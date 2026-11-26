@@ -27,6 +27,8 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
+from ...distributed import DistributedConfig
+from ...distributed.tensor_parallel import get_kv_heads_per_rank
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -262,6 +264,16 @@ class MiniCPM5MoeRMSNorm(DeepseekV3RMSNorm):
 
 class MiniCPM5MoePreTrainedModel(DeepseekV3PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = None
+
+    def _resolve_parallel_plans(self, distributed_config: DistributedConfig):
+        tp_plan, ep_plan, fsdp_plan = super()._resolve_parallel_plans(distributed_config)
+        kv_heads = self.config.num_key_value_heads
+        if get_kv_heads_per_rank(tp_plan, kv_heads, distributed_config.tp_size) is None:
+            raise ValueError(
+                f"MiniCPM5Moe requires num_key_value_heads ({kv_heads}) to be divisible by "
+                f"tp_size ({distributed_config.tp_size}) when sharding KV heads."
+            )
+        return tp_plan, ep_plan, fsdp_plan
 
 
 class MiniCPM5MoeModel(DeepseekV3Model):

@@ -32,6 +32,8 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...distributed import DistributedConfig
+from ...distributed.tensor_parallel import get_kv_heads_per_rank
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
@@ -390,6 +392,16 @@ class MiniCPM5MoePreTrainedModel(PreTrainedModel):
         elif isinstance(module, MiniCPM5MoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+
+    def _resolve_parallel_plans(self, distributed_config: DistributedConfig):
+        tp_plan, ep_plan, fsdp_plan = super()._resolve_parallel_plans(distributed_config)
+        kv_heads = self.config.num_key_value_heads
+        if get_kv_heads_per_rank(tp_plan, kv_heads, distributed_config.tp_size) is None:
+            raise ValueError(
+                f"MiniCPM5Moe requires num_key_value_heads ({kv_heads}) to be divisible by "
+                f"tp_size ({distributed_config.tp_size}) when sharding KV heads."
+            )
+        return tp_plan, ep_plan, fsdp_plan
 
 
 class MiniCPM5MoeRotaryEmbedding(nn.Module):

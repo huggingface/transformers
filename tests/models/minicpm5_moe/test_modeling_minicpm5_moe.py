@@ -95,6 +95,15 @@ class MiniCPM5MoeModelTest(CausalLMModelTest, unittest.TestCase):
             finally:
                 torch.distributed.destroy_process_group()
 
+    def test_tp_size_must_divide_sharded_kv_heads(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_key_value_heads = 2
+        model = AutoModelForCausalLM.from_config(config)
+        with self.assertRaisesRegex(ValueError, r"num_key_value_heads \(2\).*tp_size \(4\)"):
+            model._resolve_parallel_plans(DistributedConfig(tp_size=4))
+        tp_plan, _, _ = model._resolve_parallel_plans(DistributedConfig(tp_size=4, tp_plan={}))
+        self.assertEqual(tp_plan, {})
+
     def test_awq_fused_projection_exclusion(self):
         from transformers.quantizers.quantizer_awq import AwqQuantizer
         from transformers.quantizers.quantizers_utils import should_convert_module
