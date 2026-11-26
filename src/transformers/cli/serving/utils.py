@@ -766,6 +766,58 @@ class InferenceThread:
         return future
 
 
+class PrefixCache:
+    """The KV cache of the last ``model.generate()`` call, kept so that the next request only encodes what it adds.
+
+    In a multi-turn chat every request resends the whole conversation, so without this each turn re-encodes the
+    system prompt and all earlier turns. Before a request, the cache is cropped to the longest token prefix it shares
+    with the new prompt, and ``generate()`` prefills only the rest.
+
+    Only a cache of plain ``DynamicLayer``s is kept: sliding-window and linear-attention layers can't be cropped back
+    to an arbitrary length. Used from one inference thread only, so it needs no lock.
+    """
+
+    # TODO: one unbounded GPU entry; alternating clients evict each other. Follow-up: a `--prefix-cache-max-tokens`
+    # cap (crop + `.clone()` on `store()`), several LRU entries under a budget, a pinned-CPU tier for evicted ones,
+    # and hybrid models (linear attention, e.g. Qwen3-Next): snapshot the recurrent state at the end of a turn.
+
+    def __init__(self):
+        self._token_ids: list[int] = []
+        self._cache = None
+        self.reused_tokens = 0  # of the last request, for logs and tests
+
+    def take(self, model: "PreTrainedModel", input_ids: "torch.Tensor"):
+        """Return a cache for ``input_ids`` (batch of one): the kept one cropped to the shared prefix, or a new empty
+        one. ``None`` if the model's cache can't be reused, in which case ``generate()`` builds its own."""
+        from transformers.cache_utils import DynamicCache, DynamicLayer
+
+        cache, cached_ids = self._cache, self._token_ids
+        self._cache, self._token_ids = None, []  # a failed generation leaves nothing behind
+        new_ids = input_ids[0].tolist()
+        reused = 0
+        if cache is not None:
+            # leave at least one token to encode: the logits of the next token come from it
+            limit = min(cache.get_seq_length(), len(cached_ids), len(new_ids) - 1)
+            while reused < limit and cached_ids[reused] == new_ids[reused]:
+                reused += 1
+        self.reused_tokens = reused
+        if cache is None or reused == 0:
+            cache = DynamicCache(config=model.config)
+            if not all(type(layer) is DynamicLayer for layer in cache.layers):
+                return None
+            return cache
+        cache.crop(reused - cache.get_seq_length())  # a negative count: tokens to drop from the end
+        logger.debug(f"Prefix cache: reusing {reused} of {len(new_ids)} prompt tokens")
+        return cache
+
+    def store(self, token_ids: list[int], cache) -> None:
+        """Keep ``cache`` with the full sequence it was built from (prompt and generated tokens)."""
+        self._token_ids, self._cache = token_ids, cache
+
+    def clear(self) -> None:
+        self._token_ids, self._cache = [], None
+
+
 class BaseGenerateManager(ABC):
     """Base class for generation managers.
 
@@ -834,10 +886,44 @@ class BaseGenerateManager(ABC):
 
 
 class GenerateManager(BaseGenerateManager):
-    """Sequential generation via ``model.generate()`` on a persistent thread."""
+    """Sequential generation via ``model.generate()`` on a persistent thread.
 
-    def __init__(self):
+    Args:
+        prefix_cache (`bool`, *optional*, defaults to `True`):
+            Keep the KV cache of the last request and reuse the prompt prefix it shares with the next one
+            (see :class:`PrefixCache`).
+    """
+
+    def __init__(self, prefix_cache: bool = True):
         self._thread = InferenceThread()
+        self._prefix_cache = PrefixCache() if prefix_cache else None
+
+    def _reuses_prefix(self, model: "PreTrainedModel", inputs: dict, gen_config: "GenerationConfig") -> bool:
+        """Whether this request can use the prefix cache: text only, one sequence, greedy or sampling with the
+        default dynamic cache."""
+        return (
+            self._prefix_cache is not None
+            and set(inputs) == {"input_ids", "attention_mask"}  # generate() slices the cached part off by the mask
+            and inputs["input_ids"].shape[0] == 1
+            and gen_config.use_cache is not False
+            and gen_config.cache_implementation is None
+            and (gen_config.num_beams or 1) == 1
+            and not hasattr(model, "has_talker")
+            and model._supports_default_dynamic_cache()
+        )
+
+    def _generate(self, model: "PreTrainedModel", gen_kwargs: dict, reuse_prefix: bool):
+        """``model.generate(**gen_kwargs)`` on the inference thread, through the prefix cache when ``reuse_prefix``."""
+        prefix_cache = self._prefix_cache if reuse_prefix else None
+        if prefix_cache is None:
+            return model.generate(**gen_kwargs)
+        cache = prefix_cache.take(model, gen_kwargs["input_ids"])
+        if cache is None:
+            return model.generate(**gen_kwargs)
+        out = model.generate(**gen_kwargs, cache=cache)
+        sequences = out if not hasattr(out, "sequences") else out.sequences
+        prefix_cache.store(sequences[0].tolist(), cache)
+        return out
 
     def generate_streaming(
         self,
@@ -857,10 +943,11 @@ class GenerateManager(BaseGenerateManager):
         gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
         if hasattr(model, "has_talker"):
             gen_kwargs["generation_mode"] = "text"
+        reuse_prefix = self._reuses_prefix(model, inputs, gen_config)
 
         def _run() -> None:
             try:
-                model.generate(**gen_kwargs)
+                self._generate(model, gen_kwargs, reuse_prefix)
             except _GenerationCancelled:
                 loop.call_soon_threadsafe(queue.put_nowait, None)
             except Exception as e:
@@ -883,7 +970,8 @@ class GenerateManager(BaseGenerateManager):
         generate_kwargs = {**inputs, "generation_config": gen_config, "tokenizer": processor}
         if hasattr(model, "has_talker"):
             generate_kwargs["generation_mode"] = "text"
-        sequences = await self.async_submit(model.generate, **generate_kwargs)
+        reuse_prefix = self._reuses_prefix(model, inputs, gen_config)
+        sequences = await self.async_submit(self._generate, model, generate_kwargs, reuse_prefix)
         input_len = inputs["input_ids"].shape[-1]
         generated_ids = sequences[0, input_len:]
         text = processor.decode(generated_ids, skip_special_tokens=True)
@@ -1088,9 +1176,11 @@ class GenerationState:
         continuous_batching: bool = False,
         compile: bool = False,
         cb_config: "ContinuousBatchingConfig | None" = None,
+        prefix_cache: bool = True,
     ):
         self._continuous_batching = continuous_batching
         self._compile = compile
+        self._prefix_cache = prefix_cache
         self._cb_config = cb_config
         self._generate_managers: dict[str, GenerateManager] = {}
         self._cb_manager: CBGenerateManager | None = None
@@ -1136,7 +1226,7 @@ class GenerationState:
                 self._cb_model_id = model_id
             return self._cb_manager
         if model_id not in self._generate_managers:
-            self._generate_managers[model_id] = GenerateManager()
+            self._generate_managers[model_id] = GenerateManager(prefix_cache=self._prefix_cache)
         return self._generate_managers[model_id]
 
     def shutdown(self) -> None:
@@ -1266,8 +1356,6 @@ class BaseHandler:
         # CB manages its own paged KV cache
         if use_cb:
             generation_config.use_cache = False
-
-        # TODO: add prefix caching for the non-CB path (reuse KV cache across multi-turn conversations)
 
         return generation_config
 
