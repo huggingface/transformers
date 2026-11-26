@@ -54,7 +54,6 @@ class Glm4ModelTester(CausalLMModelTester):
 @require_torch
 class Glm4ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Glm4ModelTester
-    _is_stateful = True
     model_split_percents = [0.5, 0.6]
 
 

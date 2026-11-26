@@ -253,12 +253,8 @@ class PeftAdapterMixin:
                     WeightRenaming(f"{module_name}.{source_key}", f"{module_name}.{target_key}")
                 )
 
-        adapter_key_markers = {adapter_name}
-        if peft_config is not None and getattr(peft_config, "peft_type", None) is not None:
-            adapter_key_markers.add(peft_config.peft_type.value.lower())
-
         def is_adapter_key(key: str) -> bool:
-            return any(marker in key for marker in adapter_key_markers)
+            return adapter_name in key.split(".")
 
         if not self._hf_peft_config_loaded:
             self._hf_peft_config_loaded = True
@@ -339,7 +335,10 @@ class PeftAdapterMixin:
                 if isinstance(module, BaseTunerLayer):
                     module.requires_grad_(False)
 
-        loading_info.missing_keys = {k for k in loading_info.missing_keys if is_adapter_key(k)}
+        # A tied adapter weight (e.g. tied trainable tokens) is loaded through one of its keys only.
+        missing, tensors = loading_info.missing_keys, self.state_dict(keep_vars=True)
+        loaded = {id(t) for k, t in tensors.items() if k not in missing}
+        loading_info.missing_keys = {k for k in missing if is_adapter_key(k) and id(tensors[k]) not in loaded}
 
         log_state_dict_report(
             model=self,

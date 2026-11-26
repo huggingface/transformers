@@ -87,7 +87,6 @@ class AfmoeRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@use_kernel_forward_from_hub("RMSNorm")
 class AfmoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
@@ -208,7 +207,7 @@ class AfmoeSparseMoeBlock(nn.Module):
         self.router = AfmoeTokenChoiceRouter(config)
         self.shared_experts = AfmoeMLP(config, config.moe_intermediate_size * config.num_shared_experts)
         self.experts = AfmoeExperts(config)
-        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
+        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts, dtype=torch.float32), requires_grad=False)
 
     def forward(self, hidden_states):
         batch_size, seq_len, hidden_dim = hidden_states.shape

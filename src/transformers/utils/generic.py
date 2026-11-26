@@ -306,6 +306,47 @@ def is_flash_attention_requested(
     return "flash" in checked_attention_implementation
 
 
+def suppress_kernels_logging(func=None, *, layers=None):
+    """Temporarily suppress kernels kernelization logs, optionally for specific layers"""
+    import logging
+
+    def decorate(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            logger = logging.getLogger("kernels._internals.layer.layer")
+
+            # 1. Ignore everything (no specific layers)
+            if layers is None:
+                previous_level = logger.level
+                try:
+                    logger.setLevel(logging.CRITICAL + 1)
+                    return fn(*args, **kwargs)
+                finally:
+                    logger.setLevel(previous_level)
+
+            # 2. Only ignore those layers that are specified
+            class LayerFilter(logging.Filter):
+                def filter(self, record):
+                    return not (
+                        record.levelno == logging.WARNING
+                        and any(
+                            record.getMessage().lstrip().startswith(f"No kernel mapping found for layer `{layer}`.")
+                            for layer in layers
+                        )
+                    )
+
+            log_filter = LayerFilter()
+            logger.addFilter(log_filter)
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                logger.removeFilter(log_filter)
+
+        return wrapper
+
+    return decorate(func) if func is not None else decorate
+
+
 def get_max_seqlen(
     cu_seqlens: torch.Tensor,
     config: PreTrainedConfig,
@@ -450,9 +491,13 @@ class _BCCacheNameMeta(type):
         The @dataclass calls setattr on the class where it's used to add an __init__ method with all the fields (and only
         the declared fields). Se we override setattr to also allow the fields `past_key_values`/`cache_params` and rename
         them to `cache`, for BC on all the remote code most notably. Indeed, every remote code model usually does
-        `return OutputClass(past_key_values=past_key_values,...)` which would crash without this.
+        `return OutputClass(past_key_values=past_key_values,...)` which would crash without this. Classes which still
+        declare one of the old names as a field keep their `__init__` untouched, as the old name is valid for them.
         """
-        if name == "__init__":
+        if name == "__init__" and all(
+            deprecated not in getattr(cls, "__dataclass_fields__", {})
+            for deprecated in ("past_key_values", "cache_params")
+        ):
             init = value
 
             # Wrap with the kwarg name change
@@ -641,8 +686,8 @@ class ModelOutput(OrderedDict, metaclass=_BCCacheNameMeta):
 
     def _replace_old_cache_name(self, key: str) -> str:
         """Handle BC key rename from old `past_key_values`/`cache_params` to the newer `cache`, with warning if needed."""
-        # For BC
-        if key in ("past_key_values", "cache_params"):
+        # For BC, unless the class still declares the old name as a field
+        if key in ("past_key_values", "cache_params") and key not in getattr(self, "__dataclass_fields__", {}):
             if not is_tracing():
                 logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
             return "cache"
@@ -1132,7 +1177,15 @@ def merge_with_config_defaults(func):
             if arg_value is not None:
                 # Arg-specific handling
                 if arg_name == "use_cache":
-                    if getattr(self, "gradient_checkpointing", False) and self.training and arg_value:
+                    import torch
+
+                    # Same condition as in `GradientCheckpointingLayer`: without gradients, nothing is checkpointed
+                    if (
+                        getattr(self, "gradient_checkpointing", False)
+                        and self.training
+                        and torch.is_grad_enabled()
+                        and arg_value
+                    ):
                         logger.warning_once(
                             "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
                         )

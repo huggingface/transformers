@@ -56,6 +56,7 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoInput
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..mimi.modeling_mimi import MimiLayerScale
 from ..qwen2_5_omni.configuration_qwen2_5_omni import (
     Qwen2_5OmniAudioEncoderConfig,
@@ -83,7 +84,6 @@ from ..qwen3.modeling_qwen3 import (
     Qwen3ForCausalLM,
     Qwen3MLP,
     Qwen3Model,
-    Qwen3RMSNorm,
     Qwen3RotaryEmbedding,
 )
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
@@ -291,9 +291,6 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -2143,7 +2140,7 @@ class Qwen3OmniMoeCode2WavMlp(Qwen3MLP):
     pass
 
 
-class Qwen3OmniMoeCode2WavRMSNorm(Qwen3RMSNorm):
+class Qwen3OmniMoeCode2WavRMSNorm(LlamaRMSNorm):
     pass
 
 

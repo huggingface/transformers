@@ -92,6 +92,8 @@ class JambaConfigTester(ConfigTester):
 
 
 class JambaModelTester(ModelTesterConfigMixin):
+    causal_lm_class = JambaForCausalLM
+
     defaults = {}
 
     small_config_overrides = {

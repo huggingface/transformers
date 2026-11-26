@@ -116,3 +116,7 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         out_noimage = processor(text=text_batched, images=[image, image], return_tensors="pt")
         for k in out_noimage:
             self.assertTrue(out_noimage[k].tolist() == out_images[k].tolist() == out_noimage_nested[k].tolist())
+
+    @unittest.skip("PaliGemmaProcessor requires images and can't be called with text only")
+    def test_processor_single_text_same_as_batched(self):
+        pass

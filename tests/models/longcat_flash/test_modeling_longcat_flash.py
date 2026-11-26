@@ -17,6 +17,7 @@ import copy
 import tempfile
 import unittest
 
+from parameterized import parameterized
 from pytest import mark
 
 from transformers import LongcatFlashConfig, is_torch_available
@@ -26,12 +27,17 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_accelerator_memory,
+    skip_tpu,
     slow,
     torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_modeling_common import ids_tensor
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    _test_eager_matches_sdpa_inference,
+    ids_tensor,
+)
 
 
 if is_torch_available():
@@ -184,6 +190,15 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.8]
 
     model_tester_class = LongcatFlashModelTester
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @skip_tpu("test aborts")
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        _test_eager_matches_sdpa_inference(
+            self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+        )
 
     @unittest.skip("LongcatFlash buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):

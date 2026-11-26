@@ -197,10 +197,10 @@ class InklingAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
         self.k_sconv = InklingShortConvolution(
             self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=0
-        )
+        ).to(dtype=torch.float32)
         self.v_sconv = InklingShortConvolution(
             self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=1
-        )
+        ).to(dtype=torch.float32)
         self.q_norm = InklingRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = InklingRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.rel_logits_proj = InklingRelativeLogits(config.d_rel, self.rel_extent)
@@ -342,8 +342,8 @@ class InklingTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
 
         self.weight = nn.Parameter(torch.empty(self.n_total_experts, config.hidden_size))
-        self.global_scale = nn.Parameter(torch.ones(1))
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.global_scale = nn.Parameter(torch.ones(1, dtype=torch.float32))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
@@ -473,7 +473,60 @@ def causal_conv1d_fn(
     return out.to(hidden_states.dtype)
 
 
-@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
+@use_kernel_forward_from_hub("causal_conv1d_forward")
+def causal_conv1d_forward(
+    conv1d: nn.Conv1d,
+    hidden_states: torch.Tensor,
+    cache: Cache | None,
+    layer_idx: int,
+    activation: str | None = None,
+    state_idx: int = 0,
+    **kwargs,
+) -> torch.Tensor:
+    """
+    Causal depthwise convolution of a linear attention layer, reading and updating its conv state in `cache`.
+    Layers list it in `use_kernelized_func`, so that `kernelize` can replace it, e.g. with a runtime that manages
+    the conv state itself.
+
+    Args:
+        conv1d (`nn.Conv1d`):
+            The depthwise convolution, whose weights and kernel size are used.
+        hidden_states (`torch.Tensor` of shape `(batch_size, channels, seq_len)`):
+            The input to the convolution.
+        cache (`Cache`, *optional*):
+            The cache holding the conv state, updated in place.
+        layer_idx (`int`):
+            The index of the layer in `cache`.
+        activation (`str`, *optional*):
+            The activation applied to the output of the convolution.
+        state_idx (`int`, *optional*, defaults to 0):
+            Which of the layer's conv states to use.
+        kwargs:
+            Passed to the convolution kernel.
+
+    Returns:
+        `torch.Tensor` of shape `(batch_size, channels, seq_len)`: The output of the convolution.
+    """
+    seq_len = hidden_states.shape[-1]
+    conv_state = cache.get_conv_state(layer_idx, state_idx=state_idx) if cache is not None else None
+    weight = conv1d.weight.squeeze(1)
+
+    # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
+    if conv_state is not None and seq_len == 1 and not cache.is_recording_past(layer_idx):
+        return causal_conv1d_update(hidden_states, conv_state, weight, conv1d.bias, activation=activation)
+
+    if cache is not None:
+        hidden_states = cache.update_conv_state(
+            hidden_states, layer_idx, state_idx=state_idx, conv_kernel_size=conv1d.kernel_size[0]
+        )
+    hidden_states = causal_conv1d_fn(hidden_states, weight, conv1d.bias, activation=activation, **kwargs)
+    # Drop the previous states prepended by the cache
+    if cache is not None:
+        hidden_states = hidden_states[:, :, -seq_len:]
+    return hidden_states
+
+
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_forward, causal_conv1d_fn])
 class InklingShortConvolution(nn.Module):
     def __init__(self, hidden_size: int, conv_kernel_size: int, layer_idx: int, conv_idx: int):
         super().__init__()
@@ -505,32 +558,16 @@ class InklingShortConvolution(nn.Module):
 
         residual = hidden_states
         hidden_states = apply_mask_to_padding_states(hidden_states, conv_mask)
-        seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
-        if cache is not None:
-            conv_state = cache.get_conv_state(self.layer_idx, state_idx=self.conv_idx)
-        else:
-            conv_state = None
-
-        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
-            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
-            hidden_states = causal_conv1d_update(
-                hidden_states, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias
-            )
-        else:
-            if cache is not None:
-                hidden_states = cache.update_conv_state(
-                    hidden_states, self.layer_idx, state_idx=self.conv_idx, conv_kernel_size=self.conv_kernel_size
-                )
-
-            hidden_states = causal_conv1d_fn(
-                hidden_states, self.conv1d.weight.squeeze(1), self.conv1d.bias, seq_idx=kwargs.get("seq_idx")
-            )
-
-            # Drop the additional previous states
-            if cache is not None:
-                hidden_states = hidden_states[:, :, -seq_len:]
+        hidden_states = causal_conv1d_forward(
+            self.conv1d,
+            hidden_states,
+            cache,
+            self.layer_idx,
+            state_idx=self.conv_idx,
+            **kwargs,
+        )
 
         hidden_states = hidden_states.transpose(1, 2)
         hidden_states = (hidden_states + residual).to(dtype=input_dtype)
@@ -553,10 +590,10 @@ class InklingDecoderLayer(GradientCheckpointingLayer):
         self.layer_type = config.layer_types[layer_idx]
         self.attn_sconv = InklingShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
-        )
+        ).to(dtype=torch.float32)
         self.mlp_sconv = InklingShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
-        )
+        ).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -1007,6 +1044,8 @@ class InklingVisionModel(InklingPreTrainedModel):
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         num_patches = pixel_values.shape[0]
         hidden_states = pixel_values
+        if (target_dtype := self.encoder_layers[0].projection.weight.dtype).is_floating_point:
+            hidden_states = hidden_states.to(target_dtype)
         for layer in self.encoder_layers:
             hidden_states = layer(hidden_states=hidden_states)
 

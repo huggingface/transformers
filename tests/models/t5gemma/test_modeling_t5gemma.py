@@ -591,7 +591,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         else {}
     )
 
-    _is_stateful = True
     is_encoder_decoder = True
 
     # used in `test_torch_compile_for_training`
@@ -1480,7 +1479,6 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (T5GemmaEncoderModel, T5GemmaForTokenClassification) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    _is_stateful = True
     is_encoder_decoder = False
 
     # won't fix
