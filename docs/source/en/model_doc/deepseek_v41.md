@@ -50,6 +50,7 @@ Every layer attends over its own sliding window. What a layer does about compres
 Let's make this concrete with a quick example. There is one step that most models don't need: the Engram n-grams are
 hashed over a "compressed" vocabulary, where tokens that normalize alike (like `" The"` and `"the"`) share an id. The
 checkpoint doesn't store that map (yet!), so you have to build it from the tokenizer once after loading the model.
+The map is saved with the weights after that, so a model that you save and load again doesn't need this step.
 
 ```python
 import torch

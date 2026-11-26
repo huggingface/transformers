@@ -1296,6 +1296,9 @@ class DeepseekV41NGramHasher(nn.Module):
         self.bucket_sizes = nn.Buffer(bucket_sizes, persistent=False)
         self.offsets = nn.Buffer(bucket_sizes.cumsum(-1) - bucket_sizes, persistent=False)
         self.multipliers = nn.Buffer(torch.from_numpy(_ngram_hash_multipliers(config)), persistent=False)
+        # Loaded with the weights if the checkpoint has it, and set with `set_ngram_token_map` otherwise. An
+        # entry of -1 is one that neither has filled in yet. A buffer that is `None` would say "not set" more
+        # plainly, but it is not part of the state dict, so a checkpoint could never load into it.
         self.token_map = nn.Buffer(_default_ngram_token_map(config))
 
     def forward(
@@ -1588,6 +1591,10 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):
     ]
     # The DSpark draft layers are not supported yet
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
+    # The original checkpoints do not store the Engram token map, which is not a weight that went missing: the
+    # map stays unset, and the model asks for `set_ngram_token_map` when it is called. A checkpoint that does
+    # store the map loads it like any other buffer.
+    _keys_to_ignore_on_load_missing = [r"ngram_hasher\.token_map"]
     _can_record_outputs = {
         "router_logits": OutputRecorder(DeepseekV41TopKRouter, index=0),
         "hidden_states": OutputRecorder(DeepseekV41DecoderLayer, index=0),

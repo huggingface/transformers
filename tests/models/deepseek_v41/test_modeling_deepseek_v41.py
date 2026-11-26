@@ -516,6 +516,36 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
             logits = model(input_ids=input_ids).logits
         self.assertEqual(logits.shape, (1, 6, config.text_config.vocab_size))
 
+    def test_ngram_token_map_is_loaded_from_a_checkpoint_that_has_it(self):
+        """
+        A model that is saved after `set_ngram_token_map` stores the map, and loads again without a tokenizer. The
+        original checkpoints do not store it: they load without a missing weight, and the model asks for the map.
+        """
+        config = self.model_tester.get_config()
+        config.text_config.ngram_compressed_vocab_size = 60
+        model = DeepseekV41ForCausalLM(config).to(torch_device).eval()
+        model.set_ngram_token_map(torch.arange(config.text_config.vocab_size) % 60)
+        input_ids = self.model_tester.prepare_text_ids(1, 6)
+        with torch.no_grad():
+            expected = model(input_ids=input_ids).logits
+
+        with tempfile.TemporaryDirectory() as checkpoint_dir:
+            model.save_pretrained(checkpoint_dir)
+            loaded_model = DeepseekV41ForCausalLM.from_pretrained(checkpoint_dir).to(torch_device).eval()
+            with torch.no_grad():
+                torch.testing.assert_close(loaded_model(input_ids=input_ids).logits, expected)
+
+            # Next, the same checkpoint without the map, which is what the original ones look like
+            weights = load_file(f"{checkpoint_dir}/model.safetensors")
+            del weights["model.language_model.ngram_hasher.token_map"]
+            save_file(weights, f"{checkpoint_dir}/model.safetensors", metadata={"format": "pt"})
+            loaded_model, loading_info = DeepseekV41ForCausalLM.from_pretrained(
+                checkpoint_dir, output_loading_info=True
+            )
+        self.assertFalse(loading_info["missing_keys"])
+        with self.assertRaisesRegex(ValueError, "set_ngram_token_map"):
+            loaded_model.to(torch_device)(input_ids=input_ids)
+
     def test_resize_token_embeddings_is_not_supported(self):
         """A new token would have no entry in the Engram token map, so resizing raises instead."""
         config, model = self._get_model()
