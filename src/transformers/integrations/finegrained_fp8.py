@@ -697,13 +697,18 @@ _FP8_FUSED_EXPERTS = os.environ.get("HF_FP8_FUSED_EXPERTS", "1") == "1"
 # (tokens * top_k > rows * num_experts, the criterion of WP experts' decode schedule, so the two cannot overlap). The
 # fused grouped kernel (one persistent program per SM) is 2.3x today's path at ~150 rows per expert (prefill) and no
 # better at 2 rows per expert (decode)
-_FP8_FUSED_EXPERTS_MIN_ROWS = int(os.environ.get("HF_FP8_FUSED_EXPERTS_MIN_ROWS", "16"))
+# [scratch] 4 since vLLM's kernel runs the fused range: Qwen3-30B-A3B-FP8 H100 rolling 6,780 -> 8,170 tok/s, 256 x 512
+# 11,467 -> 13,975 (16 -> 4: the 256-sequence decode steps enter the range); 2: 7,993; 0: 8 requests 1,098 -> 1,009
+_FP8_FUSED_EXPERTS_MIN_ROWS = int(os.environ.get("HF_FP8_FUSED_EXPERTS_MIN_ROWS", "4"))
 
 
 # [scratch] From 2,048 tokens on (prefill steps), vLLM's Triton fused MoE when vLLM is installed: Qwen3-30B-A3B-FP8 shapes
 # on an H100, 8,192 tokens: 1.35 ms vs 1.77 for the hub's fused grouped kernel (2,048: 0.50 vs 0.56; 1,024: 0.51 vs 0.40)
 _PROTO_FP8_VLLM_MOE = os.environ.get("PROTO_FP8_VLLM_MOE", "1") == "1" and importlib.util.find_spec("vllm") is not None
-_PROTO_FP8_VLLM_MOE_MIN_TOKENS = 2048
+# From the fused range's start on (the decode kernels below): timed as CUDA graph replays (Qwen3-30B-A3B-FP8 shapes, H100)
+# vLLM's kernel is the fastest from ~128 tokens up: 0.254 ms at 256 vs 0.272 hub, 0.279 decode; 0.433 at 2,048 vs
+# 0.548 / 1.135 (fp32-reference error 4.7% vs 4.4%, both from the FP8 activations)
+_PROTO_FP8_VLLM_MOE_MIN_TOKENS = int(os.environ.get("PROTO_FP8_VLLM_MOE_MIN_TOKENS", "0"))
 
 
 def _fp8_vllm_fused_experts(self, hidden_states, top_k_index, top_k_weights):
@@ -741,7 +746,7 @@ def _proto_warm_fp8_fused_experts(model: nn.Module) -> None:
     while tokens < 2 * _PROTO_FP8_VLLM_MOE_MIN_TOKENS:
         sizes.append(tokens)
         tokens = max(tokens + 1, 2 ** ((tokens // num_sms).bit_length()) * num_sms)  # the next tokens-per-SM bucket
-    sizes += [4096, 8192]
+    sizes += [max(tokens, min_tokens), 1024, 4096, 8192]
     t = time.perf_counter()
     with torch.no_grad():
         for num_tokens in sizes:
