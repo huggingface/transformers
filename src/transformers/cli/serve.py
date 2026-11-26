@@ -196,10 +196,9 @@ class Serve:
         from .serving.server import build_server
         from .serving.systemone import SystemOneHandler
         from .serving.transcription import TranscriptionHandler
-        from .serving.utils import exit_on_parent_exit, freeze_garbage_collector, set_serve_log_level
+        from .serving.utils import freeze_garbage_collector, set_serve_log_level
 
         set_serve_log_level(self.log_level, self.enable_log_requests)
-        exit_on_parent_exit()
 
         model_manager = ModelManager(
             self.loader,
@@ -281,6 +280,7 @@ class Serve:
         import uvicorn
 
         from .serving.model_manager import EngineClient
+        from .serving.utils import run_until_parent_exits
 
         if self.force_model is None:
             raise ValueError(
@@ -298,7 +298,9 @@ class Serve:
         spawn = multiprocessing.get_context("spawn")
         servers = [
             spawn.Process(
-                target=self.run, args=(socket, (requests, results[index], index)), name=f"api-server-{index}"
+                target=run_until_parent_exits,
+                args=(self.run, socket, (requests, results[index], index)),
+                name=f"api-server-{index}",
             )
             for index in range(count)
         ]

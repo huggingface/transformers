@@ -195,18 +195,20 @@ def set_torch_seed(seed: int) -> None:
     torch.manual_seed(seed)
 
 
-def exit_on_parent_exit() -> None:
-    """In a process the server spawned: exits once its parent does, even one killed without cleanup (`kill -9`), which
-    would leave it running (a model's process holding its GPU memory, an API server its port)."""
+def run_until_parent_exits(target: Callable, *args) -> None:
+    """Runs `target(*args)` in a process the server spawned, which exits once its parent does, even one killed without
+    cleanup (`kill -9`), which would leave it running (a model's process holding its GPU memory, an API server its
+    port)."""
     parent = multiprocessing.parent_process()
-    if parent is None:  # not spawned
-        return
+    if parent is None:
+        raise RuntimeError("`run_until_parent_exits` is for the target of a process the server spawns.")
 
     def wait_and_exit() -> None:
         parent.join()
         os._exit(1)
 
-    threading.Thread(target=wait_and_exit, name="exit-on-parent-exit", daemon=True).start()
+    threading.Thread(target=wait_and_exit, name="exit-with-parent", daemon=True).start()
+    target(*args)
 
 
 def freeze_garbage_collector() -> None:

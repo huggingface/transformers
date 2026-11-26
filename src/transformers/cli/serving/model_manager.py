@@ -44,7 +44,6 @@ from .utils import (
     api_server_of,
     canonical_model_id,
     decision_model_class,
-    exit_on_parent_exit,
     freeze_garbage_collector,
     get_gen_models,
     make_progress_tqdm_class,
@@ -52,6 +51,7 @@ from .utils import (
     model_owner,
     parse_model_id,
     prompt_length,
+    run_until_parent_exits,
     set_serve_log_level,
     set_torch_seed,
     set_torch_threads_for_serving,
@@ -360,8 +360,17 @@ class EngineClient:
         reader, writer = context.Pipe(duplex=False)
         log_level = logging.get_logger("transformers.cli").level
         process = context.Process(
-            target=EngineClient.run_engine,
-            args=(load, generation_state, requests, results, writer, on_progress is not None, log_level),
+            target=run_until_parent_exits,
+            args=(
+                EngineClient.run_engine,
+                load,
+                generation_state,
+                requests,
+                results,
+                writer,
+                on_progress is not None,
+                log_level,
+            ),
             name="model",
             daemon=True,
         )
@@ -392,7 +401,6 @@ class EngineClient:
     ) -> None:
         """What the model's process runs: loads the model, then hands each request to a runner."""
         set_serve_log_level(log_level)
-        exit_on_parent_exit()
         if generation_state.seed is not None:
             set_torch_seed(generation_state.seed)
 
