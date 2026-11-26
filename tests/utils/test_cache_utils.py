@@ -2510,6 +2510,32 @@ class CacheCroppingTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Calling `crop` with a positive value"):
                 layer.crop(self.seq_len - 3)
 
+    def test_crop_uninitialized_sliding_window_layer(self):
+        for tokens_to_remove in (0, -1):
+            layer = DynamicSlidingWindowLayer(sliding_window=self.sliding_window)
+            layer.crop(tokens_to_remove)
+            self.assertFalse(layer.is_initialized)
+            self.assertEqual(layer.get_seq_length(), 0)
+
+        with self.assertRaisesRegex(ValueError, "Calling `crop` with a positive value"):
+            DynamicSlidingWindowLayer(sliding_window=self.sliding_window).crop(1)
+
+        cfg = Gemma3TextConfig(
+            vocab_size=50,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=8,
+            sliding_window=self.sliding_window,
+            layer_types=["sliding_attention", "full_attention"],
+            max_position_embeddings=64,
+        )
+        cache = DynamicCache(config=cfg)
+        cache.crop(-1)
+        self.assertEqual(cache.get_seq_length(), 0)
+
     def test_crop_static_layers(self):
         """Test that `crop` rolls the write offset of the static layers back, in-place"""
         keys = torch.rand(*self.attention_shape)

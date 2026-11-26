@@ -310,7 +310,8 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         # If we did not reach the sliding window, we can do the same as for a full attention layer
         else:
             super().crop(tokens_to_remove)
-            self.cumulative_length = self.keys.shape[-2]
+            if self.is_initialized:
+                self.cumulative_length = self.keys.shape[-2]
 
 
 class DynamicIndexedLayer(DynamicLayer):
