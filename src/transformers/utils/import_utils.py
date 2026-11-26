@@ -146,9 +146,9 @@ def resolve_internal_import(module: ModuleType | None, chained_path: str) -> Cal
     return final_module
 
 
-def is_env_variable_true(env_variable: str) -> bool:
+def is_env_variable_true(env_variable: str, default: str | None = None) -> bool:
     """Detect whether `env_variable` has been set to a true value in the environment"""
-    return os.getenv(env_variable, "false").lower() in ("true", "1", "y", "yes", "on")
+    return os.getenv(env_variable, default or "false").lower() in ("true", "1", "y", "yes", "on")
 
 
 def is_env_variable_false(env_variable: str) -> bool:

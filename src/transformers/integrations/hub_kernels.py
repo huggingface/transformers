@@ -63,7 +63,7 @@ _MISSING_KERNELS_MESSAGE = (
 
 
 def _kernels_enabled() -> bool:
-    return is_env_variable_true("USE_HUB_KERNELS", "YES")
+    return is_env_variable_true("USE_HUB_KERNELS", default="YES")
 
 
 def _ensure_kernels_enabled() -> None:
