@@ -298,8 +298,12 @@ Pentru mai multe detalii despre cum să generezi, construiești și scrii docume
 
 ## Programare cu AI agents
 
-Instrucțiunile pentru AI agents se află în `AGENTS.md`, în rădăcina repository-ului. `CLAUDE.md` și `GEMINI.md` doar îl importă.
-Skills-urile se află în `.ai/skills/`.
+Acest repository păstrează configurația AI agent în `.ai/` și expune fișierele locale de agent prin symlinks.
+
+Skills-urile pot fi expuse agenților rulând `make codex` sau `make claude`
+
+Cursor citește `AGENTS.md` și citește skills-urile din căile Claude sau Codex, deci configurarea repository-ului
+pentru Claude sau Codex va funcționa pentru Claude.
 
 ## Crearea unui Pull Request
 
