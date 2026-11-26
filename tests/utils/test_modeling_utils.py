@@ -192,6 +192,19 @@ if is_torch_available():
         def forward(self, x):
             return self.linear_2(self.linear(x))
 
+    class BaseModelWithFrozenParameter(PreTrainedModel):
+        base_model_prefix = "base"
+        config_class = PreTrainedConfig
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(5, 5)
+            self.frozen = nn.Parameter(torch.zeros(5), requires_grad=False)
+            self.post_init()
+
+        def forward(self, x):
+            return self.linear(x) + self.frozen
+
     class BaseModelWithTiedWeights(PreTrainedModel):
         config_class = PreTrainedConfig
         _tied_weights_keys = {"linear_2.weight": "linear.weight"}
@@ -2404,6 +2417,20 @@ class ModelUtilsTest(TestCasePlus):
         # Make sure the skipped missing key is not still on meta device!
         for k, v in model.state_dict().items():
             self.assertTrue(v.device.type == "cpu", f"{k} is not on cpu!")
+
+    def test_frozen_parameter_stays_frozen_after_loading(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            BaseModelWithFrozenParameter(PreTrainedConfig()).save_pretrained(tmp_dir)
+            model = BaseModelWithFrozenParameter.from_pretrained(tmp_dir)
+        self.assertFalse(model.frozen.requires_grad)
+        self.assertTrue(model.linear.weight.requires_grad)
+
+    def test_missing_frozen_parameter_stays_frozen_after_loading(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            BaseModel(PreTrainedConfig()).save_pretrained(tmp_dir)
+            model = BaseModelWithFrozenParameter.from_pretrained(tmp_dir)
+        self.assertFalse(model.frozen.requires_grad)
+        self.assertTrue(model.linear.weight.requires_grad)
 
     def test_device_map_works_with_unexpected_keys(self):
         """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
