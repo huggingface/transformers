@@ -250,6 +250,10 @@ class OlmoHybridAttention(Olmo3Attention):
 
 
 class OlmoHybridRotaryEmbedding(OlmoRotaryEmbedding):
+    """
+    RoPE for OLMo Hybrid that returns float32 cos/sin to match OLMo-core.
+    """
+
     pass
 
 

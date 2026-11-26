@@ -280,6 +280,9 @@ class Qwen3VLTextRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
         super().__init__()
         self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
 
+    def compute_default_rope_parameters(config: Qwen3VLTextConfig, **kwargs) -> tuple[torch.Tensor, float]:
+        return super().compute_default_rope_parameters(config, **kwargs)
+
     def recomposition_frequencies(self, freq):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
