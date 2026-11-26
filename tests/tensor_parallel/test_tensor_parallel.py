@@ -19,14 +19,7 @@ import torch
 import torch.distributed as dist
 from parameterized import parameterized
 
-from transformers import (
-    AutoModelForCausalLM,
-    LlamaConfig,
-    LlamaForCausalLM,
-    LlamaModel,
-    Qwen3Config,
-    Qwen3ForCausalLM,
-)
+from transformers import AutoModelForCausalLM, LlamaConfig, LlamaForCausalLM, LlamaModel
 from transformers.distributed import DistributedConfig, tensor_parallel
 from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
@@ -68,11 +61,12 @@ def _test_checkpoint_with_both_tied_keys_impl(_rank, model_path, equal):
         torch.testing.assert_close(model_tp(input_ids).logits.cpu(), model(input_ids).logits.cpu())
 
 
-def _test_norm_grad_with_kernels_impl(_rank, model_path):
-    model_tp = Qwen3ForCausalLM.from_pretrained(
-        model_path, distributed_config=DistributedConfig(tp_size=dist.get_world_size()), use_kernels=True
+def _test_norm_grad_with_kernels_impl(_rank, model_id):
+    distributed_config = DistributedConfig(tp_size=dist.get_world_size())
+    model_tp = AutoModelForCausalLM.from_pretrained(
+        model_id, distributed_config=distributed_config, use_kernels=True, dtype=torch.float32
     )
-    model = Qwen3ForCausalLM.from_pretrained(model_path).to(model_tp.device)
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32).to(model_tp.device)
     input_ids = torch.arange(16, device=model_tp.device)[None]
     model(input_ids, labels=input_ids).loss.backward()
     model_tp(input_ids, labels=input_ids).loss.backward()
@@ -528,15 +522,5 @@ class TestTensorParallelKernels(TestCasePlus):
     def test_norm_grad_with_kernels(self):
         """A per-head norm only sees its rank's heads, so the ranks' gradients of its weight are summed. Kernels
         replace the norm's `forward` after the model is loaded: the sum must still happen."""
-        config = Qwen3Config(
-            vocab_size=64,
-            hidden_size=32,
-            intermediate_size=64,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            head_dim=8,
-        )
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            Qwen3ForCausalLM(config).save_pretrained(tmp_dir)
-            run_distributed(world_size=2)(_test_norm_grad_with_kernels_impl)(tmp_dir)
+        model_id = "trl-internal-testing/tiny-Qwen3ForCausalLM"
+        run_distributed(world_size=2)(_test_norm_grad_with_kernels_impl)(model_id)
