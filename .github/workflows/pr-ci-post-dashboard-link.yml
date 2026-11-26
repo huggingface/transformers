@@ -66,3 +66,41 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MLINTER_FINDINGS_DIR: ${{ runner.temp }}/mlinter-findings
         run: python3 utils/post_mlinter_review.py "$MLINTER_FINDINGS_DIR"
+
+  # Model integration contracts gate: one PR comment, kept up to date, listing the blocked cases
+  # with links and the `record-mic` command. The contracts job runs PR code, so its artifact is
+  # untrusted: the script resolves the PR from this event and validates what it renders.
+  post-mic-gate-comment:
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repo (for post_mic_gate_comment.py and github_utils.py)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download contracts artifact
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: contracts
+          path: ${{ runner.temp }}/contracts
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post contracts gate comment
+        if: steps.download.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          CONTRACTS_DIR: ${{ runner.temp }}/contracts
+        run: python3 utils/post_mic_gate_comment.py "$CONTRACTS_DIR"
