@@ -1825,38 +1825,37 @@ class GenerationMixin(ContinuousMixin):
             beam_indices = torch.arange(scores[0].shape[0]).view(-1, 1).to(sequences.device)
             beam_indices = beam_indices.expand(-1, len(scores))
 
-        # 2. reshape scores as [batch_size*vocab_size, # generation steps] with # generation steps being
-        # seq_len - input_length
-        stacked_scores: torch.Tensor = torch.stack(scores).reshape(len(scores), -1).transpose(0, 1)
-
-        # 3. Optionally normalize the logits (across the vocab dimension)
-        if normalize_logits:
-            stacked_scores = stacked_scores.reshape(
-                -1, self.config.get_text_config().vocab_size, stacked_scores.shape[-1]
-            )
-            stacked_scores = torch.nn.functional.log_softmax(stacked_scores, dim=1)
-            stacked_scores = stacked_scores.reshape(-1, stacked_scores.shape[-1])
-
-        # 4. cut beam_indices to longest beam length
+        # 2. cut beam_indices to longest beam length
         beam_indices_mask = beam_indices < 0
         max_beam_length = (1 - beam_indices_mask.long()).sum(-1).max()
         beam_indices = beam_indices.clone()[:, :max_beam_length]
         beam_indices_mask = beam_indices_mask[:, :max_beam_length]
 
-        # 5. Set indices of beams that finished early to 0; such indices will be masked correctly afterwards
+        # 3. Set indices of beams that finished early to 0; such indices will be masked correctly afterwards
         beam_indices[beam_indices_mask] = 0
 
-        # 6. multiply beam_indices with vocab size to gather correctly from scores
+        # 4. multiply beam_indices with vocab size to gather correctly from scores
         beam_sequence_indices = beam_indices * self.config.get_text_config().vocab_size
 
-        # 7. Define which indices contributed to scores
+        # 5. Define which indices contributed to scores
         cut_idx = sequences.shape[-1] - max_beam_length
         indices = sequences[:, cut_idx:] + beam_sequence_indices
 
-        # 8. Compute scores
-        transition_scores = stacked_scores.gather(0, indices)
+        # 6. Gather the scores for the selected tokens.
+        if normalize_logits and indices.shape[1] > 0:
+            # Normalize one step at a time so the full vocabulary is never copied across all steps.
+            transition_scores = torch.stack(
+                [
+                    step_scores.log_softmax(dim=-1).flatten().gather(0, step_indices)
+                    for step_scores, step_indices in zip(scores, indices.unbind(dim=1))
+                ],
+                dim=1,
+            )
+        else:
+            stacked_scores = torch.stack(scores).reshape(len(scores), -1).transpose(0, 1)
+            transition_scores = stacked_scores.gather(0, indices)
 
-        # 9. Mask out transition_scores of beams that stopped early
+        # 7. Mask out transition_scores of beams that stopped early
         transition_scores[beam_indices_mask] = 0
 
         return transition_scores

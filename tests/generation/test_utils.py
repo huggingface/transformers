@@ -3493,6 +3493,24 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 @pytest.mark.generate
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase):
+    def test_transition_scores_normalized_with_finished_beams(self):
+        config = AutoConfig.for_model("gpt2", vocab_size=3, n_embd=8, n_layer=1, n_head=1)
+        model = AutoModelForCausalLM.from_config(config)
+        first = torch.tensor([[1.0, 2.0, 3.0], [3.0, 1.0, 2.0]])
+        second = -first
+        sequences = torch.tensor([[0, 2, 1], [0, 1, 0]])
+        beam_indices = torch.tensor([[1, 0, -1], [0, -1, -1]])
+
+        scores = model.compute_transition_scores(
+            sequences, (first, second, first), beam_indices, normalize_logits=True
+        )
+
+        expected = torch.zeros(2, 2)
+        expected[0, 0] = first[1].log_softmax(0)[2]
+        expected[0, 1] = second[0].log_softmax(0)[1]
+        expected[1, 0] = first[0].log_softmax(0)[1]
+        torch.testing.assert_close(scores, expected)
+
     def test_prefix_constraints_with_multiple_sampled_returns(self):
         config = AutoConfig.for_model(
             "gpt2",
