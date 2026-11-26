@@ -37,6 +37,7 @@ def fuse_for_mlx(graph: Graph) -> None:
         graph.erase_node(node)
     _fuse_rms_norm(graph)
     _fuse_swiglu(graph)
+    _drop_repeat_kv(graph)
     graph.eliminate_dead_code()
 
 
@@ -95,3 +96,29 @@ def _fuse_swiglu(graph: Graph) -> None:
                 fused = graph.call_function(swiglu, (gate, up))
             fused.meta = dict(gated.meta)
             gated.replace_all_uses_with(fused)
+
+
+def _drop_repeat_kv(graph: Graph) -> None:
+    """Attention's keys and values without their heads repeated to the queries' (`repeat_kv`: unsqueeze, expand, copy,
+    reshape): `mx.fast.scaled_dot_product_attention` takes fewer key/value heads than query heads, and the copy costs
+    the whole cache on every decode step."""
+    aten = torch.ops.aten
+    for sdpa in [node for node in graph.nodes if node.target == aten.scaled_dot_product_attention.default]:
+        args = list(sdpa.args)
+        for index in (1, 2):
+            repeated = args[index]
+            if repeated.target not in (aten.view.default, aten._unsafe_view.default, aten.reshape.default):
+                continue
+            expanded = repeated.args[0]
+            if expanded.target == aten.clone.default:
+                expanded = expanded.args[0]
+            if expanded.target != aten.expand.default:
+                continue
+            unsqueezed = expanded.args[0]
+            if unsqueezed.target != aten.unsqueeze.default or unsqueezed.args[1] != 2:
+                continue
+            states = unsqueezed.args[0]
+            if states.meta["val"].dim() != 4 or states.meta["val"].shape[-2:] != repeated.meta["val"].shape[-2:]:
+                continue
+            args[index] = states
+        sdpa.args = tuple(args)
