@@ -44,6 +44,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
     DeepseekV3RMSNorm,
+    DeepseekV3RotaryEmbedding,
     DeepseekV3TopkRouter,
 )
 from ..llama.modeling_llama import LlamaAttention, apply_rotary_pos_emb, repeat_kv
@@ -260,6 +261,10 @@ class MiniCPM5MoePreTrainedModel(DeepseekV3PreTrainedModel):
                 f"tp_size ({distributed_config.tp_size}) when sharding KV heads."
             )
         return tp_plan, ep_plan, fsdp_plan
+
+
+class MiniCPM5MoeRotaryEmbedding(DeepseekV3RotaryEmbedding):
+    pass
 
 
 class MiniCPM5MoeModel(DeepseekV3Model):
