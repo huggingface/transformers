@@ -529,8 +529,6 @@ class LiquidCodecPreTrainedModel(Lfm3PreTrainedModel):
 )
 class LiquidCodecEncoderModel(Lfm3Model):
     config: LiquidCodecEncoderConfig
-    base_model_prefix = "encoder"
-    _keys_to_ignore_on_load_unexpected = [r"^decoder\.", r"^quantizer\."]
 
     def __init__(self, config: LiquidCodecEncoderConfig):
         super().__init__(config)
@@ -607,9 +605,7 @@ class LiquidCodecEncoderModel(Lfm3Model):
 )
 class LiquidCodecDecoderModel(Lfm3Model):
     config: LiquidCodecDecoderConfig
-    base_model_prefix = "decoder"
     main_input_name = "latents"
-    _keys_to_ignore_on_load_unexpected = [r"^encoder\.", r"^quantizer\."]
 
     def __init__(self, config: LiquidCodecDecoderConfig):
         super().__init__(config)

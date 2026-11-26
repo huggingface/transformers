@@ -899,8 +899,6 @@ class LiquidCodecEncoderModel(LiquidCodecPreTrainedModel):
     """LFM2 model with a sliding-attention layer type; the mask and rotary embedding are built per layer type."""
 
     config: LiquidCodecEncoderConfig
-    base_model_prefix = "encoder"
-    _keys_to_ignore_on_load_unexpected = [r"^decoder\.", r"^quantizer\."]
 
     def __init__(self, config: LiquidCodecEncoderConfig):
         super().__init__(config)
@@ -984,9 +982,7 @@ class LiquidCodecDecoderModel(LiquidCodecPreTrainedModel):
     """LFM2 model with a sliding-attention layer type; the mask and rotary embedding are built per layer type."""
 
     config: LiquidCodecDecoderConfig
-    base_model_prefix = "decoder"
     main_input_name = "latents"
-    _keys_to_ignore_on_load_unexpected = [r"^encoder\.", r"^quantizer\."]
 
     def __init__(self, config: LiquidCodecDecoderConfig):
         super().__init__(config)
