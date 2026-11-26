@@ -748,7 +748,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
         cache: Cache | None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         batch_size, seq_length, _ = hidden_states.shape
         hidden_shape = (batch_size, seq_length, -1, self.index_head_dim)
@@ -779,7 +779,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         full_cos: torch.Tensor,
         full_sin: torch.Tensor,
         attention_mask: torch.Tensor,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         batch_size, seq_length, _ = hidden_states.shape
         # Note that the mask is never None here as we only allow eager and sdpa, and we do not allow sdpa's mask skip
@@ -1176,7 +1176,9 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         padded_vocab_size = math.ceil(self.total_vocab_size / ngram_vocab_divisor) * ngram_vocab_divisor
         self.ngram_embedding = nn.Embedding(padded_vocab_size, head_dim_per_ngram)
 
-    def _shift_right_ignore_eos(self, token_ids: torch.Tensor, shift: int, **kwargs) -> torch.Tensor:
+    def _shift_right_ignore_eos(
+        self, token_ids: torch.Tensor, shift: int, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         if shift == 0:
             return token_ids
         batch_size, seq_len = token_ids.shape
@@ -1193,7 +1195,9 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         return torch.where(valid, shifted, token_ids.new_full((), self.eos_token_id))
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def forward(self, input_ids: torch.Tensor, cache: Cache | None, **kwargs) -> torch.Tensor:
+    def forward(
+        self, input_ids: torch.Tensor, cache: Cache | None, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         input_ids = input_ids.long()
         # This is a trick to store the previous N=self.context_len `input_ids` - indeed the manipulations are identical to storing
         # a past conv_state, so we can use an additional conv_states inside the Cache for it
@@ -1280,7 +1284,9 @@ class Qwen4ExpTextPLELayer(nn.Module):
             bias=False,
         )
 
-    def _short_conv(self, hidden_states: torch.Tensor, cache: Cache | None, **kwargs) -> torch.Tensor:
+    def _short_conv(
+        self, hidden_states: torch.Tensor, cache: Cache | None, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
@@ -1306,7 +1312,7 @@ class Qwen4ExpTextPLELayer(nn.Module):
         input_ids: torch.Tensor,
         cache: Cache | None,
         conv_mask: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         embeddings = self.ple_embedding(input_ids, cache, **kwargs)
         key_normed = self.norm_key(self.key_proj(embeddings)).unflatten(-1, (self.hc_count, self.hidden_size))
