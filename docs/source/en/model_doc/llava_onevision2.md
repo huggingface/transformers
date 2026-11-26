@@ -266,7 +266,7 @@ output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
 print(processor.batch_decode(output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True))
 ```
 
-`target_canvas` controls the requested canvas budget; shorter videos can produce fewer usable canvases. `size["longest_edge"]` sets the canvas pixel budget. If no size is supplied, the codec budget is 150000 pixels. Increase these budgets to retain more visual evidence at a higher memory and context cost.
+`target_canvas` controls the requested canvas budget; shorter videos can produce fewer usable canvases. `size["longest_edge"]` sets the canvas pixel budget. If no size is supplied, the codec budget is 150000 pixels. The settings in this example were used to check inference on a local encoded video.
 
 <img src="https://raw.githubusercontent.com/EvolvingLMMs-Lab/LLaVA-OneVision-2/5837d88ac60bd922a38464938f9a24ebfc2a2e2f/asset/method_codec_selection_light.svg" alt="Illustration comparing dense uniform frame sampling with codec-aligned selection of dense I-frame patches and sparse P-frame patches." width="900"/>
 

@@ -23,8 +23,9 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import get_max_seqlen
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_position_ids
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from ..auto import AutoModel
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
@@ -223,11 +224,17 @@ class LlavaOnevision2VisionModel(LlavaOnevision2PreTrainedModel):
             frames_per_window = torch.full_like(sizes, window)
             frames_per_window[windows_per_grid.cumsum(0) - 1] = (frame_counts - 1) % window + 1
             lengths = frames_per_window * sizes
+            cu_seqlens = nn.functional.pad(lengths.cumsum(0, dtype=torch.int32), (1, 0))
         else:
-            lengths = frame_counts * spatial_sizes
-        cu_seqlens = nn.functional.pad(lengths.cumsum(0, dtype=torch.int32), (1, 0)).to(hidden_states.device)
+            cu_seqlens = get_vision_cu_seqlens(image_grid_thw, merge_temporal=True)
+        cu_seqlens = cu_seqlens.to(hidden_states.device)
+        max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
         hidden_states = self.encoder(
-            hidden_states, position_embeddings=self.video_rope(patch_positions), cu_seqlens=cu_seqlens, **kwargs
+            hidden_states,
+            position_embeddings=self.video_rope(patch_positions),
+            cu_seqlens=cu_seqlens,
+            max_seqlen=max_seqlen,
+            **kwargs,
         )
         return BaseModelOutputWithPooling(last_hidden_state=self.merger(hidden_states, patch_positions))
 

@@ -83,6 +83,11 @@ class LlavaOnevision2Processor(ProcessorMixin):
         )
 
     def _process_images(self, images, **kwargs):
+        for name in ("patch_size", "merge_size", "temporal_patch_size"):
+            if name in kwargs and kwargs[name] != getattr(self.image_processor, name):
+                raise ValueError(
+                    f"{name} must match the image processor configuration ({getattr(self.image_processor, name)})"
+                )
         outputs, replacements = super()._process_images(images, **kwargs)
         outputs["patch_positions"] = get_vision_position_ids(
             torch.as_tensor(outputs["image_grid_thw"]), self.image_processor.merge_size, include_temporal=True

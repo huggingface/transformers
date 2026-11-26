@@ -20,13 +20,11 @@ from pathlib import Path
 import numpy as np
 import torch
 from PIL import Image
-from torchvision.transforms import InterpolationMode
-from torchvision.transforms import functional as tvF
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import auto_docstring, is_decord_available
+from ...utils import auto_docstring, is_av_available, is_decord_available
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, load_video
 from ...vision_utils import get_vision_position_ids
@@ -108,9 +106,14 @@ class LlavaOnevision2VideoProcessor(BaseVideoProcessor):
     def sample_frames(self, metadata: VideoMetadata, num_frames=None, fps=None, max_frames=None, **kwargs):
         if num_frames is not None and fps is not None:
             raise ValueError("num_frames and fps are mutually exclusive")
+        max_frames = self.max_frames if max_frames is None else max_frames
+        for name, value in (("num_frames", num_frames), ("fps", fps), ("max_frames", max_frames)):
+            if value is not None and value <= 0:
+                raise ValueError(f"{name} must be positive")
         count = metadata.total_num_frames
+        if count <= 0:
+            raise ValueError("The video must contain at least one frame")
         duration = count / metadata.fps if metadata.fps else count
-        max_frames = max_frames or self.max_frames
         if fps is not None:
             target = min(max(1, int(duration * fps)), max_frames)
         elif num_frames is not None:
@@ -120,6 +123,8 @@ class LlavaOnevision2VideoProcessor(BaseVideoProcessor):
         return torch.linspace(0, count - 1, min(count, target)).round().long().numpy()
 
     def fetch_videos(self, video_url_or_urls, sample_indices_fn=None):
+        if not (is_decord_available() or is_av_available()):
+            return super().fetch_videos(video_url_or_urls, sample_indices_fn=sample_indices_fn)
         if isinstance(video_url_or_urls, list):
             return list(zip(*[self.fetch_videos(video, sample_indices_fn) for video in video_url_or_urls]))
         return load_video(
@@ -129,6 +134,9 @@ class LlavaOnevision2VideoProcessor(BaseVideoProcessor):
         )
 
     def preprocess(self, videos, **kwargs: Unpack[LlavaOnevision2VideosKwargs]):
+        for name in ("patch_size", "merge_size", "temporal_patch_size"):
+            if name in kwargs and kwargs[name] != getattr(self, name):
+                raise ValueError(f"{name} must match the video processor configuration ({getattr(self, name)})")
         backend = kwargs.pop("video_backend", self.video_backend)
         if backend == "codec":
             return self._preprocess_codec(videos, **kwargs)
@@ -194,7 +202,7 @@ class LlavaOnevision2VideoProcessor(BaseVideoProcessor):
                     min_pixels=size.shortest_edge,
                     max_pixels=size.longest_edge,
                 )
-                video = tvF.resize(video, [height, width], interpolation=InterpolationMode.BICUBIC, antialias=True)
+                video = self.resize(video, SizeDict(height=height, width=width), resample=resample)
             frames = [frame.permute(1, 2, 0).cpu().numpy() for frame in video]
             # Frames are already aligned to the merge grid. A second resize would
             # change the rounded minimum-area result and its source coordinates.

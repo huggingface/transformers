@@ -17,6 +17,7 @@ import unittest
 import numpy as np
 
 from transformers import LlavaOnevision2VideoProcessor
+from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.video_utils import VideoMetadata
 
@@ -53,3 +54,24 @@ class LlavaOnevision2VideoProcessorTest(unittest.TestCase):
     def test_invalid_backend(self):
         with self.assertRaises(ValueError):
             self.processor(np.zeros((2, 8, 8, 3), dtype=np.uint8), video_backend="invalid")
+
+    def test_conflicting_video_geometry(self):
+        video = np.zeros((2, 8, 8, 3), dtype=np.uint8)
+        for name, value in (("patch_size", 4), ("merge_size", 1), ("temporal_patch_size", 2)):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, f"{name} must match"):
+                self.processor(video, **{name: value})
+
+    def test_invalid_sampling_arguments(self):
+        metadata = VideoMetadata(total_num_frames=32, fps=8)
+        for name in ("num_frames", "fps", "max_frames"):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, f"{name} must be positive"):
+                self.processor.sample_frames(metadata, **{name: 0})
+
+    def test_resample_override(self):
+        video = np.arange(2 * 12 * 12 * 3, dtype=np.uint8).reshape(2, 12, 12, 3)
+        bicubic = self.processor(video, do_sample_frames=False, return_tensors="np")
+        nearest = self.processor(
+            video, do_sample_frames=False, resample=PILImageResampling.NEAREST, return_tensors="np"
+        )
+        np.testing.assert_array_equal(bicubic["patch_positions"], nearest["patch_positions"])
+        self.assertFalse(np.allclose(bicubic["pixel_values_videos"], nearest["pixel_values_videos"]))

@@ -67,6 +67,11 @@ class LlavaOnevision2ProcessorTest(unittest.TestCase):
         self.assertEqual(outputs["pixel_values"].shape, (16, 12))
         self.assertNotIn("input_ids", outputs)
 
+    def test_conflicting_image_geometry(self):
+        for name, value in (("patch_size", 4), ("merge_size", 1), ("temporal_patch_size", 2)):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, f"{name} must match"):
+                self.processor(images=self.image, text=self.image_prompt, images_kwargs={name: value})
+
     def test_truncated_visual_tokens(self):
         with self.assertRaises(ValueError):
             self.processor(images=self.image, text=self.image_prompt, truncation=True, max_length=2)
