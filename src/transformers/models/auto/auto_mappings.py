@@ -758,6 +758,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("time_series_transformer", "TimeSeriesTransformerConfig"),
         ("timesfm", "TimesFmConfig"),
         ("timesfm2_5", "TimesFm2_5Config"),
+        ("timesfm3", "TimesFm3Config"),
         ("timesformer", "TimesformerConfig"),
         ("timm_backbone", "TimmBackboneConfig"),
         ("timm_wrapper", "TimmWrapperConfig"),

@@ -202,6 +202,7 @@ IGNORE_NON_TESTED = [
     "PPDocLayoutV4Model",  # Building part of bigger (tested) model
     "TimesFmModel",  # Building part of bigger (tested) model
     "TimesFm2_5Model",  # Building part of bigger (tested) model
+    "TimesFm3Model",  # Building part of bigger (tested) model
     "Ernie4_5_VL_MoeForConditionalGeneration",  # BC alias
     "Ernie4_5_VL_MoeModel",  # BC alias
     "PeAudioFrameLevelModel",

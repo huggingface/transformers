@@ -603,6 +603,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("time_series_transformer", "TimeSeriesTransformerModel"),
         ("timesfm", "TimesFmModel"),
         ("timesfm2_5", "TimesFm2_5Model"),
+        ("timesfm3", "TimesFm3Model"),
         ("timesformer", "TimesformerModel"),
         ("timm_backbone", "TimmBackbone"),
         ("timm_wrapper", "TimmWrapperModel"),
@@ -2169,6 +2170,7 @@ MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING_NAMES = OrderedDict(
     [
         ("timesfm", "TimesFmModelForPrediction"),
         ("timesfm2_5", "TimesFm2_5ModelForPrediction"),
+        ("timesfm3", "TimesFm3ModelForPrediction"),
     ]
 )
 
