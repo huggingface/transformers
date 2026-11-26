@@ -41,7 +41,10 @@ jobs:
       HF_XET_CACHE: /tmp/hf_xet_cache
       HF_METRICS_CACHE: /tmp/hf_metrics_cache
       TEST_ID: tests/models/qwen3_vl_moe/test_modeling_qwen3_vl_moe.py::Qwen3VLMoeModelTest::test_cached_decode_matches_cacheless
-      FLAKE_RUNS: 12500
+      # 12,500 runs per job, as 5 separate pytest processes of 2,500 runs: one process of 12,500 runs grows the workers'
+      # memory until the container is killed (exit code 137)
+      NUM_BATCHES: 5
+      FLAKE_RUNS: 2500
       NUM_WORKERS: 8
     defaults:
       run:
@@ -69,14 +72,19 @@ jobs:
 
       - name: Run the test with pytest-flakefinder
         run: |
-          set -o pipefail
           mkdir -p reports
-          python -m pytest -p no:cacheprovider --flake-finder --flake-runs=$FLAKE_RUNS -n $NUM_WORKERS -q -rf \
-            "$TEST_ID" 2>&1 | tee reports/pytest.log | tail -n 40
+          status=0
+          for b in $(seq 1 $NUM_BATCHES); do
+            python -m pytest -p no:cacheprovider --flake-finder --flake-runs=$FLAKE_RUNS -n $NUM_WORKERS -q -rf \
+              "$TEST_ID" > reports/pytest_batch$b.log 2>&1 || status=1
+            echo "batch $b: $(tail -n 1 reports/pytest_batch$b.log)"
+            grep -E "^(FAILED|E +AssertionError)" reports/pytest_batch$b.log | head -n 5 || true
+          done
+          exit $status
 
-      - name: Upload the log
+      - name: Upload the logs
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: log-${{ matrix.commit.name }}-shard-${{ matrix.shard }}
-          path: reports/pytest.log
+          path: reports/
