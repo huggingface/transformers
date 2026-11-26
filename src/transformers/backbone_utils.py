@@ -327,7 +327,7 @@ def consolidate_backbone_kwargs_to_config(
     from .models.auto import CONFIG_MAPPING
 
     use_timm_backbone = kwargs.pop("use_timm_backbone", True)
-    backbone_kwargs = kwargs.pop("backbone_kwargs", {})
+    backbone_kwargs = kwargs.pop("backbone_kwargs", {}) or {}
     backbone = kwargs.pop("backbone") if kwargs.get("backbone") is not None else default_backbone
     kwargs.pop("use_pretrained_backbone", None)
 

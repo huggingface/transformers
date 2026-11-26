@@ -29,6 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -493,12 +494,10 @@ class Step3p7RotaryEmbedding(nn.Module):
 
 
 class Step3p7RMSNorm(nn.Module):
-    """Gemma-style RMSNorm: normalizes in fp32 and scales by `weight + 1`."""
-
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, hidden_size: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.zeros(hidden_size))
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
@@ -534,10 +533,9 @@ class Step3p7MLP(nn.Module):
         return self.down_proj(gate * up)
 
 
+@use_experts_implementation
 class Step3p7Experts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
-
-    _fp8_experts_clamp_after_activation = True
 
     def __init__(self, config, swiglu_limit=None):
         super().__init__()

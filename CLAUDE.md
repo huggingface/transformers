@@ -1,1 +1,1 @@
-.ai/AGENTS.md
+@AGENTS.md
