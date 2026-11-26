@@ -116,7 +116,7 @@ You can also pass the kernel repository directly with `attn_implementation="kern
 
 ## Use Hub kernels
 
-Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Transformers detects ROCm and picks the AMD build for each layer, such as [amd/aiter-rope](https://huggingface.co/kernels/amd/aiter-rope) for rotary embeddings and [kernels-community/liger-kernels](https://huggingface.co/kernels/kernels-community/liger-kernels) for RMSNorm. When you write a custom [`KernelConfig`], use `"rocm"` as the device key for AMD-specific mappings.
+Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Transformers detects ROCm and picks the AMD build for each layer. See the [Loading kernels](./kernel_doc/loading_kernels) table for the supported layers. When you write a custom [`KernelConfig`], use `"rocm"` as the device key for AMD-specific mappings.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -126,7 +126,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-Hub kernels mostly speed up prefill and large batches. Benchmark your own workload before enabling them for small-batch decoding. See [Loading kernels](./kernel_doc/loading_kernels) for the full mapping.
+Hub kernels mostly speed up prefill and large batches. Benchmark your own workload before enabling them for small-batch decoding.
 
 ## Quantize models
 

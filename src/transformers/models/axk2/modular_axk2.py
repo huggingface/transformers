@@ -31,7 +31,6 @@ from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from ..clip.modeling_clip import CLIPMLP
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3RMSNorm,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
@@ -49,6 +48,7 @@ from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32TopkRouter,
     yarn_apply_mscale,
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 
 
 logger = logging.get_logger(__name__)
@@ -128,9 +128,6 @@ class AXK2Config(DeepseekV32Config):
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -181,7 +178,7 @@ class AXK2Config(DeepseekV32Config):
                 raise ValueError(f"`topk_group` ({self.topk_group}) cannot exceed `n_group` ({self.n_group}).")
 
 
-class AXK2RMSNorm(DeepseekV3RMSNorm):
+class AXK2RMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -414,7 +411,6 @@ class AXK2DecoderLayer(DeepseekV32DecoderLayer):
 class AXK2PreTrainedModel(DeepseekV32PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["inv_freq"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, AXK2TopkRouter):

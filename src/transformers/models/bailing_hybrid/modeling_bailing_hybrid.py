@@ -41,7 +41,7 @@ from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, yarn_apply_mscale
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -132,7 +132,6 @@ class BailingHybridRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -236,21 +235,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
-
-
-def yarn_apply_mscale(rope_parameters, scaling):
-    if rope_parameters.get("rope_type", "default") != "default":
-        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
-        if mscale_all_dim:
-            mscale = yarn_get_mscale(rope_parameters["factor"], mscale_all_dim)
-            scaling = scaling * mscale * mscale
-    return scaling
-
-
 def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     r"""
     Applies interleaved Rotary Position Embedding to the query and key tensors.
@@ -291,7 +275,7 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
 
 
 class BailingHybridAttention(nn.Module):
-    """Multi-head latent attention with the head-wise output gate used by Ling 3.0."""
+    """Multi-head latent attention with the head-wise output gate used by Ling 3 models."""
 
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__()
@@ -300,6 +284,8 @@ class BailingHybridAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
+
+        self.q_lora_rank = config.q_lora_rank
         self.qk_rope_head_dim = config.qk_rope_head_dim
         self.kv_lora_rank = config.kv_lora_rank
         self.v_head_dim = config.v_head_dim
@@ -308,7 +294,23 @@ class BailingHybridAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
         self.is_causal = True
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
+
+        self.q_proj = (
+            None
+            if self.q_lora_rank is not None
+            else nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
+        )
+        self.q_a_proj = (
+            nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
+            if self.q_lora_rank is not None
+            else None
+        )
+        self.q_a_layernorm = BailingHybridRMSNorm(self.q_lora_rank) if self.q_lora_rank is not None else None
+        self.q_b_proj = (
+            nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+            if self.q_lora_rank is not None
+            else None
+        )
 
         self.kv_a_proj_with_mqa = nn.Linear(
             self.hidden_size,
@@ -362,7 +364,10 @@ class BailingHybridAttention(nn.Module):
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
-        q_states = self.q_proj(hidden_states)
+        if self.q_lora_rank is None:
+            q_states = self.q_proj(hidden_states)
+        else:
+            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
         q_states = q_states.view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
@@ -410,8 +415,8 @@ class BailingHybridForgetGate(nn.Module):
         self.qkv_dim = self.head_dim * self.num_heads
         self.safe_gate = config.kda_safe_gate
         self.lower_bound = config.kda_lower_bound
-        self.A_log = nn.Parameter(torch.empty(self.num_heads))
-        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim))
+        self.A_log = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
+        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim, dtype=torch.float32))
         self.f_proj = nn.Linear(config.hidden_size, self.qkv_dim, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -479,6 +484,59 @@ def causal_conv1d_fn(
     if activation is not None:
         out = ACT2FN[activation](out)
     return out.to(hidden_states.dtype)
+
+
+@use_kernel_forward_from_hub("causal_conv1d_forward")
+def causal_conv1d_forward(
+    conv1d: nn.Conv1d,
+    hidden_states: torch.Tensor,
+    cache: Cache | None,
+    layer_idx: int,
+    activation: str | None = None,
+    state_idx: int = 0,
+    **kwargs,
+) -> torch.Tensor:
+    """
+    Causal depthwise convolution of a linear attention layer, reading and updating its conv state in `cache`.
+    Layers list it in `use_kernelized_func`, so that `kernelize` can replace it, e.g. with a runtime that manages
+    the conv state itself.
+
+    Args:
+        conv1d (`nn.Conv1d`):
+            The depthwise convolution, whose weights and kernel size are used.
+        hidden_states (`torch.Tensor` of shape `(batch_size, channels, seq_len)`):
+            The input to the convolution.
+        cache (`Cache`, *optional*):
+            The cache holding the conv state, updated in place.
+        layer_idx (`int`):
+            The index of the layer in `cache`.
+        activation (`str`, *optional*):
+            The activation applied to the output of the convolution.
+        state_idx (`int`, *optional*, defaults to 0):
+            Which of the layer's conv states to use.
+        kwargs:
+            Passed to the convolution kernel.
+
+    Returns:
+        `torch.Tensor` of shape `(batch_size, channels, seq_len)`: The output of the convolution.
+    """
+    seq_len = hidden_states.shape[-1]
+    conv_state = cache.get_conv_state(layer_idx, state_idx=state_idx) if cache is not None else None
+    weight = conv1d.weight.squeeze(1)
+
+    # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
+    if conv_state is not None and seq_len == 1 and not cache.is_recording_past(layer_idx):
+        return causal_conv1d_update(hidden_states, conv_state, weight, conv1d.bias, activation=activation)
+
+    if cache is not None:
+        hidden_states = cache.update_conv_state(
+            hidden_states, layer_idx, state_idx=state_idx, conv_kernel_size=conv1d.kernel_size[0]
+        )
+    hidden_states = causal_conv1d_fn(hidden_states, weight, conv1d.bias, activation=activation, **kwargs)
+    # Drop the previous states prepended by the cache
+    if cache is not None:
+        hidden_states = hidden_states[:, :, -seq_len:]
+    return hidden_states
 
 
 def l2norm(x: torch.Tensor, dim: int = -1, eps: float = 1e-6):
@@ -648,7 +706,13 @@ def chunk_kimi_delta_attention(
 
 
 @use_kernelized_func(
-    [chunk_kimi_delta_attention, recurrent_kimi_delta_attention, causal_conv1d_fn, causal_conv1d_update]
+    [
+        chunk_kimi_delta_attention,
+        recurrent_kimi_delta_attention,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class BailingHybridDeltaAttention(nn.Module):
     """Linear attention module."""
@@ -676,6 +740,7 @@ class BailingHybridDeltaAttention(nn.Module):
             kernel_size=self.conv_kernel_size,
             groups=self.conv_dim,
             padding=self.conv_kernel_size - 1,
+            dtype=torch.float32,
         )
         self.forget_gate = BailingHybridForgetGate(config)
         self.b_proj = nn.Linear(self.hidden_size, self.num_heads, bias=False)
@@ -699,33 +764,20 @@ class BailingHybridDeltaAttention(nn.Module):
             [self.q_proj(hidden_states), self.k_proj(hidden_states), self.v_proj(hidden_states)], dim=-1
         ).transpose(1, 2)
 
-        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
+        # Retrieve the recurrent state if there is a cache. It may be None if the layer is not initialized.
         if cache is not None:
-            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
             recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
-            conv_state, recurrent_state = None, None
+            recurrent_state = None
 
-        if conv_state is not None and seq_len == 1:
-            mixed_qkv = causal_conv1d_update(
-                mixed_qkv,
-                conv_state,
-                weight=self.conv1d.weight.squeeze(1),
-                bias=self.conv1d.bias,
-                activation=self.activation,
-            )
-        else:
-            if cache is not None:
-                mixed_qkv = cache.update_conv_state(mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size)
-            mixed_qkv = causal_conv1d_fn(
-                mixed_qkv,
-                weight=self.conv1d.weight.squeeze(1),
-                bias=self.conv1d.bias,
-                activation=self.activation,
-                **kwargs,
-            )
-            if cache is not None:
-                mixed_qkv = mixed_qkv[:, :, -seq_len:]
+        mixed_qkv = causal_conv1d_forward(
+            self.conv1d,
+            mixed_qkv,
+            cache,
+            self.layer_idx,
+            activation=self.activation,
+            **kwargs,
+        )
 
         query, key, value = torch.split(mixed_qkv.transpose(1, 2), [self.qkv_dim] * 3, dim=-1)
         query, key, value = [states.view(hidden_shape) for states in (query, key, value)]
@@ -745,20 +797,67 @@ class BailingHybridDeltaAttention(nn.Module):
                 **kwargs,
             )
         else:
-            output, last_recurrent_state = chunk_kimi_delta_attention(
-                query,
-                key,
-                value,
-                g=decay,
-                beta=beta,
+            num_intermediate_recurrent_states = (
+                cache.get_recurrent_states_to_keep(self.layer_idx) if cache is not None else 0
+            )
+            # Cannot be more than the number of tokens
+            num_intermediate_recurrent_states = min(num_intermediate_recurrent_states, seq_len)
+            # Since we want the last num_intermediate_recurrent_states, we need to artifically remove them from the chunks, and split the inputs
+            effective_sequence_length = seq_len - num_intermediate_recurrent_states
+            chunked_query, sequential_query = torch.tensor_split(query, [effective_sequence_length], dim=1)
+            chunked_key, sequential_key = torch.tensor_split(key, [effective_sequence_length], dim=1)
+            chunked_value, sequential_value = torch.tensor_split(value, [effective_sequence_length], dim=1)
+            chunked_beta, sequential_beta = torch.tensor_split(beta, [effective_sequence_length], dim=1)
+            chunked_decay, sequential_decay = torch.tensor_split(decay, [effective_sequence_length], dim=1)
+
+            all_outputs = []
+            # First, perform the fast chunked computation
+            chunked_attn_out, chunked_last_recurrent_state = chunk_kimi_delta_attention(
+                chunked_query,
+                chunked_key,
+                chunked_value,
+                g=chunked_decay,
+                beta=chunked_beta,
                 initial_state=recurrent_state,
                 output_final_state=cache is not None,
                 use_qk_l2norm_in_kernel=True,
                 **kwargs,
             )
+            chunked_last_recurrent_state = (
+                chunked_last_recurrent_state.to(torch.float32) if chunked_last_recurrent_state is not None else None
+            )
+            all_outputs.append(chunked_attn_out)
+            # If we need to return intermediate recurrent state, we now do it sequentially after the chunked part
+            intermediate_recurrent_states = []
+            last_recurrent_state = chunked_last_recurrent_state
+            for i in range(num_intermediate_recurrent_states):
+                local_attn_out, last_recurrent_state = recurrent_kimi_delta_attention(
+                    sequential_query[:, i : i + 1, ...],
+                    sequential_key[:, i : i + 1, ...],
+                    sequential_value[:, i : i + 1, ...],
+                    g=sequential_decay[:, i : i + 1, ...],
+                    beta=sequential_beta[:, i : i + 1, ...],
+                    initial_state=last_recurrent_state,
+                    output_final_state=True,
+                    use_qk_l2norm_in_kernel=True,
+                    **kwargs,
+                )
+                # Combine them
+                all_outputs.append(local_attn_out)
+                intermediate_recurrent_states.append(last_recurrent_state.to(torch.float32))
+
+            # Cat all outputs
+            output = torch.cat(all_outputs, dim=1)
+
+            # In case we needed intermediate states, we return them, otherwise the last one is the chunked one
+            last_recurrent_state = (
+                intermediate_recurrent_states
+                if len(intermediate_recurrent_states) > 0
+                else chunked_last_recurrent_state
+            )
 
         if cache is not None:
-            cache.update_recurrent_state(last_recurrent_state.to(torch.float32), self.layer_idx)
+            cache.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         output_gate = self.g_proj(hidden_states)
         output = self.o_norm(output, output_gate.view(hidden_shape)).reshape(batch_size, seq_len, -1)
@@ -771,12 +870,12 @@ class BailingHybridTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -894,25 +993,23 @@ class BailingHybridPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BailingHybridDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.42\..*"]
+    _keys_to_ignore_on_load_unexpected = None
     _can_record_outputs = {
         "router_logits": OutputRecorder(BailingHybridTopkRouter, index=0),
         "hidden_states": BailingHybridDecoderLayer,
         "attentions": BailingHybridAttention,
     }
-    _is_stateful = True
     _can_compile_fullgraph = True
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
+        "gate.weight",
         "conv1d",
         "dt_bias",
         "A_log",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, BailingHybridForgetGate):
@@ -941,6 +1038,10 @@ class BailingHybridModel(BailingHybridPreTrainedModel):
         self.norm = BailingHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = BailingHybridRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        self._keys_to_ignore_on_load_unexpected = [
+            rf"(^|\.)layers\.{layer_idx}\."
+            for layer_idx in range(config.num_hidden_layers, config.num_hidden_layers + config.num_mtp_layers)
+        ]
         # Initialize weights and apply final processing
         self.post_init()
 

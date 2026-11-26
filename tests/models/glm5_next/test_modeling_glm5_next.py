@@ -17,6 +17,7 @@ import copy
 import tempfile
 import unittest
 
+import pytest
 from safetensors.torch import load_file
 
 from transformers import (
@@ -30,6 +31,7 @@ from transformers.models.glm5_next.modeling_glm5_next import Glm5NextTextLinearA
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
+    skip_tpu,
     slow,
     torch_device,
 )
@@ -49,48 +51,53 @@ class Glm5NextVisionText2TextModelTester(VLMModelTester):
 
     conditional_generation_class = Glm5NextForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("video_start_token_id", 3)
-        kwargs.setdefault("video_end_token_id", 4)
-        kwargs.setdefault("image_start_token_id", 5)
-        kwargs.setdefault("image_end_token_id", 6)
-        kwargs.setdefault("image_token_id", 7)
-        kwargs.setdefault("video_token_id", 8)
-        kwargs.setdefault("image_size", 112)
-        kwargs.setdefault("patch_size", 14)
-        kwargs.setdefault("projection_intermediate_size", 48 * 3)
-        kwargs.setdefault("num_image_tokens", 64)
-        kwargs.setdefault("seq_length", 64 + 7)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("num_attention_heads", 2)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 16)
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("num_experts_per_tok", 4)
-        kwargs.setdefault("n_routed_experts", 8)
-        kwargs.setdefault("num_local_experts", 8)
-        kwargs.setdefault("linear_num_heads", 2)
-        kwargs.setdefault("linear_head_dim", 16)
-        kwargs.setdefault("linear_conv_kernel_dim", 2)
-        kwargs.setdefault("v_head_dim", 16)
-        kwargs.setdefault("qk_rope_head_dim", 0)
-        kwargs.setdefault("qk_nope_head_dim", 64)
-        kwargs.setdefault("q_lora_rank", 32)
-        kwargs.setdefault("kv_lora_rank", 16)
-        kwargs.setdefault("index_head_dim", 16)
-        kwargs.setdefault("index_n_heads", 2)
-        kwargs.setdefault("index_topk", 48)
-        kwargs.setdefault("index_kpool", 3)
-        kwargs.setdefault("depth", 2)
-        kwargs.setdefault("spatial_merge_size", 1)
-        kwargs.setdefault("temporal_patch_size", 2)
-        kwargs.setdefault("hidden_size", 48)
-        kwargs.setdefault("intermediate_size", 16)
-        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
-        kwargs.setdefault("layer_types", ["linear_attention", "indexed_attention"])
-        super().__init__(parent, **kwargs)
-        self.num_heads = self.num_attention_heads
-        self.out_hidden_size = self.hidden_size
+    small_config_overrides = {
+        "video_start_token_id": 3,
+        "video_end_token_id": 4,
+        "image_start_token_id": 5,
+        "image_end_token_id": 6,
+        "image_token_id": 7,
+        "video_token_id": 8,
+        "image_size": 112,
+        "patch_size": 14,
+        "projection_intermediate_size": 144,
+        "num_image_tokens": 64,
+        "seq_length": 71,
+        "hidden_act": "silu",
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "head_dim": 16,
+        "moe_intermediate_size": 16,
+        "num_experts_per_tok": 4,
+        "n_routed_experts": 8,
+        "num_local_experts": 8,
+        "linear_num_heads": 2,
+        "linear_head_dim": 16,
+        "linear_conv_kernel_dim": 2,
+        "v_head_dim": 16,
+        "qk_rope_head_dim": 0,
+        "qk_nope_head_dim": 64,
+        "q_lora_rank": 32,
+        "kv_lora_rank": 16,
+        "index_head_dim": 16,
+        "index_n_heads": 2,
+        "index_topk": 48,
+        "index_kpool": 3,
+        "depth": 2,
+        "spatial_merge_size": 1,
+        "temporal_patch_size": 2,
+        "hidden_size": 48,
+        "intermediate_size": 16,
+        "mlp_layer_types": ["dense", "sparse"],
+        "layer_types": ["linear_attention", "indexed_attention"],
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["num_heads"] = values["num_attention_heads"]
+        values["out_hidden_size"] = values["hidden_size"]
+        return values
 
     def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models
@@ -140,6 +147,11 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.8, 0.9]
     # FIXME: export is very sensitive to any shape changes
     test_torch_exportable = False
+
+    @pytest.mark.generate
+    @skip_tpu("test aborts")
+    def test_generate_without_input_ids(self):
+        super().test_generate_without_input_ids()
 
     def test_text_model_save_uses_original_weight_names(self):
         """Keep text-only saves in the released layout expected by SGLang (sgl-project/sglang#38618)."""

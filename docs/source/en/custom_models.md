@@ -42,7 +42,7 @@ from transformers import PreTrainedConfig
 from typing import List
 
 class ResnetConfig(PreTrainedConfig):
-    model_type = "resnet"
+    model_type = "custom-resnet"
 
     def __init__(
         self,
@@ -91,6 +91,8 @@ Writing models this way produces simpler code with a clear source of truth for a
 
 You'll create two ResNet models, a barebones ResNet model that outputs the hidden states and a ResNet model with an image classification head.
 
+Call [`~PreTrainedModel.post_init`] at the end of `__init__`. It initializes the weights and records the tied weights that [`~PreTrainedModel.from_pretrained`] needs to load the model.
+
 <hfoptions id="resnet">
 <hfoption id="ResnetModel">
 
@@ -123,6 +125,7 @@ class ResnetModel(PreTrainedModel):
             stem_type=config.stem_type,
             avg_down=config.avg_down,
         )
+        self.post_init()
 
     def forward(self, tensor):
         return self.model.forward_features(tensor)
@@ -156,6 +159,7 @@ class ResnetModelForImageClassification(PreTrainedModel):
             stem_type=config.stem_type,
             avg_down=config.avg_down,
         )
+        self.post_init()
 
     def forward(self, tensor, labels=None):
         logits = self.model(tensor)
@@ -199,7 +203,7 @@ Make sure you have the `model_type` attribute (must be different from existing m
 ```py
 from transformers import AutoConfig, AutoModel, AutoModelForImageClassification
 
-AutoConfig.register("resnet", ResnetConfig)
+AutoConfig.register("custom-resnet", ResnetConfig)
 AutoModel.register(ResnetConfig, ResnetModel)
 AutoModelForImageClassification.register(ResnetConfig, ResnetModelForImageClassification)
 ```

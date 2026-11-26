@@ -40,28 +40,18 @@ class ZayaModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = ZayaModel
 
-    def __init__(self, parent, **kwargs):
-        super().__init__(
-            parent=parent,
-            num_hidden_layers=2,
-            moe_intermediate_size=32,
-            num_experts_per_tok=1,
-            layer_types=["hybrid", "hybrid_sliding"],
-            sliding_window=64,
-            **kwargs,
-        )
+    small_config_overrides = {
+        "num_hidden_layers": 2,
+        "moe_intermediate_size": 32,
+        "num_experts_per_tok": 1,
+        "layer_types": ["hybrid", "hybrid_sliding"],
+        "sliding_window": 64,
+    }
 
 
 @require_torch
 class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = ZayaModelTester
-
-    @unittest.skip(
-        reason="Zaya disables tensor parallelism on purpose (`base_model_tp_plan = AttributeError()`): its 2 KV "
-        "heads cap the useful degree, so its experts have no TP plan to check."
-    )
-    def test_moe_parallel_plans_shard_experts(self):
-        pass
 
     def _get_conv_state_shape(self, batch_size: int, config):
         conv_state_size = config.num_key_value_heads * config.head_dim + config.num_attention_heads * config.head_dim

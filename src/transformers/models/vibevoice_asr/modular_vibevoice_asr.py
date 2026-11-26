@@ -31,7 +31,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoConfig, AutoModel
-from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import (
     VibeVoiceAcousticTokenizerPreTrainedModel,
 )
@@ -120,7 +120,7 @@ class VibeVoiceAsrConfig(PreTrainedConfig):
         self.acoustic_tokenizer_chunk_size = int(value) * hop_length
 
 
-class VibeVoiceAsrRMSNorm(Qwen2RMSNorm):
+class VibeVoiceAsrRMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -161,7 +161,6 @@ class VibeVoiceAsrPreTrainedModel(VibeVoiceAcousticTokenizerPreTrainedModel):
     _no_split_modules = None
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True
@@ -422,16 +421,12 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
         )
 
     def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
-        input_values = kwargs.pop("input_values", None)
-        padding_mask = kwargs.pop("padding_mask", None)
+        acoustic_tokenizer_chunk_size = kwargs.pop("acoustic_tokenizer_chunk_size", None)
 
-        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
+        model_inputs = super().prepare_inputs_for_generation(*args, is_first_iteration=is_first_iteration, **kwargs)
 
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            if input_values is not None:
-                model_inputs["input_values"] = input_values
-            if padding_mask is not None:
-                model_inputs["padding_mask"] = padding_mask
+        if (is_first_iteration or not kwargs.get("use_cache", True)) and acoustic_tokenizer_chunk_size is not None:
+            model_inputs["acoustic_tokenizer_chunk_size"] = acoustic_tokenizer_chunk_size
 
         return model_inputs
 

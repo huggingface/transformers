@@ -15,6 +15,8 @@ import subprocess
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import is_torch_available
 from transformers.testing_utils import (
     backend_device_count,
@@ -25,6 +27,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_large_accelerator,
     require_torch_n_accelerators,
+    skip_tpu,
     slow,
     torch_device,
 )
@@ -56,44 +59,45 @@ class DeepseekV4ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = DeepseekV4Model
 
-    def __init__(self, parent, **kwargs):
-        super().__init__(parent, **kwargs)
-        # Standard CausalLMModelTester knobs — override the parent's positional defaults.
-        self.hidden_size = 64
-        self.num_attention_heads = 4
-        self.num_key_value_heads = 1
-        self.num_hidden_layers = 2
-        self.num_experts_per_tok = 2
-        self.moe_intermediate_size = 64
-        self.max_position_embeddings = 64
+    small_config_overrides = {
+        # Overrides of the shared causal LM defaults.
+        "hidden_size": 64,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 1,
+        "num_hidden_layers": 2,
+        "num_experts_per_tok": 2,
+        "moe_intermediate_size": 64,
+        "max_position_embeddings": 64,
         # V4-only knobs.
-        self.head_dim = 32
-        self.partial_rotary_factor = 8 / 32  # qk_rope_head_dim=8 / head_dim=32
-        self.q_lora_rank = 32
-        self.o_groups = 2
-        self.o_lora_rank = 16
-        self.n_routed_experts = 4
-        self.n_shared_experts = 1
+        "head_dim": 32,
+        # qk_rope_head_dim=8 / head_dim=32
+        "partial_rotary_factor": 0.25,
+        "q_lora_rank": 32,
+        "o_groups": 2,
+        "o_lora_rank": 16,
+        "n_routed_experts": 4,
+        "n_shared_experts": 1,
         # All "moe" (no "hash_moe") so inputs_embeds-only generation tests in
         # CausalLMModelTest exercise the model without hitting the hash router's
         # input_ids requirement. A dedicated test covers the hash path.
-        self.mlp_layer_types = ["moe", "moe"]
-        self.layer_types = ["heavily_compressed_attention", "compressed_sparse_attention"]
-        self.sliding_window = 8
-        self.hc_mult = 2
-        self.hc_sinkhorn_iters = 3
-        self.hc_eps = 1.0e-6
-        self.index_n_heads = 2
-        self.index_head_dim = 16
-        self.index_topk = 2
-        self.num_nextn_predict_layers = 0
-        self.scoring_func = "sqrtsoftplus"
-        self.routed_scaling_factor = 1.5
-        self.swiglu_limit = 10.0
-        self.rope_theta = 10000.0
-        self.compress_rope_theta = 160000.0
-        self.attention_bias = False
-        self.attention_dropout = 0.0
+        "mlp_layer_types": ["moe", "moe"],
+        "layer_types": ["heavily_compressed_attention", "compressed_sparse_attention"],
+        "sliding_window": 8,
+        "hc_mult": 2,
+        "hc_sinkhorn_iters": 3,
+        "hc_eps": 1e-06,
+        "index_n_heads": 2,
+        "index_head_dim": 16,
+        "index_topk": 2,
+        "num_nextn_predict_layers": 0,
+        "scoring_func": "sqrtsoftplus",
+        "routed_scaling_factor": 1.5,
+        "swiglu_limit": 10.0,
+        "rope_theta": 10000.0,
+        "compress_rope_theta": 160000.0,
+        "attention_bias": False,
+        "attention_dropout": 0.0,
+    }
 
 
 @require_torch
@@ -108,6 +112,26 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
     # No SequenceClassification / TokenClassification / QA heads on V4.
     def is_pipeline_test_to_skip(self, *args, **kwargs):
         return True
+
+    @pytest.mark.generate
+    @skip_tpu("test aborts")
+    def test_beam_sample_generate_dict_output(self):
+        super().test_beam_sample_generate_dict_output()
+
+    @pytest.mark.generate
+    @skip_tpu("test aborts")
+    def test_beam_search_generate_dict_output(self):
+        super().test_beam_search_generate_dict_output()
+
+    @pytest.mark.generate
+    @skip_tpu("test aborts")
+    def test_greedy_generate_dict_outputs(self):
+        super().test_greedy_generate_dict_outputs()
+
+    @pytest.mark.generate
+    @skip_tpu("test aborts")
+    def test_sample_generate_dict_output(self):
+        super().test_sample_generate_dict_output()
 
     @unittest.skip(
         "V4's `DeepseekV4GroupedLinear` uses `torch.bmm` for the per-group matmul; "

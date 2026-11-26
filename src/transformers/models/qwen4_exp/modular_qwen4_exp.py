@@ -33,14 +33,13 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..mamba.modeling_mamba import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5Attention,
     Qwen3_5GatedDeltaNet,
     Qwen3_5RMSNorm,
     Qwen3_5TextRotaryEmbedding,
     apply_mask_to_padding_states,
-    causal_conv1d_fn,
-    causal_conv1d_update,
     rotate_half,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
@@ -51,6 +50,7 @@ from ..qwen3_5_moe.configuration_qwen3_5_moe import (
     Qwen3_5MoeVisionConfig,
 )
 from ..qwen3_5_moe.modeling_qwen3_5_moe import (
+    Qwen3_5MoeBaseModelOutputWithPast,
     Qwen3_5MoeForCausalLM,
     Qwen3_5MoeForConditionalGeneration,
     Qwen3_5MoeModel,
@@ -124,9 +124,6 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
 
     model_type = "qwen4_exp_text"
     base_model_tp_plan = {
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_expert.gate_proj": "colwise",
         "layers.*.mlp.shared_expert.up_proj": "colwise",
         "layers.*.mlp.shared_expert.down_proj": "rowwise",
@@ -291,17 +288,21 @@ class Qwen4ExpConfig(Qwen3_5MoeConfig):
     base_model_fsdp_plan = None
 
 
+class Qwen4ExpBaseModelOutputWithPast(Qwen3_5MoeBaseModelOutputWithPast):
+    pass
+
+
 class Qwen4ExpTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
     pass
 
 
 @no_inherit_decorator
 class Qwen4ExpTextRMSNorm(Qwen3_5RMSNorm):
-    def __init__(self, dim: int, group_size: int | None = None, eps: float = 1e-6):
-        super().__init__(dim, eps=eps)
+    def __init__(self, hidden_size: int, group_size: int | None = None, eps: float = 1e-6):
+        super().__init__(hidden_size, eps=eps)
         self.group_size = group_size
-        if group_size is not None and dim % group_size != 0:
-            raise ValueError(f"hidden_size ({dim}) must be divisible by group_size ({group_size}).")
+        if group_size is not None and hidden_size % group_size != 0:
+            raise ValueError(f"hidden_size ({hidden_size}) must be divisible by group_size ({group_size}).")
 
     def _norm(self, x: torch.Tensor) -> torch.Tensor:
         if self.group_size is not None:
@@ -317,7 +318,13 @@ class Qwen4ExpTextRMSNormGated(Qwen3NextRMSNormGated):
 
 
 @use_kernelized_func(
-    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+    [
+        torch_recurrent_gated_delta_rule,
+        torch_chunk_gated_delta_rule,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class Qwen4ExpTextGatedDeltaNet(Qwen3_5GatedDeltaNet):
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
@@ -392,6 +399,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
         cache: Cache | None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         batch_size, seq_length, _ = hidden_states.shape
         hidden_shape = (batch_size, seq_length, -1, self.index_head_dim)
@@ -412,6 +420,19 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         if cache is not None:
             raw_keys = cache.update_indexer(raw_keys, self.layer_idx)
 
+        return self._select_tokens(hidden_states, q, raw_keys, full_cos, full_sin, attention_mask, **kwargs)
+
+    def _select_tokens(
+        self,
+        hidden_states: torch.Tensor,
+        q: torch.Tensor,
+        raw_keys: torch.Tensor,
+        full_cos: torch.Tensor,
+        full_sin: torch.Tensor,
+        attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        batch_size, seq_length, _ = hidden_states.shape
         # Note that the mask is never None here as we only allow eager and sdpa, and we do not allow sdpa's mask skip
         # It's always 4D with either bool (sdpa) or float (eager) and already gives us the valid indices
         visible_token_indices = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
@@ -487,7 +508,7 @@ class Qwen4ExpTextAttention(Qwen3_5Attention):
         cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        selected_token_mask = self.indexer(hidden_states, position_embeddings, attention_mask, cache)
+        selected_token_mask = self.indexer(hidden_states, position_embeddings, attention_mask, cache, **kwargs)
         # Combine the boolean selection mask with the causal mask (bool for sdpa, float for eager).
         if attention_mask.dtype == torch.bool:
             attention_mask = attention_mask & selected_token_mask
@@ -639,7 +660,9 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         padded_vocab_size = math.ceil(self.total_vocab_size / ngram_vocab_divisor) * ngram_vocab_divisor
         self.ngram_embedding = nn.Embedding(padded_vocab_size, head_dim_per_ngram)
 
-    def _shift_right_ignore_eos(self, token_ids: torch.Tensor, shift: int) -> torch.Tensor:
+    def _shift_right_ignore_eos(
+        self, token_ids: torch.Tensor, shift: int, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         if shift == 0:
             return token_ids
         batch_size, seq_len = token_ids.shape
@@ -656,7 +679,9 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         return torch.where(valid, shifted, token_ids.new_full((), self.eos_token_id))
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def forward(self, input_ids: torch.Tensor, cache: Cache | None) -> torch.Tensor:
+    def forward(
+        self, input_ids: torch.Tensor, cache: Cache | None, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         input_ids = input_ids.long()
         # This is a trick to store the previous N=self.context_len `input_ids` - indeed the manipulations are identical to storing
         # a past conv_state, so we can use an additional conv_states inside the Cache for it
@@ -682,7 +707,9 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
 
         # Get full token history
         token_history = torch.cat([previous_context, input_ids], dim=-1)
-        shifted_tokens = [self._shift_right_ignore_eos(token_history, shift) for shift in range(self.ngram_size)]
+        shifted_tokens = [
+            self._shift_right_ignore_eos(token_history, shift, **kwargs) for shift in range(self.ngram_size)
+        ]
 
         blocks = []
         for ngram in range(2, self.ngram_size + 1):
@@ -741,7 +768,9 @@ class Qwen4ExpTextPLELayer(nn.Module):
             bias=False,
         )
 
-    def _short_conv(self, hidden_states: torch.Tensor, cache: Cache | None) -> torch.Tensor:
+    def _short_conv(
+        self, hidden_states: torch.Tensor, cache: Cache | None, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
@@ -767,8 +796,9 @@ class Qwen4ExpTextPLELayer(nn.Module):
         input_ids: torch.Tensor,
         cache: Cache | None,
         conv_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        embeddings = self.ple_embedding(input_ids, cache)
+        embeddings = self.ple_embedding(input_ids, cache, **kwargs)
         key_normed = self.norm_key(self.key_proj(embeddings)).unflatten(-1, (self.hc_count, self.hidden_size))
         value = self.value_proj(embeddings)
         query_normed = self.norm_query(hidden_states).unflatten(-1, (self.hc_count, self.hidden_size))
@@ -780,7 +810,7 @@ class Qwen4ExpTextPLELayer(nn.Module):
         if conv_mask is not None:
             gated_value = apply_mask_to_padding_states(gated_value, conv_mask)
             gated_value_normed = apply_mask_to_padding_states(gated_value_normed, conv_mask)
-        output = gated_value + self._short_conv(gated_value_normed, cache)
+        output = gated_value + self._short_conv(gated_value_normed, cache, **kwargs)
         return output
 
 
@@ -811,7 +841,9 @@ class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         if self.ple is not None:
-            hidden_states = hidden_states + self.ple(hidden_states, ple_input_ids, cache, conv_mask=conv_mask)
+            hidden_states = hidden_states + self.ple(
+                hidden_states, ple_input_ids, cache, conv_mask=conv_mask, **kwargs
+            )
 
         hidden_states, hyper_input, injection_weights = self.attn_hyper_connection(hidden_states)
         if self.layer_type == "linear_attention":
@@ -849,7 +881,6 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
     # during forward. Note that if it fits on accelerator (e.g. huge B200 gpus), then it will not be skipped, and will be put on device
     _no_placement_params = ["ple.ple_embedding.ngram_embedding.weight"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Qwen4ExpTextGatedDeltaNet):
@@ -1028,7 +1059,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
 
 class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
-    config: Qwen4ExpTextConfig
+    pass
 
 
 @auto_docstring
@@ -1056,7 +1087,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MoeModelOutputWithPast:
+    ) -> tuple | Qwen4ExpBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1126,7 +1157,9 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
             **kwargs,
         )
 
-        return outputs
+        return Qwen4ExpBaseModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 @auto_docstring

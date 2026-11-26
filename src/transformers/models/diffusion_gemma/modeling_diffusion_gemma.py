@@ -121,7 +121,6 @@ class DiffusionGemmaTextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -136,16 +135,16 @@ class DiffusionGemmaTextRotaryEmbedding(nn.Module):
 
 
 class DiffusionGemmaRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6, with_scale: bool = True):
+    def __init__(self, hidden_size: int, eps: float = 1e-6, with_scale: bool = True):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
         self.with_scale = with_scale
 
         if self.with_scale:
-            self.weight = nn.Parameter(torch.ones(dim), requires_grad=True)
+            self.weight = nn.Parameter(torch.ones(hidden_size), requires_grad=True)
 
     def _norm(self, hidden_states: torch.Tensor):
-        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
+        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.variance_epsilon
         # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to address compiler differences between Torch and JAX
         return hidden_states * torch.pow(mean_squared, -0.5)
 
@@ -298,9 +297,9 @@ class DiffusionGemmaEncoderTextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-        self.q_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.v_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps, with_scale=False)
+        self.q_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.v_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -401,9 +400,9 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-        self.q_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.v_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps, with_scale=False)
+        self.q_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.v_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -827,8 +826,7 @@ class DiffusionGemmaPreTrainedModel(PreTrainedModel):
         "DiffusionGemmaDecoderTextLayer",
         "DiffusionGemmaEncoderTextLayer",
     ]
-    _skip_keys_device_placement = ["cache"]
-    _supports_flash_attn = True
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
     _supports_sdpa = True
     _supports_flex_attn = True
 
@@ -837,7 +835,6 @@ class DiffusionGemmaPreTrainedModel(PreTrainedModel):
     _can_record_outputs = None  # override
     input_modalities = ("image", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, DiffusionGemmaTextRotaryEmbedding):
@@ -1001,6 +998,7 @@ def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: tor
 class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
     _can_record_outputs = {
         "router_logits": OutputRecorder(DiffusionGemmaTextRouter, index=0),
         "hidden_states": DiffusionGemmaEncoderTextLayer,
@@ -1117,7 +1115,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            self.create_masks_for_generate(
+            causal_mask_mapping = self.create_masks_for_generate(
                 config=self.config.get_text_config(),
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
@@ -1170,12 +1168,13 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
 
         # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
         # Smaller Gemma models use a conventional casual attention mask
-        if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
-            block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
-            if mm_token_type_ids is not None:
-                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
-
-            mask_kwargs["block_sequence_ids"] = block_sequence_ids
+        if (
+            getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision"
+            and mm_token_type_ids is not None
+        ):
+            mask_kwargs["block_sequence_ids"] = get_block_sequence_ids_for_mask(
+                mm_token_type_ids, device=inputs_embeds.device
+            )
 
         return create_masks_for_generate(**mask_kwargs)
 

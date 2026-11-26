@@ -50,7 +50,6 @@ class Ministral3ModelTester(CausalLMModelTester):
 
 @require_torch
 class Ministral3ModelTest(CausalLMModelTest, unittest.TestCase):
-    _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = Ministral3ModelTester
 
@@ -94,6 +93,7 @@ class Ministral3IntegrationTest(unittest.TestCase):
         EXPECTED_MEANS = Expectations(
             {
                 ("cuda", None): torch.tensor([[-1.1503, -1.9935, -0.4457, -1.0717, -1.9182, -1.1431, -0.9697, -1.7098]]),
+                ("cuda", (8, 6)): torch.tensor([[-1.0504, -2.5976, -0.4176, -1.0341, -1.8865, -1.1867, -0.9150, -1.7992]]),
                 ("xpu", None): torch.tensor([[-0.9800, -2.4773, -0.2386, -1.0664, -1.8994, -1.3792, -1.0531, -1.8832]]),
             }
         )
@@ -112,6 +112,7 @@ class Ministral3IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", None): "My favourite condiment is 100% pure olive oil. It's a staple in my kitchen and I use it in",
+                ("cuda", (8, 6)): "My favourite condiment is 100% pure olive oil. It is a versatile, healthy, and delicious ingredient that can",
                 ("xpu", None): "My favourite condiment is iced tea. I love the way it makes me feel. It’s like a little bubble bath for",
             }
         )

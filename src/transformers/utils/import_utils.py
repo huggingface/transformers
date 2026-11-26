@@ -174,8 +174,8 @@ TORCHAO_MIN_VERSION = "0.15.0"
 COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.18.2"
-KERNELS_MAX_VERSION = "0.19.0"
+KERNELS_MIN_VERSION = "0.19.0"
+KERNELS_MAX_VERSION = "0.20.0"
 MISTRAL_COMMON_MIN_VERSION = "1.11.5"
 
 
@@ -640,12 +640,27 @@ def is_torch_tpu_available(check_device: bool = False) -> bool:
 
 @lru_cache
 @_make_compile_constant
+def is_torch_supa_available(check_device: bool = False) -> bool:
+    """Check whether the current PyTorch accelerator is an available Biren  SUPA device."""
+    if not is_torch_available() or not _is_package_available("torch_supa")[0]:
+        return False
+
+    import torch
+
+    accelerator = get_current_accelerator()
+    return accelerator is not None and accelerator.type == "supa" and torch.accelerator.is_available()
+
+
+@lru_cache
+@_make_compile_constant
 def is_torch_bf16_gpu_available() -> bool:
     if not is_torch_available():
         return False
 
     import torch
 
+    if is_torch_supa_available():
+        return torch.supa.is_bf16_supported()
     if torch.cuda.is_available():
         return torch.cuda.is_bf16_supported()
     if is_torch_xpu_available():
@@ -730,6 +745,8 @@ def is_torch_tf32_available() -> bool:
         if f"{device_info.major}{device_info.minor}" >= "22":
             return True
         return False
+    if is_torch_supa_available():
+        return is_torch_greater_or_equal("2.9")
     torch_version = getattr(torch, "version")
     if not torch.cuda.is_available() or torch_version.cuda is None:
         return False
@@ -934,7 +951,8 @@ def is_soynlp_available() -> bool:
 @lru_cache
 @_make_compile_constant
 def is_multipart_available() -> bool:
-    return _is_package_available("multipart")[0]
+    # `python-multipart` >= 0.0.13 ships `python_multipart` and deprecates the legacy `multipart` import shim.
+    return _is_package_available("python_multipart")[0] or _is_package_available("multipart")[0]
 
 
 @lru_cache

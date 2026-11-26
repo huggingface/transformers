@@ -310,7 +310,6 @@ class MetaClip2PreTrainedModel(PreTrainedModel):
         "attentions": MetaClip2Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

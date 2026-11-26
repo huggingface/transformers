@@ -49,16 +49,16 @@ logger = logging.get_logger(__name__)
 class HrmTextRMSNorm(torch.nn.Module):
     def __init__(self, eps: float = 1e-6):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
 
     def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.variance_epsilon)
 
     def forward(self, x):
         return self._norm(x.float()).type_as(x)
 
     def extra_repr(self):
-        return f"eps={self.eps}"
+        return f"eps={self.variance_epsilon}"
 
 
 class HrmTextMLP(nn.Module):
@@ -314,7 +314,6 @@ class HrmTextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["HrmTextDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -338,7 +337,6 @@ class HrmTextPreTrainedModel(PreTrainedModel):
                 )
         return super()._check_and_adjust_attn_implementation(attn_implementation, is_init_check, allow_all_kernels)
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, HrmTextModel):
@@ -383,7 +381,6 @@ class HrmTextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)

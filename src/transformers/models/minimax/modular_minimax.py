@@ -34,6 +34,7 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..mamba2.modeling_mamba2 import apply_mask_to_padding_states
 from ..mixtral.modeling_mixtral import (
     MixtralAttention,
@@ -44,7 +45,6 @@ from ..mixtral.modeling_mixtral import (
     MixtralForTokenClassification,
     MixtralModel,
     MixtralPreTrainedModel,
-    MixtralRMSNorm,
     MixtralSparseMoeBlock,
     MixtralTopKRouter,
 )
@@ -87,16 +87,12 @@ class MiniMaxConfig(PreTrainedConfig):
     ```"""
 
     model_type = "minimax"
-    keys_to_ignore_at_inference = ["cache"]
     default_theta = 1000000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -156,7 +152,7 @@ class MiniMaxConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class MiniMaxRMSNorm(MixtralRMSNorm):
+class MiniMaxRMSNorm(LlamaRMSNorm):
     pass
 
 

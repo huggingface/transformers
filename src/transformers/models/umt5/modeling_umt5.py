@@ -546,7 +546,6 @@ class UMT5PreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -1060,7 +1059,7 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
 
         sequence_output = decoder_outputs[0]
 
-        if self.config.tie_word_embeddings:
+        if self.config.scale_decoder_outputs:
             # Rescale output before projecting on vocab
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
             sequence_output = sequence_output * (self.model_dim**-0.5)

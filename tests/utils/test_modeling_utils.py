@@ -2741,6 +2741,22 @@ class ModelUtilsTest(TestCasePlus):
 
         self.assertIn("Skipping caching allocator warmup", cl.out)
 
+    def test_activation_checkpointing_keeps_the_cache_without_gradients(self):
+        """
+        Activation checkpointing drops the cache in training mode, since the backward replay would write it a second
+        time. Without gradients there is no backward, so a forward in training mode, like generating from a model being
+        trained, must fill the cache.
+        """
+        model = LlamaForCausalLM(
+            LlamaConfig(hidden_size=32, num_hidden_layers=2, num_attention_heads=4, intermediate_size=37)
+        )
+        model.activation_checkpointing_enable()
+        model.train()
+        input_ids = torch.tensor([[1, 2, 3, 4]])
+        with torch.no_grad():
+            cache = model(input_ids, use_cache=True).cache
+        self.assertEqual(cache.get_seq_length(), 4)
+
     def test_mismatched_keys_with_quantizer(self):
         from transformers import FineGrainedFP8Config
 

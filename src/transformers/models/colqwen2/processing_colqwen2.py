@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from typing import Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -114,6 +115,8 @@ class ColQwen2Processor(ProcessorMixin):
             if suffix is None:
                 suffix = self.query_augmentation_token * 10
 
+            if isinstance(text, str):
+                text = [text]
             text = [f"{self.query_prefix}{sample}{suffix}\n" for sample in text]
 
         model_inputs = super().__call__(images=images, text=text, **output_kwargs)
