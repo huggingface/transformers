@@ -288,7 +288,7 @@ class OlmoHybridRotaryEmbedding(nn.Module):
         cos = emb.cos() * self.attention_scaling
         sin = emb.sin() * self.attention_scaling
 
-        # KEY difference from parent: return float32, don't cast to x.dtype
+        # diff from parent: return float32, don't cast to x.dtype
         # keeping it in full precision
         return cos, sin
 
