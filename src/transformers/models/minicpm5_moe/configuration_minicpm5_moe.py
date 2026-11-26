@@ -30,18 +30,18 @@ from ...utils import auto_docstring
 @strict
 class MiniCPM5MoeConfig(PreTrainedConfig):
     r"""
-    mlp_layer_types (`list[str]`, *optional*):
-        Feed-forward type for each layer, either `"dense"` or `"sparse"`. Defaults to one dense layer followed by sparse layers.
-    n_routed_experts (`int`, *optional*, defaults to 160):
-        Number of routed experts in each sparse layer.
     n_shared_experts (`int`, *optional*, defaults to 1):
         Number of expert widths in the always-active shared MLP.
+    n_routed_experts (`int`, *optional*, defaults to 160):
+        Number of routed experts in each sparse layer.
     routed_scaling_factor (`float`, *optional*, defaults to 3.66):
         Scale applied to the selected expert weights after normalization.
     n_group (`int`, *optional*, defaults to 1):
         Number of expert groups used for top-k selection.
     topk_group (`int`, *optional*, defaults to 1):
         Number of expert groups retained during routing.
+    mlp_layer_types (`list[str]`, *optional*):
+        Feed-forward type for each layer, either `"dense"` or `"sparse"`. Defaults to one dense layer followed by sparse layers.
     """
 
     model_type = "minicpm5_moe"
