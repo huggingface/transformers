@@ -23,7 +23,7 @@ from transformers.testing_utils import cleanup, require_torch, require_torch_acc
 if is_torch_available():
     import torch
 
-    from transformers import AfmoeForCausalLM, AfmoeModel, AutoTokenizer
+    from transformers import AfmoeForCausalLM, AfmoeModel, AutoTokenizer, DataCollatorWithFlattening
     from transformers.conversion_mapping import get_model_conversion_mapping
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -146,6 +146,34 @@ class AfmoeModelTest(CausalLMModelTest, unittest.TestCase):
             for mapping in weight_mapping
         )
         self.assertTrue(found_fused_expert_converter)
+
+    def test_packed_sequences_no_cross_document_attention(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        collator = DataCollatorWithFlattening(return_tensors="pt")
+        doc_a = [3, 4, 5, 6, 7, 8, 9]
+        doc_a_edited = [10, 11, 12, 13, 14, 15, 16]
+        doc_b = [17, 18, 19, 20, 21, 22]
+
+        for attn in ("eager", "sdpa"):
+            torch.manual_seed(0)
+            model = AfmoeForCausalLM(config)
+            model.set_attn_implementation(attn)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                alone = model(torch.tensor([doc_b], device=torch_device), use_cache=False).logits[0]
+                batch_orig = {
+                    k: v.to(torch_device) if torch.is_tensor(v) else v
+                    for k, v in collator([{"input_ids": doc_a}, {"input_ids": doc_b}]).items()
+                }
+                batch_edit = {
+                    k: v.to(torch_device) if torch.is_tensor(v) else v
+                    for k, v in collator([{"input_ids": doc_a_edited}, {"input_ids": doc_b}]).items()
+                }
+                packed = model(**batch_orig, use_cache=False).logits[0, len(doc_a) :]
+                edited = model(**batch_edit, use_cache=False).logits[0, len(doc_a) :]
+            torch.testing.assert_close(packed, alone, rtol=1e-5, atol=1e-5)
+            torch.testing.assert_close(packed, edited, rtol=1e-5, atol=1e-5)
 
 
 @require_torch_accelerator

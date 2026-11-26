@@ -343,6 +343,35 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         with pytest.raises(StrictDataclassClassValidationError):
             GraniteMoeHybridConfig(layer_types=["not allowed!"])
 
+    def test_packed_sequences_no_cross_document_attention(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.layers_block_type = ["full_attention"] * config.num_hidden_layers
+        collator = DataCollatorWithFlattening(return_tensors="pt")
+        doc_a = [3, 4, 5, 6, 7, 8, 9]
+        doc_a_edited = [10, 11, 12, 13, 14, 15, 16]
+        doc_b = [17, 18, 19, 20, 21, 22]
+
+        for attn in ("eager", "sdpa"):
+            torch.manual_seed(0)
+            model = GraniteMoeHybridForCausalLM(config)
+            model.set_attn_implementation(attn)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                alone = model(torch.tensor([doc_b], device=torch_device), use_cache=False).logits[0]
+                batch_orig = {
+                    k: v.to(torch_device) if torch.is_tensor(v) else v
+                    for k, v in collator([{"input_ids": doc_a}, {"input_ids": doc_b}]).items()
+                }
+                batch_edit = {
+                    k: v.to(torch_device) if torch.is_tensor(v) else v
+                    for k, v in collator([{"input_ids": doc_a_edited}, {"input_ids": doc_b}]).items()
+                }
+                packed = model(**batch_orig, use_cache=False).logits[0, len(doc_a) :]
+                edited = model(**batch_edit, use_cache=False).logits[0, len(doc_a) :]
+            torch.testing.assert_close(packed, alone, rtol=1e-5, atol=1e-5)
+            torch.testing.assert_close(packed, edited, rtol=1e-5, atol=1e-5)
+
     @unittest.skip(
         "Model doesn't have rope but was added with `config_rope_parameters` which is `None` for some reason..."
     )
