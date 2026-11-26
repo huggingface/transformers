@@ -420,6 +420,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("m2m_100", "M2M100Config"),
         ("mamba", "MambaConfig"),
         ("mamba2", "Mamba2Config"),
+        ("mamba3", "Mamba3Config"),
         ("marian", "MarianConfig"),
         ("markuplm", "MarkupLMConfig"),
         ("mask2former", "Mask2FormerConfig"),

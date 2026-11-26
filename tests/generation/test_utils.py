@@ -3010,16 +3010,22 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 current_conv_shape = conv_shape
                 if isinstance(conv_shape, list) and isinstance(conv_shape[0], (list, tuple)):
                     current_conv_shape = conv_shape[i]
+                # May not be used (e.g. mamba3, which only has recurrent states)
+                if not layer.is_conv_states_initialized[i]:
+                    pass
                 # Fix sized only if we do not record the past
-                if not layer.record_past:
+                elif not layer.record_past:
                     self.assertEqual(layer.conv_states[i].shape, current_conv_shape)
                 # If we record the past, just make sure it's larger
                 else:
                     self.assertEqual(layer.conv_states[i].shape[:-1], current_conv_shape[:-1])
                     self.assertTrue(layer.conv_states[i].shape[-1] >= current_conv_shape[-1])
                 # May not be used (e.g. lfm2)
+                current_recurrent_shape = recurrent_shape
+                if isinstance(recurrent_shape, list) and isinstance(recurrent_shape[0], (list, tuple)):
+                    current_recurrent_shape = recurrent_shape[i]
                 if layer.is_recurrent_states_initialized[i]:
-                    self.assertEqual(layer.recurrent_states[i].shape, recurrent_shape)
+                    self.assertEqual(layer.recurrent_states[i].shape, current_recurrent_shape)
 
         # Check each layer has the correct shape
         for layer_idx, layer in enumerate(cache.layers):

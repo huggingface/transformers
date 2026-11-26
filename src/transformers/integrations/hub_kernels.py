@@ -74,6 +74,7 @@ _KERNELS_INTERNAL_PATH_MAPPINGS = {
     "mamba_split_conv1d_scan_combined": "ops.triton.ssd_combined",
     "selective_state_update": "ops.triton.selective_state_update",
     "mamba_chunk_scan_combined": "ops.triton.ssd_combined",
+    "mamba3_siso_combined": "ops.triton.mamba3.mamba3_siso_combined",
     "mamba_inner_fn": "ops.selective_scan_interface",
     "selective_scan_fn": "ops.selective_scan_interface",
 }

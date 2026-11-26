@@ -807,6 +807,8 @@
         title: Mamba
       - local: model_doc/mamba2
         title: Mamba2
+      - local: model_doc/mamba3
+        title: Mamba3
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
