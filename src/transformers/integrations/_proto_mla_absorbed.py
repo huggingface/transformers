@@ -4,7 +4,9 @@
 # on the latent rows directly, as a single-KV-head attention with 576-dim keys and 512-dim values:
 #   q_latent = q_nope @ W_UK  (per head)      scores = q_latent . kv_latent + q_rope . k_rope
 #   out = softmax(scores) @ kv_latent, then @ W_UV (per head) before o_proj
+import importlib.util
 import itertools
+import os
 
 import torch
 import triton
@@ -258,11 +260,19 @@ def _prefill_step(attn, allocator, q_nope, q_rope, kv, block_table, cu_seqlens_k
             latents[None, None, :, : attn.kv_lora_rank], latents[None, None, :, attn.kv_lora_rank :]
         )
         query_states = torch.cat([q_nope[:, :, tokens], q_rope[:, :, tokens]], dim=-1)
-        attention_interface = ALL_ATTENTION_FUNCTIONS[attn.config._attn_implementation]
-        prefill_out, _ = attention_interface(
-            attn, query_states, key_states, value_states, None, dropout=0.0, scaling=attn.scaling,
-            cu_seq_lens_q=cu_q_p, cu_seq_lens_k=cu_k_p, max_length_q=max_q, max_length_k=max_k,
-        )  # fmt: skip
+        if _trtllm_ragged_available(device):
+            # [scratch] Blackwell: flashinfer's TRT-LLM ragged DeepSeek prefill, as vLLM runs it (an 8,192-token prompt of
+            # DeepSeek-V3.1 at TP4, 32 heads: 0.55 ms vs 2.34 for FA2's varlen call)
+            prefill_out = _trtllm_ragged_prefill(
+                query_states[0].transpose(0, 1), key_states[0].transpose(0, 1), value_states[0].transpose(0, 1),
+                cu_q_p, cu_k_p, max_q, max_k, attn.scaling,
+            )  # fmt: skip
+        else:
+            attention_interface = ALL_ATTENTION_FUNCTIONS[attn.config._attn_implementation]
+            prefill_out, _ = attention_interface(
+                attn, query_states, key_states, value_states, None, dropout=0.0, scaling=attn.scaling,
+                cu_seq_lens_q=cu_q_p, cu_seq_lens_k=cu_k_p, max_length_q=max_q, max_length_k=max_k,
+            )  # fmt: skip
         out[tokens] = prefill_out.reshape(tokens.shape[0], num_heads, attn.v_head_dim)
     if plan["decode"] is not None:
         tokens, seqs, cu_q_d, cu_k_d = plan["decode"]
@@ -272,6 +282,34 @@ def _prefill_step(attn, allocator, q_nope, q_rope, kv, block_table, cu_seqlens_k
         )  # fmt: skip
         out[tokens] = torch.einsum("thc,hvc->thv", latent_out, w_uv)
     return out.reshape(1, num_tokens, -1)
+
+
+_PROTO_MLA_TRTLLM_PREFILL = os.environ.get("PROTO_MLA_TRTLLM_PREFILL", "1") == "1"
+_RAGGED_WORKSPACE: dict = {}
+
+
+def _trtllm_ragged_available(device: torch.device) -> bool:
+    return (
+        _PROTO_MLA_TRTLLM_PREFILL
+        and device.type == "cuda"
+        and torch.cuda.get_device_capability(device)[0] == 10
+        and importlib.util.find_spec("flashinfer") is not None
+    )
+
+
+def _trtllm_ragged_prefill(query, key, value, cu_seqlens_q, cu_seqlens_k, max_q, max_k, scale):
+    """Causal (bottom-right) varlen attention of `query` [tokens, heads, 192] on `key` [keys, heads, 192] and `value`
+    [keys, heads, 128]. Returns [tokens, heads, 128]."""
+    import flashinfer
+
+    workspace = _RAGGED_WORKSPACE.get(query.device)
+    if workspace is None:
+        workspace = _RAGGED_WORKSPACE[query.device] = torch.zeros(128 << 20, dtype=torch.uint8, device=query.device)
+    seq_lens = (cu_seqlens_k[1:] - cu_seqlens_k[:-1]).to(torch.int32)
+    return flashinfer.prefill.trtllm_ragged_attention_deepseek(
+        query.contiguous(), key.contiguous(), value.contiguous(), workspace, seq_lens, max_q, max_k, scale, 1.0, 1.0,
+        seq_lens.shape[0], -1, cu_seqlens_q, cu_seqlens_k, False, True, False,
+    )  # fmt: skip
 
 
 def _block_table_write_rows(block_table, cu_seqlens_q, cu_seqlens_k, num_tokens, page_size, trash_row):
