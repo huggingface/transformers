@@ -24,6 +24,7 @@ import textwrap
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -838,6 +839,9 @@ class TestAutoDocstringPerformance:
     # Relative metric; robust across CI vs local. Catches serious regressions.
     AUTO_DOCSTRING_COST_PCT_UPPER_BOUND = 80.0
 
+    # The test re-imports the model modules after removing them from `sys.modules`. Restore the original modules
+    # afterwards: other tests in the same process hold their classes, and new copies would break `isinstance` checks
+    @patch.dict(sys.modules)
     def test_auto_docstring_import_time_upper_bound(self):
         """
         Asserts that auto_docstring overhead stays below a percentage of total
