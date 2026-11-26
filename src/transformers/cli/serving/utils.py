@@ -195,7 +195,7 @@ def set_torch_seed(seed: int) -> None:
     torch.manual_seed(seed)
 
 
-def exit_with_parent() -> None:
+def exit_on_parent_exit() -> None:
     """In a process the server spawned: exits once its parent does, even one killed without cleanup (`kill -9`), which
     would leave it running (a model's process holding its GPU memory, an API server its port)."""
     parent = multiprocessing.parent_process()
@@ -206,7 +206,7 @@ def exit_with_parent() -> None:
         parent.join()
         os._exit(1)
 
-    threading.Thread(target=wait_and_exit, name="exit-with-parent", daemon=True).start()
+    threading.Thread(target=wait_and_exit, name="exit-on-parent-exit", daemon=True).start()
 
 
 def freeze_garbage_collector() -> None:
@@ -765,13 +765,13 @@ class Detokenizer:
 IDS_PER_API_SERVER = 1 << 40
 
 
-def make_request_id(api_server: int, request_number: int) -> int:
+def make_request_id(api_server_id: int, request_number: int) -> int:
     """The id of the `request_number`-th request of an API server: unique among all the API servers' requests."""
-    return api_server * IDS_PER_API_SERVER + request_number
+    return api_server_id * IDS_PER_API_SERVER + request_number
 
 
 def api_server_of(request_id: int) -> int:
-    """The API server that sent a request, which its results go to."""
+    """The id of the API server that sent a request, which its results go to."""
     return request_id // IDS_PER_API_SERVER
 
 

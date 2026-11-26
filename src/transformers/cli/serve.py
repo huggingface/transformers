@@ -185,7 +185,7 @@ class Serve:
         """
         Serves the API: on `socket` if given, else on the command line's host and port. In an API server (see
         `run_api_servers`), `engine_connection` connects it to the process of the model of the command line: the
-        requests queue, shared by the API servers, this one's results queue, and its number.
+        requests queue, shared by the API servers, this one's results queue, and its id.
         """
         import uvicorn
 
@@ -196,10 +196,10 @@ class Serve:
         from .serving.server import build_server
         from .serving.systemone import SystemOneHandler
         from .serving.transcription import TranscriptionHandler
-        from .serving.utils import exit_with_parent, freeze_garbage_collector, set_serve_log_level
+        from .serving.utils import exit_on_parent_exit, freeze_garbage_collector, set_serve_log_level
 
         set_serve_log_level(self.log_level, self.enable_log_requests)
-        exit_with_parent()
+        exit_on_parent_exit()
 
         model_manager = ModelManager(
             self.loader,
@@ -275,6 +275,7 @@ class Serve:
         import multiprocessing
         import signal
         import sys
+        import time
         from multiprocessing.connection import wait
 
         import uvicorn
@@ -314,8 +315,14 @@ class Serve:
         finally:
             for process in processes:
                 process.terminate()
+            deadline = time.monotonic() + 5
             for process in processes:
-                process.join(30)
+                process.join(max(0.0, deadline - time.monotonic()))
+            # An API server waits for its requests in progress, which can't finish with the model's process stopped
+            for process in processes:
+                if process.is_alive():
+                    process.kill()
+                    process.join()
             socket.close()
 
     @staticmethod

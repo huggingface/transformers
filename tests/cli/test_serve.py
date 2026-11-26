@@ -18,6 +18,7 @@ Tests for the serving layer.
 
 import asyncio
 import atexit
+import contextlib
 import json
 import multiprocessing
 import queue
@@ -770,11 +771,27 @@ class TestProcessLifecycle(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self._chat(base_url)  # the server still answers
 
-    def test_api_server_killed_stops_everything(self):
+    @parameterized.expand([("engine", 0), ("api_server", 1)])
+    def test_process_killed_stops_everything(self, _, index):
+        """With several API servers, once any process stops, the supervisor stops the others, even with a request in
+        progress, which then ends: exit code 1."""
         server, base_url = self._start_serve(force_model=self.MODEL, api_server_count=2)
-        self._chat(base_url)
-        processes = self._child_processes(server)
-        processes[-1].kill()
+        processes = self._child_processes(server)  # the engine, then the API servers
+        body = {
+            "model": self.MODEL,
+            "messages": [{"role": "user", "content": "Count from 1 to 1000."}],
+            "max_tokens": 2000,
+            "stream": True,
+        }
+        start = time.perf_counter()
+        with httpx.stream("POST", f"{base_url}/v1/chat/completions", json=body, timeout=30) as response:
+            lines = response.iter_lines()
+            next(lines)  # the request is in progress
+            processes[index].kill()
+            with contextlib.suppress(httpx.HTTPError):  # its connection closes
+                for _ in lines:
+                    pass
+        self.assertLess(time.perf_counter() - start, 20)  # it didn't wait for the 30 s timeout
         server.join(30)
         self.assertEqual(server.exitcode, 1)
         self._assert_all_stopped(processes)

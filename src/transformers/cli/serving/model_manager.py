@@ -44,7 +44,7 @@ from .utils import (
     api_server_of,
     canonical_model_id,
     decision_model_class,
-    exit_with_parent,
+    exit_on_parent_exit,
     freeze_garbage_collector,
     get_gen_models,
     make_progress_tqdm_class,
@@ -79,13 +79,30 @@ class EngineClient:
     """
     A model, as handlers use it: its config and processor here, its weights in a process of its own (the engine).
 
+    With one API server, this client starts the model's process (`start`), and stops it after `timeout` seconds
+    without requests.
+
+        API server --- requests --> model's process
+                   <-- results ----
+
+    With several API servers, the supervisor (`Serve.run_api_servers`) starts and stops the model's process. The
+    client only sends requests and reads its results, through its `connection`:
+
+    - the requests queue, shared by all the API servers;
+    - its own results queue;
+    - its API server's id: its requests' ids carry it, so the model's process knows which results queue to use.
+
+        API server 0 --+                                   +--> results 0 --> API server 0
+        API server 1 --+--> requests --> model's process --+--> results 1 --> API server 1
+        API server 2 --+                                   +--> results 2 --> API server 2
+
     Args:
         model_id (`str`): The model, as ``'repo@revision'``, or ``'repo@revision:file.gguf'`` for a GGUF file.
         loader (`ModelLoader`): How the model loads.
         generation_state (`GenerationState`, *optional*): How the model generates.
         timeout (`float`, *optional*, defaults to -1): Seconds without requests before the process stops. -1: never.
-        connection (`tuple`, *optional*): With several API servers, this one's connection to their shared process:
-            the requests queue, its results queue, and its number.
+        connection (`tuple`, *optional*): With several API servers, this one's connection to their shared process
+            (see above): the requests queue, its results queue, and its id.
     """
 
     def __init__(
@@ -98,7 +115,7 @@ class EngineClient:
     ):
         self.requests_queue: Any = None
         self.results_queue: Any = None
-        self.api_server = 0
+        self.api_server_id = 0
         self.managed_process: multiprocessing.process.BaseProcess | None = None
         self.is_dead = False
         self.fatal_error: str | None = None
@@ -118,7 +135,7 @@ class EngineClient:
 
         self.externally_managed = connection is not None
         if self.externally_managed:
-            self.requests_queue, self.results_queue, self.api_server = connection
+            self.requests_queue, self.results_queue, self.api_server_id = connection
             self._start_reading_results()
 
     def start(self, on_progress: Callable[[dict], None] | None = None) -> None:
@@ -193,7 +210,7 @@ class EngineClient:
             await asyncio.to_thread(self.start)
 
         self._loop = asyncio.get_running_loop()
-        request_id = make_request_id(self.api_server, next(self._request_counter))
+        request_id = make_request_id(self.api_server_id, next(self._request_counter))
         future = self._loop.create_future()
         self.pending_requests[request_id] = (future, streamer)
         self._cancel_idle_shutdown()
@@ -240,7 +257,17 @@ class EngineClient:
         logger.error(f"The engine of {self.model_id} died: {reason}")
 
     def _start_reading_results(self) -> None:
-        """Starts the thread that reads the engine's results. It also notices if the model's process crashed."""
+        """
+        Starts the thread that reads the results of the model's process, and hands them to the requests waiting for
+        them (see `_send_request`), on the event loop:
+
+            results queue --> this thread --> event loop: each token to its request's `Detokenizer`,
+                                                          each end to its request's future
+
+        A thread, as the queue can only be read by blocking. After each second without a message, it checks that the
+        process is alive when this client manages it; with several API servers, the supervisor watches it instead (see
+        `Serve.run_api_servers`). It stops with `shutdown`.
+        """
         process, shutdown_requested = self.managed_process, threading.Event()
         self._shutdown_requested = shutdown_requested
 
@@ -365,7 +392,7 @@ class EngineClient:
     ) -> None:
         """What the model's process runs: loads the model, then hands each request to a runner."""
         set_serve_log_level(log_level)
-        exit_with_parent()
+        exit_on_parent_exit()
         if generation_state.seed is not None:
             set_torch_seed(generation_state.seed)
 
@@ -373,9 +400,9 @@ class EngineClient:
             if len(results) == 1:
                 results[0].put((ids, tokens, finished))
                 return
-            for api_server, results_queue in enumerate(results):
-                streamed = [pair for pair in zip(ids, tokens) if api_server_of(pair[0]) == api_server]
-                ended = [pair for pair in finished if pair[0] is None or api_server_of(pair[0]) == api_server]
+            for api_server_id, results_queue in enumerate(results):
+                streamed = [pair for pair in zip(ids, tokens) if api_server_of(pair[0]) == api_server_id]
+                ended = [pair for pair in finished if pair[0] is None or api_server_of(pair[0]) == api_server_id]
                 if streamed or ended:
                     results_queue.put(
                         ([request_id for request_id, _ in streamed], [token for _, token in streamed], ended)
