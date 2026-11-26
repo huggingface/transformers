@@ -44,11 +44,12 @@ FastSpeech2's general structure with a Mel-spectrogram decoder was implemented, 
 
 You can run FastSpeech2Conformer locally with the 🤗 Transformers library.
 
-1. First install the 🤗 [Transformers library](https://github.com/huggingface/transformers), g2p-en:
+1. Install [Transformers](https://github.com/huggingface/transformers) and the speech dependencies. Download the English part-of-speech tagger used by `g2p-en`.
 
 ```bash
 pip install --upgrade pip
-pip install --upgrade transformers g2p-en
+pip install --upgrade "transformers[torch]" g2p-en soundfile
+python -m nltk.downloader averaged_perceptron_tagger_eng
 ```
 
 2. Run inference via the Transformers modelling code with the model and hifigan separately
@@ -60,17 +61,17 @@ from transformers import FastSpeech2ConformerHifiGan, FastSpeech2ConformerModel,
 
 
 tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
+model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer", device_map="auto")
 inputs = tokenizer("Hello, my dog is cute.", return_tensors="pt").to(model.device)
 input_ids = inputs["input_ids"]
 
-model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer", device_map="auto")
 output_dict = model(input_ids, return_dict=True)
 spectrogram = output_dict["spectrogram"]
 
-hifigan = FastSpeech2ConformerHifiGan.from_pretrained("espnet/fastspeech2_conformer_hifigan")
+hifigan = FastSpeech2ConformerHifiGan.from_pretrained("espnet/fastspeech2_conformer_hifigan").to(spectrogram.device)
 waveform = hifigan(spectrogram)
 
-sf.write("speech.wav", waveform.squeeze().detach().numpy(), samplerate=22050)
+sf.write("speech.wav", waveform.squeeze().detach().cpu().numpy(), samplerate=22050)
 ```
 
 3. Run inference via the Transformers modelling code with the model and hifigan combined
@@ -82,14 +83,14 @@ from transformers import FastSpeech2ConformerTokenizer, FastSpeech2ConformerWith
 
 
 tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
+model = FastSpeech2ConformerWithHifiGan.from_pretrained("espnet/fastspeech2_conformer_with_hifigan")
 inputs = tokenizer("Hello, my dog is cute.", return_tensors="pt").to(model.device)
 input_ids = inputs["input_ids"]
 
-model = FastSpeech2ConformerWithHifiGan.from_pretrained("espnet/fastspeech2_conformer_with_hifigan")
 output_dict = model(input_ids, return_dict=True)
 waveform = output_dict["waveform"]
 
-sf.write("speech.wav", waveform.squeeze().detach().numpy(), samplerate=22050)
+sf.write("speech.wav", waveform.squeeze().detach().cpu().numpy(), samplerate=22050)
 ```
 
 4. Run inference with a pipeline and specify which vocoder to use
