@@ -45,16 +45,16 @@ class LlavaOnevision2ModelTester(VLMModelTester):
     text_config_class = Qwen3Config
     vision_config_class = LlavaOnevision2VisionConfig
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("hidden_size", 64)
-        kwargs.setdefault("intermediate_size", 96)
-        kwargs.setdefault("num_attention_heads", 2)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("patch_size", 2)
-        kwargs.setdefault("spatial_merge_size", 2)
-        kwargs.setdefault("num_image_tokens", 4)
-        super().__init__(parent, **kwargs)
-        self.out_hidden_size = self.hidden_size
+    small_config_overrides = {
+        "hidden_size": 64,
+        "intermediate_size": 96,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "patch_size": 2,
+        "spatial_merge_size": 2,
+        "num_image_tokens": 4,
+        "out_hidden_size": 64,
+    }
 
     def create_pixel_values(self, batch_size=None):
         batch_size = self.batch_size if batch_size is None else batch_size
@@ -125,7 +125,7 @@ class LlavaOnevision2VisionModelTest(unittest.TestCase):
 
     def setUp(self):
         torch.manual_seed(0)
-        self.config = LlavaOnevision2ModelTester(self).get_vision_config()
+        self.config = LlavaOnevision2ModelTester(self).get_config().vision_config
         self.model = LlavaOnevision2VisionModel(self.config).eval()
 
     def test_positions_and_hidden_states(self):

@@ -22,6 +22,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_position_ids
 from ..auto import AutoModel
@@ -266,6 +267,7 @@ class LlavaOnevision2Model(LlavaModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -274,7 +276,7 @@ class LlavaOnevision2Model(LlavaModel):
         patch_positions: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -292,9 +294,10 @@ class LlavaOnevision2Model(LlavaModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
         encoder_outputs = mm_encoder_outputs or {}
-        image_features = None
         if pixel_values is not None:
-            encoder_outputs = {"image": self.get_image_features(pixel_values, image_grid_thw, patch_positions)}
+            encoder_outputs = {
+                "image": self.get_image_features(pixel_values, image_grid_thw, patch_positions, **kwargs)
+            }
         if encoder_outputs.get("image") is not None:
             image_features = torch.cat(encoder_outputs["image"].pooler_output, dim=0).to(inputs_embeds)
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
@@ -307,16 +310,10 @@ class LlavaOnevision2Model(LlavaModel):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
-        return LlavaOnevision2ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features,
-        )
+        return LlavaOnevision2ModelOutputWithPast(**outputs, image_outputs=encoder_outputs.get("image"))
 
 
 @auto_docstring
@@ -341,6 +338,7 @@ class LlavaOnevision2ForConditionalGeneration(LlavaForConditionalGeneration):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -349,7 +347,7 @@ class LlavaOnevision2ForConditionalGeneration(LlavaForConditionalGeneration):
         patch_positions: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -371,7 +369,7 @@ class LlavaOnevision2ForConditionalGeneration(LlavaForConditionalGeneration):
             patch_positions=patch_positions,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,

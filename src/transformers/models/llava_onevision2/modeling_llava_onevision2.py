@@ -29,10 +29,15 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_position_ids
@@ -40,55 +45,31 @@ from ..auto import AutoModel
 from .configuration_llava_onevision2 import LlavaOnevision2Config, LlavaOnevision2VisionConfig
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for LlavaOnevision2 outputs, with hidden states and attentions.
-    """
-)
+logger = logging.get_logger(__name__)
+
+
+@auto_docstring
 @dataclass
-class LlavaOnevision2ModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    image_hidden_states: torch.FloatTensor | None = None
+class LlavaOnevision2ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for LlavaOnevision2 causal language model (or autoregressive) outputs.
-    """
-)
+@auto_docstring
 @dataclass
-class LlavaOnevision2CausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
+class LlavaOnevision2CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 class LlavaOnevision2VisionRotaryEmbedding(nn.Module):
@@ -335,7 +316,6 @@ class LlavaOnevision2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -450,7 +430,7 @@ class LlavaOnevision2Model(LlavaOnevision2PreTrainedModel):
         return outputs
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -475,6 +455,7 @@ class LlavaOnevision2Model(LlavaOnevision2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -483,7 +464,7 @@ class LlavaOnevision2Model(LlavaOnevision2PreTrainedModel):
         patch_positions: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -501,9 +482,10 @@ class LlavaOnevision2Model(LlavaOnevision2PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
         encoder_outputs = mm_encoder_outputs or {}
-        image_features = None
         if pixel_values is not None:
-            encoder_outputs = {"image": self.get_image_features(pixel_values, image_grid_thw, patch_positions)}
+            encoder_outputs = {
+                "image": self.get_image_features(pixel_values, image_grid_thw, patch_positions, **kwargs)
+            }
         if encoder_outputs.get("image") is not None:
             image_features = torch.cat(encoder_outputs["image"].pooler_output, dim=0).to(inputs_embeds)
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
@@ -516,16 +498,10 @@ class LlavaOnevision2Model(LlavaOnevision2PreTrainedModel):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
-        return LlavaOnevision2ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features,
-        )
+        return LlavaOnevision2ModelOutputWithPast(**outputs, image_outputs=encoder_outputs.get("image"))
 
 
 @auto_docstring
@@ -561,6 +537,7 @@ class LlavaOnevision2ForConditionalGeneration(LlavaOnevision2PreTrainedModel, Ge
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -569,7 +546,7 @@ class LlavaOnevision2ForConditionalGeneration(LlavaOnevision2PreTrainedModel, Ge
         patch_positions: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -589,7 +566,7 @@ class LlavaOnevision2ForConditionalGeneration(LlavaOnevision2PreTrainedModel, Ge
             patch_positions=patch_positions,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
@@ -608,10 +585,10 @@ class LlavaOnevision2ForConditionalGeneration(LlavaOnevision2PreTrainedModel, Ge
         return LlavaOnevision2CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 
