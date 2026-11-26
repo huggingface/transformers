@@ -107,16 +107,14 @@ class MiniCPMV2_6ModelTest(VLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class MiniCPMV2_6IntegrationTest(unittest.TestCase):
-    model_id = "openbmb/MiniCPM-V-4"
-    revision = "refs/pr/6"
-
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    def test_small_model_vision_generation(self):
-        processor = AutoProcessor.from_pretrained(self.model_id, revision=self.revision)
+    # `revision`: the Hub PR with the converted config and processor files (the weights are the original ones)
+    def _describe_image(self, model_id, revision):
+        processor = AutoProcessor.from_pretrained(model_id, revision=revision)
         model = MiniCPMV2_6ForConditionalGeneration.from_pretrained(
-            self.model_id, revision=self.revision, dtype=torch.bfloat16, device_map=torch_device
+            model_id, revision=revision, dtype=torch.bfloat16, device_map=torch_device
         )
         messages = [
             {
@@ -134,12 +132,28 @@ class MiniCPMV2_6IntegrationTest(unittest.TestCase):
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
-        decoded = processor.post_process_image_text_to_text(output[:, inputs["input_ids"].shape[1] :])[0]
+        return processor.post_process_image_text_to_text(output[:, inputs["input_ids"].shape[1] :])[0]
+
+    def test_minicpm_v_4_vision_generation(self):
+        decoded = self._describe_image("openbmb/MiniCPM-V-4", revision="refs/pr/6")
         expected_texts = Expectations(
             {
                 ("cuda", None): (
                     "The image features two cats lying on a pink surface. There are also remote controls present in the "
                     "scene."
+                ),
+            }
+        )
+        self.assertEqual(decoded, expected_texts.get_expectation())
+
+    def test_minicpm_v_2_6_vision_generation(self):
+        decoded = self._describe_image("openbmb/MiniCPM-V-2_6", revision="refs/pr/60")
+        expected_texts = Expectations(
+            {
+                ("cuda", None): (
+                    "The image features two cats lying on a pink surface. One cat is on the left side, stretching "
+                    "out with its paws up, while the other cat on the right is curled up, with its head resting on "
+                    "its paw. There are also two remote controls in the image, one near the left cat and the other"
                 ),
             }
         )
