@@ -133,9 +133,47 @@ class DynamicLayer(CacheLayerMixin):
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
 
-        self.keys = torch.cat([self.keys, key_states], dim=-2)
-        self.values = torch.cat([self.values, value_states], dim=-2)
+        self.keys = self._append(self.keys, key_states, "_key_buffer")
+        self.values = self._append(self.values, value_states, "_value_buffer")
         return self.keys, self.values
+
+    # Backing storage with spare capacity, so that decoding does not reallocate and copy the whole cache at every step.
+    # `self.keys` / `self.values` are always views over the filled part of these buffers (or plain tensors when there
+    # is no buffer, e.g. after the prefill or after an operation that replaced them such as `reorder_cache`).
+    _key_buffer: torch.Tensor | None = None
+    _value_buffer: torch.Tensor | None = None
+
+    def _append(self, cache: torch.Tensor, new_states: torch.Tensor, buffer_name: str) -> torch.Tensor:
+        """Append `new_states` to `cache` along the sequence dimension (`-2`) with amortized growth."""
+        if cache.numel() == 0:
+            # First update (the prefill): no spare capacity, so peak memory is the same as before.
+            return new_states.clone(memory_format=torch.contiguous_format)
+        buffer = getattr(self, buffer_name)
+        current_length = cache.shape[-2]
+        new_length = current_length + new_states.shape[-2]
+        # The buffer can only be reused if `cache` is still a view starting at its beginning (it is not after e.g.
+        # `reorder_cache`, `batch_select_indices` or a device/dtype change, which replace the tensor) and is large enough
+        is_view_of_buffer = (
+            buffer is not None
+            and cache._base is buffer
+            and cache.storage_offset() == 0
+            and cache.shape[:-2] == buffer.shape[:-2]
+            and cache.shape[-1] == buffer.shape[-1]
+            and cache.dtype == buffer.dtype
+            and cache.device == buffer.device
+        )
+        if not is_view_of_buffer or new_length > buffer.shape[-2]:
+            capacity = new_length + max(self._min_growth, new_length // self._growth_divisor)
+            buffer = cache.new_empty((*cache.shape[:-2], capacity, cache.shape[-1]))
+            buffer[..., :current_length, :] = cache
+            setattr(self, buffer_name, buffer)
+        buffer[..., current_length:new_length, :] = new_states
+        return buffer[..., :new_length, :]
+
+    # Spare capacity added when the buffer is (re)allocated: at least `_min_growth` tokens, and 1/`_growth_divisor` of
+    # the new length (so at most 25% extra memory, and each token is copied a constant number of times on average)
+    _min_growth = 64
+    _growth_divisor = 4
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the mask"""
@@ -158,6 +196,7 @@ class DynamicLayer(CacheLayerMixin):
         # Dropped rather than zeroed, as `update` grows them by concatenation. Clearing `is_initialized` first skips
         # the zeroing in `super`, which is still called to reset the `cumulative_length` of the inheriting layers.
         self.keys = self.values = None
+        self._key_buffer = self._value_buffer = None
         self.is_initialized = False
         super().reset()
 

@@ -2609,3 +2609,110 @@ class CacheCroppingTests(unittest.TestCase):
         self.assertEqual(kv_length, sliding_window)
         self.assertEqual(returned_keys.shape[-2], kv_length)
         self.assertEqual(returned_keys[0, 0, :, 0].tolist(), [2.0, 3.0, 4.0, 5.0])
+
+
+@require_torch
+class DynamicLayerAppendTest(unittest.TestCase):
+    """`DynamicLayer.update` grows its storage geometrically, and must behave exactly like a plain concatenation."""
+
+    @staticmethod
+    def _states(length, batch=2, heads=3, dim=8):
+        return torch.randn(batch, heads, length, dim), torch.randn(batch, heads, length, dim)
+
+    def _check(self, layer, ref_keys, ref_values):
+        self.assertEqual(layer.get_seq_length(), ref_keys.shape[-2])
+        torch.testing.assert_close(layer.keys, ref_keys, rtol=0, atol=0)
+        torch.testing.assert_close(layer.values, ref_values, rtol=0, atol=0)
+
+    def test_update_matches_concatenation(self):
+        layer = DynamicLayer()
+        ref_keys = ref_values = None
+        for length in [5, 1, 1, 3, 1, 70, 1, 1, 200, 1]:
+            keys, values = self._states(length)
+            out_keys, out_values = layer.update(keys, values)
+            ref_keys = keys if ref_keys is None else torch.cat([ref_keys, keys], dim=-2)
+            ref_values = values if ref_values is None else torch.cat([ref_values, values], dim=-2)
+            torch.testing.assert_close(out_keys, ref_keys, rtol=0, atol=0)
+            torch.testing.assert_close(out_values, ref_values, rtol=0, atol=0)
+            self._check(layer, ref_keys, ref_values)
+
+    def test_prefill_is_copied_and_does_not_alias_the_input(self):
+        layer = DynamicLayer()
+        keys, values = self._states(4)
+        expected = keys.clone()
+        layer.update(keys, values)
+        keys.zero_()
+        torch.testing.assert_close(layer.keys, expected, rtol=0, atol=0)
+
+    def test_update_reuses_storage_between_reallocations(self):
+        layer = DynamicLayer()
+        layer.update(*self._states(8))
+        layer.update(*self._states(1))
+        buffer = layer._key_buffer
+        for _ in range(10):
+            layer.update(*self._states(1))
+            self.assertIs(layer._key_buffer, buffer)
+        self.assertGreater(buffer.shape[-2], layer.get_seq_length())
+
+    def test_crop_then_update(self):
+        layer = DynamicLayer()
+        keys, values = self._states(10)
+        layer.update(keys, values)
+        extra_keys, extra_values = self._states(1)
+        layer.update(extra_keys, extra_values)
+        ref_keys, ref_values = torch.cat([keys, extra_keys], dim=-2), torch.cat([values, extra_values], dim=-2)
+        layer.crop(-3)
+        ref_keys, ref_values = ref_keys[..., :-3, :], ref_values[..., :-3, :]
+        self._check(layer, ref_keys, ref_values)
+        new_keys, new_values = self._states(2)
+        layer.update(new_keys, new_values)
+        ref_keys, ref_values = torch.cat([ref_keys, new_keys], dim=-2), torch.cat([ref_values, new_values], dim=-2)
+        self._check(layer, ref_keys, ref_values)
+
+    def test_batch_operations_then_update(self):
+        for operation in ("reorder", "select", "repeat"):
+            layer = DynamicLayer()
+            keys, values = self._states(6)
+            layer.update(keys, values)
+            layer.update(*self._states(1))
+            ref_keys, ref_values = layer.keys.clone(), layer.values.clone()
+            if operation == "reorder":
+                beam_idx = torch.tensor([1, 0])
+                layer.reorder_cache(beam_idx)
+                ref_keys, ref_values = ref_keys[beam_idx], ref_values[beam_idx]
+            elif operation == "select":
+                layer.batch_select_indices(torch.tensor([1]))
+                ref_keys, ref_values = ref_keys[[1]], ref_values[[1]]
+            else:
+                layer.batch_repeat_interleave(2)
+                ref_keys, ref_values = ref_keys.repeat_interleave(2, dim=0), ref_values.repeat_interleave(2, dim=0)
+            self._check(layer, ref_keys, ref_values)
+            batch = ref_keys.shape[0]
+            for _ in range(3):
+                new_keys, new_values = self._states(1, batch=batch)
+                layer.update(new_keys, new_values)
+                ref_keys, ref_values = (
+                    torch.cat([ref_keys, new_keys], dim=-2),
+                    torch.cat([ref_values, new_values], dim=-2),
+                )
+                self._check(layer, ref_keys, ref_values)
+
+    def test_reset_then_update(self):
+        layer = DynamicLayer()
+        layer.update(*self._states(4))
+        layer.update(*self._states(1))
+        layer.reset()
+        self.assertIsNone(layer._key_buffer)
+        keys, values = self._states(3)
+        layer.update(keys, values)
+        self._check(layer, keys, values)
+
+    def test_deepcopy(self):
+        layer = DynamicLayer()
+        layer.update(*self._states(4))
+        layer.update(*self._states(1))
+        clone = copy.deepcopy(layer)
+        new_keys, new_values = self._states(1)
+        clone.update(new_keys, new_values)
+        self.assertEqual(layer.get_seq_length(), 5)
+        self.assertEqual(clone.get_seq_length(), 6)
