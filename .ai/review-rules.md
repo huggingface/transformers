@@ -18,7 +18,7 @@ Paths below are written **absolute from the repository root** (leading `/`). The
 
 Before reviewing, read the contributor guidance — it is the repo's own statement of what is acceptable, and it overrides your general instincts:
 
-- `/.ai/AGENTS.md` — the canonical agent brief: build/check commands, coordination rules, the `# Copied from` and `modular_*.py` mechanisms, and the contribution rules. `/AGENTS.md` and `/CLAUDE.md` are symlinks to it.
+- `/AGENTS.md` — the canonical agent brief: build/check commands, coordination rules, the `# Copied from` and `modular_*.py` mechanisms, and the contribution rules. `/CLAUDE.md` and `/GEMINI.md` only import it.
 - `/CONTRIBUTING.md` — the human contributor guide: PR expectations, style, test requirements.
 
 Read these on demand, when the diff touches the relevant area. Do not read all of them on every review.
@@ -84,8 +84,8 @@ This is the highest-value thing you can catch, because it is mechanical and revi
 
 - Unrelated changes: scratch scripts, editor config, `.DS_Store`, leftover `print()` or breakpoints, commented-out code.
 - Reformatting mixed into a functional change, obscuring the real diff.
-- Single-typo or isolated-lint PRs — per `/.ai/AGENTS.md`, these are unlikely to be accepted on their own.
-- Fixes for theoretical bugs that no published checkpoint, default config, or documented workflow hits — per `/.ai/AGENTS.md`, these won't be accepted.
+- Single-typo or isolated-lint PRs — per `/AGENTS.md`, these are unlikely to be accepted on their own.
+- Fixes for theoretical bugs that no published checkpoint, default config, or documented workflow hits — per `/AGENTS.md`, these won't be accepted.
 
 ### 6. Security
 

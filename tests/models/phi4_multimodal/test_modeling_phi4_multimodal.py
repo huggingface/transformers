@@ -39,6 +39,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_large_accelerator,
     require_torchcodec,
+    skip_tpu,
     slow,
     torch_device,
 )
@@ -313,6 +314,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         self.assertEqual(response, EXPECTED_RESPONSE)
 
     @require_deterministic_for_xpu
+    @skip_tpu("test aborts")
     def test_vision_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
             self.checkpoint_path, revision=self.revision, dtype=torch.float16, device_map=torch_device
