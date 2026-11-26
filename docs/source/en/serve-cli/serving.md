@@ -47,6 +47,8 @@ transformers serve
 
 The `v1/chat/completions` API is based on the [Chat Completions API](https://platform.openai.com/docs/api-reference/chat). It supports text, image, audio, and video requests for LLMs, VLMs, and multimodal models. Use it with `curl`, the [`~huggingface_hub.InferenceClient`], or the [OpenAI](https://platform.openai.com/docs/quickstart) client.
 
+Streamed text comes in chunks of one or more tokens, in every endpoint that streams: when a client reads more slowly than the model generates, the text waiting for it goes out in one chunk. The number of chunks of an answer depends on the load, so join the text of the chunks rather than counting them.
+
 ### Text-based completions
 
 <hfoptions id="chat-completion-http">
