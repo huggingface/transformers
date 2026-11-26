@@ -29,7 +29,10 @@ _st = {"phase": None, "ctx": None, "layers": {}, "logits": {}, "mask": None}
 
 def _reset():
     _rec.clear()
-    _st.update(phase=None, ctx=None, layers={}, logits={"cached": {}, "cacheless": {}}, mask=None)
+    _st.update(
+        phase=None, ctx=None, layers={}, logits={"cached": {}, "cacheless": {}},
+        extra={"cached": {}, "cacheless": {}}, mask=None,
+    )
 
 
 def _install():
@@ -92,6 +95,16 @@ def _install():
             layer, b, s = _st["ctx"]
             _st["top_k"] = self.top_k
             _st["logits"][_st["phase"]].setdefault(layer, []).append(out[0].detach().float().cpu().view(b, s, -1))
+            # The same softmax call as the router, on the same `router_logits` tensor -> bit-identical to what `topk` saw
+            probs = torch.nn.functional.softmax(out[0], dtype=torch.float, dim=-1)
+            _st["extra"][_st["phase"]].setdefault(layer, []).append(
+                {
+                    "probs": probs.detach().cpu().view(b, s, -1),
+                    "idx": out[2].detach().cpu().view(b, s, -1),  # the experts the router actually selected
+                    "w": out[1].detach().float().cpu().view(b, s, -1),  # their normalized routing weights
+                    "h": hidden_states.detach().float().cpu().reshape(b, s, -1),  # the router's input
+                }
+            )
         return out
 
     orig_set_seed = tu.set_seed
@@ -184,6 +197,111 @@ def _cross_path():
     return out
 
 
+def _ulps_gap(sorted_probs, k):
+    """4th-5th probability gap in float32 steps (ULPs) at the 4th value: 0 = exact tie."""
+    hi, lo = sorted_probs[..., k - 1], sorted_probs[..., k]
+    step = torch.nextafter(hi, torch.full_like(hi, float("inf"))) - hi
+    return (hi - lo) / step
+
+
+def _prob_path():
+    """Compare what `topk` actually saw (softmax probabilities) and selected, cached vs cacheless generate."""
+    cached, cacheless, k = _st["extra"]["cached"], _st["extra"]["cacheless"], _st.get("top_k")
+    if not cached or not cacheless or k is None:
+        return None
+    res = {
+        "n": 0, "ties_cached": 0, "ties_cacheless": 0, "ties_both": 0, "ties_both_same_selection": 0,
+        "tie_entries": 0, "tie_lowest_index_selected": 0, "actual_flips": 0,
+        "hist_min_gap_ulps": {"0": 0, "1": 0, "2-4": 0, "5-16": 0, ">16": 0},
+        "max_weight_diff_same_selection": 0.0, "max_hidden_delta": 0.0, "max_abs_hidden": 0.0,
+    }
+    closest, close_entries, flip_details = None, [], []
+    mask = _st["mask"]
+    for layer, calls in cached.items():
+        P, I, W, H = (torch.cat([c[key] for c in calls], 1) for key in ("probs", "idx", "w", "h"))
+        for step_idx, c2 in enumerate(cacheless.get(layer, [])):
+            n = min(P.shape[1], c2["probs"].shape[1])
+            pa, pb, ia, ib = P[:, :n], c2["probs"][:, :n], I[:, :n], c2["idx"][:, :n]
+            wa, wb, ha, hb = W[:, :n], c2["w"][:, :n], H[:, :n], c2["h"][:, :n]
+            valid = torch.ones(pa.shape[:2], dtype=torch.bool)
+            if mask is not None and mask.shape[0] == pa.shape[0]:
+                m_len = min(mask.shape[1], n)
+                valid[:, :m_len] = mask[:, :m_len].bool()
+            spa, spb = pa.sort(-1, descending=True).values, pb.sort(-1, descending=True).values
+            ua, ub = _ulps_gap(spa, k), _ulps_gap(spb, k)
+            umin = torch.minimum(ua, ub)
+            tie_a, tie_b = spa[..., k - 1] == spa[..., k], spb[..., k - 1] == spb[..., k]
+            flip = (ia.sort(-1).values != ib.sort(-1).values).any(-1)  # the experts actually used differ
+            # sanity: the recomputed probabilities must reproduce the router's own selection everywhere
+            for p, i in ((pa, ia), (pb, ib)):
+                res["recompute_mismatch"] = res.get("recompute_mismatch", 0) + int(
+                    (p.topk(k, -1).indices.sort(-1).values != i.sort(-1).values).any(-1).sum()
+                )
+            wdiff = (wa.gather(-1, ia.argsort(-1)) - wb.gather(-1, ib.argsort(-1))).abs().amax(-1)  # by expert id
+            hdelta, habs = (ha - hb).abs().amax(-1), ha.abs().amax(-1)
+            sel = valid
+            res["n"] += int(sel.sum())
+            res["ties_cached"] += int((tie_a & sel).sum())
+            res["ties_cacheless"] += int((tie_b & sel).sum())
+            res["ties_both"] += int((tie_a & tie_b & sel).sum())
+            res["ties_both_same_selection"] += int((tie_a & tie_b & ~flip & sel).sum())
+            res["actual_flips"] += int((flip & sel).sum())
+            h = res["hist_min_gap_ulps"]
+            u = umin[sel]
+            h["0"] += int((u == 0).sum())
+            h["1"] += int(((u > 0) & (u <= 1.5)).sum())
+            h["2-4"] += int(((u > 1.5) & (u <= 4.5)).sum())
+            h["5-16"] += int(((u > 4.5) & (u <= 16.5)).sum())
+            h[">16"] += int((u > 16.5).sum())
+            if (~flip & sel).any():
+                res["max_weight_diff_same_selection"] = max(
+                    res["max_weight_diff_same_selection"], wdiff[~flip & sel].max().item()
+                )
+            res["max_hidden_delta"] = max(res["max_hidden_delta"], hdelta[sel].max().item())
+            res["max_abs_hidden"] = max(res["max_abs_hidden"], habs[sel].max().item())
+
+            def detail(row, pos):
+                d = {
+                    "layer": layer, "row": row, "position": pos, "cacheless_step": step_idx,
+                    "gap_ulps_cached": ua[row, pos].item(), "gap_ulps_cacheless": ub[row, pos].item(),
+                    "tie_cached": bool(tie_a[row, pos]), "tie_cacheless": bool(tie_b[row, pos]),
+                    "flip": bool(flip[row, pos]), "padding": not bool(valid[row, pos]),
+                    "weight_diff": wdiff[row, pos].item(), "hidden_delta": hdelta[row, pos].item(),
+                }
+                for name, p, i in (("cached", pa, ia), ("cacheless", pb, ib)):
+                    top = p[row, pos].topk(k + 1)
+                    d[f"top{k + 1}_probs_{name}"] = top.values.tolist()  # exact float32 values
+                    d[f"top{k + 1}_experts_{name}"] = top.indices.tolist()
+                    d[f"selected_{name}"] = sorted(i[row, pos].tolist())
+                return d
+
+            for row, pos in ((umin <= 16.5) | flip).nonzero().tolist():
+                d = detail(row, pos)
+                close_entries.append({key: d[key] for key in (
+                    "layer", "row", "position", "cacheless_step", "gap_ulps_cached", "gap_ulps_cacheless",
+                    "tie_cached", "tie_cacheless", "flip", "padding")})
+                if d["flip"]:
+                    flip_details.append(d)
+                for name, p, i, tie in (("cached", pa, ia, tie_a), ("cacheless", pb, ib, tie_b)):
+                    if tie[row, pos] and valid[row, pos]:  # which of the tied experts did `topk` keep?
+                        boundary = p[row, pos].sort(descending=True).values[k - 1]
+                        tied = (p[row, pos] == boundary).nonzero().flatten().tolist()
+                        res["tie_entries"] += 1
+                        res["tie_lowest_index_selected"] += int(min(tied) in i[row, pos].tolist())
+            masked = torch.where(sel, umin, torch.full_like(umin, float("inf")))
+            idx = int(masked.argmin())
+            row, pos = divmod(idx, masked.shape[1])
+            if masked[row, pos].isfinite() and (closest is None or masked[row, pos].item() < closest["min_ulps"]):
+                closest = dict(detail(row, pos), min_ulps=masked[row, pos].item())
+    if closest is not None and closest["min_ulps"] <= 64:
+        res["closest"] = closest
+    if close_entries:
+        res["close_entries"] = close_entries
+    if flip_details:
+        res["flip_details"] = flip_details
+    return res
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
     _reset()
@@ -216,5 +334,9 @@ def pytest_runtest_makereport(item, call):
             rec["xpath"] = _cross_path()
         except Exception as e:  # never break the run because of the instrumentation
             rec["xpath_error"] = repr(e)[:200]
+        try:
+            rec["prob"] = _prob_path()
+        except Exception as e:
+            rec["prob_error"] = repr(e)[:200]
         with open(os.path.join(STATS_DIR, f"{os.getpid()}.jsonl"), "a") as f:
             f.write(json.dumps(rec) + "\n")
