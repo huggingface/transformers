@@ -47,7 +47,9 @@ transformers serve
 
 The `v1/chat/completions` API is based on the [Chat Completions API](https://platform.openai.com/docs/api-reference/chat). It supports text, image, audio, and video requests for LLMs, VLMs, and multimodal models. Use it with `curl`, the [`~huggingface_hub.InferenceClient`], or the [OpenAI](https://platform.openai.com/docs/quickstart) client.
 
-Streamed text comes in chunks of one or more tokens, in every endpoint that streams: when a client reads more slowly than the model generates, the text waiting for it goes out in one chunk. The number of chunks of an answer depends on the load, so join the text of the chunks rather than counting them.
+Streamed text comes in chunks of one or more tokens, in `v1/chat/completions`, `v1/completions` and `v1/responses`: when a client reads more slowly than the model generates, the text waiting for it goes out in one chunk. The number of chunks of an answer depends on the load, so join the text of the chunks rather than counting them.
+
+A streamed answer of `v1/chat/completions` or `v1/completions` reports its token usage only when the request asks for it, with `stream_options={"include_usage": true}`, as in OpenAI's API. The usage then comes in a last chunk of its own, whose `choices` list is empty.
 
 ### Text-based completions
 
@@ -1737,7 +1739,7 @@ Answers use the same question names. For example:
 
 ```json
 {
-  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "model": "Qwen/Qwen2.5-1.5B-Instruct@main",
   "answers": {
     "team": {"type": "choice", "choice": "technical", "probabilities": {"billing": 0.000006962256520637311, "technical": 0.999993085861206}, "confidence": 0.9999861717224121},
     "urgency": {"type": "score", "score": 1.6739138662815094, "legend": {"0": "low", "1": "medium", "2": "high"}, "probabilities": {"0": 0.0031353600788861513, "1": 0.31981542706489563, "2": 0.6770492196083069}, "confidence": 0.5108707791659981},
