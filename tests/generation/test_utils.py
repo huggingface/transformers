@@ -88,6 +88,7 @@ if is_torch_available():
         EncoderDecoderCache,
         LinearAttentionAndFullAttentionLayer,
         LinearAttentionAndSlidingWindowAttentionLayer,
+        LinearAttentionCacheLayerMixin,
         LinearAttentionLayer,
         MtpCache,
         QuantoQuantizedLayer,
@@ -2301,12 +2302,14 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if not model_class._supports_attention_backend:
                 self.skipTest(f"{model_class.__name__} does not support new attention mask API")
 
-            if model_class._is_stateful:  # non-transformer models most probably have no packing support
-                self.skipTest(f"{model_class.__name__} doesn't support packing!")
-
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             # disable flakiness via norms as much as possible
             set_config_for_less_flaky_test(config)
+
+            # Linear attention models most probably have no packing support
+            dummy_cache = DynamicCache(config=config)
+            if any(isinstance(layer, LinearAttentionCacheLayerMixin) for layer in dummy_cache.layers):
+                self.skipTest(f"{model_class.__name__} doesn't support packing as it uses linear attention!")
 
             if config.is_encoder_decoder:
                 self.skipTest("Model is an encoder-decoder")
