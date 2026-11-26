@@ -75,7 +75,8 @@ print(processor.post_process_image_text_to_text(generated[:, inputs["input_ids"]
 
 - Frames are sampled at `fps` (5 by default), as in the original `encode_video`. Videos with `fps * int(duration) > max_num_frames` (37 s and longer by default) are packed `ceil(duration * fps / max_num_frames)` frames per group, at most `max_num_packing` (3), so at most `max_num_frames * max_num_packing` frames (540) are sampled. Each group is placed as `<image>` + 64 × `<|video_pad|>` + `</image>`, one line per group.
 - With `do_sample_frames=False` and no video metadata, the frames are taken as sampled at `fps`.
-- At the defaults, videos of 108 s and longer are sampled to 540 frames (180 groups); a 120 s clip peaked at 45 GiB in bf16. Lower `max_num_frames` to use less memory.
+- The packing always follows the video's duration, as in `encode_video`, also when frames come from `num_frames` or are passed already sampled with metadata.
+- At the defaults, videos of 108 s and longer are sampled to 540 frames (180 groups); a 120 s clip peaked at 45 GiB in bf16. Lower `max_num_frames` to use less memory, e.g. `processor_kwargs={"max_num_frames": 60}` in `apply_chat_template`.
 
 ## MiniCPMV4_5Config
 

@@ -44,14 +44,13 @@ class MiniCPMV4_5VisionText2TextModelTester(VLMModelTester):
 
     small_config_overrides = {
         "batch_size": 2,
-        "image_token_id": 100,
-        "video_token_id": 101,
+        "image_token_id": 3,  # low ids, so they survive tests that shrink the embedding table
+        "video_token_id": 4,
         "image_size": 32,
         "patch_size": 8,  # each test image is one 4x4-patch slice
         "resampler_n_latents": 4,  # ... which the resampler turns into 4 tokens
         "resampler_n_heads": 4,
         "num_image_tokens": 4,
-        "vocab_size": 256,
         "hidden_size": 128,
         "intermediate_size": 37,
         "num_hidden_layers": 2,
@@ -172,7 +171,7 @@ class MiniCPMV4_5IntegrationTest(unittest.TestCase):
             messages,
             add_generation_prompt=True,
             enable_thinking=False,
-            max_num_frames=20,
+            processor_kwargs={"max_num_frames": 20},
             tokenize=True,
             return_dict=True,
             return_tensors="pt",

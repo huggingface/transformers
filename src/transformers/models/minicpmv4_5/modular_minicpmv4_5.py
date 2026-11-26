@@ -140,16 +140,12 @@ class MiniCPMV4_5VideoProcessor(MiniCPMV4_6VideoProcessor):
     downsample_mode = AttributeError()
     use_image_id = AttributeError()
     stack_frames = AttributeError()
-    valid_kwargs = MiniCPMV4_5VideoProcessorKwargs
     model_input_names = [
         "pixel_values_videos",
         "pixel_attention_mask_videos",
         "patch_position_ids_videos",
         "temporal_ids",
     ]
-
-    def __init__(self, **kwargs: Unpack[MiniCPMV4_5VideoProcessorKwargs]):
-        super().__init__(**kwargs)
 
     def concat_frames_as_image(self, video):
         raise AttributeError("Not needed for MiniCPM-V 4.5")
@@ -406,11 +402,11 @@ class MiniCPMV4_5Resampler(MiniCPMV2_6Resampler):
     """
 
     def get_temporal_pos_embed(self, temporal_ids: torch.Tensor) -> torch.Tensor:
-        """1D sin-cos embedding of each key's frame timestamp, zero where `temporal_ids` is -1 (padding frames)."""
+        """1D sin-cos embedding of each frame's timestamp."""
         half = self.embed_dim // 2
         omega = 1.0 / 10000 ** (torch.arange(half, device=temporal_ids.device, dtype=torch.float32) / half)
-        angles = temporal_ids.clamp(min=0)[..., None].float() * omega
-        return torch.cat([angles.sin(), angles.cos()], dim=-1) * (temporal_ids >= 0)[..., None]
+        angles = temporal_ids[..., None].float() * omega
+        return torch.cat([angles.sin(), angles.cos()], dim=-1)
 
     def forward(
         self,
@@ -426,7 +422,6 @@ class MiniCPMV4_5Resampler(MiniCPMV2_6Resampler):
             temporal = self.get_temporal_pos_embed(temporal_ids)
             position_embeddings = position_embeddings.unflatten(1, (temporal_ids.shape[1], -1)) + temporal[:, :, None]
             position_embeddings = position_embeddings.flatten(1, 2)
-        # Cast before the attention, so the float32 embeddings of all frames are freed first
         position_embeddings = (position_embeddings * pixel_attention_mask[..., None]).to(key_value_states.dtype)
         query_states = self.ln_q(self.query).unsqueeze(0).expand(key_value_states.shape[0], -1, -1)
         attention_mask = create_bidirectional_mask(

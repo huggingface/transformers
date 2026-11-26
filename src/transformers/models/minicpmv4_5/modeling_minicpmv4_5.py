@@ -348,6 +348,8 @@ class MiniCPMV4_5VisionTransformer(MiniCPMV4_5PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
+        pixel_values (`torch.FloatTensor` of shape `(num_slices, num_channels, patch_size, max_patches * patch_size)`):
+            Every image slice as a single row of patches, padded to the longest slice.
         patch_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`):
             Which patches are real (`True`) rather than padding.
         patch_position_ids (`torch.LongTensor` of shape `(num_slices, max_patches, 2)`):
@@ -472,7 +474,6 @@ class MiniCPMV4_5Resampler(nn.Module):
             temporal = self.get_temporal_pos_embed(temporal_ids)
             position_embeddings = position_embeddings.unflatten(1, (temporal_ids.shape[1], -1)) + temporal[:, :, None]
             position_embeddings = position_embeddings.flatten(1, 2)
-        # Cast before the attention, so the float32 embeddings of all frames are freed first
         position_embeddings = (position_embeddings * pixel_attention_mask[..., None]).to(key_value_states.dtype)
         query_states = self.ln_q(self.query).unsqueeze(0).expand(key_value_states.shape[0], -1, -1)
         attention_mask = create_bidirectional_mask(
@@ -491,11 +492,11 @@ class MiniCPMV4_5Resampler(nn.Module):
         return self.ln_post(attention_output) @ self.proj
 
     def get_temporal_pos_embed(self, temporal_ids: torch.Tensor) -> torch.Tensor:
-        """1D sin-cos embedding of each key's frame timestamp, zero where `temporal_ids` is -1 (padding frames)."""
+        """1D sin-cos embedding of each frame's timestamp."""
         half = self.embed_dim // 2
         omega = 1.0 / 10000 ** (torch.arange(half, device=temporal_ids.device, dtype=torch.float32) / half)
-        angles = temporal_ids.clamp(min=0)[..., None].float() * omega
-        return torch.cat([angles.sin(), angles.cos()], dim=-1) * (temporal_ids >= 0)[..., None]
+        angles = temporal_ids[..., None].float() * omega
+        return torch.cat([angles.sin(), angles.cos()], dim=-1)
 
 
 @auto_docstring(
