@@ -160,7 +160,7 @@ class ColwiseParallel(TensorParallelLayer):
             raise ValueError(f"{type(module).__name__} has no `out_features`: colwise shards linear layers.")
         return super().install_forward(module, mesh, config=config, mesh_manager=mesh_manager)
 
-    def shard_param(self, module, param, mesh):
+    def shard_param(self, module, param, mesh, *, config=None, mesh_manager=None):
         meta = module._parameters.get(param)
         if meta is None:
             return
@@ -292,7 +292,7 @@ class RowwiseParallel(TensorParallelLayer):
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
         return use_local_quantized_path or uses_local_inference_kernel
 
-    def shard_param(self, module, param, mesh):
+    def shard_param(self, module, param, mesh, *, config=None, mesh_manager=None):
         meta = module._parameters.get(param)
         if meta is None:
             return
@@ -437,7 +437,7 @@ class EmbeddingParallel(TensorParallelLayer):
     def should_use_local_tensors(self, module):
         return getattr(module, "_hf_quantized_needs_local_tp", False)
 
-    def shard_param(self, module, param, mesh):
+    def shard_param(self, module, param, mesh, *, config=None, mesh_manager=None):
         meta = module._parameters.get(param)
         if meta is None:
             return
@@ -609,7 +609,7 @@ class PackedColwiseParallel(TensorParallelLayer):
             return -1
         return param_ndim - 2
 
-    def shard_param(self, module, param, mesh):
+    def shard_param(self, module, param, mesh, *, config=None, mesh_manager=None):
         meta = module._parameters.get(param)
         if meta is None:
             return
@@ -652,7 +652,7 @@ class PackedRowwiseParallel(TensorParallelLayer):
     def __init__(self, *, split_factor: int = 2):
         self.split_factor = split_factor
 
-    def shard_param(self, module, param, mesh):
+    def shard_param(self, module, param, mesh, *, config=None, mesh_manager=None):
         meta = module._parameters.get(param)
         if meta is None:
             return
