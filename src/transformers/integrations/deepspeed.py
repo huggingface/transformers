@@ -24,6 +24,8 @@ import weakref
 from collections.abc import Callable
 from functools import partialmethod
 
+from packaging import version
+
 from ..dependency_versions_check import dep_version_check
 from ..utils import is_accelerate_available, is_torch_available, logging
 
@@ -766,6 +768,10 @@ def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
     torch.distributed.all_reduce(totals, group=sp_group)
     # The value is the mean over the whole sequence, but each rank backpropagates only its own share: DeepSpeed sums
     # gradients over the SP group, so backpropagating the full mean on every rank would scale them by `sp_size`.
+    # Before deepspeed 0.20.2 (deepspeedai/DeepSpeed#8854), ZeRO-3 averages them instead.
+    deepspeed_version = version.parse(importlib.metadata.version("deepspeed"))
+    if is_deepspeed_zero3_enabled() and deepspeed_version < version.parse("0.20.2"):
+        local_sum = local_sum * pc.sp_size
     loss = (local_sum + (totals[0] - local_sum.detach())) / totals[1].clamp(min=1)
 
     return (loss, outputs) if return_outputs else loss
