@@ -517,6 +517,7 @@ if TYPE_CHECKING:
     from .timesfm import *
     from .timesfm2_5 import *
     from .timesformer import *
+    from .timestral import *
     from .timm_backbone import *
     from .timm_wrapper import *
     from .tipsv2 import *
