@@ -1196,6 +1196,22 @@ class LogitsProcessorTest(unittest.TestCase):
         greenlist_id = 1
         self.assertTrue((out[:, greenlist_id] == scores_wo_bias + watermark.bias).all())
 
+    @parameterized.expand([(64, 0.01), (16, 0.5)])
+    def test_selfhash_watermark_candidates(self, vocab_size, greenlist_ratio):
+        watermark = WatermarkLogitsProcessor(
+            vocab_size=vocab_size, device=torch_device, seeding_scheme="selfhash", greenlist_ratio=greenlist_ratio
+        )
+        input_ids = torch.tensor([[1, 2]], device=torch_device)
+        scores = torch.arange(vocab_size, dtype=torch.float, device=torch_device).unsqueeze(0)
+
+        # In the first case the greenlist rounds down to zero tokens. In the second
+        # the entire vocabulary fits within the 40-candidate rejection sampling budget.
+        expected = scores.clone()
+        for token in range(vocab_size):
+            if token in watermark._get_greenlist_ids(input_ids[0].new_tensor([1, 2, token])):
+                expected[0, token] += watermark.bias
+        torch.testing.assert_close(watermark(input_ids, scores), expected)
+
     @parameterized.expand([(5, 3, 10000), (10, 5, 1000)])
     def test_synthidtext_watermarking_processor_bias_uniformity(self, ngram_len, num_layers, vocab_size):
         """Test SynthID watermarked distribution bias uniformity over iterations."""

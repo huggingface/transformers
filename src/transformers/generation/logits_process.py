@@ -2554,11 +2554,11 @@ class WatermarkLogitsProcessor(LogitsProcessor):
         _, greedy_predictions = scores.sort(dim=-1, descending=True)
 
         # 40 is an arbitrary number chosen to save compute and not run for long (taken from orig repo)
-        for i in range(40):
-            greenlist_ids = self._get_greenlist_ids(torch.cat([input_seq, greedy_predictions[i, None]], dim=-1))
-            if greedy_predictions[i] in greenlist_ids:
-                final_greenlist.append(greedy_predictions[i])
-        return torch.tensor(final_greenlist, device=input_seq.device)
+        for candidate in greedy_predictions[:40]:
+            greenlist_ids = self._get_greenlist_ids(torch.cat([input_seq, candidate[None]], dim=-1))
+            if candidate in greenlist_ids:
+                final_greenlist.append(candidate)
+        return torch.tensor(final_greenlist, dtype=torch.long, device=input_seq.device)
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
