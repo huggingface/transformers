@@ -82,6 +82,7 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
         return_tensors: str | TensorType | None = None,
         return_attention_mask: bool | None = True,
         device: str | None = "cpu",
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -197,7 +198,7 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
         if feature_attention_mask is not None and return_attention_mask:
             data["audio_attention_mask"] = feature_attention_mask
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     # TODO; @eustlb, move this to audio_utils in a general spectogram_batch function that handles torch and numpy
     def _torch_extract_fbank_features(

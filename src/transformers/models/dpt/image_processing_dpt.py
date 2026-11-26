@@ -153,6 +153,7 @@ class DPTImageProcessor(TorchvisionBackend):
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
         device: Union[str, "torch.device"] | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
@@ -187,7 +188,7 @@ class DPTImageProcessor(TorchvisionBackend):
             ]
             data["labels"] = processed_segmentation_maps
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def reduce_label(self, labels: list["torch.Tensor"]) -> list["torch.Tensor"]:
         """Reduce label values by 1, replacing 0 with 255."""
@@ -218,6 +219,8 @@ class DPTImageProcessor(TorchvisionBackend):
         do_pad: bool,
         size_divisor: int | None,
         disable_grouping: bool | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for DPT."""

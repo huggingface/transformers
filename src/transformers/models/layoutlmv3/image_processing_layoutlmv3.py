@@ -159,6 +159,8 @@ class LayoutLMv3ImageProcessor(TorchvisionBackend):
         apply_ocr: bool = True,
         ocr_lang: str | None = None,
         tesseract_config: str | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Tesseract OCR to get words + normalized bounding boxes

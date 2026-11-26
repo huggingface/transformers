@@ -245,6 +245,8 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         patch_size: int,
         pooling_size: list[int],
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if size.height != size.width:

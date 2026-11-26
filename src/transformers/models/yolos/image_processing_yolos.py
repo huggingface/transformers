@@ -589,6 +589,8 @@ class YolosImageProcessor(TorchvisionBackend):
         format: str | AnnotationFormat | None,
         return_tensors: str | TensorType | None,
         disable_grouping: bool | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

@@ -433,6 +433,8 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         video_metadata: list[VideoMetadata],
         return_tensors: str | TensorType | None,
         downsample_mode: str = "16x",
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Stage 1 — Build an ordered list of visual units.

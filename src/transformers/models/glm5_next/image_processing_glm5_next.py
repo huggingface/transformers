@@ -234,6 +234,8 @@ class Glm5NextImageProcessor(TorchvisionBackend):
         max_image_tokens: int,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

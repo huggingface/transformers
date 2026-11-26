@@ -150,6 +150,8 @@ class DeepseekVLImageProcessorPil(PilBackend):
         min_size: int,
         return_tensors: str | TensorType | None,
         do_pad: bool = True,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = []

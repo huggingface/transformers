@@ -167,6 +167,8 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask: bool | None = None,
         return_tensors: str | TensorType | None = None,
         sampling_rate: int | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -282,6 +284,8 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         pad_to_multiple_of: int | None = None,
         return_attention_mask: bool | None = None,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         is_batched_numpy = isinstance(speech, np.ndarray) and len(speech.shape) > 1

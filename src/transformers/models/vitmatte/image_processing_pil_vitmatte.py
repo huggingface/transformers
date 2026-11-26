@@ -130,6 +130,8 @@ class VitMatteImageProcessorPil(PilBackend):
         do_pad: bool | None,
         size_divisor: int | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = []

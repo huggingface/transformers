@@ -190,6 +190,8 @@ class ViltImageProcessor(TorchvisionBackend):
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         size_divisor: int | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -228,7 +230,7 @@ class ViltImageProcessor(TorchvisionBackend):
                 processed_images = torch.stack(processed_images)
             data = {"pixel_values": processed_images}
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
 
 __all__ = ["ViltImageProcessor"]

@@ -459,6 +459,8 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
         return_row_col_info: bool,
         return_tensors: str | TensorType | None,
         disable_grouping: bool | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if not do_image_splitting:
@@ -554,7 +556,7 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
             data["image_cols"] = batch_cols
             data["image_sizes"] = resized_image_sizes
 
-        encoding = BatchFeature(data=data, tensor_type=return_tensors)
+        encoding = BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
         return encoding
 
 

@@ -148,6 +148,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
     def process_images(
         self,
         images: ImageInput | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         return self.__call__(images=images, **kwargs)
@@ -158,6 +160,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
     def process_queries(
         self,
         text: TextInput | list[TextInput],
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         return self.__call__(text=text, **kwargs)

@@ -197,6 +197,8 @@ class Kosmos2_5ImageProcessorPil(PilBackend):
         max_patches: int,
         patch_size: SizeDict,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if kwargs.get("data_format") is not None:

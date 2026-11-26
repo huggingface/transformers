@@ -91,6 +91,7 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
         return_tensors: str | TensorType | None = None,
         sampling_rate: int | None = None,
         device: str = "cpu",
+        dtype: torch.dtype | str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

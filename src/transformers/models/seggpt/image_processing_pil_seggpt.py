@@ -166,6 +166,8 @@ class SegGptImageProcessorPil(PilBackend):
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
         num_labels: int | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         data = {}
@@ -208,7 +210,7 @@ class SegGptImageProcessorPil(PilBackend):
             masks_kwargs["resample"] = PILImageResampling.NEAREST
             data["prompt_masks"] = self._preprocess(prepared_masks, **masks_kwargs)
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def _preprocess(
         self,

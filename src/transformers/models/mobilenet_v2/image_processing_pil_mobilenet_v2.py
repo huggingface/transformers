@@ -95,6 +95,7 @@ class MobileNetV2ImageProcessorPil(PilBackend):
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
         device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
@@ -135,7 +136,7 @@ class MobileNetV2ImageProcessorPil(PilBackend):
             ]
             data["labels"] = processed_segmentation_maps
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def reduce_label(self, image: np.ndarray) -> np.ndarray:
         """Reduce label values by 1, replacing 0 with 255."""

@@ -273,6 +273,8 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
         pad_to_multiple_of: int | None = 128,
         return_tensors: str | TensorType | None = None,
         return_attention_mask: bool | None = True,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Creates a batch of MEL spectrograms from the provided raw speech.

@@ -192,6 +192,8 @@ class Idefics2ImageProcessor(TorchvisionBackend):
         do_image_splitting: bool | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(
@@ -258,7 +260,7 @@ class Idefics2ImageProcessor(TorchvisionBackend):
             data = {"pixel_values": torch.stack([torch.stack(images) for images in processed_images])}
         else:
             data = {"pixel_values": processed_images}
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
 
 __all__ = ["Idefics2ImageProcessor"]

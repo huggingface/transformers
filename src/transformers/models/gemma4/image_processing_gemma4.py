@@ -211,8 +211,8 @@ class Gemma4ImageProcessor(TorchvisionBackend):
         patch_size: int | None = None,
         max_soft_tokens: int | None = None,
         pooling_kernel_size: int | None = None,
-        device: torch.device | str | None = None,
-        dtype: torch.dtype | str | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if max_soft_tokens not in _SUPPORTED_SOFT_TOKENS:

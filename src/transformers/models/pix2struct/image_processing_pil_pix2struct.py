@@ -373,6 +373,8 @@ class Pix2StructImageProcessorPil(PilBackend):
         max_patches: int,
         patch_size: SizeDict,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

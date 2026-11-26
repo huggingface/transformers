@@ -83,6 +83,8 @@ class PPOCRV5ServerDetImageProcessor(TorchvisionBackend):
         max_side_limit: int,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         target_sizes = []

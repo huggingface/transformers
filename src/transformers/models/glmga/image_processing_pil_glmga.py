@@ -189,6 +189,8 @@ class GlmgaImageProcessorPil(PilBackend):
         temporal_patch_size: int,
         merge_size: int,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

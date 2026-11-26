@@ -526,6 +526,8 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         patch_size: int,
         disable_grouping: bool | None,
         return_tensors: "str | TensorType | None",
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         image_size = size.height
@@ -559,7 +561,7 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         # Built before the local-patch fields below are assigned: `result[key] = ...` (unlike `data[key] = ...`
         # pre-construction) bypasses `BatchFeature`'s tensor conversion, which matters for
         # `patch_newline_masks` — it must stay a plain list of `bool`s, not a tensor.
-        result = BatchFeature(data=data, tensor_type=return_tensors)
+        result = BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
         max_patches = max(num_local_patches, default=0)
         if max_patches:

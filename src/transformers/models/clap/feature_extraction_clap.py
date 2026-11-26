@@ -267,6 +267,8 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         max_length: int | None = None,
         sampling_rate: int | None = None,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

@@ -415,6 +415,8 @@ class AriaImageProcessor(TorchvisionBackend):
         split_resolutions: list[list[int]] | None = None,
         split_image: bool = False,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if max_image_size not in [490, 980]:

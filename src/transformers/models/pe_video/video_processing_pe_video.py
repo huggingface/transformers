@@ -45,6 +45,8 @@ class PeVideoVideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: VideoInput,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs: Unpack[VideosKwargs],
     ) -> BatchFeature:
         # Always set `return_tensors` to `None` since it won't pad variable length videos
@@ -60,7 +62,7 @@ class PeVideoVideoProcessor(BaseVideoProcessor):
             if lengths.unique().size(0) > 1:
                 mask = torch.arange(lengths.max())[None] < lengths[:, None]
                 data["padding_mask_videos"] = mask
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
 
 __all__ = ["PeVideoVideoProcessor"]

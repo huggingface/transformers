@@ -745,7 +745,7 @@ class ProcessorMixin(PushToHubMixin):
             data,
             tensor_type=return_tensors,
             device=device,
-            dtype=merged_kwargs['images_kwargs'].get('dtype'),
+            dtype=merged_kwargs["images_kwargs"].get("dtype"),
             skip_tensor_conversion=self.skip_tensor_conversion,
         )
 

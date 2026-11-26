@@ -197,6 +197,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
         device: str | None = None,
         return_tensors: str | TensorType | None = None,
         prompt_scale_to_meter: float | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -246,7 +247,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
 
             data["prompt_depth"] = final_prompt_depths
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def _preprocess(
         self,

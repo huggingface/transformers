@@ -162,6 +162,8 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
         sampling_rate: int | None = None,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

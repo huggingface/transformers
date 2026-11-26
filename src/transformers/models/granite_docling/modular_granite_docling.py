@@ -378,6 +378,8 @@ class GraniteDoclingImageProcessor(GotOcr2ImageProcessor):
         dense_max_scale: float = 0.0,
         dense_min_aspect: float = 0.0,
         dense_max_aspect: float = 0.0,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         grid_kwargs = {
@@ -493,6 +495,8 @@ class GraniteDoclingImageProcessorPil(GotOcr2ImageProcessorPil):
         dense_max_scale: float = 0.0,
         dense_min_aspect: float = 0.0,
         dense_max_aspect: float = 0.0,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         grid_kwargs = {

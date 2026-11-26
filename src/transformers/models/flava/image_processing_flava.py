@@ -413,6 +413,8 @@ class FlavaImageProcessor(TorchvisionBackend):
         codebook_image_std: float | list[float] | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = self._preprocess_image(
@@ -466,7 +468,7 @@ class FlavaImageProcessor(TorchvisionBackend):
             masks = [mask_generator() for _ in range(len(images))]
             data["bool_masked_pos"] = masks
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
 
 __all__ = ["FlavaImageProcessor"]

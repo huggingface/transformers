@@ -202,6 +202,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: int | None = None,
         do_normalize: bool | None = None,
         device: str | None = "cpu",
+        dtype: torch.dtype | str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Main method to featurize and prepare for the model one or several sequence(s). Implementation uses PyTorch

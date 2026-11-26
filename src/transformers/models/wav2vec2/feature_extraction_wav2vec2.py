@@ -106,6 +106,8 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask: bool | None = None,
         return_tensors: str | TensorType | None = None,
         sampling_rate: int | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

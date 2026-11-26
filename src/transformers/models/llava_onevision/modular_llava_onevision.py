@@ -152,6 +152,8 @@ class LlavaOnevisionImageProcessor(LlavaNextImageProcessor):
         do_pad: bool,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = []
@@ -314,6 +316,8 @@ class LlavaOnevisionImageProcessorPil(LlavaNextImageProcessorPil):
         pad_size: SizeDict | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for LLaVA-NeXT with patch processing."""

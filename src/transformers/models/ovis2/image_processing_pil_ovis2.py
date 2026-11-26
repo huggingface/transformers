@@ -257,6 +257,8 @@ class Ovis2ImageProcessorPil(PilBackend):
         min_patches: int = 1,
         max_patches: int = 12,
         use_covering_area_grid: bool = True,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if crop_to_patches and max_patches > 1:

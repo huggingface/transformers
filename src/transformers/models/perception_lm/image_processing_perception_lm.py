@@ -266,6 +266,8 @@ class PerceptionLMImageProcessor(TorchvisionBackend):
         max_num_tiles: int,
         return_tensors: str | TensorType | None,
         disable_grouping: bool | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched transformation

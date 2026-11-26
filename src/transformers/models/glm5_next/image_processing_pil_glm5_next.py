@@ -240,6 +240,8 @@ class Glm5NextImageProcessorPil(PilBackend):
         min_image_tokens: int,
         max_image_tokens: int,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

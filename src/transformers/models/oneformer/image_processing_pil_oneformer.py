@@ -379,6 +379,8 @@ class OneFormerImageProcessorPil(PilBackend):
         ignore_index: int | None,
         do_reduce_labels: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Process images one by one (no batching in PIL backend)
@@ -410,6 +412,8 @@ class OneFormerImageProcessorPil(PilBackend):
             ignore_index=ignore_index,
             do_reduce_labels=do_reduce_labels,
             return_tensors=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
         return encoded_inputs
@@ -454,7 +458,12 @@ class OneFormerImageProcessorPil(PilBackend):
         return padded_image
 
     def pad(
-        self, images: list[np.ndarray], return_pixel_mask: bool = True, return_tensors: str | TensorType | None = None
+        self,
+        images: list[np.ndarray],
+        return_pixel_mask: bool = True,
+        return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
     ) -> BatchFeature:
         """
         Pad a batch of images to the same size using numpy operations.
@@ -492,7 +501,7 @@ class OneFormerImageProcessorPil(PilBackend):
         if return_pixel_mask:
             data["pixel_mask"] = pixel_masks
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def convert_segmentation_map_to_binary_masks(
         self,
@@ -662,6 +671,8 @@ class OneFormerImageProcessorPil(PilBackend):
         ignore_index: int | None = None,
         do_reduce_labels: bool = False,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
     ) -> BatchFeature:
         ignore_index = self.ignore_index if ignore_index is None else ignore_index
         do_reduce_labels = self.do_reduce_labels if do_reduce_labels is None else do_reduce_labels
@@ -678,7 +689,7 @@ class OneFormerImageProcessorPil(PilBackend):
                 input_data_format=ChannelDimension.FIRST,
             )
         pad_size = get_max_height_width(pixel_values_list, input_data_format=ChannelDimension.FIRST)
-        encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)
+        encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors, device=device, dtype=dtype)
 
         annotations = None
         if segmentation_maps is not None:

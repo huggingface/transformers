@@ -67,6 +67,8 @@ class InstructBlipVideoProcessor(ProcessorMixin):
         return_length: bool = False,
         verbose: bool = True,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if images is None and text is None:

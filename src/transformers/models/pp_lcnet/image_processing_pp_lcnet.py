@@ -76,6 +76,8 @@ class PPLCNetImageProcessor(TorchvisionBackend):
         image_std: float | list[float] | None,
         return_tensors: str | TensorType | None,
         disable_grouping: bool | None = False,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing

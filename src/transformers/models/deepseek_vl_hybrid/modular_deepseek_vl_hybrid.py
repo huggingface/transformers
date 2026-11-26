@@ -485,6 +485,8 @@ class DeepseekVLHybridImageProcessorPil(DeepseekVLImageProcessorPil):
         high_res_image_std: float | list[float] | None,
         return_tensors: str | TensorType | None,
         do_pad: bool = True,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         high_res_processed_images = []
@@ -597,6 +599,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         do_pad: bool = True,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing

@@ -267,6 +267,8 @@ class NougatImageProcessorPil(PilBackend):
         do_thumbnail: bool = True,
         do_crop_margin: bool = True,
         do_pad: bool | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = []

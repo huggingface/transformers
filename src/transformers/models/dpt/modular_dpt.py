@@ -206,6 +206,8 @@ class DPTImageProcessor(BeitImageProcessor):
         do_pad: bool,
         size_divisor: int | None,
         disable_grouping: bool | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if do_reduce_labels:

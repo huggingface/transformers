@@ -107,6 +107,7 @@ class GraniteSpeech5FeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: int | None = None,
         return_attention_mask: bool = True,
         device: str | None = "cpu",
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if sampling_rate is not None:
@@ -143,7 +144,7 @@ class GraniteSpeech5FeatureExtractor(SequenceFeatureExtractor):
             )
             data["attention_mask"] = attention_mask.long()
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def _as_mono_clips(self, raw_speech) -> list["torch.Tensor"]:
         """Normalise any accepted input into a list of 1-D float32 waveforms."""

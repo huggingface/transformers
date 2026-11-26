@@ -167,6 +167,7 @@ class SegGptImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         device: Union[str, "torch.device"] | None = None,
         num_labels: int | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         data = {}
@@ -219,7 +220,7 @@ class SegGptImageProcessor(TorchvisionBackend):
             masks_kwargs["resample"] = PILImageResampling.NEAREST
             data["prompt_masks"] = self._preprocess(prepared_masks, **masks_kwargs)
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def _preprocess(
         self,

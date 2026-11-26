@@ -195,6 +195,8 @@ class PixtralImageProcessorPil(PilBackend):
         do_pad: bool,
         return_tensors: str | TensorType | None,
         patch_size: dict[str, int] | SizeDict | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         patch_size = get_size_dict(patch_size or self.patch_size, default_to_square=True)

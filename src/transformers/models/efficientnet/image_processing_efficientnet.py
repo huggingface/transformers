@@ -141,6 +141,8 @@ class EfficientNetImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         rescale_offset: bool = False,
         include_top: bool = True,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for EfficientNet."""

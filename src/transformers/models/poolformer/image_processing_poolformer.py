@@ -104,6 +104,8 @@ class PoolFormerImageProcessor(TorchvisionBackend):
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         crop_pct: float = 0.9,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for PoolFormer (pass crop_pct to resize)."""

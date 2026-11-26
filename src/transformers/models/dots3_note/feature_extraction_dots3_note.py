@@ -117,6 +117,7 @@ class Dots3NoteFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: int | None = None,
         return_tensors: str | TensorType | None = "pt",
         device: str = "cpu",
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Extract chunked log-mel features and their waveform sample lengths."""
@@ -154,7 +155,7 @@ class Dots3NoteFeatureExtractor(SequenceFeatureExtractor):
             "chunk_sample_lengths": torch.tensor(chunk_sample_lengths, dtype=torch.long, device=device),
             "num_audio_tokens": torch.tensor(audio_token_lengths, dtype=torch.long, device=device),
         }
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
 
 __all__ = ["Dots3NoteFeatureExtractor"]

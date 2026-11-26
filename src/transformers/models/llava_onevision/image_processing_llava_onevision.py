@@ -183,6 +183,8 @@ class LlavaOnevisionImageProcessor(TorchvisionBackend):
         do_pad: bool,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for LLaVA-NeXT with patch processing."""

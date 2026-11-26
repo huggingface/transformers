@@ -446,6 +446,8 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
         do_reduce_labels: bool | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if segmentation_maps is not None and len(images) != len(segmentation_maps):

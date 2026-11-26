@@ -346,6 +346,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         resample: bool | None = True,
         return_attention_mask: bool | None = False,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

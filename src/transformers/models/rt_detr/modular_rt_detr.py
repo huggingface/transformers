@@ -383,6 +383,8 @@ class RTDetrImageProcessorPil(DetrImageProcessorPil):
         pad_size: SizeDict | None,
         format: str | AnnotationFormat | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

@@ -389,6 +389,8 @@ class Pix2StructImageProcessor(TorchvisionBackend):
         patch_size: SizeDict,
         return_tensors: str | TensorType | None,
         disable_grouping: bool,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

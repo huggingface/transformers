@@ -116,6 +116,8 @@ class ConvNextImageProcessor(TorchvisionBackend):
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         crop_pct: float = 224 / 256,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for ConvNeXT."""

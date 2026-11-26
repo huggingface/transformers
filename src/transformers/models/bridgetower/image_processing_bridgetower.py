@@ -136,6 +136,8 @@ class BridgeTowerImageProcessor(TorchvisionBackend):
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         size_divisor: int = 32,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for BridgeTower."""
@@ -173,7 +175,7 @@ class BridgeTowerImageProcessor(TorchvisionBackend):
 
         data["pixel_values"] = processed_images
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
 
 __all__ = ["BridgeTowerImageProcessor"]

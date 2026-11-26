@@ -214,6 +214,8 @@ class TvpImageProcessorPil(PilBackend):
         image_std: float | list[float] | None,
         do_flip_channel_order: bool,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

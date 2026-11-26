@@ -139,6 +139,8 @@ class NemotronH_Omni_Reasoning_V3ImageProcessor(TorchvisionBackend):
         max_model_len: int,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         merge_size = round(1 / downsample_ratio)

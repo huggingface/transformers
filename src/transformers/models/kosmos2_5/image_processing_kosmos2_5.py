@@ -212,6 +212,8 @@ class Kosmos2_5ImageProcessor(TorchvisionBackend):
         patch_size: SizeDict,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         width, height, rows, cols, attention_masks = [], [], [], [], []

@@ -363,6 +363,8 @@ class OneFormerImageProcessor(TorchvisionBackend):
         do_reduce_labels: bool | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -402,6 +404,8 @@ class OneFormerImageProcessor(TorchvisionBackend):
             ignore_index=ignore_index,
             do_reduce_labels=do_reduce_labels,
             return_tensors=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
         return encoded_inputs
@@ -441,6 +445,8 @@ class OneFormerImageProcessor(TorchvisionBackend):
         images: list["torch.Tensor"],
         return_pixel_mask: bool = True,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
     ) -> BatchFeature:
         """
         Pad a batch of images to the same size using torch operations.
@@ -469,7 +475,7 @@ class OneFormerImageProcessor(TorchvisionBackend):
         if return_pixel_mask:
             data["pixel_mask"] = pixel_masks
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def convert_segmentation_map_to_binary_masks(
         self,
@@ -616,6 +622,8 @@ class OneFormerImageProcessor(TorchvisionBackend):
         ignore_index: int | None = None,
         do_reduce_labels: bool = False,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
     ) -> BatchFeature:
         ignore_index = self.ignore_index if ignore_index is None else ignore_index
         do_reduce_labels = self.do_reduce_labels if do_reduce_labels is None else do_reduce_labels
@@ -632,7 +640,7 @@ class OneFormerImageProcessor(TorchvisionBackend):
                 input_data_format=ChannelDimension.FIRST,
             )
         pad_size = get_max_height_width(pixel_values_list)
-        encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)
+        encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors, device=device, dtype=dtype)
 
         annotations = None
         if segmentation_maps is not None:

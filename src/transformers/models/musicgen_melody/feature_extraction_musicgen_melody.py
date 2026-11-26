@@ -189,6 +189,8 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         padding: str | None = True,
         max_length: int | None = None,
         sampling_rate: int | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

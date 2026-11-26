@@ -304,6 +304,7 @@ class NeuCodecFeatureExtractor(Xcodec2FeatureExtractor):
         return_tensors: str | TensorType | None = None,
         sampling_rate: int | None = None,
         device: str = "cpu",
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -437,6 +438,8 @@ class NeuCodecFeatureExtractor(Xcodec2FeatureExtractor):
                 "input_features_mask": spectrogram_mask,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

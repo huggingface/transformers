@@ -222,6 +222,8 @@ class HYV4VLImageProcessorPil(PilBackend):
         temporal_patch_size: int,
         merge_size: int,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         all_patches = []

@@ -150,6 +150,8 @@ class AriaImageProcessorPil(PilBackend):
         split_resolutions: list[list[int]] | None = None,
         split_image: bool = False,
         resample: "PILImageResampling | None" = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if max_image_size not in [490, 980]:

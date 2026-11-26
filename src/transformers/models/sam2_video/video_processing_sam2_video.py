@@ -40,6 +40,8 @@ class Sam2VideoVideoProcessor(BaseVideoProcessor):
         videos: list["torch.Tensor"],
         size: SizeDict,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         original_sizes = [video.shape[-2:] for video in videos]

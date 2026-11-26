@@ -181,6 +181,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         return_tensors: str | TensorType | None = None,
         sampling_rate: int | None = None,
         return_attention_mask: bool | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

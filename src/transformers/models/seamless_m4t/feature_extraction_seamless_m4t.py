@@ -148,6 +148,8 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: int | None = None,
         return_attention_mask: bool | None = None,
         do_normalize_per_mel_bins: bool | None = True,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

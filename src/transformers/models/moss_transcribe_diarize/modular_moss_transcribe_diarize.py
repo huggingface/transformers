@@ -81,6 +81,7 @@ class MossTranscribeDiarizeFeatureExtractor(WhisperFeatureExtractor):
         return_tensors: str | TensorType | None = None,
         sampling_rate: int | None = None,
         device: str | None = "cpu",
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         r"""
@@ -147,6 +148,7 @@ class MossTranscribeDiarizeFeatureExtractor(WhisperFeatureExtractor):
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=True,
+            device=device,
         )
 
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)

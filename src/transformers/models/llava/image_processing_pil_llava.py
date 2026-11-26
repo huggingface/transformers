@@ -106,6 +106,8 @@ class LlavaImageProcessorPil(PilBackend):
         do_pad: bool | None,
         pad_size: SizeDict | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = []

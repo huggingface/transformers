@@ -99,6 +99,8 @@ class Gemma4UnifiedAudioFeatureExtractor(SequenceFeatureExtractor):
         max_length: int | None = None,
         truncation: bool = True,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Chunk raw audio waveforms into fixed-length frames for the unified model.

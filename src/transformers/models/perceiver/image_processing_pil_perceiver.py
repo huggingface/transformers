@@ -87,6 +87,8 @@ class PerceiverImageProcessorPil(PilBackend):
         do_pad: bool | None,
         pad_size: SizeDict | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for Perceiver: center_crop -> resize -> rescale and normalize."""

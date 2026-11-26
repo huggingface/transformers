@@ -76,6 +76,8 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
         pad_size: SizeDict | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if do_resize:

@@ -135,6 +135,8 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask: bool | None = True,
         padding: str | None = "max_length",
         max_length: int | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

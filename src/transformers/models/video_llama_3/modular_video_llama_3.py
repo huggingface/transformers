@@ -736,6 +736,8 @@ class VideoLlama3ImageProcessorPil(Qwen2VLImageProcessorPil):
         temporal_patch_size: int,
         merge_size: int,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         all_patches = []
@@ -806,6 +808,8 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
         merge_size: int,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)

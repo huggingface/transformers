@@ -150,6 +150,8 @@ class FuyuImageProcessorPil(PilBackend):
         padding_value: float | None,
         padding_mode: str | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Process nested images one by one

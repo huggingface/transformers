@@ -289,6 +289,8 @@ class Gemma4UnifiedImageProcessor(TorchvisionBackend):
         patch_size: int | None = None,
         max_soft_tokens: int | None = None,
         pooling_kernel_size: int | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if max_soft_tokens not in _SUPPORTED_SOFT_TOKENS:
@@ -359,7 +361,7 @@ class Gemma4UnifiedImageProcessor(TorchvisionBackend):
             "image_position_ids": position_ids,
             "num_soft_tokens_per_image": num_soft_tokens_per_image,
         }
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
 
 __all__ = ["Gemma4UnifiedImageProcessor"]

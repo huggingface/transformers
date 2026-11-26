@@ -180,6 +180,8 @@ class MuseGlimmerImageProcessor(TorchvisionBackend):
         max_image_tokens: int,
         merge_size: int,
         disable_grouping: bool = False,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

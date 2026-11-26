@@ -153,6 +153,8 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
         truncation: bool = False,
         pad_to_multiple_of: int | None = None,
         return_attention_mask: bool | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

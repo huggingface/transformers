@@ -145,6 +145,8 @@ class UltraVBertImageProcessor(Idefics3ImageProcessor):
         return_row_col_info: bool | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(
@@ -237,7 +239,7 @@ class UltraVBertImageProcessor(Idefics3ImageProcessor):
             data = {"pixel_values": torch.stack([torch.stack(images) for images in processed_images])}
         else:
             data = {"pixel_values": processed_images}
-        encoding = BatchFeature(data=data, tensor_type=return_tensors)
+        encoding = BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
         if return_row_col_info:
             encoding["rows"] = rows

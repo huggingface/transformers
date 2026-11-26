@@ -300,6 +300,8 @@ class VivitImageProcessor(BaseImageProcessor):
         return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: str | ChannelDimension | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -392,7 +394,7 @@ class VivitImageProcessor(BaseImageProcessor):
         ]
 
         data = {"pixel_values": videos}
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
 
 __all__ = ["VivitImageProcessor"]

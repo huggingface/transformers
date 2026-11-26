@@ -181,6 +181,7 @@ class SamImageProcessorPil(PilBackend):
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
         device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -221,7 +222,7 @@ class SamImageProcessorPil(PilBackend):
             )
             data["labels"] = [m.squeeze(0).astype(np.int64) for m in processed_segmentation_maps]
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def _preprocess(
         self,

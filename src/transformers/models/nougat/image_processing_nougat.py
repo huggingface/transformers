@@ -264,6 +264,8 @@ class NougatImageProcessor(TorchvisionBackend):
         do_align_long_axis: bool = False,
         do_thumbnail: bool = True,
         do_crop_margin: bool = True,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Crop images

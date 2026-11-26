@@ -138,6 +138,7 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: int | None = None,
         n_window: int | None = None,
         device: str | None = "cpu",
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         r"""
@@ -204,6 +205,7 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
+            device=device,
         )
 
         input_features = padded_inputs["input_features"].transpose(2, 0, 1)

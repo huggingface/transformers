@@ -221,6 +221,8 @@ class GotOcr2ImageProcessor(TorchvisionBackend):
         crop_to_patches: bool = False,
         min_patches: int = 1,
         max_patches: int = 12,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if crop_to_patches:

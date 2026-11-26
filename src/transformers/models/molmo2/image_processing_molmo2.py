@@ -376,6 +376,8 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         pooling_size: list[int],
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if size.height != size.width:
@@ -429,7 +431,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
             "image_grids": torch.stack(grids, dim=0),
             "image_num_crops": torch.tensor([crops.shape[0] for crops in patches], dtype=torch.int64, device=device),
         }
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
         image_grid, _ = self.get_image_grid_and_crops(height, width, images_kwargs)

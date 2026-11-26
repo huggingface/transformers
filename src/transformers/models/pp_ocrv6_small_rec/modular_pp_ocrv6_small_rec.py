@@ -83,6 +83,8 @@ class PPOCRV6SmallRecImageProcessor(PPOCRV5ServerRecImageProcessor):
         pad_size: SizeDict | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing

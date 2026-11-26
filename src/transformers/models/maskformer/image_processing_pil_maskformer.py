@@ -496,6 +496,8 @@ class MaskFormerImageProcessorPil(PilBackend):
         ignore_index: int | None,
         do_reduce_labels: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if segmentation_maps is not None and len(images) != len(segmentation_maps):

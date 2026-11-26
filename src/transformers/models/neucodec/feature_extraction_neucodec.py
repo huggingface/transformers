@@ -97,6 +97,7 @@ class NeuCodecFeatureExtractor(SequenceFeatureExtractor):
         return_tensors: str | TensorType | None = None,
         sampling_rate: int | None = None,
         device: str = "cpu",
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -230,6 +231,8 @@ class NeuCodecFeatureExtractor(SequenceFeatureExtractor):
                 "input_features_mask": spectrogram_mask,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def to_dict(self) -> dict[str, Any]:

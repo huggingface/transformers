@@ -468,6 +468,8 @@ class MllamaImageProcessorPil(PilBackend):
         image_std: float | list[float] | None,
         max_image_tiles: int | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         batch_images = []

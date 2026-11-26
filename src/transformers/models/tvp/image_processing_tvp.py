@@ -185,6 +185,8 @@ class TvpImageProcessor(TorchvisionBackend):
         do_flip_channel_order: bool,
         return_tensors: str | TensorType | None,
         disable_grouping: bool | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

@@ -697,34 +697,40 @@ class ProcessorTesterMixin:
         inputs = processor(**inputs_dict, return_tensors="pt")
         for key, value in inputs.items():
             self.assertEqual(
-                value.device.type, "cpu",
+                value.device.type,
+                "cpu",
                 f"`{key}` is on `{value.device}` but expected `cpu`",
             )
             if value.is_floating_point():
                 self.assertEqual(
-                    value.dtype, torch.float32,
+                    value.dtype,
+                    torch.float32,
                     f"`{key}` has dtype `{value.dtype}` but expected `torch.float32`",
                 )
             else:
                 self.assertNotEqual(
-                    value.dtype, torch.float32,
+                    value.dtype,
+                    torch.float32,
                     f"`{key}` is non-floating but has dtype `{value.dtype}`, which should not be `torch.float32`",
                 )
 
         inputs = processor(**inputs_dict, return_tensors="pt", device="cuda", dtype=torch.bfloat16)
         for key, value in inputs.items():
             self.assertEqual(
-                value.device.type, "cuda",
+                value.device.type,
+                "cuda",
                 f"`{key}` is on `{value.device}` but expected `cuda`",
             )
             if value.is_floating_point():
                 self.assertEqual(
-                    value.dtype, torch.bfloat16,
+                    value.dtype,
+                    torch.bfloat16,
                     f"`{key}` has dtype `{value.dtype}` but expected `torch.bfloat16`",
                 )
             else:
                 self.assertNotEqual(
-                    value.dtype, torch.bfloat16,
+                    value.dtype,
+                    torch.bfloat16,
                     f"`{key}` is non-floating but has dtype `{value.dtype}`, which should not be `torch.bfloat16`",
                 )
 
@@ -732,12 +738,14 @@ class ProcessorTesterMixin:
         for key, value in inputs.items():
             if np.issubdtype(value.dtype, np.floating):
                 self.assertEqual(
-                    value.dtype, np.float16,
+                    value.dtype,
+                    np.float16,
                     f"`{key}` has dtype `{value.dtype}` but expected `float16`",
                 )
             else:
                 self.assertNotEqual(
-                    value.dtype, np.float16,
+                    value.dtype,
+                    np.float16,
                     f"`{key}` is non-floating but has dtype `{value.dtype}`, which should not be `float16`",
                 )
 

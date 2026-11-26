@@ -459,6 +459,8 @@ class MllamaImageProcessor(TorchvisionBackend):
         max_image_tiles: int | None,
         return_tensors: str | TensorType | None,
         disable_grouping: bool | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing (nested structure)

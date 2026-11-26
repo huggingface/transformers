@@ -185,6 +185,8 @@ class Glm4vImageProcessor(TorchvisionBackend):
         merge_size: int,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

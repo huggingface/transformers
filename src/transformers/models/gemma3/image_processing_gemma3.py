@@ -181,6 +181,8 @@ class Gemma3ImageProcessor(TorchvisionBackend):
         pan_and_scan_min_crop_size: int | None = None,
         pan_and_scan_max_num_crops: int | None = None,
         pan_and_scan_min_ratio_to_activate: float | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched processing
