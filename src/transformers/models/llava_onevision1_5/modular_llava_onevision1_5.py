@@ -144,13 +144,36 @@ class LlavaOnevision15VisionBlock(GlmImageVisionBlock):
     pass
 
 
+class LlavaOnevision15VisionClassEmbeddings(nn.Module):
+    def __init__(self, config: LlavaOnevision15VisionConfig):
+        super().__init__()
+        self.config = config
+        self.class_embedding = nn.Parameter(torch.empty(config.hidden_size))
+        self.class_pos_emb = nn.Parameter(torch.empty(1, config.hidden_size // config.num_heads // 2))
+
+    def forward(
+        self, hidden_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, frame_lengths: list[int]
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        cls_freqs = torch.cat((self.class_pos_emb, self.class_pos_emb), dim=-1).to(cos.dtype)
+        hidden_states = self.prepend_cls(hidden_states, self.class_embedding[None, :], frame_lengths)
+        cos = self.prepend_cls(cos, cls_freqs.cos(), frame_lengths)
+        sin = self.prepend_cls(sin, cls_freqs.sin(), frame_lengths)
+        return hidden_states, (cos, sin)
+
+    @staticmethod
+    def prepend_cls(hidden_states: torch.Tensor, cls_states: torch.Tensor, frame_lengths: list[int]) -> torch.Tensor:
+        """Prepend a class token, cast to the input dtype, to each frame's patches."""
+        cls_states = cls_states.to(hidden_states.dtype)
+        return torch.cat([torch.cat((cls_states, frame)) for frame in hidden_states.split(frame_lengths)])
+
+
 @auto_docstring
 class LlavaOnevision15PreTrainedModel(Qwen2_5_VLPreTrainedModel):
     _no_split_modules = ["LlavaOnevision15VisionBlock"]
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, LlavaOnevision15VisionModel):
+        if isinstance(module, LlavaOnevision15VisionClassEmbeddings):
             std = module.config.hidden_size**-0.5 * module.config.initializer_factor
             init.normal_(module.class_embedding, mean=0.0, std=std)
             init.normal_(module.class_pos_emb, mean=0.0, std=std)
@@ -171,8 +194,7 @@ class LlavaOnevision15VisionModel(LlavaOnevision15PreTrainedModel):
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_embed = LlavaOnevision15VisionPatchEmbed(config)
         self.rotary_pos_emb = LlavaOnevision15VisionRotaryEmbedding(config)
-        self.class_embedding = nn.Parameter(torch.empty(config.hidden_size))
-        self.class_pos_emb = nn.Parameter(torch.empty(1, config.hidden_size // config.num_heads // 2))
+        self.cls_embeddings = LlavaOnevision15VisionClassEmbeddings(config)
         self.pre_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.blocks = nn.ModuleList([LlavaOnevision15VisionBlock(config) for _ in range(config.depth)])
         self.merger = LlavaOnevision15VisionPatchMerger(config)
@@ -205,7 +227,7 @@ class LlavaOnevision15VisionModel(LlavaOnevision15PreTrainedModel):
         if max_seqlen is not None:
             max_seqlen += 1
 
-        hidden_states, position_embeddings = self._prepare_cls_tokens(hidden_states, cos, sin, frame_lengths)
+        hidden_states, position_embeddings = self.cls_embeddings(hidden_states, cos, sin, frame_lengths)
 
         hidden_states = self.pre_layernorm(hidden_states)
         for block in self.blocks:
@@ -218,21 +240,6 @@ class LlavaOnevision15VisionModel(LlavaOnevision15PreTrainedModel):
         )
         pooled_states = self.merger(hidden_states)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=pooled_states)
-
-    def _prepare_cls_tokens(
-        self, hidden_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, frame_lengths: list[int]
-    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
-        cls_freqs = torch.cat((self.class_pos_emb, self.class_pos_emb), dim=-1).to(cos.dtype)
-        hidden_states = self.prepend_cls(hidden_states, self.class_embedding[None, :], frame_lengths)
-        cos = self.prepend_cls(cos, cls_freqs.cos(), frame_lengths)
-        sin = self.prepend_cls(sin, cls_freqs.sin(), frame_lengths)
-        return hidden_states, (cos, sin)
-
-    @staticmethod
-    def prepend_cls(hidden_states: torch.Tensor, cls_states: torch.Tensor, frame_lengths: list[int]) -> torch.Tensor:
-        """Prepend a class token, cast to the input dtype, to each frame's patches."""
-        cls_states = cls_states.to(hidden_states.dtype)
-        return torch.cat([torch.cat((cls_states, frame)) for frame in hidden_states.split(frame_lengths)])
 
 
 @auto_docstring

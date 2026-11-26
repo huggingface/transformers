@@ -231,6 +231,8 @@ def _build_checkpoint_conversion_mapping():
         ],
         "llava_onevision1_5_vision": [
             PrefixChange(prefix_to_remove="visual"),
+            WeightRenaming(r"^class_embedding", r"cls_embeddings\.class_embedding"),
+            WeightRenaming(r"^class_pos_emb", r"cls_embeddings\.class_pos_emb"),
             WeightRenaming(r"merger\.fc1\.", "merger.linear_fc1."),
             WeightRenaming(r"merger\.fc2\.", "merger.linear_fc2."),
             WeightRenaming(r"merger\.mlp\.0\.", "merger.linear_fc1."),

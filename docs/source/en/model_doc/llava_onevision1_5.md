@@ -17,7 +17,7 @@ rendered properly in your Markdown viewer.
 LLaVA-OneVision-1.5 was introduced in [LLaVA-OneVision-1.5: Fully Open Framework for Democratized Multimodal Training](https://huggingface.co/papers/2509.23661).
 It combines a native resolution vision encoder with a Qwen3 language backbone. The vision encoder adds a learned class token to each image, applies full attention, removes the class token, and merges spatial patches into visual features for the language model. The language backbone uses ordinary one dimensional rotary positions for the combined image and text sequence.
 
-Transformers supports the [4B checkpoint](https://huggingface.co/Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf).
+Transformers supports the [4B Instruct](https://huggingface.co/Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf) and [8B Instruct](https://huggingface.co/Deep-VLM/LLaVA-OneVision-1.5-8B-Instruct-hf) checkpoints.
 
 The paper describes the work as follows:
 

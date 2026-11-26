@@ -157,8 +157,8 @@ class LlavaOnevision15ModelTest(VLMModelTest, unittest.TestCase):
         model(pixels, grid).pooler_output.square().sum().backward()
         for name, p in model.named_parameters():
             torch.testing.assert_close(p.grad, expected[name])
-        self.assertGreater(model.class_embedding.grad.abs().sum().item(), 0)
-        self.assertGreater(model.class_pos_emb.grad.abs().sum().item(), 0)
+        self.assertGreater(model.cls_embeddings.class_embedding.grad.abs().sum().item(), 0)
+        self.assertGreater(model.cls_embeddings.class_pos_emb.grad.abs().sum().item(), 0)
 
 
 @require_torch
