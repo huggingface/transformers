@@ -94,21 +94,21 @@ Install the dependencies for the backend you plan to export to.
 <hfoption id="Dynamo">
 
 ```bash
-pip install transformers "torch==2.12.0"
+pip install transformers "torch==2.13.0"
 ```
 
 </hfoption>
 <hfoption id="ONNX">
 
 ```bash
-pip install transformers "torch==2.12.0" "onnx==1.21.0" "onnxscript==0.7.0" onnxruntime
+pip install transformers "torch==2.13.0" "onnx==1.23.2" "onnxscript==0.7.2" onnxruntime
 ```
 
 </hfoption>
 <hfoption id="ExecuTorch XNNPACK">
 
 ```bash
-pip install transformers "torch==2.12.0" "executorch==1.3.1"
+pip install transformers "torch==2.13.0" "executorch==1.5.1"
 ```
 
 </hfoption>
@@ -133,7 +133,7 @@ For source builds, see the [MLX installation guide](https://docs.pytorch.org/exe
 <hfoption id="OpenVINO">
 
 ```bash
-pip install transformers "torch==2.12.0" "openvino==2026.3.1"
+pip install transformers "torch==2.13.0" "openvino==2026.4.1"
 ```
 
 </hfoption>

@@ -134,7 +134,9 @@ class OnnxExporter(DynamoExporter):
     requires_trust_remote_code = False
 
     required_packages = ["torch", "onnx", "onnxscript"]
-    tested_versions = {"torch": "2.12.0", "onnx": "1.21.0", "onnxscript": "0.7.0"}
+    # The patches dropped as fixed were checked on these: older ones may still need them
+    min_versions = {"torch": "2.11.0", "onnxscript": "0.7.2"}
+    tested_versions = {"torch": "2.13.0", "onnx": "1.23.2", "onnxscript": "0.7.2"}
 
     def export_program(
         self,
@@ -424,20 +426,6 @@ def _patch_chunk(original):
             splits.append(input.narrow(dim, start, length))
             start = start + chunk_size
         return tuple(splits)
-
-    return patch
-
-
-@register_patch("onnx", "torch.exp", "torch.Tensor.exp")
-def _patch_exp(original):
-    """Lower `exp` on complex tensors via Euler — onnxscript has no dispatch for `aten.exp` on
-    complex inputs. Real inputs hit the original path."""
-
-    def patch(input):
-        if torch.is_complex(input):
-            magnitude = original(input.real)
-            return torch.complex(magnitude * input.imag.cos(), magnitude * input.imag.sin())
-        return original(input)
 
     return patch
 
