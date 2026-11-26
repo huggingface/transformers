@@ -770,17 +770,6 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         if self.size is not None and (self.size.get("height", None) is None or self.size.get("width", None) is None):
             raise ValueError("size must contain 'height' and 'width' keys.")
 
-    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None) -> int:
-        """Return the number of `<im_patch>` tokens of a video: every frame is resized to `size`, regardless of its own
-        size."""
-        if videos_kwargs is None:
-            videos_kwargs = {}
-        size = videos_kwargs.get("size", self.size)
-        patch_size = videos_kwargs.get("patch_size", self.patch_size)
-        pooling_h, pooling_w = videos_kwargs.get("pooling_size", self.pooling_size)
-        patches_per_side = size["height"] // patch_size
-        return num_frames * math.ceil(patches_per_side / pooling_h) * math.ceil(patches_per_side / pooling_w)
-
     def sample_frames(
         self,
         metadata: VideoMetadata,
@@ -1067,9 +1056,13 @@ class Molmo2Processor(ProcessorMixin):
 
         if video_sizes is not None:
             videos_kwargs = self._merge_kwargs(**kwargs)["videos_kwargs"]
-            vision_data["num_video_tokens"] = [
-                self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
-            ]
+            size = videos_kwargs.get("size", self.video_processor.size)
+            patch_size = videos_kwargs.get("patch_size", self.video_processor.patch_size)
+            pooling_h, pooling_w = videos_kwargs.get("pooling_size", self.video_processor.pooling_size)
+            # Every frame is resized to `size`, so the count doesn't depend on the video's own size
+            patches_per_side = size["height"] // patch_size
+            num_frame_tokens = math.ceil(patches_per_side / pooling_h) * math.ceil(patches_per_side / pooling_w)
+            vision_data["num_video_tokens"] = [num_frames * num_frame_tokens for num_frames, _, _ in video_sizes]
 
         return MultiModalData(**vision_data)
 

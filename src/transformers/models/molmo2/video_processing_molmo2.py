@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 
 import torch
 from torch.nn import functional as F
@@ -163,17 +162,6 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         super().__init__(**kwargs)
         if self.size is not None and (self.size.get("height", None) is None or self.size.get("width", None) is None):
             raise ValueError("size must contain 'height' and 'width' keys.")
-
-    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None) -> int:
-        """Return the number of `<im_patch>` tokens of a video: every frame is resized to `size`, regardless of its own
-        size."""
-        if videos_kwargs is None:
-            videos_kwargs = {}
-        size = videos_kwargs.get("size", self.size)
-        patch_size = videos_kwargs.get("patch_size", self.patch_size)
-        pooling_h, pooling_w = videos_kwargs.get("pooling_size", self.pooling_size)
-        patches_per_side = size["height"] // patch_size
-        return num_frames * math.ceil(patches_per_side / pooling_h) * math.ceil(patches_per_side / pooling_w)
 
     def sample_frames(
         self,
