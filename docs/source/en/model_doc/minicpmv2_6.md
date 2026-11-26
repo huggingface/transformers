@@ -56,6 +56,7 @@ print(processor.post_process_image_text_to_text(generated[:, inputs["input_ids"]
 
 - In a prompt, each image is marked with `<unk>`. The processor expands it to `<image>` + 64 × `<unk>` + `</image>` for the overview image, followed by each slice as `<slice>` + 64 × `<unk>` + `</slice>`, one line per row of slices.
 - The chat template puts `<image_id>N</image_id>` before each image, N being the image's index in the conversation, as the original processor does. Add it yourself when you write prompts without the chat template.
+- The vision encoder's position ids bucket each patch by `index * (1 / size)` in its slice's patch grid, as Idefics2 does. The original code computes the same buckets with a CPU `torch.arange`, whose rounding depends on the CPU, so on some slice sizes (49 and 50 patches on ARM) a few patches land one bucket off from the original.
 
 ## MiniCPMV2_6Config
 

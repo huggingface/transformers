@@ -495,6 +495,8 @@ class MiniCPMV2_6VisionTransformer(MiniCPMV2_6PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
+        pixel_values (`torch.FloatTensor` of shape `(num_slices, num_channels, patch_size, max_patches * patch_size)`):
+            Every image slice as a single row of patches, padded to the longest slice.
         patch_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`):
             Which patches are real (`True`) rather than padding.
         patch_position_ids (`torch.LongTensor` of shape `(num_slices, max_patches, 2)`):
