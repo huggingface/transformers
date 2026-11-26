@@ -76,7 +76,7 @@ pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac
 from transformers import pipeline
 
 pipeline = pipeline(task="image-classification", model="google/vit-base-patch16-224")
-pipeline(images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 [{'label': 'lynx, catamount', 'score': 0.43350091576576233},
  {'label': 'cougar, puma, catamount, mountain lion, painter, panther, Felis concolor',
   'score': 0.034796204417943954},
@@ -224,7 +224,7 @@ Pass the `return_timestamps="word"` parameter to [`Pipeline`] to return when eac
 from transformers import pipeline
 
 pipeline = pipeline(task="automatic-speech-recognition", model="openai/whisper-large-v3")
-pipeline(audio="https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac", return_timestamps="word")
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac", return_timestamps="word")
 {'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.',
  'chunks': [{'text': ' I', 'timestamp': (0.0, 1.1)},
   {'text': ' have', 'timestamp': (1.1, 1.44)},

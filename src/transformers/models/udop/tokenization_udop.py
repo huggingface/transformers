@@ -13,7 +13,7 @@
 # limitations under the License
 """Tokenization classes for UDOP model."""
 
-from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_utils_base import (
@@ -194,6 +194,7 @@ class UdopTokenizer(TokenizersBackend):
         pad_token_label=-100,
         only_label_first_subword=True,
         extra_special_tokens=None,
+        _spm_precompiled_charsmap: str | None = None,
         **kwargs,
     ):
         if "additional_special_tokens" in kwargs and "extra_special_tokens" not in kwargs:
@@ -218,7 +219,13 @@ class UdopTokenizer(TokenizersBackend):
             )
         )
 
-        self._tokenizer.normalizer = None
+        self._spm_precompiled_charsmap = _spm_precompiled_charsmap
+        list_normalizers = []
+        if _spm_precompiled_charsmap is not None:
+            list_normalizers.append(normalizers.Precompiled(_spm_precompiled_charsmap))
+        list_normalizers.append(normalizers.Strip(left=False, right=True))
+        list_normalizers.append(normalizers.Replace(Regex(" {2,}"), "▁"))
+        self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
@@ -238,6 +245,7 @@ class UdopTokenizer(TokenizersBackend):
             pad_token_box=pad_token_box,
             pad_token_label=pad_token_label,
             only_label_first_subword=only_label_first_subword,
+            _spm_precompiled_charsmap=_spm_precompiled_charsmap,
             **kwargs,
         )
 

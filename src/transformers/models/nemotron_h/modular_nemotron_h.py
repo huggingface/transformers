@@ -37,7 +37,7 @@ from ...models.zamba2.modeling_zamba2 import Zamba2MambaMixer, Zamba2RMSNormGate
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_nemotron_h import NemotronHConfig
 
@@ -86,6 +86,7 @@ class NemotronHMamba2Mixer(Zamba2MambaMixer):
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
 
+@no_inherit_decorator
 class NemotronHRMSNorm(LlamaRMSNorm):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
@@ -204,15 +205,7 @@ class NemotronHTopkRouter(DeepseekV3TopkRouter):
 
 
 class NemotronHAttention(JambaAttention):
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        cache: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        return super().forward(hidden_states, attention_mask, cache, **kwargs)
+    pass
 
 
 MIXER_TYPES = {
