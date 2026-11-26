@@ -2811,7 +2811,6 @@ def get_model_conversion_mapping(
     seen to prevent `XForY` / `XModel` pairs from applying the same mapping
     twice via different lookup paths.
     """
-    from .modeling_utils import PreTrainedModel
 
     # note: this function is used in PEFT, so changing the API requires coordination
     weight_conversions = []
@@ -2828,11 +2827,7 @@ def get_model_conversion_mapping(
     # prevents a parent's transforms from being duplicated with a scoped copy for the child.
     seen_identifiers: defaultdict[str, list[str]] = defaultdict(list)
 
-    for module_name, submodule in model.named_modules():
-        # Skip if it's not a submodel
-        if not isinstance(submodule, PreTrainedModel):
-            continue
-
+    for module_name, submodule in model.named_pretrained_modules():
         class_name = type(submodule).__name__
         model_type = submodule.config.model_type
 

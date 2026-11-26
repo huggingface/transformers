@@ -332,7 +332,6 @@ class RowwiseParallel(TensorParallelLayer):
             input_tensor = input_tensor.to_local()
         return (input_tensor,) + args[1:], kwargs
 
-    @contextlib.contextmanager
     def context_around_forward(self, module, mesh):
         if not self.should_use_local_tensors(module):
             yield
