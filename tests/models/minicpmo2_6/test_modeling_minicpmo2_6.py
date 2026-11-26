@@ -178,14 +178,16 @@ class MiniCPMO2_6Audio2TextModelTest(MiniCPMO2_6ModelTestMixin, ALMModelTest, un
 @require_torch_accelerator
 class MiniCPMO2_6IntegrationTest(unittest.TestCase):
     model_id = "openbmb/MiniCPM-o-2_6"
+    # The Hub PR with the converted config and processor files (the weights are the original ones)
+    revision = "refs/pr/59"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
     def test_small_model_audio_generation(self):
-        processor = AutoProcessor.from_pretrained(self.model_id)
+        processor = AutoProcessor.from_pretrained(self.model_id, revision=self.revision)
         model = MiniCPMO2_6ForConditionalGeneration.from_pretrained(
-            self.model_id, dtype=torch.bfloat16, device_map=torch_device
+            self.model_id, revision=self.revision, dtype=torch.bfloat16, device_map=torch_device
         )
         messages = [
             {
@@ -220,9 +222,9 @@ class MiniCPMO2_6IntegrationTest(unittest.TestCase):
 
     def test_small_model_generation_batched(self):
         # An audio prompt and an image prompt of different lengths in one left-padded batch
-        processor = AutoProcessor.from_pretrained(self.model_id)
+        processor = AutoProcessor.from_pretrained(self.model_id, revision=self.revision)
         model = MiniCPMO2_6ForConditionalGeneration.from_pretrained(
-            self.model_id, dtype=torch.bfloat16, device_map=torch_device
+            self.model_id, revision=self.revision, dtype=torch.bfloat16, device_map=torch_device
         )
         audio_url = (
             "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3"
