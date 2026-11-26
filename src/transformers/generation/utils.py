@@ -2970,6 +2970,11 @@ class GenerationMixin(ContinuousMixin):
         self._prepare_cache_for_generation(
             generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
+        # Generation options that configure the cache itself are recorded on it, as the model reads them back from
+        # there. A cache is built for one value: reusing it with another one raises inside the model.
+        recurrent_kv_cache_mode = getattr(generation_config, "recurrent_kv_cache_mode", None)
+        if recurrent_kv_cache_mode is not None and (cache := model_kwargs.get("cache")) is not None:
+            cache.recurrent_kv_cache_mode = recurrent_kv_cache_mode
 
         # Inputs on CPU are supported: `prepare_inputs_for_generation` moves them to the model device before each forward
         if self.device.type != input_ids.device.type and input_ids.device.type != "cpu":

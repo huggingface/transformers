@@ -57,7 +57,6 @@ if is_torch_available():
         Inkling2LoopTextModel,
     )
     from transformers.cache_utils import DynamicCache, StaticCache
-    from transformers.models.inkling2_loop.modeling_inkling2_loop import Inkling2LoopPastReader
 
 
 def check_loop_cache(test, batch_size, cache, seq_length, config, check_cache):
@@ -141,30 +140,19 @@ class Inkling2LoopTextModelTest(CausalLMModelTest, unittest.TestCase):
             self.skipTest("Low-precision rounding differences across expert kernels exceed the 1e-4 tolerance")
         _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
 
-    def test_last_loop_single_forward_matches_per_loop(self):
-        # With no past, the readers return the passes' own states, so the first forward matches across modes
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"]
-        model = Inkling2LoopForCausalLM(config).to(torch_device).eval()
-        with torch.no_grad():
-            logits = {}
-            for mode in ("per_loop", "last_loop"):
-                config.recurrent_kv_cache_mode = mode
-                logits[mode] = model(input_ids, cache=DynamicCache(config=config)).logits
-        torch.testing.assert_close(logits["last_loop"], logits["per_loop"], rtol=1e-4, atol=1e-4)
-
     def test_static_cache_matches_dynamic_with_loops(self):
         # `last_loop` passes before the last read the cache without writing, which must match across cache types,
         # also past the sliding window
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.sliding_window_size = 4
         input_ids = inputs_dict["input_ids"][:1].repeat(1, 2)[:, :12]
+        model = Inkling2LoopForCausalLM(config).to(torch_device).eval()
         for mode in ("per_loop", "last_loop"):
             with self.subTest(mode=mode):
-                config.recurrent_kv_cache_mode = mode
-                model = Inkling2LoopForCausalLM(config).to(torch_device).eval()
                 dynamic = DynamicCache(config=config)
                 static = StaticCache(config=config, max_cache_len=16)
+                # `generate` records the mode on the cache from `generation_config`
+                dynamic.recurrent_kv_cache_mode = static.recurrent_kv_cache_mode = mode
                 with torch.no_grad():
                     for start, end in ((0, 2), (2, 4), (4, 7), (7, 8), (8, 12)):
                         expected = model(input_ids[:, start:end], cache=dynamic).logits
@@ -181,34 +169,24 @@ class Inkling2LoopTextModelTest(CausalLMModelTest, unittest.TestCase):
         dynamic = model.generate(input_ids, max_new_tokens=8, do_sample=False, cache=DynamicCache(config=config))
         for mode in ("per_loop", "last_loop"):
             with self.subTest(mode=mode):
-                config.recurrent_kv_cache_mode = mode
                 static = model.generate(
                     input_ids,
                     max_new_tokens=8,
                     do_sample=False,
                     cache=StaticCache(config=config, max_cache_len=20),
+                    recurrent_kv_cache_mode=mode,
                 )
                 torch.testing.assert_close(static, dynamic, rtol=0, atol=0)
 
-    def test_last_loop_readers_hold_no_kv(self):
-        # The extra cache layers are read-only views of the loop layers: pass-local conv states, no KV of their own
+    def test_recurrent_kv_cache_mode_is_immutable_per_cache(self):
+        # A cache is laid out for the mode it was built with: reusing it with the other mode raises
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.recurrent_kv_cache_mode = "last_loop"
-        text_config = config.get_text_config(decoder=True)
-        num_loop_layers = text_config.loop_layer_index_end - text_config.loop_layer_index_start
         model = Inkling2LoopForCausalLM(config).to(torch_device).eval()
         cache = DynamicCache(config=config)
-        with torch.no_grad():
-            model(inputs_dict["input_ids"], cache=cache)
-        readers = cache.layers[text_config.num_hidden_layers :]
-        self.assertEqual(len(readers), (text_config.loop_num_passes - 1) * num_loop_layers)
-        for reader, layer_idx in zip(
-            readers, list(range(text_config.loop_layer_index_start, text_config.loop_layer_index_end)) * 2
-        ):
-            self.assertIs(type(reader), Inkling2LoopPastReader)
-            self.assertIsNone(reader.keys)
-            self.assertIs(reader.layer, cache.layers[layer_idx])
-            self.assertTrue(any(state is not None for state in reader.conv_states.values()))
+        kwargs = {"max_new_tokens": 2, "do_sample": False, "cache": cache}
+        model.generate(inputs_dict["input_ids"], recurrent_kv_cache_mode="last_loop", **kwargs)
+        with self.assertRaises(ValueError):
+            model.generate(inputs_dict["input_ids"], recurrent_kv_cache_mode="per_loop", **kwargs)
 
 
 class Inkling2LoopVisionText2TextModelTester(VLMModelTester):

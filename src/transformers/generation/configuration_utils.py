@@ -178,6 +178,12 @@ class GenerationConfig(PushToHubMixin):
             largest call you expect so that repeated `generate()` calls with a longer prompt or a larger
             `max_new_tokens` (up to this ceiling) reuse the same cache instead of triggering a reallocation and a
             `torch.compile` recompilation.
+        recurrent_kv_cache_mode (`str`, *optional*):
+            How models that run some layers several times per forward (e.g. the loop layers of [`Inkling2Loop`])
+            fill the KV cache. `"per_loop"` keeps one KV cache per pass over those layers. `"last_loop"` keeps a
+            single KV cache per layer, written only by the last pass (earlier passes read it), so cache memory does
+            not grow with the pass count. Defaults to `"per_loop"`, and is ignored by models without such layers.
+            A cache is built for one mode: reusing it with the other mode raises an error.
 
         > Parameters for manipulation of the model output logits
 
@@ -407,6 +413,7 @@ class GenerationConfig(PushToHubMixin):
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
         self.max_cache_len = kwargs.pop("max_cache_len", None)
+        self.recurrent_kv_cache_mode = kwargs.pop("recurrent_kv_cache_mode", None)
 
         # Parameters for manipulation of the model output logits
         self.temperature = kwargs.pop("temperature", None)
@@ -693,6 +700,11 @@ class GenerationConfig(PushToHubMixin):
             logger.warning_once(
                 f"`max_cache_len` is only used with static caches ({STATIC_CACHE_IMPLEMENTATIONS}); it will be "
                 f"ignored with `cache_implementation={self.cache_implementation!r}`."
+            )
+        if getattr(self, "recurrent_kv_cache_mode", None) not in (None, "per_loop", "last_loop"):
+            raise ValueError(
+                f"Invalid `recurrent_kv_cache_mode` ({self.recurrent_kv_cache_mode}). Choose one of: "
+                "('per_loop', 'last_loop')."
             )
         # 1.3. Performance attributes
         if self.compile_config is not None and not isinstance(self.compile_config, CompileConfig):

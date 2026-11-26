@@ -179,7 +179,31 @@ print(processor.decode(outputs[0][input_len:], skip_special_tokens=False))
 - The short convolutions use fast GPU kernels when available: Hub kernels when loading with `use_kernels=True`,
   otherwise the [causal-conv1d](https://github.com/Dao-AILab/causal-conv1d) package if installed
   (`pip install causal-conv1d`). Without them, they fall back to a slower PyTorch implementation.
-- Every pass through the loop layers keeps its own keys, values and convolution states, so the cache has one layer per layer visit (48 for the released checkpoint).
+- Every pass through the loop layers keeps its own keys, values and convolution states by default
+  (`recurrent_kv_cache_mode="per_loop"`), so the cache has one layer per layer visit (48 for the released checkpoint).
+- Set `recurrent_kv_cache_mode="last_loop"` in `generate` (or in `model.generation_config`) to share one KV cache per
+  loop layer across passes instead, so cache memory stays independent of the pass count. Every pass still computes its
+  own Q, K and V, but only the last pass writes them to the cache. Earlier passes read the cached past and attend over
+  it plus their own new keys, without writing. Convolution states stay per-pass in both modes, so the cache keeps one
+  convolution state per layer visit.
+
+  `recurrent_kv_cache_mode` is a generation option: it is a [`GenerationConfig`] field, so it changes how the cache is
+  filled, not the architecture, and it can be set per call or in `generation_config.json`. A cache is laid out for the
+  mode it was built with, so reusing one with the other mode raises an error. The diagram below shows one loop layer `L`
+  with 3 passes.
+
+  ```text
+  prefill "a b c":   cache[L] empty
+    pass0: attend [k0(abc)]
+    pass1: attend [k1(abc)]
+    pass2: attend [k2(abc)]  → cache[L] = k2(abc)    (write)
+
+  decode "d":        cache[L] = k2(abc)              (read)
+    pass0: attend [k2(abc) | k0(d)]
+    pass1: attend [k2(abc) | k1(d)]
+    pass2: attend [k2(abc) | k2(d)] → cache[L] = k2(abcd)
+  ```
+
 - `output_hidden_states` and `output_attentions` return one entry per layer visit.
 
 ## Inkling2LoopConfig

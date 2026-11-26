@@ -14,7 +14,6 @@
 
 import copy
 from collections.abc import Callable
-from typing import Literal
 
 import torch
 import torch.nn as nn
@@ -99,10 +98,6 @@ class Inkling2LoopTextConfig(Inkling2TextConfig):
     loop_gate_rank (`int`, *optional*, defaults to 64):
         Rank of the message gate projections that mix the residual blocks of the previous pass into the current
         one.
-    recurrent_kv_cache_mode (`str`, *optional*, defaults to `"per_loop"`):
-        `"per_loop"` keeps one KV cache per loop pass. `"last_loop"` keeps a single KV cache per loop layer,
-        written only by the last pass (earlier passes read it), so cache memory does not grow with the pass
-        count. Convolution states stay per-pass in both modes.
     """
 
     model_type = "inkling2_loop_text"
@@ -118,7 +113,6 @@ class Inkling2LoopTextConfig(Inkling2TextConfig):
     loop_layer_index_end: int = 18
     loop_num_passes: int = 3
     loop_gate_rank: int = 64
-    recurrent_kv_cache_mode: Literal["per_loop", "last_loop"] = "per_loop"
 
     def __post_init__(self, **kwargs):
         if (loop_config := kwargs.get("loop_config")) is not None:
@@ -414,6 +408,57 @@ class Inkling2LoopPastReader(DoryPastReader, LinearAttentionLayer):
         LinearAttentionLayer.reorder_cache(self, beam_idx)
 
 
+class Inkling2LoopCacheLayout:
+    """
+    Cache-side layout of the loop layers. The cache holds one layer per physical decoder layer, plus, appended on the
+    first forward, one layer per loop layer for every pass after the first: `per_loop` passes write to copies of the
+    loop layers, while `last_loop` passes before the last read the real layers, written by the last pass, through
+    read-only views. `offset` maps a pass index to the cache offset its decoder layers read and write, so the forward
+    does not need to know how passes map onto the cache.
+
+    The mode comes from `generation_config.recurrent_kv_cache_mode`, which `generate` records on the cache. The cache
+    is built for one mode: reusing it with the other one raises, as its layers are laid out for the first.
+    """
+
+    def __init__(self, cache: Cache | None, config: Inkling2LoopTextConfig):
+        self.num_loop_layers = config.loop_layer_index_end - config.loop_layer_index_start
+        self.num_passes = config.loop_num_passes
+        # Offset of the extra loop layers relative to `config.num_hidden_layers`
+        self.loop_offset = config.num_hidden_layers - config.loop_layer_index_start
+
+        requested = getattr(cache, "recurrent_kv_cache_mode", None)
+        if requested not in (None, "per_loop", "last_loop"):
+            raise ValueError(f"Invalid `recurrent_kv_cache_mode` ({requested}). Use 'per_loop' or 'last_loop'.")
+        # A cache that already holds the extra loop layers records the mode it was built with, in their layer types
+        built = None
+        if cache is not None and len(cache.layers) > config.num_hidden_layers:
+            built = (
+                "last_loop"
+                if isinstance(cache.layers[config.num_hidden_layers], Inkling2LoopPastReader)
+                else "per_loop"
+            )
+            if requested is not None and requested != built:
+                raise ValueError(
+                    f"This cache was built with `recurrent_kv_cache_mode='{built}'`, it cannot be reused with "
+                    f"`recurrent_kv_cache_mode='{requested}'`. Create a new cache instead."
+                )
+        self.last_loop_only = (requested or built) == "last_loop"
+
+        if cache is not None and len(cache.layers) == config.num_hidden_layers:
+            loop_cache_layers = cache.layers[config.loop_layer_index_start : config.loop_layer_index_end]
+            extra_layers = loop_cache_layers * (self.num_passes - 1)
+            if self.last_loop_only:
+                cache.layers += [Inkling2LoopPastReader(layer) for layer in extra_layers]
+            else:
+                cache.layers += [copy.deepcopy(layer) for layer in extra_layers]
+
+    def offset(self, pass_idx: int) -> int:
+        # The pass writing the physical loop layers is the first one with `per_loop`, the last one with `last_loop`
+        if pass_idx == (self.num_passes - 1 if self.last_loop_only else 0):
+            return 0
+        return self.loop_offset + (pass_idx if self.last_loop_only else pass_idx - 1) * self.num_loop_layers
+
+
 class Inkling2LoopTopKRouter(Inkling2TopKRouter):
     pass
 
@@ -526,22 +571,8 @@ class Inkling2LoopTextModel(Inkling2TextModel):
 
         loop_start = self.config.loop_layer_index_start
         loop_end = self.config.loop_layer_index_end
-        num_loop_layers = loop_end - loop_start
-
-        num_passes = self.config.loop_num_passes
-        last_loop_only = self.config.recurrent_kv_cache_mode == "last_loop"
-        if cache is not None and len(cache.layers) == self.config.num_hidden_layers:
-            # Extra cache layers, appended at the end: `per_loop` passes 1, 2, ... write to copies of the loop
-            # layers, `last_loop` passes before the last read the real layers (written by the last pass) without
-            # writing, each through its own reader to keep the convolution states pass-local
-            loop_cache_layers = cache.layers[loop_start:loop_end]
-            if last_loop_only:
-                cache.layers += [Inkling2LoopPastReader(layer) for layer in loop_cache_layers * (num_passes - 1)]
-            else:
-                cache.layers += [copy.deepcopy(layer) for layer in loop_cache_layers * (num_passes - 1)]
-
-        # In `last_loop` mode only the last pass writes the real loop layers; earlier passes use the readers
-        first_pass_offset = self.config.num_hidden_layers - loop_start if last_loop_only and num_passes > 1 else 0
+        # Appends the extra cache layers on the first forward, and gives each pass the cache offset it reads and writes
+        loop_cache = Inkling2LoopCacheLayout(cache, self.config)
 
         hidden_states = inputs_embeds
         block_states = inputs_embeds.new_zeros(*inputs_embeds.shape[:-1], 0, inputs_embeds.shape[-1])
@@ -566,6 +597,7 @@ class Inkling2LoopTextModel(Inkling2TextModel):
         num_pre_loop_blocks = pre_loop_block_states.shape[-2]
 
         # First pass over loop layers
+        cache_offset = loop_cache.offset(0)
         for decoder_layer in self.layers[loop_start:loop_end]:
             new_hidden_states = decoder_layer(
                 hidden_states,
@@ -574,7 +606,7 @@ class Inkling2LoopTextModel(Inkling2TextModel):
                 relative_distance=relative_distance_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 cache=cache,
-                cache_offset=first_pass_offset,
+                cache_offset=cache_offset,
                 position_ids=position_ids,
                 **kwargs,
             )
@@ -589,12 +621,7 @@ class Inkling2LoopTextModel(Inkling2TextModel):
             previous_hidden_states = hidden_states
             hidden_states, block_states = pre_loop_hidden_states, pre_loop_block_states
 
-            # Each pass reaches its extra cache layers through `cache_offset`
-            extra_idx = loop_idx if last_loop_only and loop_idx < num_passes - 1 else loop_idx - 1
-            if last_loop_only and loop_idx == num_passes - 1:
-                cache_offset = 0
-            else:
-                cache_offset = self.config.num_hidden_layers + extra_idx * num_loop_layers - loop_start
+            cache_offset = loop_cache.offset(loop_idx)
             for loop_layer_idx, decoder_layer in enumerate(self.layers[loop_start:loop_end]):
                 messages = self.message_input(previous_block_states, previous_hidden_states, loop_layer_idx)
                 new_hidden_states = decoder_layer(
