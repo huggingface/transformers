@@ -147,9 +147,9 @@ class Phi3VModel(LlavaNextModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.Tensor` of shape `(num_crops, channels, height, width)`)
-            The global image followed by the crops of each image, for all images.
-        image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
+        pixel_values (`torch.Tensor` of shape `(total_crops, channels, height, width)`)
+            For each image, its global image followed by its crops, concatenated over all images.
+        image_sizes (`torch.LongTensor` of shape `(num_images, 2)`)
             Number of rows and columns of crops of each image.
         vision_feature_layer (`int`, *optional*):
             The index of the layer to select the vision feature.
@@ -166,8 +166,8 @@ class Phi3VModel(LlavaNextModel):
         side = self.config.vision_config.image_size // self.config.vision_config.patch_size // 2
         image_features = image_features.view(-1, side, 2, side, 2, image_features.shape[-1])
         image_features = self.multi_modal_projector(image_features.permute(0, 1, 3, 2, 4, 5).flatten(3))
-        newline = self.multi_modal_projector(self.image_newline[0].to(image_features))
-        separator = self.multi_modal_projector(self.image_separator[0].to(image_features))
+        newline = self.multi_modal_projector(self.image_newline[0])
+        separator = self.multi_modal_projector(self.image_separator[0])
 
         grids = image_sizes.tolist()
         num_crops = [rows * cols + 1 for rows, cols in grids]
@@ -183,6 +183,18 @@ class Phi3VModel(LlavaNextModel):
 
         return image_outputs
 
+    def forward(self, **super_kwargs):
+        r"""
+        pixel_values (`torch.Tensor` of shape `(total_crops, channels, height, width)`, *optional*):
+            For each image, its global image followed by its crops, concatenated over all images.
+        image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
+            Number of rows and columns of crops of each image.
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            `"default"` removes the CLS token.
+        """
+        return super().forward(**super_kwargs)
+
 
 @auto_docstring(
     custom_intro="""
@@ -192,9 +204,9 @@ class Phi3VModel(LlavaNextModel):
 class Phi3VForConditionalGeneration(LlavaNextForConditionalGeneration):
     def get_image_features(self, **super_kwargs):
         r"""
-        pixel_values (`torch.Tensor` of shape `(num_crops, channels, height, width)`)
-            The global image followed by the crops of each image, for all images.
-        image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
+        pixel_values (`torch.Tensor` of shape `(total_crops, channels, height, width)`)
+            For each image, its global image followed by its crops, concatenated over all images.
+        image_sizes (`torch.LongTensor` of shape `(num_images, 2)`)
             Number of rows and columns of crops of each image.
         vision_feature_layer (`int`, *optional*):
             The index of the layer to select the vision feature.
@@ -209,6 +221,10 @@ class Phi3VForConditionalGeneration(LlavaNextForConditionalGeneration):
 
     def forward(self, **super_kwargs):
         r"""
+        pixel_values (`torch.Tensor` of shape `(total_crops, channels, height, width)`, *optional*):
+            For each image, its global image followed by its crops, concatenated over all images.
+        image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
+            Number of rows and columns of crops of each image.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             `"default"` removes the CLS token.
@@ -225,7 +241,7 @@ class Phi3VForConditionalGeneration(LlavaNextForConditionalGeneration):
             past_length = cache.get_seq_length()
             if past_length <= self.config.text_config.original_max_position_embeddings:
                 cache = None
-                # The prompt embeddings would miss the generated tokens
+                # Else the forced first iteration feeds the prompt `inputs_embeds`, which lack the generated tokens
                 inputs_embeds = inputs_embeds if is_first_iteration else None
                 is_first_iteration = True
                 kwargs["next_sequence_length"] = None
@@ -265,7 +281,9 @@ class Phi3VImageProcessor(TorchvisionBackend):
 
     def _validate_preprocess_kwargs(self, **kwargs):
         if kwargs["size"].height != kwargs["size"].width:
-            raise ValueError(f"Phi-3-vision crops are square, but got size {kwargs['size']}.")
+            raise ValueError(
+                f"Phi-3-vision crops are square, but got size {kwargs['size'].height}x{kwargs['size'].width}."
+            )
         super()._validate_preprocess_kwargs(**kwargs)
 
     def get_resized_size(self, height: int, width: int, num_crops: int, crop_size: int) -> tuple[int, int]:

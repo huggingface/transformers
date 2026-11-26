@@ -39,6 +39,8 @@ class Phi3VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     images_text_kwargs_max_length = 400
     images_text_kwargs_override_max_length = 396
     images_unstructured_max_length = 407
+    # Several crops per image and a call-time `size`, so the token count depends on both
+    num_image_tokens_images_kwargs = {"num_crops": 4, "size": {"height": 56, "width": 56}}
 
     @classmethod
     def _setup_tokenizer(cls):

@@ -62,7 +62,9 @@ class Phi3VImageProcessor(TorchvisionBackend):
 
     def _validate_preprocess_kwargs(self, **kwargs):
         if kwargs["size"].height != kwargs["size"].width:
-            raise ValueError(f"Phi-3-vision crops are square, but got size {kwargs['size']}.")
+            raise ValueError(
+                f"Phi-3-vision crops are square, but got size {kwargs['size'].height}x{kwargs['size'].width}."
+            )
         super()._validate_preprocess_kwargs(**kwargs)
 
     def get_resized_size(self, height: int, width: int, num_crops: int, crop_size: int) -> tuple[int, int]:

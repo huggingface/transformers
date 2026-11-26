@@ -15,8 +15,13 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available
 
 from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
+
+
+if is_torch_available():
+    import torch
 
 
 class Phi3VImageProcessingTester(ImageProcessingTester):
@@ -40,6 +45,13 @@ class Phi3VImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoding = image_processor(image, num_crops=4, return_tensors="pt")
             self.assertEqual(tuple(encoding.pixel_values.shape), (3, 3, 28, 28))
             self.assertEqual(encoding.image_sizes.tolist(), [[2, 1]])
+
+            # Grouped by size, the crops of each image stay together and in order
+            images = [image, image.resize((100, 50)), image]
+            encoding = image_processor(images, num_crops=4, disable_grouping=False, return_tensors="pt")
+            self.assertEqual(encoding.image_sizes.tolist(), [[2, 1], [1, 2], [2, 1]])
+            singles = [image_processor(single, num_crops=4, return_tensors="pt").pixel_values for single in images]
+            torch.testing.assert_close(encoding.pixel_values, torch.cat(singles))
 
     # Overwritten: the crops of all images are packed along the first dimension of `pixel_values`
     def _check_call(self, image_inputs, **kwargs):
