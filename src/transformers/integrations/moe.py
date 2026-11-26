@@ -13,8 +13,10 @@
 # limitations under the License.
 from __future__ import annotations
 
+from collections import OrderedDict
 from collections.abc import Callable
 from functools import wraps
+from typing import NamedTuple
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
@@ -30,9 +32,156 @@ from .sonicmoe import sonicmoe_experts_forward
 
 if is_torch_available():
     import torch
+    from torch.utils.hooks import RemovableHandle
 
 
 logger = logging.get_logger(__name__)
+
+
+class ExpertsHookContext(NamedTuple):
+    """Routing metadata aligned row-for-row with the ``(S, D)`` routed expert tensor.
+
+    Attributes:
+        expert_ids (`torch.Tensor`):
+            Local expert index for each row, shape ``(S,)``. Under expert parallelism, non-local
+            sentinel rows are identified by ``valid_mask``.
+        token_ids (`torch.Tensor`):
+            Originating token index in ``[0, num_tokens)`` for each row, shape ``(S,)``.
+        top_k_slot (`torch.Tensor`):
+            Router slot index in ``[0, num_top_k)`` for each row, shape ``(S,)``.
+        top_k_weights (`torch.Tensor`):
+            Router weight for each ``(token, expert)`` pair, shape ``(S,)``.
+        num_tokens (`int`):
+            Number of input tokens passed to the experts module.
+        num_top_k (`int`):
+            Number of routed experts selected per token.
+        valid_mask (`torch.Tensor`, *optional*):
+            Boolean mask of shape ``(S,)`` where ``False`` marks non-local expert-parallel sentinel
+            slots, or ``None`` when expert parallelism is inactive.
+    """
+
+    expert_ids: torch.Tensor
+    token_ids: torch.Tensor
+    top_k_slot: torch.Tensor
+    top_k_weights: torch.Tensor
+    num_tokens: int
+    num_top_k: int
+    valid_mask: torch.Tensor | None = None
+
+    def to_token_order(self, tensor: torch.Tensor) -> torch.Tensor:
+        """Reorder a routed ``(S, ...)`` tensor into backend-invariant ``(num_tokens, num_top_k, ...)`` token order."""
+        ordered = torch.empty(
+            (self.num_tokens, self.num_top_k, *tensor.shape[1:]),
+            device=tensor.device,
+            dtype=tensor.dtype,
+        )
+        ordered[self.token_ids, self.top_k_slot] = tensor
+        return ordered
+
+
+def _apply_experts_hooks(
+    module: torch.nn.Module,
+    hooks: OrderedDict,
+    tensor: torch.Tensor,
+    *,
+    expert_ids: torch.Tensor,
+    token_ids: torch.Tensor,
+    top_k_slot: torch.Tensor,
+    top_k_weights: torch.Tensor,
+    num_tokens: int,
+    num_top_k: int,
+    sentinel_mask: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, bool]:
+    """Run registered experts hooks on a routed ``(S, D)`` tensor.
+
+    Hooks have signature ``hook(module, tensor, context) -> torch.Tensor | None``.
+    Returning ``None`` leaves ``tensor`` unchanged (unless mutated in-place); returning a tensor
+    replaces it. Under expert parallelism, sentinel rows are re-zeroed whenever any hook modifies
+    ``tensor`` (either functionally or in-place) so non-local slots cannot leak into downstream
+    projections or gradients.
+
+    Returns:
+        ``(tensor, modified)`` where ``modified`` is ``True`` if any hook returned a replacement
+        tensor or mutated ``tensor`` in-place.
+    """
+    valid_mask = None if sentinel_mask is None else ~sentinel_mask.reshape(-1)
+    context = ExpertsHookContext(
+        expert_ids=expert_ids,
+        token_ids=token_ids,
+        top_k_slot=top_k_slot,
+        top_k_weights=top_k_weights,
+        num_tokens=num_tokens,
+        num_top_k=num_top_k,
+        valid_mask=valid_mask,
+    )
+    initial_version = tensor._version
+    modified = False
+    for hook in hooks.values():
+        result = hook(module, tensor, context)
+        if result is not None:
+            if result.shape != tensor.shape:
+                raise ValueError(
+                    f"Experts hook must return a tensor of shape {tuple(tensor.shape)}, got {tuple(result.shape)}."
+                )
+            if result.device != tensor.device:
+                raise ValueError(f"Experts hook must return a tensor on device {tensor.device}, got {result.device}.")
+            if result.dtype != tensor.dtype:
+                result = result.to(dtype=tensor.dtype)
+            tensor = result
+            modified = True
+
+    if not modified and tensor._version != initial_version:
+        modified = True
+
+    if modified and sentinel_mask is not None:
+        tensor = tensor.masked_fill(sentinel_mask.reshape(-1, 1), 0.0)
+    return tensor, modified
+
+
+def _register_activation_hook(
+    self: torch.nn.Module,
+    hook: Callable[[torch.nn.Module, torch.Tensor, ExpertsHookContext], torch.Tensor | None],
+) -> RemovableHandle:
+    """Register a forward hook on post-activation, pre-``down_proj`` expert activations.
+
+    The hook is called after gating or activation and immediately before ``down_proj`` with::
+
+        hook(module, activations, context) -> torch.Tensor | None
+
+    where ``activations`` has shape ``(S, intermediate_dim)`` (``S = num_tokens * num_top_k``) and
+    ``context`` is an :class:`ExpertsHookContext` aligning each row to its
+    ``(token_id, top_k_slot, expert_id, top_k_weight)``. Returning a tensor replaces ``activations``
+    flowing into ``down_proj``; returning ``None`` leaves ``activations`` unchanged.
+
+    Returns:
+        `torch.utils.hooks.RemovableHandle`: Handle whose ``remove()`` method unregisters the hook.
+    """
+    handle = RemovableHandle(self._experts_activation_hooks)
+    self._experts_activation_hooks[handle.id] = hook
+    return handle
+
+
+def _register_output_hook(
+    self: torch.nn.Module,
+    hook: Callable[[torch.nn.Module, torch.Tensor, ExpertsHookContext], torch.Tensor | None],
+) -> RemovableHandle:
+    """Register a forward hook on per-expert outputs immediately before router-weighted aggregation.
+
+    The hook is called after ``down_proj`` (and optional ``post_expert_norm``) and before multiplying
+    by ``top_k_weights`` and summing across experts, with::
+
+        hook(module, outputs, context) -> torch.Tensor | None
+
+    where ``outputs`` has shape ``(S, hidden_dim)`` (``S = num_tokens * num_top_k``) and
+    ``context`` is an :class:`ExpertsHookContext`. Returning a tensor replaces ``outputs`` before
+    router weighting; returning ``None`` leaves ``outputs`` unchanged.
+
+    Returns:
+        `torch.utils.hooks.RemovableHandle`: Handle whose ``remove()`` method unregisters the hook.
+    """
+    handle = RemovableHandle(self._experts_output_hooks)
+    self._experts_output_hooks[handle.id] = hook
+    return handle
 
 
 # Examples of experts class with its eager mm implementation
@@ -155,6 +304,30 @@ def batched_mm_experts_forward(
         # for non-gated experts we just apply the activation function
         proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
+    act_hooks = getattr(self, "_experts_activation_hooks", None)
+    out_hooks = getattr(self, "_experts_output_hooks", None)
+    token_ids = top_k_slot = None
+    if act_hooks or out_hooks:
+        device = hidden_states.device
+        token_ids = torch.arange(num_tokens, device=device).repeat_interleave(num_top_k)
+        top_k_slot = torch.arange(num_top_k, device=device).repeat(num_tokens)
+
+    if act_hooks:
+        if sentinel_mask is not None:
+            proj_out = proj_out.masked_fill(sentinel_mask.unsqueeze(-1), 0.0)
+        proj_out, _ = _apply_experts_hooks(
+            self,
+            act_hooks,
+            proj_out,
+            expert_ids=expert_ids,
+            token_ids=token_ids,
+            top_k_slot=top_k_slot,
+            top_k_weights=sample_weights,
+            num_tokens=num_tokens,
+            num_top_k=num_top_k,
+            sentinel_mask=sentinel_mask,
+        )
+
     # Select down projection weights and biases for selected samples
     selected_weights = self.down_proj[expert_ids]
     selected_biases = self.down_proj_bias[expert_ids] if self.has_bias else None
@@ -167,6 +340,22 @@ def batched_mm_experts_forward(
     # Apply optional post expert norm
     if self.has_post_expert_norm:
         proj_out = self.post_expert_norm(proj_out)
+
+    if out_hooks:
+        if sentinel_mask is not None:
+            proj_out = proj_out.masked_fill(sentinel_mask.unsqueeze(-1), 0.0)
+        proj_out, _ = _apply_experts_hooks(
+            self,
+            out_hooks,
+            proj_out,
+            expert_ids=expert_ids,
+            token_ids=token_ids,
+            top_k_slot=top_k_slot,
+            top_k_weights=sample_weights,
+            num_tokens=num_tokens,
+            num_top_k=num_top_k,
+            sentinel_mask=sentinel_mask,
+        )
 
     # Apply routing weights
     if sentinel_mask is not None:
@@ -438,7 +627,8 @@ def grouped_mm_experts_forward(
 
     # Sort by expert for grouped processing
     expert_ids_g, perm = torch.sort(expert_ids)
-    selected_hidden_states_g = hidden_states[perm // num_top_k]
+    token_ids_g = perm // num_top_k
+    selected_hidden_states_g = hidden_states[token_ids_g]
     sample_weights_g = sample_weights[perm]
 
     # Compute offsets for grouped_mm
@@ -503,6 +693,24 @@ def grouped_mm_experts_forward(
         # for non-gated experts we just apply the activation function
         proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
+    act_hooks = getattr(self, "_experts_activation_hooks", None)
+    out_hooks = getattr(self, "_experts_output_hooks", None)
+    top_k_slot_g = perm % num_top_k if (act_hooks or out_hooks) else None
+
+    if act_hooks:
+        proj_out, _ = _apply_experts_hooks(
+            self,
+            act_hooks,
+            proj_out,
+            expert_ids=expert_ids_g,
+            token_ids=token_ids_g,
+            top_k_slot=top_k_slot_g,
+            top_k_weights=sample_weights_g,
+            num_tokens=num_tokens,
+            num_top_k=num_top_k,
+            sentinel_mask=sentinel_mask,
+        )
+
     # Select down projection weights and biases
     selected_weights = self.down_proj
     selected_biases = self.down_proj_bias[expert_ids_g] if self.has_bias else None
@@ -520,6 +728,20 @@ def grouped_mm_experts_forward(
     if self.has_post_expert_norm:
         proj_out = self.post_expert_norm(proj_out)
 
+    if out_hooks:
+        proj_out, _ = _apply_experts_hooks(
+            self,
+            out_hooks,
+            proj_out,
+            expert_ids=expert_ids_g,
+            token_ids=token_ids_g,
+            top_k_slot=top_k_slot_g,
+            top_k_weights=sample_weights_g,
+            num_tokens=num_tokens,
+            num_top_k=num_top_k,
+            sentinel_mask=sentinel_mask,
+        )
+
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
 
@@ -535,6 +757,10 @@ def grouped_mm_experts_forward(
     final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
 
     return final_hidden_states.to(hidden_states.dtype)
+
+
+batched_mm_experts_forward._supports_experts_hooks = True
+grouped_mm_experts_forward._supports_experts_hooks = True
 
 
 class ExpertsInterface(GeneralInterface):
@@ -627,14 +853,30 @@ def use_experts_implementation(
             self.is_transposed = is_transposed
             self.is_concatenated = is_concatenated
             self._is_expert_parallel = False
+            if not hasattr(self, "_experts_activation_hooks"):
+                self._experts_activation_hooks = OrderedDict()
+            if not hasattr(self, "_experts_output_hooks"):
+                self._experts_output_hooks = OrderedDict()
 
         @wraps(original_forward)
         def forward(self, *args, **kwargs):
             experts_forward = experts_interface.get_interface(self.config._experts_implementation, original_forward)
+            if (self._experts_activation_hooks or self._experts_output_hooks) and not getattr(
+                experts_forward, "_supports_experts_hooks", False
+            ):
+                raise NotImplementedError(
+                    f"Expert hooks registered on `{type(self).__name__}` are not supported with "
+                    f"`experts_implementation={self.config._experts_implementation!r}`. "
+                    "Use `experts_implementation='grouped_mm'`, `'batched_mm'`, or `'deepgemm'`."
+                )
             return experts_forward(self, *args, **kwargs)
 
         if not hasattr(experts_class, "_apply_gate"):
             experts_class._apply_gate = _default_apply_gate
+        if not hasattr(experts_class, "register_activation_hook"):
+            experts_class.register_activation_hook = _register_activation_hook
+        if not hasattr(experts_class, "register_output_hook"):
+            experts_class.register_output_hook = _register_output_hook
 
         experts_class.__init__ = __init__
         experts_class.forward = forward

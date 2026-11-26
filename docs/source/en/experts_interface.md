@@ -226,6 +226,27 @@ model = AutoModelForCausalLM.from_pretrained(
 model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
 ```
 
+## Hooking expert activations and outputs
+
+Fused 3D expert modules decorated with `@use_experts_implementation` expose two hook methods modeled on `torch.nn.Module.register_forward_hook` so you can inspect or intervene on per-expert intermediates without falling back to a per-expert Python loop:
+
+- `experts.register_activation_hook(hook)` runs after gating/activation and immediately before `down_proj` on the `(S, intermediate_dim)` tensor (`S = num_tokens * num_top_k`).
+- `experts.register_output_hook(hook)` runs after `down_proj` (and optional `post_expert_norm`) and immediately before router-weighted aggregation on the `(S, hidden_dim)` tensor.
+
+Each hook has signature `hook(module, tensor, context) -> torch.Tensor | None`, where `context` is an `ExpertsHookContext` carrying `expert_ids`, `token_ids`, `top_k_slot`, `top_k_weights`, `num_tokens`, `num_top_k`, and `valid_mask` (under expert parallelism), plus `context.to_token_order(tensor)` to scatter rows into backend-invariant `(num_tokens, num_top_k, D)` order. Returning `None` leaves the forward bit-identical; returning a tensor replaces the intermediate flowing downstream (preserving autograd). Both return a standard `RemovableHandle` usable as a context manager.
+
+```py
+captured = []
+
+def capture_expert_act(module, activations, ctx):
+    captured.append(ctx.to_token_order(activations).detach())
+
+with model.model.layers[0].mlp.experts.register_activation_hook(capture_expert_act):
+    out = model(**inputs)
+```
+
+Hooks are supported on `"grouped_mm"`, `"batched_mm"`, and `"deepgemm"` (including FP8/FP4 experts) and stay active across `generate()`'s automatic `grouped_mm` → `batched_mm` decode switch. Registering a hook on an unsupported backend (`"eager"`, `"sonicmoe"`, `"deepgemm_megamoe"`) raises `NotImplementedError`.
+
 ## Benchmarks
 
 This [benchmark](https://github.com/user-attachments/files/24125816/bench.py) compares different input sizes and experts implementations with and without `torch.compile`.

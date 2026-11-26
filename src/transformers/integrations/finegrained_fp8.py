@@ -35,7 +35,7 @@ from .deepgemm import (
     is_sm100,
 )
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
-from .moe import ExpertsInterface, _grouped_mm, use_experts_implementation
+from .moe import ExpertsInterface, _apply_experts_hooks, _grouped_mm, use_experts_implementation
 
 
 logger = logging.get_logger(__name__)
@@ -586,6 +586,30 @@ def fp8_batched_mm_experts_forward(
         # for non-gated experts we just apply the activation function
         proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
+    act_hooks = getattr(self, "_experts_activation_hooks", None)
+    out_hooks = getattr(self, "_experts_output_hooks", None)
+    token_ids = top_k_slot = None
+    if act_hooks or out_hooks:
+        device = hidden_states.device
+        token_ids = torch.arange(num_tokens, device=device).repeat_interleave(num_top_k)
+        top_k_slot = torch.arange(num_top_k, device=device).repeat(num_tokens)
+
+    if act_hooks:
+        if sentinel_mask is not None:
+            proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
+        proj_out, _ = _apply_experts_hooks(
+            self,
+            act_hooks,
+            proj_out,
+            expert_ids=expert_ids,
+            token_ids=token_ids,
+            top_k_slot=top_k_slot,
+            top_k_weights=sample_weights,
+            num_tokens=num_tokens,
+            num_top_k=num_top_k,
+            sentinel_mask=sentinel_mask,
+        )
+
     # --- Down projection per expert (FP8 batched) ---
     proj_out = finegrained_fp8.batched_matmul(
         proj_out,
@@ -594,6 +618,22 @@ def fp8_batched_mm_experts_forward(
         block_size=self.block_size,
         expert_ids=expert_ids,
     )  # (S, hidden_dim)
+
+    if out_hooks:
+        if sentinel_mask is not None:
+            proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
+        proj_out, _ = _apply_experts_hooks(
+            self,
+            out_hooks,
+            proj_out,
+            expert_ids=expert_ids,
+            token_ids=token_ids,
+            top_k_slot=top_k_slot,
+            top_k_weights=sample_weights,
+            num_tokens=num_tokens,
+            num_top_k=num_top_k,
+            sentinel_mask=sentinel_mask,
+        )
 
     # Apply routing weights
     weighted_out = proj_out * sample_weights.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
@@ -633,7 +673,8 @@ def fp8_grouped_mm_experts_forward(
 
     # Sort by expert for grouped processing
     expert_ids_g, perm = torch.sort(expert_ids)
-    selected_hidden_states_g = hidden_states[perm // num_top_k]
+    token_ids_g = perm // num_top_k
+    selected_hidden_states_g = hidden_states[token_ids_g]
     sample_weights_g = sample_weights[perm]
 
     # Compute offsets for grouped processing.
@@ -679,6 +720,26 @@ def fp8_grouped_mm_experts_forward(
         # for non-gated experts we just apply the activation function
         proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
+    act_hooks = getattr(self, "_experts_activation_hooks", None)
+    out_hooks = getattr(self, "_experts_output_hooks", None)
+    top_k_slot_g = perm % num_top_k if (act_hooks or out_hooks) else None
+
+    if act_hooks:
+        if sentinel_mask is not None:
+            proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
+        proj_out, _ = _apply_experts_hooks(
+            self,
+            act_hooks,
+            proj_out,
+            expert_ids=expert_ids_g,
+            token_ids=token_ids_g,
+            top_k_slot=top_k_slot_g,
+            top_k_weights=sample_weights_g,
+            num_tokens=num_tokens,
+            num_top_k=num_top_k,
+            sentinel_mask=sentinel_mask,
+        )
+
     # --- Down projection per expert (FP8 grouped) ---
     proj_out = _apply_if_grad(
         FP8GroupedMatmulFunction,
@@ -690,6 +751,22 @@ def fp8_grouped_mm_experts_forward(
         tokens_per_expert,
         self.block_size,
     )  # (S, hidden_dim)
+
+    if out_hooks:
+        if sentinel_mask is not None:
+            proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
+        proj_out, _ = _apply_experts_hooks(
+            self,
+            out_hooks,
+            proj_out,
+            expert_ids=expert_ids_g,
+            token_ids=token_ids_g,
+            top_k_slot=top_k_slot_g,
+            top_k_weights=sample_weights_g,
+            num_tokens=num_tokens,
+            num_top_k=num_top_k,
+            sentinel_mask=sentinel_mask,
+        )
 
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
@@ -708,6 +785,10 @@ def fp8_grouped_mm_experts_forward(
     final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
 
     return final_hidden_states.to(hidden_states.dtype)
+
+
+fp8_batched_mm_experts_forward._supports_experts_hooks = True
+fp8_grouped_mm_experts_forward._supports_experts_hooks = True
 
 
 class FP8Experts(nn.Module):

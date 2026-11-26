@@ -560,9 +560,30 @@ def _combine_routed_output(
     num_top_k: int,
     hidden_dim: int,
     out_dtype: torch.dtype,
+    *,
+    module: torch.nn.Module | None = None,
+    expert_ids: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Unpad → weighted multiply → mask sentinels → restore order → top-k reduce."""
+    """Unpad → optional output hooks → weighted multiply → mask sentinels → restore order → top-k reduce."""
     out = _unpad_from_deepgemm_contiguous_layout(out_padded, sorted_to_padded)
+    out_hooks = getattr(module, "_experts_output_hooks", None) if module is not None else None
+    if out_hooks:
+        from .moe import _apply_experts_hooks
+
+        if sentinel_mask is not None:
+            out = out.masked_fill(sentinel_mask, 0.0)
+        out, _ = _apply_experts_hooks(
+            module,
+            out_hooks,
+            out,
+            expert_ids=expert_ids,
+            token_ids=perm // num_top_k,
+            top_k_slot=perm % num_top_k,
+            top_k_weights=sorted_weights,
+            num_tokens=num_tokens,
+            num_top_k=num_top_k,
+            sentinel_mask=sentinel_mask,
+        )
     weighted = out * sorted_weights.to(out.dtype).unsqueeze(-1)
     # Sentinel rows past the valid expert blocks may carry NaN from allocator
     # reuse (`0 * NaN = NaN`); zero them so the top-k reduction stays finite.
@@ -572,6 +593,45 @@ def _combine_routed_output(
     inv_perm[perm] = torch.arange(perm.size(0), device=out.device)
     # Deterministic reshape+sum (index_add_ with duplicates is non-deterministic on CUDA).
     return weighted[inv_perm].view(num_tokens, num_top_k, hidden_dim).sum(dim=1).to(out_dtype)
+
+
+def _maybe_apply_deepgemm_activation_hooks(
+    module: torch.nn.Module,
+    proj_out_padded: torch.Tensor,
+    *,
+    sorted_to_padded: torch.Tensor,
+    expert_ids: torch.Tensor,
+    perm: torch.Tensor,
+    top_k_weights: torch.Tensor,
+    num_tokens: int,
+    num_top_k: int,
+    sentinel_mask: torch.Tensor | None,
+) -> torch.Tensor:
+    """Apply registered post-activation hooks to the unpadded ``(S, intermediate_dim)`` slice."""
+    act_hooks = getattr(module, "_experts_activation_hooks", None)
+    if not act_hooks:
+        return proj_out_padded
+
+    from .moe import _apply_experts_hooks
+
+    unpadded = _unpad_from_deepgemm_contiguous_layout(proj_out_padded, sorted_to_padded)
+    if sentinel_mask is not None:
+        unpadded = unpadded.masked_fill(sentinel_mask, 0.0)
+    hooked, modified = _apply_experts_hooks(
+        module,
+        act_hooks,
+        unpadded,
+        expert_ids=expert_ids,
+        token_ids=perm // num_top_k,
+        top_k_slot=perm % num_top_k,
+        top_k_weights=top_k_weights,
+        num_tokens=num_tokens,
+        num_top_k=num_top_k,
+        sentinel_mask=sentinel_mask,
+    )
+    if modified:
+        proj_out_padded = proj_out_padded.index_copy(0, sorted_to_padded, hooked)
+    return proj_out_padded
 
 
 # ── Public dispatches ──────────────────────────────────────────────────────────
@@ -673,6 +733,17 @@ def deepgemm_bf16_experts_forward(
         proj_out.index_add_(0, sorted_to_padded, up_bias[expert_ids_g])
 
     proj_out = self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
+    proj_out = _maybe_apply_deepgemm_activation_hooks(
+        self,
+        proj_out,
+        sorted_to_padded=sorted_to_padded,
+        expert_ids=expert_ids_g,
+        perm=perm,
+        top_k_weights=sorted_weights,
+        num_tokens=num_tokens,
+        num_top_k=num_top_k,
+        sentinel_mask=sentinel_mask,
+    )
 
     # Down projection.
     out = torch.empty(total_padded_rows, hidden_dim, device=device, dtype=hidden_states.dtype)
@@ -690,6 +761,8 @@ def deepgemm_bf16_experts_forward(
         num_top_k,
         hidden_dim,
         hidden_states.dtype,
+        module=self,
+        expert_ids=expert_ids_g,
     )
 
 
@@ -735,7 +808,7 @@ def deepgemm_fp8_fp4_experts_forward(
     (
         sorted_hidden,
         sorted_weights,
-        _expert_ids_g,
+        expert_ids_g,
         sentinel_mask,
         perm,
         sorted_to_padded,
@@ -766,6 +839,17 @@ def deepgemm_fp8_fp4_experts_forward(
         use_psum_layout=is_sm100(),
     )
     proj_out = self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
+    proj_out = _maybe_apply_deepgemm_activation_hooks(
+        self,
+        proj_out,
+        sorted_to_padded=sorted_to_padded,
+        expert_ids=expert_ids_g,
+        perm=perm,
+        top_k_weights=sorted_weights,
+        num_tokens=num_tokens,
+        num_top_k=num_top_k,
+        sentinel_mask=sentinel_mask,
+    )
 
     # Down projection.
     proj_fp8, proj_scales = deepgemm.per_token_cast_to_fp8(proj_out, **cast_kwargs)
@@ -789,7 +873,13 @@ def deepgemm_fp8_fp4_experts_forward(
         num_top_k,
         hidden_dim,
         hidden_states.dtype,
+        module=self,
+        expert_ids=expert_ids_g,
     )
+
+
+deepgemm_bf16_experts_forward._supports_experts_hooks = True
+deepgemm_fp8_fp4_experts_forward._supports_experts_hooks = True
 
 
 def setup_megamoe_weights(module: torch.nn.Module) -> None:

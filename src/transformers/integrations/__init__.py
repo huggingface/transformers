@@ -130,6 +130,7 @@ _import_structure = {
         "replace_with_metal_linear",
     ],
     "moe": [
+        "ExpertsHookContext",
         "batched_mm_experts_forward",
         "grouped_mm_experts_forward",
         "use_experts_implementation",
@@ -282,6 +283,7 @@ if TYPE_CHECKING:
         replace_with_metal_linear,
     )
     from .moe import (
+        ExpertsHookContext,
         batched_mm_experts_forward,
         grouped_mm_experts_forward,
         use_experts_implementation,
