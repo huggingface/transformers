@@ -892,6 +892,32 @@ class ProcessorTesterMixin:
             )
             self.assertTrue(self.text_input_name in inputs_chat_template)
 
+    def test_processor_single_text_same_as_batched(self):
+        """
+        Tests that multimodal processors handle a single string as one sample and
+        return the same token ids as for a list with that string, instead of splitting
+        the string into characters.
+        """
+        processor = self.get_processor()
+        call_signature = inspect.signature(processor.__call__)
+        input_args = [param.name for param in call_signature.parameters.values() if param.annotation != param.empty]
+
+        if not ("text" in input_args and hasattr(processor, "tokenizer")):
+            self.skipTest(f"{self.processor_class} doesn't accept text inputs.")
+
+        # Same condition as in `prepare_inputs_layout`, which wraps a string in a list only for
+        # processors with special multimodal tokens
+        if not processor.all_special_multimodal_tokens:
+            self.skipTest(f"{self.processor_class} has no special multimodal tokens.")
+
+        # Extract one string from a batch because some overrides also return a list when `batch_size` is omitted
+        text = self.prepare_text_inputs(batch_size=1)[0]
+        inputs = processor(text=text, return_tensors="pt")
+        inputs_batched = processor(text=[text], return_tensors="pt")
+
+        self.assertEqual(len(inputs[self.text_input_name]), 1)
+        self.assertListEqual(inputs[self.text_input_name].tolist(), inputs_batched[self.text_input_name].tolist())
+
     def test_if_input_has_mismatching_tokens_and_mm_data(self):
         """
         Tests that vision models raise an error when number of data doesn't match number
