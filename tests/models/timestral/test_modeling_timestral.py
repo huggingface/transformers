@@ -392,12 +392,18 @@ class TimestralModelTest(ModelTesterMixin, unittest.TestCase):
         dtype = {"fp16": torch.float16, "bf16": torch.bfloat16, "fp32": torch.float32}[dtype]
         tolerance = {torch.float32: 1e-4, torch.bfloat16: 5e-2, torch.float16: 5e-2}[dtype]
 
-        config = self.model_tester.get_config()
-        model_eager = TimestralModelForPrediction._from_config(config, attn_implementation="eager")
+        # One config per model: the attention implementation is stored on the config.
+        model_eager = TimestralModelForPrediction._from_config(
+            self.model_tester.get_config(), attn_implementation="eager"
+        )
         model_eager.to(dtype=dtype, device=torch_device).eval()
-        model_sdpa = TimestralModelForPrediction._from_config(config, attn_implementation="sdpa")
+        model_sdpa = TimestralModelForPrediction._from_config(
+            self.model_tester.get_config(), attn_implementation="sdpa"
+        )
         model_sdpa.load_state_dict(model_eager.state_dict())
         model_sdpa.to(dtype=dtype, device=torch_device).eval()
+        self.assertEqual(model_eager.config._attn_implementation, "eager")
+        self.assertEqual(model_sdpa.config._attn_implementation, "sdpa")
 
         past_values = self.model_tester.prepare_series(2, 40)
         past_values[0, 0, 5:9] = float("nan")
