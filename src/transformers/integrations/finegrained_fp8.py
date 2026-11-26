@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import functools
+import importlib.util
 import os
 import time
 from collections.abc import Callable
@@ -699,7 +700,28 @@ _FP8_FUSED_EXPERTS = os.environ.get("HF_FP8_FUSED_EXPERTS", "1") == "1"
 _FP8_FUSED_EXPERTS_MIN_ROWS = int(os.environ.get("HF_FP8_FUSED_EXPERTS_MIN_ROWS", "16"))
 
 
+# [scratch] From 2,048 tokens on (prefill steps), vLLM's Triton fused MoE when vLLM is installed: Qwen3-30B-A3B-FP8 shapes
+# on an H100, 8,192 tokens: 1.35 ms vs 1.77 for the hub's fused grouped kernel (2,048: 0.50 vs 0.56; 1,024: 0.51 vs 0.40)
+_PROTO_FP8_VLLM_MOE = os.environ.get("PROTO_FP8_VLLM_MOE", "1") == "1" and importlib.util.find_spec("vllm") is not None
+_PROTO_FP8_VLLM_MOE_MIN_TOKENS = 2048
+
+
+def _fp8_vllm_fused_experts(self, hidden_states, top_k_index, top_k_weights):
+    from vllm.model_executor.layers.fused_moe.config import fp8_w8a8_moe_quant_config
+    from vllm.model_executor.layers.fused_moe.fused_moe import fused_experts
+
+    quant_config = fp8_w8a8_moe_quant_config(
+        w1_scale=self.gate_up_proj_scale_inv, w2_scale=self.down_proj_scale_inv, block_shape=list(self.block_size)
+    )
+    return fused_experts(
+        hidden_states, self.gate_up_proj, self.down_proj, top_k_weights.float(), top_k_index.to(torch.int32),
+        quant_config=quant_config,
+    )  # fmt: skip
+
+
 def _fp8_fused_experts_forward(self, hidden_states, top_k_index, top_k_weights, grouped: bool):
+    if _PROTO_FP8_VLLM_MOE and hidden_states.shape[0] >= _PROTO_FP8_VLLM_MOE_MIN_TOKENS:
+        return _fp8_vllm_fused_experts(self, hidden_states, top_k_index, top_k_weights).to(hidden_states.dtype)
     kernel = lazy_load_kernel("finegrained-fp8")
     fused = kernel.moe_fused_grouped if grouped else kernel.moe_fused_batched
     out = fused(
