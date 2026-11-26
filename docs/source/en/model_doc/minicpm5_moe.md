@@ -1,4 +1,4 @@
-<!--Copyright 2025 the HuggingFace Team. All rights reserved.
+<!--Copyright 2026 the HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,16 +21,32 @@ limitations under the License.
 
 MiniCPM5-15B-A2.5B is a decoder-only language model with 15 billion parameters and 2.5 billion active parameters per token. It uses gated grouped-query attention. The first decoder layer has a dense feed-forward network. Each subsequent layer uses a shared expert and selects 16 of 160 routed experts per token.
 
-## MiniCPM5Config
+## Usage example
 
-[[autodoc]] MiniCPM5Config
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-## MiniCPM5Model
+checkpoint = "openbmb/MiniCPM5-15B-A2.5B"
+tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+model = AutoModelForCausalLM.from_pretrained(checkpoint, dtype="auto", device_map="auto")
+messages = [{"role": "user", "content": "What is 7 + 8? Answer with only the number."}]
+inputs = tokenizer.apply_chat_template(
+    messages, tokenize=True, add_generation_prompt=True, enable_thinking=False, return_dict=True, return_tensors="pt"
+).to(model.device)
+outputs = model.generate(**inputs, max_new_tokens=16, do_sample=False)
+print(tokenizer.decode(outputs[0, inputs.input_ids.shape[1]:], skip_special_tokens=True))
+```
 
-[[autodoc]] MiniCPM5Model
+## MiniCPM5MoeConfig
+
+[[autodoc]] MiniCPM5MoeConfig
+
+## MiniCPM5MoeModel
+
+[[autodoc]] MiniCPM5MoeModel
     - forward
 
-## MiniCPM5MoEForCausalLM
+## MiniCPM5MoeForCausalLM
 
-[[autodoc]] MiniCPM5MoEForCausalLM
+[[autodoc]] MiniCPM5MoeForCausalLM
     - forward

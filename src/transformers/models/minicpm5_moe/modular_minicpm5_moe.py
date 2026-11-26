@@ -1,3 +1,4 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -24,30 +25,33 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import maybe_autocast
-from ..llama.configuration_llama import LlamaConfig
-from ..llama.modeling_llama import (
-    LlamaAttention,
-    LlamaDecoderLayer,
-    LlamaForCausalLM,
-    LlamaModel,
-    LlamaPreTrainedModel,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
+from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3DecoderLayer,
+    DeepseekV3Experts,
+    DeepseekV3ForCausalLM,
+    DeepseekV3MLP,
+    DeepseekV3Model,
+    DeepseekV3MoE,
+    DeepseekV3PreTrainedModel,
+    DeepseekV3RMSNorm,
+    DeepseekV3TopkRouter,
 )
+from ..llama.modeling_llama import LlamaAttention, apply_rotary_pos_emb, repeat_kv
 
 
 @auto_docstring(checkpoint="openbmb/MiniCPM5-15B-A2.5B")
 @strict
-class MiniCPM5Config(LlamaConfig):
+class MiniCPM5MoeConfig(PreTrainedConfig):
     r"""
-    first_k_dense_replace (`int`, *optional*, defaults to 1):
-        Number of initial decoder layers with a dense feed-forward network.
+    mlp_layer_types (`list[str]`, *optional*):
+        Feed-forward type for each layer, either `"dense"` or `"sparse"`. Defaults to one dense layer followed by sparse layers.
     n_routed_experts (`int`, *optional*, defaults to 160):
         Number of routed experts in each sparse layer.
     n_shared_experts (`int`, *optional*, defaults to 1):
@@ -58,24 +62,55 @@ class MiniCPM5Config(LlamaConfig):
         Number of expert groups used for top-k selection.
     topk_group (`int`, *optional*, defaults to 1):
         Number of expert groups retained during routing.
-    use_gated_attention (`bool`, *optional*, defaults to True):
-        Project one gate per query head dimension and apply it to the attention output.
     """
 
     model_type = "minicpm5_moe"
     default_theta = 5000000.0
+    base_model_tp_plan = {
+        "layers.*.self_attn.query_proj": "colwise",
+        "layers.*.self_attn.gate_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+    }
+
+    attribute_map = {"num_local_experts": "n_routed_experts"}
+    hidden_act: str = "silu"
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float = 0.0
     vocab_size: int = 130560
     hidden_size: int = 2048
     intermediate_size: int = 8192
     num_hidden_layers: int = 28
     num_attention_heads: int = 32
-    num_key_value_heads: int = 2
-    head_dim: int = 128
+    num_key_value_heads: int | None = 2
+    head_dim: int | None = 128
     max_position_embeddings: int = 524288
-    pad_token_id: int = 1
-    bos_token_id: int = 0
+    pad_token_id: int | None = 1
+    bos_token_id: int | None = 0
     eos_token_id: int | list[int] | None = field(default_factory=lambda: [1, 130073])
-    first_k_dense_replace: int = 1
+    mlp_layer_types: list[str] | None = None
     n_routed_experts: int = 160
     n_shared_experts: int = 1
     routed_scaling_factor: float = 3.66
@@ -84,44 +119,40 @@ class MiniCPM5Config(LlamaConfig):
     n_group: int = 1
     topk_group: int = 1
     norm_topk_prob: bool = True
-    use_gated_attention: bool = True
+    output_router_logits: bool = False
+
+    def __post_init__(self, **kwargs):
+        if self.architectures == ["MiniCPM5MoEForCausalLM"]:
+            self.architectures = ["MiniCPM5MoeForCausalLM"]
+        dense_layers = kwargs.pop("first_k_dense_replace", 1)
+        kwargs.pop("use_gated_attention", None)
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = ["dense" if i < dense_layers else "sparse" for i in range(self.num_hidden_layers)]
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+        super().__post_init__(**kwargs)
 
 
-class MiniCPM5MLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+class MiniCPM5MoeMLP(DeepseekV3MLP):
+    pass
 
 
-class MiniCPM5TopkRouter(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.top_k = config.num_experts_per_tok
-        self.n_routed_experts = config.n_routed_experts
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
+class MiniCPM5MoeExperts(DeepseekV3Experts):
+    pass
 
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts, dtype=torch.float32))
 
-    @torch.no_grad()
-    def get_topk_indices(self, scores):
-        scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
+class MiniCPM5MoeTopkRouter(DeepseekV3TopkRouter):
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            router_logits = F.linear(hidden_states.float(), self.weight.float())
+        scores = router_logits.sigmoid()
+        scores_for_choice = scores + self.e_score_correction_bias
         group_scores = (
-            scores_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
+            scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
             .topk(2, dim=-1)[0]
             .sum(dim=-1)
         )
@@ -130,20 +161,11 @@ class MiniCPM5TopkRouter(nn.Module):
         group_mask.scatter_(1, group_idx, 1)
         score_mask = (
             group_mask.unsqueeze(-1)
-            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .reshape(-1, self.n_routed_experts)
+            .expand(-1, self.num_group, self.num_experts // self.num_group)
+            .reshape(-1, self.num_experts)
         )
         scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
         topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        return topk_indices
-
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
-        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            router_logits = F.linear(hidden_states.float(), self.weight.float())
-        scores = router_logits.sigmoid()
-        topk_indices = self.get_topk_indices(scores)
         topk_weights = scores.gather(1, topk_indices)
         if self.norm_topk_prob:
             denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
@@ -152,67 +174,35 @@ class MiniCPM5TopkRouter(nn.Module):
         return router_logits, topk_weights, topk_indices
 
 
-class MiniCPM5Experts(nn.ModuleList):
-    def forward(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
-        final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
-        # Group the selected token/slot pairs without expanding them across all experts.
-        expert_ids, positions = topk_indices.flatten().sort(stable=True)
-        boundaries = torch.searchsorted(expert_ids, torch.arange(1, len(self), device=expert_ids.device)).tolist()
-        flat_weights = topk_weights.flatten()
-        start = 0
-        for expert, end in zip(self, [*boundaries, positions.numel()]):
-            expert_positions = positions[start:end]
-            start = end
-            # Keep empty experts in the autograd graph when gradients are enabled.
-            if expert_positions.numel() == 0 and not torch.is_grad_enabled():
-                continue
-            token_indices = expert_positions // topk_indices.shape[-1]
-            expert_weights = flat_weights[expert_positions]
-            expert_input = hidden_states[token_indices]
-            expert_output = expert(expert_input)
-            weighted_output = expert_output * expert_weights.unsqueeze(-1)
-            final_hidden_states.index_add_(0, token_indices, weighted_output)
-
-        return final_hidden_states.to(hidden_states.dtype)
+class MiniCPM5MoeMoE(DeepseekV3MoE):
+    pass
 
 
-class MiniCPM5MoE(nn.Module):
-    """
-    A mixed expert module containing shared experts.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.experts = MiniCPM5Experts(
-            [
-                MiniCPM5MLP(config, intermediate_size=config.moe_intermediate_size)
-                for _ in range(config.n_routed_experts)
-            ]
-        )
-        self.gate = MiniCPM5TopkRouter(config)
-        self.shared_experts = MiniCPM5MLP(
-            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
-        )
-
-    def forward(self, hidden_states):
-        residuals = hidden_states
-        orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).reshape(orig_shape)
-        hidden_states = hidden_states + self.shared_experts(residuals)
-        return hidden_states
+def minicpm5_moe_eager_attention_forward(module, query, key, value, attention_mask, scaling, dropout=0.0, **kwargs):
+    key = repeat_kv(key, module.num_key_value_groups)
+    value = repeat_kv(value, module.num_key_value_groups)
+    if query.dtype == torch.float16:
+        # Some unscaled QK scores in the released checkpoint exceed the FP16 range.
+        with torch.autocast(device_type=query.device.type, enabled=False):
+            scores = torch.matmul(query.float(), key.float().transpose(2, 3)) * scaling
+    else:
+        scores = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        scores = scores + attention_mask
+    weights = F.softmax(scores, dim=-1, dtype=torch.float32).to(value.dtype)
+    weights = F.dropout(weights, p=dropout, training=module.training)
+    return torch.matmul(weights, value).transpose(1, 2).contiguous(), weights
 
 
-class MiniCPM5Attention(LlamaAttention):
-    def __init__(self, config: MiniCPM5Config, layer_idx: int):
+class MiniCPM5MoeAttention(LlamaAttention):
+    def __init__(self, config: MiniCPM5MoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.use_gated_attention = config.use_gated_attention
-        self.q_proj = nn.Linear(
-            config.hidden_size,
-            config.num_attention_heads * self.head_dim * (2 if config.use_gated_attention else 1),
-            bias=config.attention_bias,
+        self.query_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        del self.q_proj
+        self.gate_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
 
     def forward(
@@ -224,13 +214,11 @@ class MiniCPM5Attention(LlamaAttention):
         **kwargs: Unpack[TransformersKwargs],
     ):
         # Keep the three projections adjacent so backends can fuse them without repacking the checkpoint.
-        query = self.q_proj(hidden_states)
+        query = self.query_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
         input_shape = hidden_states.shape[:-1]
         head_shape = (*input_shape, -1, self.head_dim)
-        if self.use_gated_attention:
-            query, gate = query.reshape(*input_shape, -1, 2 * self.head_dim).chunk(2, dim=-1)
         query_states = query.reshape(head_shape).transpose(1, 2)
         key_states = key.reshape(head_shape).transpose(1, 2)
         value_states = value.reshape(head_shape).transpose(1, 2)
@@ -239,7 +227,7 @@ class MiniCPM5Attention(LlamaAttention):
         if cache is not None:
             key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
+            self.config._attn_implementation, minicpm5_moe_eager_attention_forward
         )
         output, weights = attention_interface(
             self,
@@ -252,33 +240,32 @@ class MiniCPM5Attention(LlamaAttention):
             **kwargs,
         )
         output = output.reshape(*input_shape, -1).contiguous()
-        if self.use_gated_attention:
-            output = output * gate.reshape(*input_shape, -1).sigmoid()
+        output = output * self.gate_proj(hidden_states).sigmoid()
         return self.o_proj(output), weights
 
 
-class MiniCPM5DecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: MiniCPM5Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.mlp = MiniCPM5MLP(config) if layer_idx < config.first_k_dense_replace else MiniCPM5MoE(config)
+class MiniCPM5MoeDecoderLayer(DeepseekV3DecoderLayer):
+    def __init__(self, config: MiniCPM5MoeConfig, layer_idx: int):
+        nn.Module.__init__(self)
+        self.self_attn = MiniCPM5MoeAttention(config=config, layer_idx=layer_idx)
+        self.mlp = MiniCPM5MoeMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else MiniCPM5MoeMLP(config)
+        self.input_layernorm = MiniCPM5MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MiniCPM5MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
-class MiniCPM5PreTrainedModel(LlamaPreTrainedModel):
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
-    _can_compile_fullgraph = False
-
-    def _init_weights(self, module):
-        PreTrainedModel._init_weights(self, module)
-        if isinstance(module, MiniCPM5TopkRouter):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            nn.init.zeros_(module.e_score_correction_bias)
-
-
-class MiniCPM5Model(LlamaModel):
+class MiniCPM5MoeRMSNorm(DeepseekV3RMSNorm):
     pass
 
 
-class MiniCPM5MoEForCausalLM(LlamaForCausalLM):
+class MiniCPM5MoePreTrainedModel(DeepseekV3PreTrainedModel):
+    _keys_to_ignore_on_load_unexpected = None
+
+
+class MiniCPM5MoeModel(DeepseekV3Model):
+    pass
+
+
+class MiniCPM5MoeForCausalLM(DeepseekV3ForCausalLM):
     def forward(self, **super_kwargs):
         r"""
         Example:
@@ -297,8 +284,8 @@ class MiniCPM5MoEForCausalLM(LlamaForCausalLM):
 
 
 __all__ = [
-    "MiniCPM5Config",
-    "MiniCPM5PreTrainedModel",
-    "MiniCPM5Model",
-    "MiniCPM5MoEForCausalLM",
+    "MiniCPM5MoeConfig",
+    "MiniCPM5MoePreTrainedModel",
+    "MiniCPM5MoeModel",
+    "MiniCPM5MoeForCausalLM",
 ]

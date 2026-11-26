@@ -82,6 +82,23 @@ class AwqQuantizer(HfQuantizer):
 
         hf_gptqmodel_post_init(model, use_act_order=self.quantization_config.desc_act)
 
+    def update_weight_conversions(self, weight_conversions, model):
+        conversions = super().update_weight_conversions(weight_conversions, model)
+        if model.config.model_type == "minicpm5_moe" and self.quantization_config.format == "gemm":
+            from ..core_model_loading import Chunk, Interleave, WeightConverter
+
+            # AWQ GEMM packs eight adjacent output channels per int32. Each query
+            # or gate head spans whole words, so this also splits the packed zeros.
+            for suffix in ("qweight", "qzeros", "scales"):
+                conversions.append(
+                    WeightConverter(
+                        source_patterns=f"self_attn.q_proj.{suffix}",
+                        target_patterns=[f"self_attn.query_proj.{suffix}", f"self_attn.gate_proj.{suffix}"],
+                        operations=[Interleave(dim=1, num_groups_attribute="num_attention_heads"), Chunk(dim=1)],
+                    )
+                )
+        return conversions
+
     def is_serializable(self):
         if self.quantization_config.backend in [AwqBackend.EXLLAMA_V1, AwqBackend.EXLLAMA_V2]:
             logger.warning("You cannot save an AWQ model that uses Exllama backend!")

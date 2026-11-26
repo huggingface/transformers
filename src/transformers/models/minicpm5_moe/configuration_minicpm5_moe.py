@@ -4,6 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_minicpm5_moe.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2026 The HuggingFace Team. All rights reserved.
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -29,15 +30,14 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
-from ...utils.type_validators import interval
 
 
 @auto_docstring(checkpoint="openbmb/MiniCPM5-15B-A2.5B")
 @strict
-class MiniCPM5Config(PreTrainedConfig):
+class MiniCPM5MoeConfig(PreTrainedConfig):
     r"""
-    first_k_dense_replace (`int`, *optional*, defaults to 1):
-        Number of initial decoder layers with a dense feed-forward network.
+    mlp_layer_types (`list[str]`, *optional*):
+        Feed-forward type for each layer, either `"dense"` or `"sparse"`. Defaults to one dense layer followed by sparse layers.
     n_routed_experts (`int`, *optional*, defaults to 160):
         Number of routed experts in each sparse layer.
     n_shared_experts (`int`, *optional*, defaults to 1):
@@ -48,17 +48,19 @@ class MiniCPM5Config(PreTrainedConfig):
         Number of expert groups used for top-k selection.
     topk_group (`int`, *optional*, defaults to 1):
         Number of expert groups retained during routing.
-    use_gated_attention (`bool`, *optional*, defaults to True):
-        Project one gate per query head dimension and apply it to the attention output.
     """
 
     model_type = "minicpm5_moe"
-    # Default tensor parallel plan for base model `MiniCPM5Model`
+    default_theta = 5000000.0
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.query_proj": "colwise",
+        "layers.*.self_attn.gate_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -68,29 +70,33 @@ class MiniCPM5Config(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+    }
+
+    attribute_map = {"num_local_experts": "n_routed_experts"}
+    hidden_act: str = "silu"
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float = 0.0
     vocab_size: int = 130560
     hidden_size: int = 2048
     intermediate_size: int = 8192
     num_hidden_layers: int = 28
     num_attention_heads: int = 32
-    num_key_value_heads: int = 2
-    hidden_act: str = "silu"
+    num_key_value_heads: int | None = 2
+    head_dim: int | None = 128
     max_position_embeddings: int = 524288
-    initializer_range: float = interval(min=0.0, max=1.0)(default=0.02)
-    rms_norm_eps: float = 1e-6
-    use_cache: bool = True
-    pad_token_id: int = 1
-    bos_token_id: int = 0
+    pad_token_id: int | None = 1
+    bos_token_id: int | None = 0
     eos_token_id: int | list[int] | None = field(default_factory=lambda: [1, 130073])
-    pretraining_tp: int | None = 1
-    tie_word_embeddings: bool = False
-    rope_parameters: RopeParameters | dict | None = None
-    attention_bias: bool = False
-    attention_dropout: int | float | None = 0.0
-    mlp_bias: bool = False
-    head_dim: int = 128
-    default_theta = 5000000.0
-    first_k_dense_replace: int = 1
+    mlp_layer_types: list[str] | None = None
     n_routed_experts: int = 160
     n_shared_experts: int = 1
     routed_scaling_factor: float = 3.66
@@ -99,23 +105,20 @@ class MiniCPM5Config(PreTrainedConfig):
     n_group: int = 1
     topk_group: int = 1
     norm_topk_prob: bool = True
-    use_gated_attention: bool = True
+    output_router_logits: bool = False
 
     def __post_init__(self, **kwargs):
+        if self.architectures == ["MiniCPM5MoEForCausalLM"]:
+            self.architectures = ["MiniCPM5MoeForCausalLM"]
+        dense_layers = kwargs.pop("first_k_dense_replace", 1)
+        kwargs.pop("use_gated_attention", None)
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = ["dense" if i < dense_layers else "sparse" for i in range(self.num_hidden_layers)]
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
-
         super().__post_init__(**kwargs)
 
-    def validate_architecture(self):
-        """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.hidden_size % self.num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({self.num_attention_heads})."
-            )
 
-
-__all__ = ["MiniCPM5Config"]
+__all__ = ["MiniCPM5MoeConfig"]

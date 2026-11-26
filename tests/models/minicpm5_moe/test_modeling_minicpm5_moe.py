@@ -22,20 +22,46 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import AutoModelForCausalLM, MiniCPM5Model, MiniCPM5MoEForCausalLM
+    from transformers import AutoModelForCausalLM, MiniCPM5MoeForCausalLM, MiniCPM5MoeModel
 
 
-class MiniCPM5ModelTester(CausalLMModelTester):
+class MiniCPM5MoeModelTester(CausalLMModelTester):
     if is_torch_available():
-        base_model_class = MiniCPM5Model
-        causal_lm_class = MiniCPM5MoEForCausalLM
+        base_model_class = MiniCPM5MoeModel
+        causal_lm_class = MiniCPM5MoeForCausalLM
 
-    small_config_overrides = {"n_routed_experts": 4, "num_key_value_heads": 1}
+    small_config_overrides = {"n_routed_experts": 4, "num_key_value_heads": 1, "attention_bias": True}
 
 
 @require_torch
-class MiniCPM5ModelTest(CausalLMModelTest, unittest.TestCase):
-    model_tester_class = MiniCPM5ModelTester
+class MiniCPM5MoeModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = MiniCPM5MoeModelTester
+
+    def test_fp16_eager_attention_scales_before_narrowing(self):
+        from transformers.models.minicpm5_moe.modeling_minicpm5_moe import minicpm5_moe_eager_attention_forward
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        attention = AutoModelForCausalLM.from_config(config).model.layers[0].self_attn
+        query = torch.full((1, config.num_attention_heads, 1, 2), 256.0, dtype=torch.float16)
+        key = torch.full((1, config.num_key_value_heads, 2, 2), 256.0, dtype=torch.float16)
+        value = torch.ones_like(key)
+        output, weights = minicpm5_moe_eager_attention_forward(attention, query, key, value, None, scaling=0.25)
+        torch.testing.assert_close(weights, torch.full_like(weights, 0.5))
+        torch.testing.assert_close(output, torch.ones_like(output))
+
+    def test_interleaved_query_and_gate_checkpoint(self):
+        from transformers.core_model_loading import Interleave
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        heads = config.num_attention_heads
+        query = torch.arange(heads * 6).view(heads, 3, 2)
+        gate = -query - 1
+        packed = torch.stack((query, gate), dim=1).flatten(0, 2)
+        operation = Interleave(dim=0, num_groups_attribute="num_attention_heads")
+        unpacked = operation.convert({"q": packed}, ["q"], ["split"], config=config)["split"]
+        torch.testing.assert_close(unpacked, torch.cat((query.flatten(0, 1), gate.flatten(0, 1))))
+        repacked = operation.reverse_op.convert({"split": unpacked}, ["split"], ["q"], config=config)["q"]
+        torch.testing.assert_close(repacked, packed)
 
     def test_router_preserves_fp32_under_autocast(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

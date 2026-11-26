@@ -4,6 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_minicpm5_moe.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2026 The HuggingFace Team. All rights reserved.
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -28,24 +29,25 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
-from .configuration_minicpm5_moe import MiniCPM5Config
+from ...utils.output_capturing import OutputRecorder, capture_outputs
+from .configuration_minicpm5_moe import MiniCPM5MoeConfig
 
 
-class MiniCPM5MLP(nn.Module):
+class MiniCPM5MoeMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
         self.config = config
@@ -61,25 +63,68 @@ class MiniCPM5MLP(nn.Module):
         return down_proj
 
 
-class MiniCPM5TopkRouter(nn.Module):
+@use_experts_implementation
+class MiniCPM5MoeExperts(nn.Module):
+    """Collection of expert weights stored as 3D tensors."""
+
     def __init__(self, config):
         super().__init__()
-        self.config = config
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.moe_intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
+
+
+class MiniCPM5MoeTopkRouter(nn.Module):
+    def __init__(self, config: MiniCPM5MoeConfig):
+        super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.n_routed_experts = config.n_routed_experts
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.n_group = config.n_group
+        self.num_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts, dtype=torch.float32))
-
-    @torch.no_grad()
-    def get_topk_indices(self, scores):
-        scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            router_logits = F.linear(hidden_states.float(), self.weight.float())
+        scores = router_logits.sigmoid()
+        scores_for_choice = scores + self.e_score_correction_bias
         group_scores = (
-            scores_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
+            scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
             .topk(2, dim=-1)[0]
             .sum(dim=-1)
         )
@@ -88,20 +133,11 @@ class MiniCPM5TopkRouter(nn.Module):
         group_mask.scatter_(1, group_idx, 1)
         score_mask = (
             group_mask.unsqueeze(-1)
-            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .reshape(-1, self.n_routed_experts)
+            .expand(-1, self.num_group, self.num_experts // self.num_group)
+            .reshape(-1, self.num_experts)
         )
         scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
         topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        return topk_indices
-
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
-        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            router_logits = F.linear(hidden_states.float(), self.weight.float())
-        scores = router_logits.sigmoid()
-        topk_indices = self.get_topk_indices(scores)
         topk_weights = scores.gather(1, topk_indices)
         if self.norm_topk_prob:
             denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
@@ -110,55 +146,26 @@ class MiniCPM5TopkRouter(nn.Module):
         return router_logits, topk_weights, topk_indices
 
 
-class MiniCPM5Experts(nn.ModuleList):
-    def forward(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
-        final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
-        # Group the selected token/slot pairs without expanding them across all experts.
-        expert_ids, positions = topk_indices.flatten().sort(stable=True)
-        boundaries = torch.searchsorted(expert_ids, torch.arange(1, len(self), device=expert_ids.device)).tolist()
-        flat_weights = topk_weights.flatten()
-        start = 0
-        for expert, end in zip(self, [*boundaries, positions.numel()]):
-            expert_positions = positions[start:end]
-            start = end
-            # Keep empty experts in the autograd graph when gradients are enabled.
-            if expert_positions.numel() == 0 and not torch.is_grad_enabled():
-                continue
-            token_indices = expert_positions // topk_indices.shape[-1]
-            expert_weights = flat_weights[expert_positions]
-            expert_input = hidden_states[token_indices]
-            expert_output = expert(expert_input)
-            weighted_output = expert_output * expert_weights.unsqueeze(-1)
-            final_hidden_states.index_add_(0, token_indices, weighted_output)
-
-        return final_hidden_states.to(hidden_states.dtype)
-
-
-class MiniCPM5MoE(nn.Module):
+class MiniCPM5MoeMoE(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: MiniCPM5MoeConfig):
         super().__init__()
         self.config = config
-        self.experts = MiniCPM5Experts(
-            [
-                MiniCPM5MLP(config, intermediate_size=config.moe_intermediate_size)
-                for _ in range(config.n_routed_experts)
-            ]
-        )
-        self.gate = MiniCPM5TopkRouter(config)
-        self.shared_experts = MiniCPM5MLP(
+        self.experts = MiniCPM5MoeExperts(config)
+        self.gate = MiniCPM5MoeTopkRouter(config)
+        self.shared_experts = MiniCPM5MoeMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
         _, topk_weights, topk_indices = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).reshape(orig_shape)
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 
@@ -208,36 +215,27 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+def minicpm5_moe_eager_attention_forward(module, query, key, value, attention_mask, scaling, dropout=0.0, **kwargs):
+    key = repeat_kv(key, module.num_key_value_groups)
+    value = repeat_kv(value, module.num_key_value_groups)
+    if query.dtype == torch.float16:
+        # Some unscaled QK scores in the released checkpoint exceed the FP16 range.
+        with torch.autocast(device_type=query.device.type, enabled=False):
+            scores = torch.matmul(query.float(), key.float().transpose(2, 3)) * scaling
+    else:
+        scores = torch.matmul(query, key.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
+        scores = scores + attention_mask
+    weights = F.softmax(scores, dim=-1, dtype=torch.float32).to(value.dtype)
+    weights = F.dropout(weights, p=dropout, training=module.training)
+    return torch.matmul(weights, value).transpose(1, 2).contiguous(), weights
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class MiniCPM5Attention(nn.Module):
+class MiniCPM5MoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: MiniCPM5Config, layer_idx: int):
+    def __init__(self, config: MiniCPM5MoeConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -246,11 +244,6 @@ class MiniCPM5Attention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-        self.q_proj = nn.Linear(
-            config.hidden_size,
-            config.num_attention_heads * self.head_dim * (2 if config.use_gated_attention else 1),
-            bias=config.attention_bias,
-        )
         self.k_proj = nn.Linear(
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
@@ -260,7 +253,12 @@ class MiniCPM5Attention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.use_gated_attention = config.use_gated_attention
+        self.query_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.gate_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -272,13 +270,11 @@ class MiniCPM5Attention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Keep the three projections adjacent so backends can fuse them without repacking the checkpoint.
-        query = self.q_proj(hidden_states)
+        query = self.query_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
         input_shape = hidden_states.shape[:-1]
         head_shape = (*input_shape, -1, self.head_dim)
-        if self.use_gated_attention:
-            query, gate = query.reshape(*input_shape, -1, 2 * self.head_dim).chunk(2, dim=-1)
         query_states = query.reshape(head_shape).transpose(1, 2)
         key_states = key.reshape(head_shape).transpose(1, 2)
         value_states = value.reshape(head_shape).transpose(1, 2)
@@ -287,7 +283,7 @@ class MiniCPM5Attention(nn.Module):
         if cache is not None:
             key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
+            self.config._attn_implementation, minicpm5_moe_eager_attention_forward
         )
         output, weights = attention_interface(
             self,
@@ -300,41 +296,17 @@ class MiniCPM5Attention(nn.Module):
             **kwargs,
         )
         output = output.reshape(*input_shape, -1).contiguous()
-        if self.use_gated_attention:
-            output = output * gate.reshape(*input_shape, -1).sigmoid()
+        output = output * self.gate_proj(hidden_states).sigmoid()
         return self.o_proj(output), weights
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class MiniCPM5RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        MiniCPM5RMSNorm is equivalent to T5LayerNorm
-        """
+class MiniCPM5MoeDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: MiniCPM5MoeConfig, layer_idx: int):
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class MiniCPM5DecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: MiniCPM5Config, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-
-        self.self_attn = MiniCPM5Attention(config=config, layer_idx=layer_idx)
-        self.mlp = MiniCPM5MLP(config) if layer_idx < config.first_k_dense_replace else MiniCPM5MoE(config)
-        self.input_layernorm = MiniCPM5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = MiniCPM5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = MiniCPM5MoeAttention(config=config, layer_idx=layer_idx)
+        self.mlp = MiniCPM5MoeMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else MiniCPM5MoeMLP(config)
+        self.input_layernorm = MiniCPM5MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MiniCPM5MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -369,32 +341,59 @@ class MiniCPM5DecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@use_kernel_forward_from_hub("RMSNorm")
+class MiniCPM5MoeRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        MiniCPM5MoeRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
 @auto_docstring
-class MiniCPM5PreTrainedModel(PreTrainedModel):
-    config: MiniCPM5Config
+class MiniCPM5MoePreTrainedModel(PreTrainedModel):
+    config: MiniCPM5MoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["MiniCPM5DecoderLayer"]
+    _no_split_modules = ["MiniCPM5MoeDecoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = False
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": MiniCPM5DecoderLayer,
-        "attentions": MiniCPM5Attention,
+        "hidden_states": MiniCPM5MoeDecoderLayer,
+        "attentions": MiniCPM5MoeAttention,
+        "router_logits": OutputRecorder(MiniCPM5MoeTopkRouter, index=0),
     }
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
+    _keys_to_ignore_on_load_unexpected = None
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, MiniCPM5TopkRouter):
-            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            nn.init.zeros_(module.e_score_correction_bias)
+        if isinstance(module, MiniCPM5MoeTopkRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.e_score_correction_bias)
+        elif isinstance(module, MiniCPM5MoeExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
-class MiniCPM5RotaryEmbedding(nn.Module):
-    def __init__(self, config: MiniCPM5Config):
+class MiniCPM5MoeRotaryEmbedding(nn.Module):
+    def __init__(self, config: MiniCPM5MoeConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -411,7 +410,7 @@ class MiniCPM5RotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(config: MiniCPM5Config, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: MiniCPM5MoeConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -440,27 +439,26 @@ class MiniCPM5RotaryEmbedding(nn.Module):
 
 
 @auto_docstring
-class MiniCPM5Model(MiniCPM5PreTrainedModel):
-    def __init__(self, config: MiniCPM5Config):
+class MiniCPM5MoeModel(MiniCPM5MoePreTrainedModel):
+    def __init__(self, config: MiniCPM5MoeConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [MiniCPM5DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [MiniCPM5MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = MiniCPM5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = MiniCPM5RotaryEmbedding(config=config)
+        self.norm = MiniCPM5MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = MiniCPM5MoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -470,22 +468,22 @@ class MiniCPM5Model(MiniCPM5PreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if inputs_embeds is None:
-            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
-
         if use_cache and cache is None:
             cache = DynamicCache(config=self.config)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if position_ids is None:
             past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
+        causal_mask = create_causal_mask(  # diff with mixtral: no sliding
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
@@ -494,13 +492,15 @@ class MiniCPM5Model(MiniCPM5PreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
                 position_embeddings=position_embeddings,
+                attention_mask=causal_mask,
                 position_ids=position_ids,
                 cache=cache,
                 use_cache=use_cache,
@@ -508,31 +508,32 @@ class MiniCPM5Model(MiniCPM5PreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
+
+        return MoeModelOutputWithPast(  # only diff with Mistral is the output type, we need MoE
             last_hidden_state=hidden_states,
             cache=cache,
         )
 
 
 @auto_docstring
-class MiniCPM5MoEForCausalLM(MiniCPM5PreTrainedModel, GenerationMixin):
+class MiniCPM5MoeForCausalLM(MiniCPM5MoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config: MiniCPM5Config):
+    def __init__(self, config: MiniCPM5MoeConfig):
         super().__init__(config)
-        self.model = MiniCPM5Model(config)
+        self.model = MiniCPM5MoeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -544,7 +545,7 @@ class MiniCPM5MoEForCausalLM(MiniCPM5PreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> MoeCausalLMOutputWithPast:
         r"""
         Example:
 
@@ -558,7 +559,7 @@ class MiniCPM5MoEForCausalLM(MiniCPM5PreTrainedModel, GenerationMixin):
         >>> outputs = model(**inputs, logits_to_keep=1)
         ```
         """
-        outputs: BaseModelOutputWithPast = self.model(
+        outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -569,6 +570,7 @@ class MiniCPM5MoEForCausalLM(MiniCPM5PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
 
@@ -576,13 +578,14 @@ class MiniCPM5MoEForCausalLM(MiniCPM5PreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        return CausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 
-__all__ = ["MiniCPM5PreTrainedModel", "MiniCPM5Model", "MiniCPM5MoEForCausalLM"]
+__all__ = ["MiniCPM5MoePreTrainedModel", "MiniCPM5MoeModel", "MiniCPM5MoeForCausalLM"]
