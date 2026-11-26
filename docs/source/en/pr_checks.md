@@ -164,7 +164,7 @@ RUN_SLOW=1 python -m pytest tests/models/my_model/ -v
 
 Model integration contracts (MICs) run the documented usage code of published models on small fixtures and compare the outputs with reviewed expected values, the baselines. The `fast-integration / transformers` job runs the contracts your changes select (see [Run Model Integration Contracts locally](./testing#run-model-integration-contracts-locally)), and its summary lists every red case.
 
-A red case is **blocked** when it is green on the PR's base and red on the PR, so the PR caused it. Any other red case is a warning that isn't yours to fix: `main` is already red, a setup error (a missing baseline, fixture drift), or a known failure that now passes. The job doesn't fail the PR yet, but reviewers treat a blocked case as a failure.
+A red case is **blocked** when it is green on the PR's base and red on the PR, so the PR caused it. Any other red case is a warning that isn't yours to fix: `main` is already red, a setup error (a missing baseline, fixture drift), or a known failure that now passes. The job doesn't fail the PR yet, but reviewers treat a blocked case as a failure. A bot comment on the PR lists the blocked cases with links to the contracts run, and is marked resolved once nothing is blocked.
 
 For a blocked case, decide whether the new output is a regression or an intended change.
 
