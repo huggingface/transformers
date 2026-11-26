@@ -40,7 +40,6 @@ from __future__ import annotations
 
 import math
 import operator
-import re
 import shutil
 from collections.abc import MutableMapping
 from pathlib import Path
@@ -82,7 +81,6 @@ if is_executorch_available():
     )
     from executorch.backends.xnnpack.utils.utils import get_input_node
     from executorch.exir.capture._config import EdgeCompileConfig, ExecutorchBackendConfig
-    from executorch.exir.dialects._ops import ops as exir_ops
     from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
     from executorch.exir.passes.memory_planning_pass import MemoryPlanningPass
     from executorch.exir.passes.replace_view_copy_with_view_pass import _VIEW_OP, _is_view_copy, _ViewSpec
@@ -463,38 +461,6 @@ def _patch_avg_pool2d(original):
     return patch
 
 
-@register_patch("executorch", "torch.nn.functional.adaptive_avg_pool2d")
-def _patch_adaptive_avg_pool2d(original):
-    """Decompose adaptive_avg_pool2d (no portable adaptive-pool kernel).
-
-    When the input spatial dims divide the output dims evenly it's a plain ``avg_pool2d``; otherwise
-    (e.g. pyramid pooling with output 2/3/6) each output cell averages a variable, overlapping window
-    per the adaptive formula — ``start = i*S // O``, ``end = ceil((i+1)*S / O)`` — which we build from
-    concrete slices + ``mean``. Falls back to the original for symbolic (dynamic) spatial dims, where
-    the window bounds aren't computable at trace time.
-    """
-
-    def patch(input, output_size):
-        oh, ow = (output_size, output_size) if isinstance(output_size, int) else output_size
-        h, w = input.shape[-2], input.shape[-1]
-        oh, ow = (h if oh is None else oh), (w if ow is None else ow)
-        if not (isinstance(h, int) and isinstance(w, int)):
-            return original(input, output_size)
-        if h % oh == 0 and w % ow == 0:
-            return torch.nn.functional.avg_pool2d(input, kernel_size=(h // oh, w // ow))
-
-        def bounds(size, out):
-            return [((i * size) // out, -(-(i + 1) * size // out)) for i in range(out)]
-
-        rows = [
-            torch.cat([input[..., hs:he, ws:we].mean(dim=(-2, -1), keepdim=True) for ws, we in bounds(w, ow)], dim=-1)
-            for hs, he in bounds(h, oh)
-        ]
-        return torch.cat(rows, dim=-2)
-
-    return patch
-
-
 def _cumulative_reduce(input: torch.Tensor, dim: int, maximum: bool) -> torch.Tensor:
     """``cummax``/``cummin`` values via a triangular-masked ``amax``/``amin`` (no portable scan
     kernel). Output ``[..., i]`` reduces over ``j <= i``: broadcast the sequence against a
@@ -640,30 +606,6 @@ def _patch_scaled_dot_product_attention(original):
     return patch
 
 
-@register_patch("executorch", "torch.Tensor.expand")
-def _patch_expand(original):
-    """Force a contiguous copy after ``expand``.
-
-    ``Tensor.expand`` produces a view with stride ``0`` along broadcast dims.
-    ExecuTorch's memory planner rejects ``stride == 0`` and raises "0 in strides is not
-    supported for ExecuTorch" — see ``TensorSpec.__init__`` in
-    https://github.com/pytorch/executorch/blob/v1.0.0/exir/tensor.py#L72. Materialise
-    the broadcast so the captured tensor has standard strides downstream.
-    """
-
-    def patch(self, *sizes, **kwargs):
-        # Forward whatever form the caller used — positional ``expand(*sizes)``, a single
-        # list/tuple, or the keyword form ``expand(size=...)`` — straight to the original.
-        result = original(self, *sizes, **kwargs)
-        # Only materialise when ``expand`` actually introduced a stride-0 (broadcast) dim; a
-        # no-broadcast expand is a plain view ExecuTorch's memory planner accepts as-is.
-        if 0 in result.stride():
-            return result.clone(memory_format=torch.contiguous_format)
-        return result
-
-    return patch
-
-
 @register_patch("executorch", "transformers.exporters.exporter_dynamo._scan")
 def _patch_scan(_original):
     """Run `scan` (the chunked gated delta rule's, Mamba's recurrence) as a Python loop, unrolled for the traced length.
@@ -723,38 +665,6 @@ def _patch_eval_upper_bound(original):
         hint = eval_expr(maybe_symint)
         cap = max(hint * _MAX_DIM_MULTIPLIER, _MAX_DIM_FLOOR) if isinstance(hint, int) else _MAX_DIM_FLOOR
         return min(result, cap) if isinstance(result, int) else cap
-
-    return patch
-
-
-@register_patch(
-    "executorch", "executorch.exir.passes.prune_empty_tensors_pass.PruneEmptyTensorsPass.remove_empty_tensors_from_cat"
-)
-def _patch_remove_empty_tensors_from_cat(_original):
-    """Replacement for ``PruneEmptyTensorsPass.remove_empty_tensors_from_cat``.
-
-    The original checks ``input.numel() != 0`` directly; for tensors with
-    unbacked dynamic shapes (e.g. ``74 * u176``) that raises
-    ``GuardOnDataDependentSymNode`` because ``Ne(74*u176, 0)`` can't be proved
-    either way at trace time. Using ``guard_or_true`` keeps unbacked-shape
-    inputs conservatively (the pass is purely an optimisation).
-    """
-    from torch.fx.experimental.symbolic_shapes import guard_or_true
-
-    def patch(self, graph_module, cat_node):
-        pruned = [arg for arg in cat_node.args[0] if guard_or_true(arg.meta["val"].numel() != 0)]
-        cat_node.args = (pruned,) + cat_node.args[1:]
-        if not pruned:
-            cat_tensor = cat_node.meta["val"]
-            with graph_module.graph.inserting_after(cat_node):
-                full_like = graph_module.graph.create_node(
-                    "call_function",
-                    target=exir_ops.edge.aten.full.default,
-                    args=(tuple(cat_tensor.shape), 0),
-                    kwargs={"dtype": cat_tensor.dtype},
-                )
-                full_like.meta = cat_node.meta
-                cat_node.replace_all_uses_with(full_like)
 
     return patch
 
@@ -976,20 +886,6 @@ def _patch_convert_guards_to_code(_original):
     return patch
 
 
-@register_patch(
-    "executorch",
-    "executorch.exir.passes.executorch_prim_ops_registry._EXECUTORCH_SYM_OPS",
-    "executorch.exir.verification.verifier._EXECUTORCH_SYM_OPS",
-)
-def _extend_sym_ops_allowlist(original):
-    """Return the edge-dialect sym-op allowlist extended with sym ops that have no `executorch_prim.*`
-    equivalent (`sym_ite`, `sym_not`, `sym_int`, `sym_sum`, `sym_float`).
-
-    Trace-time-only ops don't need a runtime kernel; without this they still trip the verifier.
-    """
-    return original | {torch.sym_ite, torch.sym_not, torch.sym_int, torch.sym_sum, torch.sym_float}
-
-
 def _make_squeeze_define_node(original):
     """Allow XNNPACK's squeeze/unsqueeze to serialize when output has multiple dynamic dims.
 
@@ -1070,44 +966,6 @@ def _patch_prelu_check_constraints(original):
         if not (isinstance(val, torch.Tensor) and val.dim() == 4):
             return False
         return original(self, node, ep)
-
-    return patch
-
-
-# Lookbehind/lookahead on JSON delimiters so only bare numeric literals match (quoted strings are
-# bounded by `"` and never touched). Compiled once at import rather than per delegate-serialize call.
-_JSON_NONFINITE_SUBS = (
-    (re.compile(r"(?<=[:\[,\s])-Infinity(?=[,\]}\s])"), "-inf"),
-    (re.compile(r"(?<=[:\[,\s])Infinity(?=[,\]}\s])"), "inf"),
-    (re.compile(r"(?<=[:\[,\s])NaN(?=[,\]}\s])"), "nan"),
-)
-
-
-@register_patch(
-    "executorch",
-    "executorch.backends.xnnpack.serialization.xnnpack_graph_serialize._flatc_compile",
-)
-def _patch_flatc_compile_nonfinite(original):
-    """Rewrite non-finite float literals in the XNNPACK delegate JSON before ``flatc``.
-
-    XNNPACK serializes its delegate graph via ``json.dumps``, which emits non-finite floats as the
-    bare tokens ``-Infinity`` / ``Infinity`` / ``NaN`` — not part of the flatbuffers JSON grammar, so
-    ``flatc`` fails with ``cannot parse value starting with: -``. MiniMaxM3's lightning-indexer block
-    padding (``F.pad(scores, ..., value=float("-inf"))``) lowers to a ``constant_pad_nd`` whose
-    ``-inf`` ``padding_value`` hits this. Swap the tokens for flatbuffers' own ``-inf`` / ``inf`` /
-    ``nan`` (parsed to the identical IEEE value) so the exact ``-inf`` semantics are preserved.
-    """
-
-    def patch(output_dir, schema_path, json_path):
-        with open(json_path, encoding="utf-8") as f:
-            data = f.read()
-        fixed = data
-        for pattern, repl in _JSON_NONFINITE_SUBS:
-            fixed = pattern.sub(repl, fixed)
-        if fixed != data:
-            with open(json_path, "w", encoding="utf-8") as f:
-                f.write(fixed)
-        return original(output_dir, schema_path, json_path)
 
     return patch
 
@@ -1319,28 +1177,6 @@ def _fix_python_sym_op(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     if replacement is None:
         return False
     node.target = replacement
-    return True
-
-
-@register_fx_node_fix("executorch")
-def _fix_clone_memory_format(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Force ``contiguous_format`` on ``aten.clone`` whose input has a non-standard dim order.
-
-    ``Tensor.clone()`` defaults to ``preserve_format`` and inherits the source's stride
-    layout. When a cache tensor has been transposed earlier (dim order e.g. ``[1, 0, 2, 3]``),
-    the clone inherits it and ExecuTorch's ``dim_order_from_stride`` fails to map it to a
-    ``torch.memory_format``. Only rewrite clones whose input ``meta["val"]`` is non-contiguous
-    so we don't disturb the (much more common) clones of already-contiguous tensors — those
-    can otherwise get optimised into pass-through nodes that XNNPACK rejects.
-    """
-    if node.target is not torch.ops.aten.clone.default:
-        return False
-    if node.kwargs.get("memory_format") is not None:
-        return False
-    input_val = node.args[0].meta.get("val") if hasattr(node.args[0], "meta") else None
-    if not (isinstance(input_val, torch.Tensor) and not input_val.is_contiguous()):
-        return False
-    node.kwargs = {**node.kwargs, "memory_format": torch.contiguous_format}
     return True
 
 

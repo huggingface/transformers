@@ -252,30 +252,6 @@ def _name_graph_outputs(graph: onnx_ir.Graph, names: list[str]) -> None:
 # To add a new patch: define a `_patch_*` factory and decorate it.
 
 
-@register_patch("onnx", "torch.where")
-def _patch_where(original):
-    """Normalize dtypes and scalars in torch.where."""
-
-    def patch(condition, x=None, y=None):
-        if isinstance(x, torch.Tensor) and isinstance(y, torch.Tensor) and x.dtype != y.dtype:
-            y = y.to(x.dtype)
-        elif isinstance(x, torch.Tensor) and isinstance(y, (int, float, bool)):
-            # `full_like` (a traced op) rather than `torch.tensor(...)` (a fresh leaf constant): the
-            # latter, if materialised during `run_decompositions`' retrace, becomes an unregistered
-            # `_tensor_constant` → `alias` → `detach_` that trips aot's functional-graph assertion.
-            y = torch.full_like(x, y)
-        elif isinstance(y, torch.Tensor) and isinstance(x, (int, float, bool)):
-            x = torch.full_like(y, x)
-        if x is None and y is None:
-            return original(condition)
-        elif y is None:
-            return original(condition, x)
-        else:
-            return original(condition, x, y)
-
-    return patch
-
-
 @register_patch("onnx", "torch.unsqueeze", "torch.Tensor.unsqueeze")
 def _patch_unsqueeze(original):
     """Support complex tensors in torch.unsqueeze."""
@@ -466,40 +442,6 @@ def _patch_exp(original):
     return patch
 
 
-@register_patch("onnx", "torch.fft.irfft")
-def _patch_irfft(original):
-    """Replace `irfft` with `ifft` over the conjugate-mirrored input — ORT's `DFT` op rejects the
-    `is_onesided=1`/`inverse=1` combination that torch's `irfft` lowers to. Mirroring restores the
-    full spectrum so the inverse path uses two-sided DFT, which ORT accepts. Assumes even `n`
-    (which is the common case for STFT-based audio codecs)."""
-
-    def patch(input, n=None, dim=-1, norm=None):
-        if n is None:
-            n = 2 * (input.shape[dim] - 1)
-        slc = [slice(None)] * input.ndim
-        slc[dim] = slice(1, -1)
-        full = torch.cat([input, input[tuple(slc)].flip(dims=[dim]).conj()], dim=dim)
-        return torch.fft.ifft(full, n=n, dim=dim, norm=norm).real
-
-    return patch
-
-
-@register_patch("onnx", "torch.full")
-def _patch_full(original):
-    """Force dtype=torch.long when fill_value is int and no dtype specified (ONNX defaults to float32)."""
-
-    def patch(*args, dtype=None, **kwargs):
-        if dtype is None:
-            # find fill_value: positional arg or kwarg
-            fill_value = kwargs.get("fill_value", args[1] if len(args) > 1 else None)
-            # `bool` is a subclass of `int` — exclude it so `torch.full(size, True)` stays bool.
-            if isinstance(fill_value, int) and not isinstance(fill_value, bool):
-                dtype = torch.long
-        return original(*args, dtype=dtype, **kwargs)
-
-    return patch
-
-
 @register_patch("onnx", "torch.masked.mean")
 def _patch_masked_mean(original):
     """Manual masked mean: avoids sum/int_count Div type mismatch in ONNX."""
@@ -530,52 +472,6 @@ def _patch_masked_var(original):
     return patch
 
 
-@register_patch("onnx", "torch.Tensor.masked_scatter")
-def _patch_masked_scatter(original):
-    """Cumsum-gather-where strategy for masked_scatter (avoids ScatterND ORT failures)."""
-
-    def patch(self, mask, source):
-        mask = mask.expand_as(self)
-        flat_mask = mask.reshape(-1)
-        positions = (flat_mask.to(torch.int64).cumsum(0) - 1).clamp(min=0)
-        gathered = source.reshape(-1)[positions]
-        return torch.where(flat_mask, gathered, self.reshape(-1)).reshape(self.shape)
-
-    return patch
-
-
-@register_patch("onnx", "torch.roll")
-def _patch_roll(original):
-    """Replace `torch.roll(input, shifts, dims)` with explicit `narrow + cat` shifts.
-
-    `torch.roll`'s torch.export lowering emits a `Shape(start, end)` op that can resolve to an
-    empty INT64 result; the downstream `Slice` then has mismatched `axes` and `ends` lengths
-    and ORT rejects the graph with `ShapeInferenceError` (seen in Gemma4-Unified Vision2Text,
-    where roll is composed with an in-place scatter `[..., 0] = value`). The explicit form is
-    bit-exact and traces to plain Slice + Concat nodes.
-    """
-
-    def patch(input, shifts, dims=None):
-        if isinstance(shifts, int) and isinstance(dims, int):
-            shifts = (shifts,)
-            dims = (dims,)
-        elif not (isinstance(shifts, (tuple, list)) and isinstance(dims, (tuple, list)) and len(shifts) == len(dims)):
-            return original(input, shifts, dims)
-
-        out = input
-        for shift, dim in zip(shifts, dims):
-            length = out.size(dim)
-            shift = shift % length if length > 0 else 0
-            if shift == 0:
-                continue
-            front = out.narrow(dim, length - shift, shift)
-            back = out.narrow(dim, 0, length - shift)
-            out = torch.cat([front, back], dim=dim)
-        return out
-
-    return patch
-
-
 # ── Stage 2: ONNX patches ──────────────────────────────────────────────────────
 # Reversible swaps of `torch.onnx` internals via `@register_patch("onnx", path)`.
 # Currently a single hook that intercepts the private `_prepare_exported_program_for_export`
@@ -589,9 +485,8 @@ def _patch_prepare_for_export(original):
     """Run the FX node fixes immediately after the ONNX internal decomposition step.
 
     `torch.onnx.export` internally calls `run_decompositions` with the ONNX
-    decomposition table, which can introduce new symbolic-guard nodes (e.g.
-    `operator.le(sym_size, int_oo)`). These overflow during ONNX translation.
-    Wrapping the prepare step lets us apply our FX fixes immediately after.
+    decomposition table, whose output holds patterns our FX fixes rewrite (`sort.stable`, an
+    integral tensor meeting a float scalar). Wrapping the prepare step applies them right after.
 
     <Tip warning={true}>
 
@@ -616,38 +511,6 @@ def _patch_prepare_for_export(original):
 # in place by `apply_fx_node_fixes("onnx", gm)`. Return `True` to consume the node;
 # DCE runs at the end of the walk. Triggered twice in the pipeline: once explicitly
 # after `torch.export`, once via the stage 2 patch after `run_decompositions`.
-
-
-_COMPARISON_OPS = frozenset({operator.le, operator.lt, operator.ge, operator.gt, operator.eq, operator.ne})
-
-
-@register_fx_node_fix("onnx")
-def _fix_dead_comparison(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Erase or constant-fold comparison nodes involving symbolic infinities.
-
-    torch.export emits guards like ``%le_3 = operator.le(sym_size, int_oo)`` where
-    ``int_oo`` is a sympy ``IntInfinity`` object.  The ONNX translator tries to lower it
-    to a C long and overflows.  Two cases handled:
-
-    * No users → erase the node outright (PyTorch DCE skips Python callables).
-    * Any arg is a non-FX-Node constant (e.g. ``int_oo``) → evaluate the comparison at
-      graph-construction time, replace all uses with the Python bool result, and erase.
-    """
-    if node.target not in _COMPARISON_OPS:
-        return False
-    if len(node.users) == 0:
-        gm.graph.erase_node(node)
-        return True
-    # Check if any arg is a compile-time constant (not a graph Node).
-    if any(not isinstance(a, torch.fx.Node) for a in node.args):
-        try:
-            result = node.target(*node.args)
-        except Exception:
-            return False
-        node.replace_all_uses_with(result)
-        gm.graph.erase_node(node)
-        return True
-    return False
 
 
 @register_fx_node_fix("onnx")
@@ -686,125 +549,6 @@ def _fix_bfloat16_convolution(gm: torch.fx.GraphModule, node: torch.fx.Node) -> 
 
 
 @register_fx_node_fix("onnx")
-def _fix_alias(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Replace alias(x) -> x to break the alias -> detach_ -> index_put_ chain."""
-    if node.target is not torch.ops.aten.alias.default:
-        return False
-    node.replace_all_uses_with(node.args[0])
-    gm.graph.erase_node(node)
-    return True
-
-
-@register_fx_node_fix("onnx")
-def _fix_detach_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Replace in-place detach_ with out-of-place detach."""
-    if node.target is not torch.ops.aten.detach_.default:
-        return False
-    with gm.graph.inserting_before(node):
-        new = gm.graph.call_function(torch.ops.aten.detach.default, args=node.args, kwargs=node.kwargs)
-    node.replace_all_uses_with(new)
-    gm.graph.erase_node(node)
-    return True
-
-
-@register_fx_node_fix("onnx")
-def _fix_slice_implicit_start(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Spell out a slice's implicit start as ``0``.
-
-    ``x[..., :end]`` traces as `aten.slice` with ``start=None``, which onnxscript lowers to a `Slice`
-    whose `starts` input is an `Unsqueeze` of nothing. ORT then rejects the whole graph with
-    ``input 0 is marked single but has an empty string`` (funnel's relative-shift gather), or, with
-    optimisation on, the malformed node surfaces as an `onnx_ir` `PassError` from the inliner.
-    ``None`` already means ``0`` here, so writing it out changes nothing but the emitted graph.
-    """
-    if node.target is not torch.ops.aten.slice.Tensor or len(node.args) < 3 or node.args[2] is not None:
-        return False
-    args = list(node.args)
-    args[2] = 0
-    node.args = tuple(args)
-    return True
-
-
-@register_fx_node_fix("onnx")
-def _fix_index_put_last_dim_index(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Rewrite ``self[..., idx] = value`` as a mask + ``where`` when ``idx`` selects on the last dim.
-
-    torchlib's `index_put` lowering silently drops the write under dynamic shapes — the indexed
-    columns come back unchanged (chameleon masks its image-token logits with `finfo.min` that way, and
-    the sentinel never lands). Comparing an `arange` over the indexed dim against `idx` gives a mask
-    that broadcasts against `self`, which ONNX handles identically in both shape modes. Only scalar
-    (broadcastable) values take this path; anything else keeps the original lowering.
-    """
-    if node.target not in (torch.ops.aten.index_put.default, torch.ops.aten.index_put_.default):
-        return False
-    if len(node.args) < 3:
-        return False
-    self_arg, indices, values = node.args[0], node.args[1], node.args[2]
-    accumulate = node.args[3] if len(node.args) > 3 else node.kwargs.get("accumulate", False)
-    if accumulate or not isinstance(indices, (list, tuple)) or not indices or indices[-1] is None:
-        return False
-    if any(index is not None for index in indices[:-1]):
-        return False
-
-    index = indices[-1]
-    index_val = getattr(index, "meta", {}).get("val")
-    self_val = getattr(self_arg, "meta", {}).get("val")
-    values_val = getattr(values, "meta", {}).get("val")
-    if index_val is None or self_val is None or values_val is None:
-        return False
-    # bool masks have their own translation, and only a broadcastable value can become a `where`
-    if index_val.dtype == torch.bool or values_val.numel() != 1 or len(indices) != self_val.ndim:
-        return False
-
-    # `x[:, :, idx] = v` mutates a *view*: the graph slices, writes into the slice, and returns the
-    # base it never re-reads. Walk back through slices that keep the shape (a full `:`) so the write
-    # lands on the tensor later nodes actually read.
-    base = self_arg
-    while (
-        base.op == "call_function"
-        and base.target is torch.ops.aten.slice.Tensor
-        and getattr(base.args[0], "meta", {}).get("val") is not None
-        and base.meta["val"].shape == base.args[0].meta["val"].shape
-    ):
-        base = base.args[0]
-
-    last_dim = self_val.ndim - 1
-    with gm.graph.inserting_before(node):
-        size = gm.graph.call_function(torch.ops.aten.sym_size.int, args=(self_arg, last_dim))
-        arange = gm.graph.call_function(
-            torch.ops.aten.arange.default, args=(size,), kwargs={"dtype": index_val.dtype, "device": index_val.device}
-        )
-        columns = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(arange, -1))
-        selected = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(index, 0))
-        matches = gm.graph.call_function(torch.ops.aten.eq.Tensor, args=(columns, selected))
-        mask = gm.graph.call_function(torch.ops.aten.any.dim, args=(matches, -1))
-        result = gm.graph.call_function(torch.ops.aten.where.self, args=(mask, values, base))
-        result.meta.update(node.meta)
-    node.replace_all_uses_with(result)
-    # Under dynamic shapes `index_put_` is left with no users at all: the graph returns the tensor it
-    # mutated and relies on the mutation, which a functional IR drops on the floor. Hand every later
-    # reader of that tensor the value instead.
-    ordering = {other: position for position, other in enumerate(gm.graph.nodes)}
-    for user in list(base.users):
-        if user is not node and ordering.get(user, -1) > ordering[node]:
-            user.replace_input_with(base, result)
-    gm.graph.erase_node(node)
-    return True
-
-
-@register_fx_node_fix("onnx")
-def _fix_index_put_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Replace in-place index_put_ with out-of-place index_put."""
-    if node.target is not torch.ops.aten.index_put_.default:
-        return False
-    with gm.graph.inserting_before(node):
-        new = gm.graph.call_function(torch.ops.aten.index_put.default, args=node.args, kwargs=node.kwargs)
-    node.replace_all_uses_with(new)
-    gm.graph.erase_node(node)
-    return True
-
-
-@register_fx_node_fix("onnx")
 def _fix_fill_diagonal_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Replace in-place fill_diagonal_ with out-of-place equivalent."""
     if node.target is not torch.ops.aten.fill_diagonal_.default:
@@ -819,18 +563,6 @@ def _fix_fill_diagonal_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) ->
         eye_bool = gm.graph.call_function(torch.ops.aten.to.dtype, args=(eye, torch.bool))
         fill_tensor = gm.graph.call_function(torch.ops.aten.full_like.default, args=(tensor_arg, fill_value))
         new = gm.graph.call_function(torch.ops.aten.where.self, args=(eye_bool, fill_tensor, tensor_arg))
-    node.replace_all_uses_with(new)
-    gm.graph.erase_node(node)
-    return True
-
-
-@register_fx_node_fix("onnx")
-def _fix_triu_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Replace in-place triu_ with out-of-place triu."""
-    if node.target is not torch.ops.aten.triu_.default:
-        return False
-    with gm.graph.inserting_before(node):
-        new = gm.graph.call_function(torch.ops.aten.triu.default, args=node.args, kwargs=node.kwargs)
     node.replace_all_uses_with(new)
     gm.graph.erase_node(node)
     return True
@@ -918,60 +650,6 @@ def _fix_integral_tensor_float_scalar(gm: torch.fx.GraphModule, node: torch.fx.N
         )
     promoted.meta.update(node.meta)
     node.replace_input_with(tensor_arg, promoted)
-    return True
-
-
-@register_fx_node_fix("onnx")
-def _fix_mul_scalar_symbolic(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Rewrite `mul.Scalar` to `mul.Tensor` when its 'scalar' is a graph node.
-
-    The other half of pytorch/pytorch#194382: torchlib registers no real-valued `aten.mul.Scalar`
-    translation at all, and decomposition also produces that overload with a *symbolic* second operand — a
-    division result rather than a literal (`mul.Scalar(x, %truediv_1)`) — which the promotion fix above
-    cannot address, since there is no Python constant to promote against. `mul.Tensor` has the two-operand
-    translation, which is the same rewrite `_fix_remainder_scalar` makes for the same reason.
-
-    That operand is a `SymFloat`, not a tensor: across the affected families every one of the 33 sites is
-    an `operator.truediv` result. `mul.Tensor`'s translation takes a symbolic scalar there — it becomes a
-    graph value like any other — so the rewrite is sound, but the guard below names both accepted forms
-    rather than trusting that a `Node` implies a tensor. Anything else (a nested list, an unbacked value
-    with no `val`) is left as `mul.Scalar` to fail visibly in translation instead of silently here.
-
-    Reached because the FX fixes run a second time right after `run_decompositions`, where this overload
-    appears.
-    """
-    if node.target is not torch.ops.aten.mul.Scalar:
-        return False
-    if len(node.args) < 2 or not isinstance(node.args[1], torch.fx.Node):
-        return False
-    other = node.args[1].meta.get("val")
-    if not isinstance(other, (torch.Tensor, torch.SymFloat, torch.SymInt, torch.SymBool)):
-        return False
-    with gm.graph.inserting_before(node):
-        new = gm.graph.call_function(torch.ops.aten.mul.Tensor, args=node.args)
-    new.meta.update(node.meta)
-    node.replace_all_uses_with(new)
-    gm.graph.erase_node(node)
-    return True
-
-
-@register_fx_node_fix("onnx")
-def _fix_remainder_scalar(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Rewrite remainder.Scalar to remainder.Tensor when the 'scalar' arg is actually a tensor.
-
-    After decomposition the second operand of ``aten.remainder.Scalar`` can be a graph
-    node (SymbolicTensor) rather than a Python scalar.  The ONNX torchlib translation for
-    ``remainder.Scalar`` calls ``int()`` on it and crashes.  Rewriting to
-    ``remainder.Tensor`` uses the two-tensor ONNX translation which handles this correctly.
-    """
-    if node.target is not torch.ops.aten.remainder.Scalar:
-        return False
-    if len(node.args) < 2 or not isinstance(node.args[1], torch.fx.Node):
-        return False
-    with gm.graph.inserting_before(node):
-        new = gm.graph.call_function(torch.ops.aten.remainder.Tensor, args=node.args)
-    node.replace_all_uses_with(new)
-    gm.graph.erase_node(node)
     return True
 
 
@@ -1310,40 +988,9 @@ def _fix_ir_constant_gather_nd(graph_like: onnx_ir.Graph) -> None:
         replacement.name = gathered.name
 
 
-def _fix_ir_rotary_embedding_batch(graph_like: onnx_ir.Graph) -> None:
-    """Expand a `RotaryEmbedding`'s cos and sin to its input's batch. onnxscript fuses the rotation into the op (opset
-    23) from cos and sin a model computes once for the batch (batch 1), which torch broadcasts against the input; the
-    op takes them only at the input's batch."""
-    for node in list(graph_like):
-        if node.op_type != "RotaryEmbedding" or node.domain not in ("", "ai.onnx"):
-            continue
-        # With `position_ids`, cos and sin are a cache indexed by position, without a batch axis.
-        if len(node.inputs) > 3 and node.inputs[3] is not None:
-            continue
-        x, cos, sin = node.inputs[:3]
-        if x.shape is not None and cos.shape is not None and sin.shape is not None:
-            if isinstance(x.shape[0], int) and x.shape[0] == cos.shape[0] == sin.shape[0]:
-                continue
-        batch = onnx_ir.node("Shape", [x], {"start": 0, "end": 1})
-        batch.outputs[0].dtype = onnx_ir.DataType.INT64
-        added = [batch]
-        for index, value in ((1, cos), (2, sin)):
-            rest = onnx_ir.node("Shape", [value], {"start": 1})
-            shape = onnx_ir.node("Concat", [batch.outputs[0], rest.outputs[0]], {"axis": 0})
-            expanded = onnx_ir.node("Expand", [value, shape.outputs[0]])
-            # cos and sin share the input's dtype; the fused graph may not record theirs.
-            expanded.outputs[0].dtype = value.dtype or x.dtype
-            for shape_node in (rest, shape):
-                shape_node.outputs[0].dtype = onnx_ir.DataType.INT64
-            added += [rest, shape, expanded]
-            node.replace_input_with(index, expanded.outputs[0])
-        graph_like.insert_before(node, added)
-
-
 _IR_FIXES = [
     _fix_ir_topk_sorted,
     _fix_ir_constant_gather_nd,
-    _fix_ir_rotary_embedding_batch,
 ]
 
 

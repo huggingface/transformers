@@ -66,7 +66,6 @@ from .utils import (
     patch_model_outputs,
     quantize_converted_model,
     register_fx_node_fix,
-    register_fx_program_fix,
     register_patch,
 )
 
@@ -923,38 +922,6 @@ def _fix_sym_min_max(gm, node):
     return False
 
 
-@register_fx_program_fix("openvino")
-def _fix_to_dtype_layout_in_subgraphs(exported_program):
-    """Rewrite every ``aten.to.{dtype,dtype_layout,device,other}`` node to ``aten._to_copy``
-    (keeping only the dtype kwarg), in the top-level graph and every submodule graph.
-
-    OV's PyTorch frontend has no ``aten.to.*`` translators at all — an unhandled variant falls
-    back to a dangling ``torch::None`` constant that fails conversion (e.g. the
-    ``wrap_with_set_grad_enabled`` HigherOrderOp subgraph in Chameleon's rotary path hits
-    ``aten.to.dtype_layout``). Rewriting the FX target here — before conversion — lets our
-    ``_convert_to_copy`` override handle every case (it also swallows complex-dtype casts)."""
-    # Walk the top-level graph AND every submodule's graph (higher-order-op subgraphs).
-    graphs = [exported_program.graph_module]
-    graphs.extend(m for _, m in exported_program.graph_module.named_children() if hasattr(m, "graph"))
-    for gm_or_submod in graphs:
-        for node in list(gm_or_submod.graph.nodes):
-            if node.op != "call_function":
-                continue
-            target = node.target
-            if target is torch.ops.aten.to.dtype:
-                # ``aten.to.dtype(tensor, dtype)`` — dtype is positional arg[1].
-                dtype = node.args[1] if len(node.args) > 1 else node.kwargs.get("dtype")
-                node.target = torch.ops.aten._to_copy.default
-                node.args = (node.args[0],)
-                node.kwargs = {"dtype": dtype} if dtype is not None else {}
-            elif target in (torch.ops.aten.to.dtype_layout, torch.ops.aten.to.device, torch.ops.aten.to.other):
-                dtype = node.kwargs.get("dtype")
-                node.target = torch.ops.aten._to_copy.default
-                node.args = (node.args[0],)
-                node.kwargs = {"dtype": dtype} if dtype is not None else {}
-        gm_or_submod.recompile()
-
-
 @register_fx_node_fix("openvino")
 def _fix_symbolic_pad(gm, node):
     """Decompose ``constant_pad_nd`` with symbolic pad amounts into ``full`` + ``cat``.
@@ -1435,27 +1402,6 @@ def _tiled_experts_forward(self, hidden_states, top_k_index, top_k_weights):
     return weighted_out.sum(dim=0)
 
 
-@register_patch("openvino", "torch.nn.functional.layer_norm")
-def _patch_layer_norm(original):
-    """Substitute identity ``weight=ones``/``bias=zeros`` when either is ``None``.
-
-    OV's frontend records a ``torch::None`` constant for any unwired optional, then refuses to
-    convert it (``None constant cannot be converted to OpenVINO opset``). LayerNorm without
-    affine still computes ``(x - mean) / sqrt(var + eps)``; passing identity tensors keeps the
-    math unchanged and gives OV concrete operands. Affects Chameleon (no-affine RMSNorm path)
-    and any model that calls ``F.layer_norm(..., weight=None, bias=None)``.
-    """
-
-    def patch(input, normalized_shape, weight=None, bias=None, eps=1e-5):
-        if weight is None:
-            weight = torch.ones(normalized_shape, dtype=input.dtype, device=input.device)
-        if bias is None:
-            bias = torch.zeros(normalized_shape, dtype=input.dtype, device=input.device)
-        return original(input, normalized_shape, weight, bias, eps)
-
-    return patch
-
-
 @register_patch("openvino", "torch.nn.functional.interpolate")
 def _patch_interpolate(original):
     """Carry `antialias=True` resampling into the graph as explicit weights.
@@ -1550,52 +1496,6 @@ def _patch_sdpa(original):
             if scale != default_scale:
                 query = query * (scale / default_scale)
         return original(query, key, value, attn_mask, *args, **kwargs)
-
-    return patch
-
-
-@register_patch("openvino", "transformers.models.qwen3_vl.modeling_qwen3_vl.Qwen3VLTextModel._deepstack_process")
-def _patch_qwen3vl_deepstack(original):
-    """Rewrite qwen3-vl deepstack injection to avoid boolean-mask indexing.
-
-    ``_deepstack_process`` does ``hidden_states[visual_pos_masks] += visual_embeds``, whose selected
-    length is data-dependent — OV can't trace the dynamic shape. Rebuild the per-position visual
-    features with ``cumsum`` + ``index_select`` (a Gather OV keeps dynamic) and add them through a
-    ``float(mask)`` multiply, which is numerically identical.
-    """
-
-    def patch(self, hidden_states, visual_pos_masks, visual_embeds):
-        visual_embeds = visual_embeds.to(hidden_states.dtype)
-        batch, seq_len, dim = hidden_states.shape
-        flat_mask = visual_pos_masks.reshape(-1)
-        indices = torch.clamp(torch.cumsum(flat_mask.long(), dim=0) - 1, min=0)
-        full_visual = torch.index_select(visual_embeds, 0, indices).reshape(batch, seq_len, dim)
-        return hidden_states + full_visual * flat_mask.to(hidden_states.dtype).reshape(batch, seq_len, 1)
-
-    return patch
-
-
-@register_patch(
-    "openvino",
-    "transformers.models.wavlm.modeling_wavlm.WavLMPreTrainedModel._get_feature_vector_attention_mask",
-    "transformers.models.data2vec.modeling_data2vec_audio.Data2VecAudioPreTrainedModel._get_feature_vector_attention_mask",
-)
-def _patch_feature_vector_attention_mask(original):
-    """Build the downsampled attention mask with a broadcast comparison instead of a scatter.
-
-    The wav2vec2-family ``_get_feature_vector_attention_mask`` sets a one-hot at ``output_lengths - 1``
-    via integer advanced-index assignment, then flip/cumsum/flip to fill the earlier positions — OV
-    can't convert the ``aten.index_put`` (integer indices become an unconvertible ``SequenceMark``).
-    ``arange(seq) < output_lengths`` is identical (every position before each row's length is attended)
-    and export-clean.
-    """
-
-    def patch(self, feature_vector_length, attention_mask, add_adapter=None):
-        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
-        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
-        output_lengths = output_lengths.to(torch.long)
-        positions = torch.arange(feature_vector_length, device=attention_mask.device)
-        return positions.unsqueeze(0) < output_lengths.unsqueeze(1)
 
     return patch
 
