@@ -202,7 +202,17 @@ class LlavaOnevision2VideoProcessor(BaseVideoProcessor):
                     min_pixels=size.shortest_edge,
                     max_pixels=size.longest_edge,
                 )
-                video = self.resize(video, SizeDict(height=height, width=width), resample=resample)
+                resize_size = SizeDict(height=height, width=width)
+                if video.dtype == torch.uint8 and resample == PILImageResampling.BICUBIC:
+                    # Match the float interpolation and rounding used by the reference video processor.
+                    video = (
+                        self.resize(video.float(), resize_size, resample=resample)
+                        .clamp_(0, 255)
+                        .round_()
+                        .to(torch.uint8)
+                    )
+                else:
+                    video = self.resize(video, resize_size, resample=resample)
             frames = list(video.cpu().numpy())
             # Frames are already aligned to the merge grid. A second resize would
             # change the rounded minimum-area result and its source coordinates.
