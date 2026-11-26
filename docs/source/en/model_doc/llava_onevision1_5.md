@@ -8,7 +8,7 @@ specific language governing permissions and limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
-*This model was contributed to Hugging Face Transformers on 2026-11-16.*
+*This model was contributed to Hugging Face Transformers on 2026-11-26.*
 
 # LLaVA-OneVision-1.5
 
@@ -21,7 +21,7 @@ Transformers supports the [4B Instruct](https://huggingface.co/Deep-VLM/LLaVA-On
 
 The paper describes the work as follows:
 
-*The [paper's abstract](https://huggingface.co/papers/2509.23661) describes an open framework for training vision-language models from scratch at a reduced cost. The [latest revision](https://arxiv.org/abs/2509.23661v3) reports 85 million pretraining examples, 22 million instruction examples, and a training budget of $16,000 using offline parallel packing. In their evaluation, the 8B model exceeds Qwen2.5-VL-7B on 18 out of 27 benchmarks, while the 4B model exceeds Qwen2.5-VL-3B on all 27. The latest revision also describes a lightweight reinforcement learning stage that improves multimodal reasoning.*
+*The [paper's abstract](https://huggingface.co/papers/2509.23661) describes an open framework for training vision-language models from scratch at a reduced cost. The [latest revision](https://huggingface.co/papers/2509.23661v3) reports 85 million pretraining examples, 22 million instruction examples, and a training budget of $16,000 using offline parallel packing. In their evaluation, the 8B model exceeds Qwen2.5-VL-7B on 18 out of 27 benchmarks, while the 4B model exceeds Qwen2.5-VL-3B on all 27. The latest revision also describes a lightweight reinforcement learning stage that improves multimodal reasoning.*
 
 ## Usage
 
