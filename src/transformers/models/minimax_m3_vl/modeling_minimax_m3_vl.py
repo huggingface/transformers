@@ -482,12 +482,13 @@ class MiniMaxM3VLIndexer(nn.Module):
 
         # Expand selected blocks into physical token indices
         offsets = torch.arange(self.block_size, device=idx_q.device)
-        indices = (block_indices[..., None] * self.block_size + offsets).flatten(-2)
+        indices = (block_indices[..., None] * self.block_size + offsets).flatten(-2).clamp_min(-1)
 
         # Exclude padded and future tokens
         mask_positions = (indices.flatten(1) - attention_mask[:, :1]).clamp(0, attention_mask.shape[-1] - 2)
-        valid = attention_mask.diff(dim=-1).gather(1, mask_positions).view_as(indices) > 0
-        valid = valid & indices.ge(0) & (indices <= query_positions[:, None, :, None])
+        valid = attention_mask.diff(dim=-1).gather(1, mask_positions).reshape_as(indices) > 0
+        valid &= indices <= query_positions.reshape(batch, 1, q_len, 1)
+
         return block_indices, indices.masked_fill(~valid, -1)
 
 
