@@ -98,7 +98,17 @@ def get_modified_cards() -> list[str]:
         # On main branch, only uncommitted changes detected
         result = subprocess.check_output(["git", "diff", "--name-only", "HEAD"], text=True)
     else:
-        fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")
+        # CI checks out a detached merge ref without a local `main` branch, so fall back to `origin/main`.
+        base_ref = next(
+            (
+                ref
+                for ref in ("main", "origin/main")
+                if subprocess.run(["git", "rev-parse", "--verify", "--quiet", ref], capture_output=True).returncode
+                == 0
+            ),
+            "main",
+        )
+        fork_point_sha = subprocess.check_output(["git", "merge-base", base_ref, "HEAD"]).decode("utf-8")
         result = subprocess.check_output(f"git diff --name-only {fork_point_sha}".split()).decode("utf-8")
 
     model_names = []
@@ -384,16 +394,22 @@ def main(all=False, models=None, check_only=False):
         # Check all model cards for missing dates
         all_model_cards = get_all_model_cards()
         missing_dates = check_missing_dates(all_model_cards)
+        if missing_dates:
+            model_names = [card.replace(".md", "") for card in missing_dates]
+            raise ValueError(
+                f"Missing dates in the following model cards: {' '.join(missing_dates)}\n"
+                f"Run `python utils/add_dates.py --models {' '.join(model_names)}` to fix them."
+            )
 
         # Check modified model cards for incorrect dates
         modified_cards = get_modified_cards()
         incorrect_dates = check_incorrect_dates(modified_cards)
 
-        if missing_dates or incorrect_dates:
-            problematic_cards = missing_dates + incorrect_dates
+        if incorrect_dates:
+            problematic_cards = incorrect_dates
             model_names = [card.replace(".md", "") for card in problematic_cards]
             raise ValueError(
-                f"Missing or incorrect dates in the following model cards: {' '.join(problematic_cards)}\n"
+                f"Incorrect dates in the following model cards: {' '.join(problematic_cards)}\n"
                 f"Run `python utils/add_dates.py --models {' '.join(model_names)}` to fix them."
             )
         return
@@ -422,6 +438,9 @@ if __name__ == "__main__":
     try:
         main(args.all, args.models, args.check_only)
     except subprocess.CalledProcessError as e:
+        if args.check_only:
+            # Never let a git failure turn the check into a silent pass.
+            raise
         print(
             f"An error occurred while executing git commands but it can be ignored (git issue) most probably local: {e}"
         )

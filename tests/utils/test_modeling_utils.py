@@ -971,6 +971,33 @@ class ModelUtilsTest(TestCasePlus):
                 for p1, p2 in zip(model.parameters(), new_model.parameters()):
                     torch.testing.assert_close(p1, p2)
 
+    def test_checkpoint_sharding_rejects_path_traversal(self):
+        config = BertConfig(
+            vocab_size=16,
+            hidden_size=8,
+            num_hidden_layers=1,
+            num_attention_heads=1,
+            intermediate_size=8,
+            max_position_embeddings=8,
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = os.path.join(tmp_dir, "repo")
+            outside_dir = os.path.join(tmp_dir, "outside")
+            BertModel(config).save_pretrained(repo, max_shard_size="1kB")
+            BertModel(config).save_pretrained(outside_dir, max_shard_size="1kB")
+
+            index_file = os.path.join(repo, SAFE_WEIGHTS_INDEX_NAME)
+            with open(index_file, encoding="utf-8") as f:
+                index = json.load(f)
+
+            # Both of these point at real shards, so without a check the repo would load the outside model's weights
+            for bad_dir in [os.path.join("..", "outside"), outside_dir]:
+                bad_weight_map = {key: os.path.join(bad_dir, shard) for key, shard in index["weight_map"].items()}
+                with open(index_file, "w", encoding="utf-8") as f:
+                    json.dump({**index, "weight_map": bad_weight_map}, f)
+                with self.assertRaises(ValueError):
+                    BertModel.from_pretrained(repo)
+
     def test_transformers_weights_config_field_rejects_path_traversal(self):
         config = BertConfig(
             vocab_size=16,
@@ -2740,6 +2767,22 @@ class ModelUtilsTest(TestCasePlus):
                 caching_allocator_warmup(model, expanded_device_map, None)
 
         self.assertIn("Skipping caching allocator warmup", cl.out)
+
+    def test_activation_checkpointing_keeps_the_cache_without_gradients(self):
+        """
+        Activation checkpointing drops the cache in training mode, since the backward replay would write it a second
+        time. Without gradients there is no backward, so a forward in training mode, like generating from a model being
+        trained, must fill the cache.
+        """
+        model = LlamaForCausalLM(
+            LlamaConfig(hidden_size=32, num_hidden_layers=2, num_attention_heads=4, intermediate_size=37)
+        )
+        model.activation_checkpointing_enable()
+        model.train()
+        input_ids = torch.tensor([[1, 2, 3, 4]])
+        with torch.no_grad():
+            cache = model(input_ids, use_cache=True).cache
+        self.assertEqual(cache.get_seq_length(), 4)
 
     def test_mismatched_keys_with_quantizer(self):
         from transformers import FineGrainedFP8Config

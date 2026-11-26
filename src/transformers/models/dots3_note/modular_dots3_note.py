@@ -113,11 +113,6 @@ class Dots3NoteVisionConfig(VideoLlama3VisionConfig):
 
     model_type = "dots3_note_vision_encoder"
     layer_norm_eps = AttributeError()
-    base_model_tp_plan = {
-        "blocks.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "blocks.*.mlp.experts.down_proj": "rowwise",
-        "blocks.*.mlp.experts": "moe_tp_experts",
-    }
     base_model_ep_plan = {
         "blocks.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "blocks.*.mlp.experts.down_proj": "grouped_gemm",
@@ -272,9 +267,6 @@ class Dots3NoteTextConfig(DeepseekV32Config):
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.g_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -884,7 +876,7 @@ class Dots3NoteVisionMoE(MiMoV2FlashMoE):
         layer_config = config.per_layer_config[layer_idx]
         self.experts = Dots3NoteExperts(layer_config)
         self.gate = Dots3NoteVisionTopKRouter(layer_config)
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(layer_config.num_local_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(layer_config.num_local_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         super().forward(hidden_states)
@@ -922,7 +914,7 @@ class Dots3NoteVisionPreTrainedModel(Qwen2VLPreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
     _no_split_modules = ["Dots3NoteVisionBlock"]
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
 
     def _init_weights(self, module: nn.Module):
         PreTrainedModel._init_weights(self, module)

@@ -147,6 +147,7 @@ PRIVATE_MODELS = [
     "VoxtralRealtimeTextModel",
     "VoxtralRealtimeTextForCausalLM",
     "VoxtralRealtimeTextPreTrainedModel",
+    "PI05ActionExpertModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -204,6 +205,7 @@ IGNORE_NON_TESTED = [
     "Ernie4_5_VL_MoeModel",  # BC alias
     "PeAudioFrameLevelModel",
     "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
+    "PI05Model",  # special arch, tested through PI05ForConditionalGeneration
     "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
     "VibeVoiceAcousticTokenizerDecoderModel",
     "VibeVoiceAcousticTokenizerEncoderModel",
@@ -492,6 +494,7 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
         ("inkling_mm_model", "inkling"),
         ("inkling2_text", "inkling2"),
         ("inkling2_vision", "inkling2"),
+        ("inkling2_loop_text", "inkling2_loop"),
         ("nemo_speechlm", "nemotron3_5_transcribe"),
     ]
 )

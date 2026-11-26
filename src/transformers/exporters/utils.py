@@ -632,6 +632,9 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
     include_temporal = getattr(model, "include_temporal", False)
     inputs["position_ids"] = get_vision_position_ids(grid_thw, spatial_merge_size, include_temporal=include_temporal)
 
+    if hasattr(module, "get_vision_frame_lengths"):
+        inputs["frame_lengths"] = module.get_vision_frame_lengths(grid_thw)
+
     window_size = _find_submodule_attr(model, "window_size")
     patch_size = _find_submodule_attr(model, "patch_size")
     if window_size is not None and patch_size is not None:
