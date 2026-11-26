@@ -88,7 +88,9 @@ class MultimodalMixin:
         they keep it traceable by `torch.compile(fullgraph=True)` and `torch.export`. None unless the model computes
         some."""
         base_model = self.base_model
-        return base_model.get_data_dependent_inputs(**kwargs) if base_model is not self else {}
+        if base_model is self or not hasattr(base_model, "get_data_dependent_inputs"):
+            return {}
+        return base_model.get_data_dependent_inputs(**kwargs)
 
 
 def merge_mm_encoder_outputs(forward):
