@@ -265,7 +265,13 @@ class MiniCPMO2_6IntegrationTest(unittest.TestCase):
         decoded = processor.post_process_image_text_to_text(output[:, inputs["input_ids"].shape[1] :])
         expected_texts = Expectations(
             {
-                ("cuda", None): ["__EXPECTED_AUDIO__", "__EXPECTED_IMAGE__"],
+                ("cuda", None): [
+                    "Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to -20 degrees.",
+                    (
+                        "The image features two cats lying on a pink surface, possibly a couch or bed. Both cats appear "
+                        "to be in a relaxed state, with their bodies stretched out"
+                    ),
+                ],
             }
         )
         self.assertEqual(decoded, expected_texts.get_expectation())
