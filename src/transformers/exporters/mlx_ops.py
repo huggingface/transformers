@@ -16,6 +16,7 @@ exporter checks its graphs against `MLX_OPS` and the runner runs them."""
 
 from __future__ import annotations
 
+import functools
 import itertools
 import math
 import operator
@@ -243,6 +244,121 @@ def rope(x, positions, inv_freq, scaling):
     return out if scaling == 1.0 else out * scaling
 
 
+def _convolution(x, weight, bias, stride, padding, dilation, transposed, output_padding, groups):
+    # MLX convolves channels-last, with `(out_channels, *kernel, in_channels / groups)` weights
+    spatial = x.ndim - 2
+    x = mx.moveaxis(x, 1, -1)
+    if transposed:
+        # A transposed convolution is a convolution of the stride-dilated input with the flipped kernel
+        in_channels, group_out_channels, *kernel = weight.shape
+        weight = weight.reshape(groups, in_channels // groups, group_out_channels, *kernel)
+        weight = mx.moveaxis(weight, 1, -1).reshape(groups * group_out_channels, *kernel, in_channels // groups)
+        low = [d * (k - 1) - p for d, k, p in zip(dilation, kernel, padding)]
+        high = [lo + extra for lo, extra in zip(low, output_padding)]
+        options = {"padding": (low, high), "kernel_dilation": dilation, "input_dilation": stride, "flip": True}
+    else:
+        weight = mx.moveaxis(weight, 1, -1)
+        options = {"stride": stride, "padding": padding, "kernel_dilation": dilation}
+    if groups == 1 or spatial < 3:
+        out = mx.conv_general(x, weight, groups=groups, **options)
+    else:
+        # MLX groups only 1D and 2D convolutions
+        pairs = zip(mx.split(x, groups, axis=-1), mx.split(weight, groups, axis=0))
+        out = mx.concatenate([mx.conv_general(xs, ws, **options) for xs, ws in pairs], axis=-1)
+    out = mx.moveaxis(out, -1, 1)
+    return out if bias is None else out + bias.reshape(-1, *[1] * spatial)
+
+
+def _pool_arguments(dims, kernel_size, stride, padding, dilation=1):
+    def per_axis(value):
+        return [value] * dims if isinstance(value, int) else list(value) * (dims if len(value) == 1 else 1)
+
+    return per_axis(kernel_size), per_axis(stride or kernel_size), per_axis(padding), per_axis(dilation)
+
+
+def _pool_padding(sizes, kernel, stride, padding, dilation, ceil_mode) -> list[tuple[int, int]]:
+    """Each axis' `(low, high)` padding: `padding`, and on the high side what a `ceil_mode` window reads past it."""
+    widths = []
+    for size, k, s, p, d in zip(sizes, kernel, stride, padding, dilation):
+        span = size + 2 * p - d * (k - 1) - 1
+        windows = (-(-span // s) if ceil_mode else span // s) + 1
+        # The last window starts inside the input or its low padding
+        if ceil_mode and (windows - 1) * s >= size + p:
+            windows -= 1
+        widths.append((p, p + max(0, (windows - 1) * s + d * (k - 1) + 1 - (size + 2 * p))))
+    return widths
+
+
+def _pool_windows(x, kernel, stride, dilation):
+    """The windows over `x`'s last `len(kernel)` axes, as `(*leading, *windows, *kernel)` (a strided view)."""
+    dims = len(kernel)
+    leading, sizes = x.shape[: x.ndim - dims], x.shape[x.ndim - dims :]
+    strides = [1] * x.ndim
+    for axis in range(x.ndim - 2, -1, -1):
+        strides[axis] = strides[axis + 1] * x.shape[axis + 1]
+    spatial = strides[x.ndim - dims :]
+    windows = [(n - d * (k - 1) - 1) // s + 1 for n, k, s, d in zip(sizes, kernel, stride, dilation)]
+    return mx.as_strided(
+        x,
+        (*leading, *windows, *kernel),
+        (
+            *strides[: x.ndim - dims],
+            *[a * s for a, s in zip(spatial, stride)],
+            *[a * d for a, d in zip(spatial, dilation)],
+        ),
+    )
+
+
+def _avg_pool(
+    dims, x, kernel_size, stride=(), padding=0, ceil_mode=False, count_include_pad=True, divisor_override=None
+):
+    kernel, stride, padding, dilation = _pool_arguments(dims, kernel_size, stride, padding)
+    widths = _pool_padding(x.shape[-dims:], kernel, stride, padding, dilation, ceil_mode)
+    kernel_axes = tuple(range(-dims, 0))
+    padded = mx.pad(x, [(0, 0)] * (x.ndim - dims) + widths)
+    total = _pool_windows(padded, kernel, stride, dilation).sum(axis=kernel_axes)
+    if divisor_override:
+        return (total / divisor_override).astype(x.dtype)
+    # Each window's divisor: the elements it covers of the input, and of its padding if counted, never of the high
+    # side a `ceil_mode` window reads past it
+    covered = mx.ones(x.shape[-dims:], dtype=mx.float32)
+    if count_include_pad:
+        covered = mx.pad(covered, [(p, p) for p in padding], constant_values=1)
+        covered = mx.pad(covered, [(0, high - p) for (_, high), p in zip(widths, padding)])
+    else:
+        covered = mx.pad(covered, widths)
+    count = _pool_windows(covered, kernel, stride, dilation).sum(axis=kernel_axes)
+    return (total / count).astype(x.dtype)
+
+
+def _max_pool_with_indices(dims, x, kernel_size, stride=(), padding=0, dilation=1, ceil_mode=False):
+    kernel, stride, padding, dilation = _pool_arguments(dims, kernel_size, stride, padding, dilation)
+    sizes = x.shape[-dims:]
+    widths = _pool_padding(sizes, kernel, stride, padding, dilation, ceil_mode)
+    padded = mx.pad(x, [(0, 0)] * (x.ndim - dims) + widths, constant_values=-float("inf"))
+    windows = _pool_windows(padded, kernel, stride, dilation)
+    windows = windows.reshape(*windows.shape[: x.ndim], -1)
+    argmax = mx.argmax(windows, axis=-1, keepdims=True)
+    # Indices into each input plane, as torch returns them (MLX computes them only if read)
+    positions = mx.pad(mx.arange(math.prod(sizes)).reshape(sizes), widths, constant_values=-1)
+    positions = _pool_windows(positions, kernel, stride, dilation)
+    positions = mx.broadcast_to(positions.reshape(*positions.shape[:dims], -1), windows.shape)
+    indices = mx.take_along_axis(positions, argmax, axis=-1).squeeze(-1).astype(mx.int64)
+    return mx.max(windows, axis=-1), indices
+
+
+def _vector_norm(x, ord=2, dim=None, keepdim=False, dtype=None):
+    x = mx.abs(_astype(x, dtype))
+    axes = _axes(dim)
+    if ord == float("inf"):
+        return mx.max(x, axis=axes, keepdims=keepdim)
+    if ord == -float("inf"):
+        return mx.min(x, axis=axes, keepdims=keepdim)
+    if ord == 0:
+        return mx.sum(x != 0, axis=axes, keepdims=keepdim).astype(x.dtype)
+    return mx.power(mx.sum(mx.power(x, ord), axis=axes, keepdims=keepdim), 1 / ord)
+
+
 def _identity(x, *_, **__):
     return x
 
@@ -379,6 +495,7 @@ if is_mlx_available():
         "aten.argmax.default": lambda x, dim=None, keepdim=False: mx.argmax(x, axis=dim, keepdims=keepdim).astype(
             mx.int64
         ),
+        "aten.linalg_vector_norm.default": _vector_norm,
         "aten.cumsum.default": lambda x, dim, dtype=None: _astype(mx.cumsum(x, axis=dim), dtype),
         "aten._softmax.default": lambda x, dim, half_to_float=False: mx.softmax(x, axis=dim, precise=True),
         "aten._log_softmax.default": lambda x, dim, half_to_float=False: x - mx.logsumexp(x, axis=dim, keepdims=True),
@@ -392,6 +509,13 @@ if is_mlx_available():
         "aten.rms_norm.default": _rms_norm,
         "aten.linear.default": _linear,
         "aten.silu.default": lambda x: x * mx.sigmoid(x),
+        # Convolutions and pooling
+        "aten.convolution.default": _convolution,
+        "aten.avg_pool1d.default": functools.partial(_avg_pool, 1),
+        "aten.avg_pool2d.default": functools.partial(_avg_pool, 2),
+        "aten.avg_pool3d.default": functools.partial(_avg_pool, 3),
+        "aten.max_pool2d_with_indices.default": functools.partial(_max_pool_with_indices, 2),
+        "aten.max_pool3d_with_indices.default": functools.partial(_max_pool_with_indices, 3),
         # Fusions (`mlx_fusions`)
         "transformers.exporters.mlx_ops.rms_norm": rms_norm,
         "transformers.exporters.mlx_ops.swiglu": swiglu,
