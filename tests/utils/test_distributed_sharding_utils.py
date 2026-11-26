@@ -156,6 +156,29 @@ class TestDtensorShardOperation(unittest.TestCase):
             )
             torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
 
+    def test_op_from_values_matches_dtensor_layouts(self):
+        """The op can be built from `(shape, device_mesh, placements)` instead of a DTensor, for an engine whose params
+        are plain tensors: `[Replicate(), Shard(0)]` (kv heads replicated over the first mesh dim) and
+        `[Shard(0), Shard(1)]` (experts on one dim, intermediate size on the other) slice as they would on a DTensor."""
+        tensor = torch.arange(64).reshape(8, 8).float()
+        cases = [
+            # (mesh shape, placements, global shape, expected slice per rank)
+            ((4,), [Shard(0)], (8, 8), {rank: tensor[rank * 2 : (rank + 1) * 2] for rank in range(4)}),
+            # kv-head replication: ranks 0 and 2 (same second-dim index) hold the same rows
+            ((2, 2), [Replicate(), Shard(0)], (8, 8), {0: tensor[:4], 1: tensor[4:], 2: tensor[:4], 3: tensor[4:]}),
+            (
+                (2, 2),
+                [Shard(0), Shard(1)],
+                (8, 8),
+                {0: tensor[:4, :4], 1: tensor[:4, 4:], 2: tensor[4:, :4], 3: tensor[4:, 4:]},
+            ),
+        ]
+        for mesh_shape, placements, shape, expected in cases:
+            for rank, expected_slice in expected.items():
+                mesh = FakeMesh(shape=mesh_shape, rank=rank)
+                op = DtensorShardOperation(shape, mesh, placements)
+                torch.testing.assert_close(op.shard_tensor(tensor), expected_slice, msg=f"{mesh_shape} {rank}")
+
     def test_2D_shard_different_dims(self):
         tensor = torch.arange(64).reshape(8, 8).float()
         expected = {

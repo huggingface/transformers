@@ -53,9 +53,19 @@ class ExpertParallelLayer:
         """Validate a parameter before applying this EP style."""
         pass
 
+    def placements(self, module, param):
+        """The placements this style gives one param, or `None` to leave it whole."""
+        return None
+
     def shard_param(self, module, param, mesh):
-        """Wrap ONE parameter as a DTensor placeholder. Default: no-op."""
-        pass
+        """Wrap ONE parameter as a DTensor placeholder, with this style's `placements`."""
+        meta = module._parameters.get(param)
+        if meta is None or (placements := self.placements(module, param)) is None:
+            return
+        module._parameters[param] = torch.nn.Parameter(
+            distribute_tensor(meta, mesh, placements, src_data_rank=None),
+            requires_grad=meta.requires_grad,
+        )
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         return args, kwargs
@@ -93,6 +103,9 @@ class MoEParamShard(ExpertParallelLayer):
         self.placement = placement
         self.shards_expert_dim = shards_expert_dim
 
+    def placements(self, module, param):
+        return [self.placement]
+
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
         if meta is None:
@@ -108,10 +121,7 @@ class MoEParamShard(ExpertParallelLayer):
             module.num_experts = global_num_experts // expert_parallel_size
             # The experts forward masks sentinel rows only when its experts are actually split.
             module._is_expert_parallel = True
-        module._parameters[param] = torch.nn.Parameter(
-            distribute_tensor(meta, mesh, [self.placement], src_data_rank=None),
-            requires_grad=meta.requires_grad,
-        )
+        super().shard_param(module, param, mesh)
 
 
 class EPImplementation:

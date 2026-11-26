@@ -102,9 +102,20 @@ class TensorParallelLayer:
         """Validate a parameter before applying this TP style."""
         pass
 
+    def placements(self, module, param):
+        """The placements this style gives one param, or `None` to leave it whole. Mesh-agnostic: one placement per
+        mesh dim, so the same list applies on a 1-D mesh or on the matching dims of a 2-D one."""
+        return None
+
     def shard_param(self, module, param, mesh):
-        """Wrap ONE parameter as a DTensor placeholder. Default: no-op."""
-        pass
+        """Wrap ONE parameter as a DTensor placeholder, with this style's `placements`."""
+        meta = module._parameters.get(param)
+        if meta is None or (placements := self.placements(module, param)) is None:
+            return
+        module._parameters[param] = torch.nn.Parameter(
+            distribute_tensor(meta, mesh, placements, src_data_rank=None),
+            requires_grad=meta.requires_grad,
+        )
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         return args, kwargs
@@ -160,15 +171,9 @@ class ColwiseParallel(TensorParallelLayer):
             raise ValueError(f"{type(module).__name__} has no `out_features`: colwise shards linear layers.")
         return super().install_forward(module, mesh)
 
-    def shard_param(self, module, param, mesh):
+    def placements(self, module, param):
         meta = module._parameters.get(param)
-        if meta is None:
-            return
-        placement = Shard(meta.ndim - 2)
-        module._parameters[param] = torch.nn.Parameter(
-            distribute_tensor(meta, mesh, [placement], src_data_rank=None),
-            requires_grad=meta.requires_grad,
-        )
+        return None if meta is None else [Shard(meta.ndim - 2)]
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         x = args[0]
@@ -231,16 +236,9 @@ class RowwiseParallel(TensorParallelLayer):
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
         return use_local_quantized_path or uses_local_inference_kernel
 
-    def shard_param(self, module, param, mesh):
-        meta = module._parameters.get(param)
-        if meta is None:
-            return
+    def placements(self, module, param):
         # bias is replicated (added after the row-reduce); weight shards on input dim (-1)
-        placement = Replicate() if param == "bias" else Shard(-1)
-        module._parameters[param] = torch.nn.Parameter(
-            distribute_tensor(meta, mesh, [placement], src_data_rank=None),
-            requires_grad=meta.requires_grad,
-        )
+        return [Replicate()] if param == "bias" else [Shard(-1)]
 
     def install_forward(self, module, mesh):
         if not hasattr(module, "in_features"):
@@ -323,14 +321,8 @@ class EmbeddingParallel(TensorParallelLayer):
     def should_use_local_tensors(self, module):
         return getattr(module, "_hf_quantized_needs_local_tp", False)
 
-    def shard_param(self, module, param, mesh):
-        meta = module._parameters.get(param)
-        if meta is None:
-            return
-        module._parameters[param] = torch.nn.Parameter(
-            distribute_tensor(meta, mesh, [Shard(self.shard_dim)], src_data_rank=None),
-            requires_grad=meta.requires_grad,
-        )
+    def placements(self, module, param):
+        return [Shard(self.shard_dim)]
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         x = args[0]
@@ -495,20 +487,15 @@ class PackedColwiseParallel(TensorParallelLayer):
             return -1
         return param_ndim - 2
 
-    def shard_param(self, module, param, mesh):
+    def placements(self, module, param):
         meta = module._parameters.get(param)
         if meta is None:
-            return
+            return None
         shard_dim = self._packed_output_shard_dim(meta.ndim)
-        # Wrap as a DTensor placeholder. Runs on meta — distribute_tensor builds metadata only.
         if meta.ndim == 1:
-            placement = Shard(shard_dim)
-        else:
-            placement = _StridedShard(dim=shard_dim, split_factor=self.split_factor)
-        module._parameters[param] = torch.nn.Parameter(
-            distribute_tensor(meta, mesh, [placement], src_data_rank=None),
-            requires_grad=meta.requires_grad,
-        )
+            return [Shard(shard_dim)]
+        # Interleaved: each of the `split_factor` packed segments is sharded on its own
+        return [_StridedShard(dim=shard_dim, split_factor=self.split_factor)]
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         input_tensor = args[0]
@@ -538,15 +525,11 @@ class PackedRowwiseParallel(TensorParallelLayer):
     def __init__(self, *, split_factor: int = 2):
         self.split_factor = split_factor
 
-    def shard_param(self, module, param, mesh):
+    def placements(self, module, param):
         meta = module._parameters.get(param)
         if meta is None:
-            return
-        placement = Replicate() if meta.ndim == 1 else _StridedShard(dim=-1, split_factor=self.split_factor)
-        module._parameters[param] = torch.nn.Parameter(
-            distribute_tensor(meta, mesh, [placement], src_data_rank=None),
-            requires_grad=meta.requires_grad,
-        )
+            return None
+        return [Replicate()] if meta.ndim == 1 else [_StridedShard(dim=-1, split_factor=self.split_factor)]
 
 
 class MoeExpertsParallel(TensorParallelLayer):

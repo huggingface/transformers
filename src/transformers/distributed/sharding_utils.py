@@ -89,16 +89,18 @@ class DtensorShardOperation:
        we skip it. Later, the converter (e.g. `MergeModulelist`) stacks the owned experts we kept into the rank's local shard
     """
 
-    def __init__(self, param: DTensor):
-        self.device_mesh = param.device_mesh
-        self.placements = tuple(param.placements)
-        self.param_ndim = param.ndim
-        local_shape, offsets = compute_local_shape_and_global_offset(param.shape, self.device_mesh, self.placements)
+    def __init__(self, shape: tuple[int, ...] | torch.Size, device_mesh, placements):
+        """`placements` (one per mesh dim: `Shard(dim)`, `_StridedShard(dim, sf)`, `Replicate()`) of a param of
+        `shape`, which need not be a `DTensor` (an engine may own plain params and only describe their layout)."""
+        self.device_mesh = device_mesh
+        self.placements = tuple(placements)
+        self.param_ndim = len(shape)
+        local_shape, offsets = compute_local_shape_and_global_offset(shape, self.device_mesh, self.placements)
         # Axis-0 range owned by this rank (used to filter per-expert pieces)
         # [_axis0_offset, _axis0_offset + _axis0_local_size)
         self._axis0_offset = offsets[0]
         self._axis0_local_size = local_shape[0]
-        self._axis0_size = param.shape[0]
+        self._axis0_size = shape[0]
 
     def shard_tensor(
         self, source: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
@@ -131,8 +133,7 @@ class DtensorShardOperation:
             # i.e: dim 1 -> [ Shard(rank0, size=2)]
             planned_ops_by_dim = [[] for _ in source_shape]
             for mesh_dim, placement in dim_placements:
-                sub_mesh = self._get_sub_mesh(mesh_dim)
-                rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
+                rank, world_size = self._rank_and_size(mesh_dim)
                 dim_idx = self._normalize_param_dim(placement.dim)
                 planned_ops_by_dim[dim_idx].append((placement, rank, world_size))
 
@@ -184,8 +185,7 @@ class DtensorShardOperation:
         for mesh_dim, _, param_dim in normalized_dim_placements:
             if param_dim > 0:
                 source_dim = param_dim - 1
-                sub_mesh = self._get_sub_mesh(mesh_dim)
-                rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
+                rank, world_size = self._rank_and_size(mesh_dim)
                 planned_ops_by_source_dim[source_dim].append((rank, world_size))
 
         intervals_by_source_dim = [[(0, size)] for size in source_shape]
@@ -318,10 +318,11 @@ class DtensorShardOperation:
 
         return torch.cat(interval_tensors, dim=concat_dim).to(device=device, dtype=dtype)
 
-    def _get_sub_mesh(self, mesh_dim: int):
-        if self.device_mesh.ndim == 1:
-            return self.device_mesh
-        return self.device_mesh[self.device_mesh.mesh_dim_names[mesh_dim]]
+    def _rank_and_size(self, mesh_dim: int) -> tuple[int, int]:
+        """This rank's index on `mesh_dim`, and that dim's size. Read from the mesh's shape and this rank's coordinate,
+        so a mesh built from ranks alone (`DeviceMesh(..., _init_backend=False)`, e.g. an engine describing its params'
+        layout) works without creating process groups."""
+        return self.device_mesh.get_coordinate()[mesh_dim], self.device_mesh.shape[mesh_dim]
 
     def _normalize_param_dim(self, dim: int) -> int:
         # if dim is negative, it should be normalized to the last axis
