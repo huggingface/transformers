@@ -457,7 +457,7 @@ class PagedAttentionCache:
     ) -> torch.Tensor:  # shape [1, seqlen_q + past_length, index_head_dim]
         """Updates the indexer key cache of an indexed attention layer, at the indices of its last `update`, and returns
         the complete indexer keys."""
-        indexer_key_states = self.layer_to_allocator[layer_idx].update_indexer(indexer_key_states[0], layer_idx)
+        indexer_key_states = self.layer_to_allocator[layer_idx].update_indexer(indexer_key_states[0], layer_idx)  # type: ignore
         return indexer_key_states.unsqueeze(0)
 
     def reset(self) -> None:
