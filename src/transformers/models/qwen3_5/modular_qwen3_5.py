@@ -46,6 +46,8 @@ from ...vision_utils import (
     get_vision_position_ids,
 )
 from ..auto import AutoModel
+from ..gemma.modeling_gemma import GemmaRMSNorm
+from ..mamba.modeling_mamba import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
 from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
@@ -55,10 +57,7 @@ from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextMLP,
     Qwen3NextModel,
     Qwen3NextPreTrainedModel,
-    Qwen3NextRMSNorm,
     apply_mask_to_padding_states,
-    causal_conv1d_fn,
-    causal_conv1d_update,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
 )
@@ -209,7 +208,13 @@ class Qwen3_5TextRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
 
 @use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")
 @use_kernelized_func(
-    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+    [
+        torch_recurrent_gated_delta_rule,
+        torch_chunk_gated_delta_rule,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
     def __init__(self, config: Qwen3_5Config, layer_idx: int):
@@ -246,11 +251,11 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
         if paged_cache is not None:
             conv_state, recurrent_state = paged_cache.read_cache_states(self.layer_idx, kwargs)
+        # Retrieve the recurrent state if there is a cache. It may be None if the layer is not initialized.
         elif cache is not None:
-            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
             recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
-            conv_state, recurrent_state = None, None
+            recurrent_state = None
 
         mixed_qkv = self.in_proj_qkv(hidden_states)
         mixed_qkv = mixed_qkv.transpose(1, 2)
@@ -271,30 +276,15 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 self.conv1d.bias,
                 self.activation,
             )
-        elif conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
-            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
-            mixed_qkv = causal_conv1d_update(
-                mixed_qkv,
-                conv_state,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                self.activation,
-            )
         else:
-            if cache is not None:
-                mixed_qkv = cache.update_conv_state(mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size)
-
-            mixed_qkv = causal_conv1d_fn(
+            mixed_qkv = causal_conv1d_forward(
+                self.conv1d,
                 mixed_qkv,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
+                cache,
+                self.layer_idx,
                 activation=self.activation,
                 **kwargs,
             )
-
-            # Drop the additional previous states
-            if cache is not None:
-                mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
         mixed_qkv = mixed_qkv.transpose(1, 2)
         query, key, value = torch.split(
@@ -384,7 +374,7 @@ class Qwen3_5MLP(Qwen3NextMLP):
 
 
 @use_kernel_forward_from_hub("RMSNormZeroCentered")
-class Qwen3_5RMSNorm(Qwen3NextRMSNorm):
+class Qwen3_5RMSNorm(GemmaRMSNorm):
     pass
 
 

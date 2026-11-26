@@ -32,7 +32,7 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..bamba.modeling_bamba import BambaMixer
 from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
-from ..mamba2.modeling_mamba2 import MambaRMSNormGated
+from ..mamba2.modeling_mamba2 import Mamba2RMSNormGated
 from ..zamba.modeling_zamba import (
     ZambaAttention,
     ZambaAttentionDecoderLayer,
@@ -50,7 +50,7 @@ from .configuration_zamba2 import Zamba2Config
 logger = logging.get_logger(__name__)
 
 
-class Zamba2RMSNormGated(MambaRMSNormGated):
+class Zamba2RMSNormGated(Mamba2RMSNormGated):
     pass
 
 
@@ -572,11 +572,6 @@ class Zamba2ForCausalLM(ZambaForCausalLM):
 
 
 class Zamba2ForSequenceClassification(ZambaForSequenceClassification):
-    def __init__(self, config: Zamba2Config):
-        super().__init__(config)
-        self.model = Zamba2Model(config)
-        self.post_init()
-
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

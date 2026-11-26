@@ -1058,6 +1058,15 @@ def require_torch_tpu(test_case):
     return unittest.skipUnless(is_torch_tpu_available(), "test requires PyTorch TPU")(test_case)
 
 
+def skip_tpu(reason):
+    """
+    Decorator skipping a test function or class when the test device is a TPU, with `reason` as the skip message.
+
+    The test is left untouched on any other device.
+    """
+    return unittest.skipIf(torch_device == "tpu", reason)
+
+
 def require_torch_npu(test_case):
     """
     Decorator marking a test that requires NPU (in PyTorch).
@@ -3461,10 +3470,18 @@ if is_torch_xpu_available():
 
 
 if is_torch_available() and is_torch_tpu_available():
+
+    def _tpu_device_count() -> int:
+        # Before the first TPU op, device_count() ignores TPU_VISIBLE_DEVICES.
+        # Apply it here so test collection doesn't claim TPU chips.
+        count = torch.accelerator.device_count()
+        visible = os.environ.get("TPU_VISIBLE_DEVICES")
+        return min(count, len(visible.split(","))) if visible else count
+
     # `torch.tpu` does not expose the whole accelerator API yet, so anything missing is left out and
     # falls back to the `default` entry of its table rather than being faked here.
     BACKEND_MANUAL_SEED["tpu"] = torch.tpu.manual_seed
-    BACKEND_DEVICE_COUNT["tpu"] = torch.accelerator.device_count
+    BACKEND_DEVICE_COUNT["tpu"] = _tpu_device_count
     BACKEND_SYNCHRONIZE["tpu"] = torch.accelerator.synchronize
     BACKEND_TORCH_ACCELERATOR_MODULE["tpu"] = torch.tpu
     if hasattr(torch.tpu, "empty_cache"):

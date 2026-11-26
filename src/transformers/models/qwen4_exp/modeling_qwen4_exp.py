@@ -53,14 +53,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_torchdynamo_exporting,
-    logging,
-    torch_compilable_check,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
@@ -68,6 +61,7 @@ from ...utils.generic import (
     is_flash_attention_requested,
     merge_with_config_defaults,
 )
+from ...utils.import_utils import is_torchdynamo_exporting
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
@@ -160,13 +154,13 @@ class Qwen4ExpTextRotaryEmbedding(nn.Module):
 
 
 class Qwen4ExpTextRMSNorm(nn.Module):
-    def __init__(self, dim: int, group_size: int | None = None, eps: float = 1e-6):
+    def __init__(self, hidden_size: int, group_size: int | None = None, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.zeros(hidden_size))
         self.group_size = group_size
-        if group_size is not None and dim % group_size != 0:
-            raise ValueError(f"hidden_size ({dim}) must be divisible by group_size ({group_size}).")
+        if group_size is not None and hidden_size % group_size != 0:
+            raise ValueError(f"hidden_size ({hidden_size}) must be divisible by group_size ({group_size}).")
 
     def _norm(self, x: torch.Tensor) -> torch.Tensor:
         if self.group_size is not None:
@@ -259,6 +253,59 @@ def causal_conv1d_fn(
     if activation is not None:
         out = ACT2FN[activation](out)
     return out.to(hidden_states.dtype)
+
+
+@use_kernel_forward_from_hub("causal_conv1d_forward")
+def causal_conv1d_forward(
+    conv1d: nn.Conv1d,
+    hidden_states: torch.Tensor,
+    cache: Cache | None,
+    layer_idx: int,
+    activation: str | None = None,
+    state_idx: int = 0,
+    **kwargs,
+) -> torch.Tensor:
+    """
+    Causal depthwise convolution of a linear attention layer, reading and updating its conv state in `cache`.
+    Layers list it in `use_kernelized_func`, so that `kernelize` can replace it, e.g. with a runtime that manages
+    the conv state itself.
+
+    Args:
+        conv1d (`nn.Conv1d`):
+            The depthwise convolution, whose weights and kernel size are used.
+        hidden_states (`torch.Tensor` of shape `(batch_size, channels, seq_len)`):
+            The input to the convolution.
+        cache (`Cache`, *optional*):
+            The cache holding the conv state, updated in place.
+        layer_idx (`int`):
+            The index of the layer in `cache`.
+        activation (`str`, *optional*):
+            The activation applied to the output of the convolution.
+        state_idx (`int`, *optional*, defaults to 0):
+            Which of the layer's conv states to use.
+        kwargs:
+            Passed to the convolution kernel.
+
+    Returns:
+        `torch.Tensor` of shape `(batch_size, channels, seq_len)`: The output of the convolution.
+    """
+    seq_len = hidden_states.shape[-1]
+    conv_state = cache.get_conv_state(layer_idx, state_idx=state_idx) if cache is not None else None
+    weight = conv1d.weight.squeeze(1)
+
+    # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
+    if conv_state is not None and seq_len == 1 and not cache.is_recording_past(layer_idx):
+        return causal_conv1d_update(hidden_states, conv_state, weight, conv1d.bias, activation=activation)
+
+    if cache is not None:
+        hidden_states = cache.update_conv_state(
+            hidden_states, layer_idx, state_idx=state_idx, conv_kernel_size=conv1d.kernel_size[0]
+        )
+    hidden_states = causal_conv1d_fn(hidden_states, weight, conv1d.bias, activation=activation, **kwargs)
+    # Drop the previous states prepended by the cache
+    if cache is not None:
+        hidden_states = hidden_states[:, :, -seq_len:]
+    return hidden_states
 
 
 # NOTE: the FLA package computes `x / torch.sqrt((x * x).sum(dim=dim, keepdim=True) + eps)` instead, so if we align
@@ -480,7 +527,13 @@ def torch_recurrent_gated_delta_rule(
 
 
 @use_kernelized_func(
-    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+    [
+        torch_recurrent_gated_delta_rule,
+        torch_chunk_gated_delta_rule,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class Qwen4ExpTextGatedDeltaNet(nn.Module):
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
@@ -555,11 +608,11 @@ class Qwen4ExpTextGatedDeltaNet(nn.Module):
         # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
         if paged_cache is not None:
             conv_state, recurrent_state = paged_cache.read_cache_states(self.layer_idx, kwargs)
+        # Retrieve the recurrent state if there is a cache. It may be None if the layer is not initialized.
         elif cache is not None:
-            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
             recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
-            conv_state, recurrent_state = None, None
+            recurrent_state = None
 
         mixed_qkv = self.in_proj_qkv(hidden_states)
         mixed_qkv = mixed_qkv.transpose(1, 2)
@@ -580,30 +633,15 @@ class Qwen4ExpTextGatedDeltaNet(nn.Module):
                 self.conv1d.bias,
                 self.activation,
             )
-        elif conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
-            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
-            mixed_qkv = causal_conv1d_update(
-                mixed_qkv,
-                conv_state,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                self.activation,
-            )
         else:
-            if cache is not None:
-                mixed_qkv = cache.update_conv_state(mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size)
-
-            mixed_qkv = causal_conv1d_fn(
+            mixed_qkv = causal_conv1d_forward(
+                self.conv1d,
                 mixed_qkv,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
+                cache,
+                self.layer_idx,
                 activation=self.activation,
                 **kwargs,
             )
-
-            # Drop the additional previous states
-            if cache is not None:
-                mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
         mixed_qkv = mixed_qkv.transpose(1, 2)
         query, key, value = torch.split(
@@ -754,6 +792,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
         cache: Cache | None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         batch_size, seq_length, _ = hidden_states.shape
         hidden_shape = (batch_size, seq_length, -1, self.index_head_dim)
@@ -774,6 +813,19 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         if cache is not None:
             raw_keys = cache.update_indexer(raw_keys, self.layer_idx)
 
+        return self._select_tokens(hidden_states, q, raw_keys, full_cos, full_sin, attention_mask, **kwargs)
+
+    def _select_tokens(
+        self,
+        hidden_states: torch.Tensor,
+        q: torch.Tensor,
+        raw_keys: torch.Tensor,
+        full_cos: torch.Tensor,
+        full_sin: torch.Tensor,
+        attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        batch_size, seq_length, _ = hidden_states.shape
         # Note that the mask is never None here as we only allow eager and sdpa, and we do not allow sdpa's mask skip
         # It's always 4D with either bool (sdpa) or float (eager) and already gives us the valid indices
         visible_token_indices = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
@@ -907,7 +959,7 @@ class Qwen4ExpTextAttention(nn.Module):
         cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        selected_token_mask = self.indexer(hidden_states, position_embeddings, attention_mask, cache)
+        selected_token_mask = self.indexer(hidden_states, position_embeddings, attention_mask, cache, **kwargs)
         # Combine the boolean selection mask with the causal mask (bool for sdpa, float for eager).
         if attention_mask.dtype == torch.bool:
             attention_mask = attention_mask & selected_token_mask
@@ -1168,7 +1220,9 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         padded_vocab_size = math.ceil(self.total_vocab_size / ngram_vocab_divisor) * ngram_vocab_divisor
         self.ngram_embedding = nn.Embedding(padded_vocab_size, head_dim_per_ngram)
 
-    def _shift_right_ignore_eos(self, token_ids: torch.Tensor, shift: int) -> torch.Tensor:
+    def _shift_right_ignore_eos(
+        self, token_ids: torch.Tensor, shift: int, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         if shift == 0:
             return token_ids
         batch_size, seq_len = token_ids.shape
@@ -1185,7 +1239,9 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         return torch.where(valid, shifted, token_ids.new_full((), self.eos_token_id))
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def forward(self, input_ids: torch.Tensor, cache: Cache | None) -> torch.Tensor:
+    def forward(
+        self, input_ids: torch.Tensor, cache: Cache | None, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         input_ids = input_ids.long()
         # This is a trick to store the previous N=self.context_len `input_ids` - indeed the manipulations are identical to storing
         # a past conv_state, so we can use an additional conv_states inside the Cache for it
@@ -1211,7 +1267,9 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
 
         # Get full token history
         token_history = torch.cat([previous_context, input_ids], dim=-1)
-        shifted_tokens = [self._shift_right_ignore_eos(token_history, shift) for shift in range(self.ngram_size)]
+        shifted_tokens = [
+            self._shift_right_ignore_eos(token_history, shift, **kwargs) for shift in range(self.ngram_size)
+        ]
 
         blocks = []
         for ngram in range(2, self.ngram_size + 1):
@@ -1270,7 +1328,9 @@ class Qwen4ExpTextPLELayer(nn.Module):
             bias=False,
         )
 
-    def _short_conv(self, hidden_states: torch.Tensor, cache: Cache | None) -> torch.Tensor:
+    def _short_conv(
+        self, hidden_states: torch.Tensor, cache: Cache | None, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
@@ -1296,8 +1356,9 @@ class Qwen4ExpTextPLELayer(nn.Module):
         input_ids: torch.Tensor,
         cache: Cache | None,
         conv_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        embeddings = self.ple_embedding(input_ids, cache)
+        embeddings = self.ple_embedding(input_ids, cache, **kwargs)
         key_normed = self.norm_key(self.key_proj(embeddings)).unflatten(-1, (self.hc_count, self.hidden_size))
         value = self.value_proj(embeddings)
         query_normed = self.norm_query(hidden_states).unflatten(-1, (self.hc_count, self.hidden_size))
@@ -1309,7 +1370,7 @@ class Qwen4ExpTextPLELayer(nn.Module):
         if conv_mask is not None:
             gated_value = apply_mask_to_padding_states(gated_value, conv_mask)
             gated_value_normed = apply_mask_to_padding_states(gated_value_normed, conv_mask)
-        output = gated_value + self._short_conv(gated_value_normed, cache)
+        output = gated_value + self._short_conv(gated_value_normed, cache, **kwargs)
         return output
 
 
@@ -1340,7 +1401,9 @@ class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         if self.ple is not None:
-            hidden_states = hidden_states + self.ple(hidden_states, ple_input_ids, cache, conv_mask=conv_mask)
+            hidden_states = hidden_states + self.ple(
+                hidden_states, ple_input_ids, cache, conv_mask=conv_mask, **kwargs
+            )
 
         hidden_states, hyper_input, injection_weights = self.attn_hyper_connection(hidden_states)
         if self.layer_type == "linear_attention":
