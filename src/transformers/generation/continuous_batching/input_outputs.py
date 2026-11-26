@@ -74,7 +74,7 @@ class PagedAttentionArgs(TypedDict):
     logits_indices: torch.Tensor
     cache: PagedAttentionCache
     block_table: torch.Tensor | None
-    cache_seqlens: torch.Tensor
+    cache_seqlens: torch.Tensor | None
     logits_processor_args: torch.Tensor
     use_cache: bool
     is_causal: bool
@@ -512,6 +512,7 @@ class ContinuousBatchingIOs:
             write_index=[],
             cache=self.cache,
             block_table=self.block_table[:, :num_sequences] if self.use_block_table else None,
+            cache_seqlens=None,
             use_cache=False,
             is_causal=self.attention_mask is None,  # False for SDPA and eager, True for flash
         )
