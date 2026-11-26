@@ -66,10 +66,7 @@ jobs:
     uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
     with:
       job: run_models_gpu
-      # TODO: reporting is pinned to the dummy channel + dataset while we validate the
-      # lane. Switch to "#amd-hf-ci" and a real dataset (like MI300's
-      # optimum-amd/transformers_daily_ci) once the results are trusted.
-      slack_report_channel: "#transformers-ci-dummy"
+      slack_report_channel: "#amd-hf-ci"
       # DevLab Dispatch is label-addressed; runner_group kept only as the report gpu_name.
       runner_group: strix-halo
       runs_on: '["self-hosted", "Linux", "devlab-dispatch", "strix-halo"]'
@@ -77,7 +74,7 @@ jobs:
       hf_cache_dir: /mnt/scratch/cache/hf
       docker: huggingface/transformers-pytorch-amd-gpu-gfx1151
       ci_event: Scheduled CI (AMD) - strix-halo
-      report_repo_id: hf-transformers-bot/transformers-ci-dummy
+      report_repo_id: optimum-amd/transformers_daily_ci_strix_halo
       # Skip list and timeouts from #50191 (big checkpoints gfx1151 cannot hold, and the
       # flex-attention test that segfaults). --timeout is pytest-timeout's per-test cap.
       pytest_k: >-
