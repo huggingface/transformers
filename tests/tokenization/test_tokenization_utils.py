@@ -378,6 +378,19 @@ class TokenizerUtilsTest(unittest.TestCase):
                 tokenizer = BertTokenizer.from_pretrained(repo)
                 self.assertIn("<deprecated>", tokenizer.all_special_tokens)
 
+    def test_legacy_special_tokens_map_additional_special_tokens(self):
+        # Legacy checkpoints with `special_tokens_map.json` have no `added_tokens_decoder` in `tokenizer_config.json`,
+        # and `special_tokens_map.json` lists `additional_special_tokens` as plain dicts.
+        tokenizer = AutoTokenizer.from_pretrained("Salesforce/codet5-base")
+        self.assertEqual(len(tokenizer), 32100)
+        self.assertIn("<extra_id_0>", tokenizer.all_special_tokens)
+        self.assertIn("<extra_id_99>", tokenizer.all_special_tokens)
+        # expected ids from v4.57.6
+        self.assertEqual(
+            tokenizer.encode("def add(a, b): <extra_id_0> return a + b <extra_id_99>"),
+            [1, 536, 527, 12, 69, 16, 324, 4672, 32099, 327, 279, 397, 324, 32000, 2],
+        )
+
     def test_len_tokenizer(self):
         for tokenizer_class in [BertTokenizer, BertTokenizer]:
             with self.subTest(f"{tokenizer_class}"):

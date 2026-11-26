@@ -1902,6 +1902,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if special_tokens_map_file is not None:
                 with open(special_tokens_map_file, encoding="utf-8") as f:
                     special_tokens_map = json.load(f)
+                # V5: Convert deprecated additional_special_tokens to extra_special_tokens
+                if "additional_special_tokens" in special_tokens_map and not special_tokens_map.get(
+                    "extra_special_tokens"
+                ):
+                    special_tokens_map["extra_special_tokens"] = special_tokens_map.pop("additional_special_tokens")
                 for key, value in special_tokens_map.items():
                     if key in kwargs and kwargs[key]:
                         continue  # User-provided kwargs take precedence
