@@ -87,6 +87,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
         mask_token="[MASK]",
         add_prefix_space=True,
         unk_id=1,
+        _spm_precompiled_charsmap: bytes | None = None,
         **kwargs,
     ):
         self.do_lower_case = do_lower_case
@@ -119,14 +120,22 @@ class DebertaV2Tokenizer(TokenizersBackend):
         list_normalizers = []
         if do_lower_case:
             list_normalizers.append(normalizers.Lowercase())
-
-        list_normalizers.extend(
-            [
-                normalizers.Replace(Regex(r"\s{2,}|[\n\r\t]"), " "),
-                normalizers.NFC(),
-                normalizers.Strip(left=False, right=True),
-            ]
-        )
+        if _spm_precompiled_charsmap is not None:
+            list_normalizers.extend(
+                [
+                    normalizers.Precompiled(_spm_precompiled_charsmap),
+                    normalizers.Strip(left=False, right=True),
+                    normalizers.Replace(Regex(r" {2,}"), " "),
+                ]
+            )
+        else:
+            list_normalizers.extend(
+                [
+                    normalizers.Replace(Regex(r"\s{2,}|[\n\r\t]"), " "),
+                    normalizers.NFC(),
+                    normalizers.Strip(left=False, right=True),
+                ]
+            )
         self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
 
         list_pretokenizers = []
