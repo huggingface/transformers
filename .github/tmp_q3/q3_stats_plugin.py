@@ -17,6 +17,11 @@ import torch
 
 STATS_DIR = os.environ.get("Q3_STATS_DIR", "q3_stats")
 CLOSEST_MIN_RATIO = float(os.environ.get("Q3_CLOSEST_MIN_RATIO", "1e-3"))
+# entries (layer, row, position, step) with delta/gap above this are all listed (compact)
+ENTRY_MIN_RATIO = float(os.environ.get("Q3_ENTRY_MIN_RATIO", "1e-2"))
+# Q3_RANDOM_SEEDS=1: replace the test's `set_seed(42)` by a random (recorded) weights seed, and seed the testers'
+# `global_rng` (input ids / pixel values) with a random (recorded) input seed -> any run can be replayed exactly
+RANDOM_SEEDS = os.environ.get("Q3_RANDOM_SEEDS") == "1"
 os.makedirs(STATS_DIR, exist_ok=True)
 _rec = {}
 _st = {"phase": None, "ctx": None, "layers": {}, "logits": {}, "mask": None}
@@ -89,8 +94,17 @@ def _install():
             _st["logits"][_st["phase"]].setdefault(layer, []).append(out[0].detach().float().cpu().view(b, s, -1))
         return out
 
+    orig_set_seed = tu.set_seed
+
+    def set_seed(seed, *args, **kwargs):
+        if RANDOM_SEEDS and "weights_seed" in _rec:
+            seed = _rec["weights_seed"]
+        _rec["set_seed_used"] = seed
+        return orig_set_seed(seed, *args, **kwargs)
+
     torch.testing.assert_close = assert_close
     tu.assert_similar_generate_outputs = assert_similar
+    tu.set_seed = set_seed
     GenerationMixin.generate = generate
     m.Qwen3VLMoeTextSparseMoeBlock.forward = block_forward
     m.Qwen3VLMoeTextTopKRouter.forward = router_forward
@@ -104,8 +118,11 @@ def _cross_path():
     out = {"rel": {"n": 0, "max_delta": 0.0, "min_gap": float("inf"), "max_ratio": 0.0, "flips": 0},
            "pad": {"n": 0, "max_ratio": 0.0, "flips": 0}}
     closest = None  # the single (layer, row, position, step) entry with the largest delta/gap among relevant positions
+    entries, flips = [], []  # entries: delta/gap > ENTRY_MIN_RATIO (compact); flips: every top-k flip (full detail)
     for layer, calls in cached.items():
         full = torch.cat(calls, dim=1)  # cached: prefill + one position per decode step -> all positions
+        out["prompt_len"] = calls[0].shape[1]  # the prefill call covers the prompt; later positions are generated
+        out["n_positions"] = full.shape[1]
         for step_idx, step_logits in enumerate(cacheless.get(layer, [])):  # cacheless: recomputes 0..L-1 each step
             n = min(full.shape[1], step_logits.shape[1])
             a, b = full[:, :n], step_logits[:, :n]
@@ -121,6 +138,18 @@ def _cross_path():
             if mask is not None and mask.shape[0] == a.shape[0]:
                 m_len = min(mask.shape[1], n)
                 valid[:, :m_len] = mask[:, :m_len].bool()
+            for row, pos in ((ratio > ENTRY_MIN_RATIO) | flip).nonzero().tolist():
+                entry = {"layer": layer, "row": row, "position": pos, "cacheless_step": step_idx,
+                         "ratio": ratio[row, pos].item(), "delta": delta[row, pos].item(),
+                         "gap": gap[row, pos].item(), "flip": bool(flip[row, pos]), "padding": not bool(valid[row, pos])}
+                entries.append(entry)
+                if flip[row, pos]:
+                    detail = dict(entry)
+                    for name, t in (("cached", a), ("cacheless", b)):
+                        top = t[row, pos].topk(k + 1)
+                        detail[f"top{k + 1}_{name}"] = [round(v, 9) for v in top.values.tolist()]
+                        detail[f"top{k + 1}_experts_{name}"] = top.indices.tolist()
+                    flips.append(detail)
             for key, sel in (("rel", valid), ("pad", ~valid)):
                 if sel.any():
                     o = out[key]
@@ -148,12 +177,26 @@ def _cross_path():
     # Only keep the details of near-misses: they are what we want to look at, and it keeps the files small
     if closest is not None and closest["ratio"] > CLOSEST_MIN_RATIO:
         out["closest"] = closest
+    if entries:
+        out["entries"] = entries
+    if flips:
+        out["flip_details"] = flips
     return out
 
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
     _reset()
+    if RANDOM_SEEDS:
+        import tests.test_modeling_common as tcm
+
+        forced = os.environ.get("Q3_FORCE_SEEDS")  # "<weights_seed>,<input_seed>": replay one recorded run
+        if forced:
+            _rec["weights_seed"], _rec["input_seed"] = (int(x) for x in forced.split(","))
+        else:
+            _rec["weights_seed"] = int.from_bytes(os.urandom(4), "little")
+            _rec["input_seed"] = int.from_bytes(os.urandom(4), "little")
+        tcm.global_rng.seed(_rec["input_seed"])
 
 
 def pytest_collection_finish(session):

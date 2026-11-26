@@ -27,8 +27,6 @@ jobs:
         commit:
           - name: failing-commit
             sha: 47f65ea3020ba2cfcba73ceacc0e258f8e856bca
-          - name: main
-            sha: main
         shard: [0, 1, 2, 3]
     env:
       # Same as the PR CI `tests_generate` job
@@ -83,7 +81,8 @@ jobs:
           mkdir -p reports
           status=0
           for b in $(seq 1 $NUM_BATCHES); do
-            Q3_STATS_DIR=reports/stats PYTHONPATH=$GITHUB_WORKSPACE/tmp_tools/.github/tmp_q3 \
+            # Q3_RANDOM_SEEDS=1: a random (recorded) weights seed instead of `set_seed(42)`, and a recorded input seed
+            Q3_RANDOM_SEEDS=1 Q3_STATS_DIR=reports/stats PYTHONPATH=$GITHUB_WORKSPACE/tmp_tools/.github/tmp_q3 \
               python -m pytest -p no:cacheprovider -p q3_stats_plugin --flake-finder --flake-runs=$FLAKE_RUNS \
               -n $NUM_WORKERS -q -rf "$TEST_ID" > reports/pytest_batch$b.log 2>&1 || status=1
             echo "batch $b: $(tail -n 1 reports/pytest_batch$b.log)"
