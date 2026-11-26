@@ -907,6 +907,9 @@ class ContinuousBatchProcessor:
 
 
 
+_PROTO_KEEP_HUB_ACT = os.environ.get("PROTO_KEEP_HUB_ACT", "0") == "1"  # dev knob: the activations' A/B baseline
+
+
 def _rms_norm_dispatch_forward(self, *args, **kwargs):
     """[scratch] An RMSNorm under compiled continuous batching: its own forward when traced, the hub kernel otherwise."""
     if torch.compiler.is_compiling() or "_cb_hub_forward" not in self.__dict__:
@@ -1008,7 +1011,11 @@ class ContinuousBatchingManager:
         compiled = cb_config.decode_compile_config is not None or cb_config.varlen_compile_config is not None
         if compiled and os.environ.get("PROTO_KEEP_HUB_RMSNORM", "0") != "1":  # dev knob: the A/B baseline
             for module in self.model.modules():
-                if type(module).__name__.endswith("RMSNorm") and "forward" in module.__dict__:
+                # the hub activations too: inductor fuses the native one with the multiply of a gated MLP (Gemma-3-12B
+                # H100: GeluTanh then the multiply were 595 us a layer of an 8,192-token step, two passes over [T, 2I])
+                is_act = type(module).__module__.endswith(".activations")
+                hub_module = type(module).__name__.endswith("RMSNorm") or (is_act and not _PROTO_KEEP_HUB_ACT)
+                if hub_module and "forward" in module.__dict__:
                     module._cb_hub_forward = module.__dict__.pop("forward")
                     cls = type(module)
                     if "_cb_own_forward" not in cls.__dict__:  # the class dispatches: no per-module guard for dynamo
