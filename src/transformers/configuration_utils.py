@@ -497,7 +497,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         per_layer_config = kwargs.pop("per_layer_config", None)
 
         # Avoid deserializing problematic fields from hub configs - they should use the public field
-        ignored_keys = {"_attn_implementation", "_attn_implementation_internal", "_experts_implementation_internal"}
+        ignored_keys = {
+            "_attn_implementation",
+            "_attn_implementation_internal",
+            "_experts_implementation",
+            "_experts_implementation_internal",
+        }
         # Additional attributes without default values
         for key, value in kwargs.items():
             if key not in ignored_keys:
