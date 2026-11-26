@@ -686,8 +686,8 @@ class MiniCPMO2_6Model(MiniCPMO2_6PreTrainedModel):
         )
         audio_embeds = self.audio_projector(audio_outputs.last_hidden_state)
         _, num_tokens = self.audio_tower._get_feat_extract_output_lengths(input_features_mask.sum(-1))
-        valid_mask = torch.arange(audio_embeds.shape[1], device=audio_embeds.device) < num_tokens[:, None]
-        audio_outputs.pooler_output = audio_embeds[valid_mask]
+        valid_mask = torch.arange(audio_embeds.shape[1], device=num_tokens.device) < num_tokens[:, None]
+        audio_outputs.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
         return audio_outputs
 
 

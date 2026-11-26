@@ -217,3 +217,55 @@ class MiniCPMO2_6IntegrationTest(unittest.TestCase):
             }
         )
         self.assertEqual(decoded, expected_texts.get_expectation())
+
+    def test_small_model_generation_batched(self):
+        # An audio prompt and an image prompt of different lengths in one left-padded batch
+        processor = AutoProcessor.from_pretrained(self.model_id)
+        model = MiniCPMO2_6ForConditionalGeneration.from_pretrained(
+            self.model_id, dtype=torch.bfloat16, device_map=torch_device
+        )
+        audio_url = (
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3"
+        )
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Please listen to the audio snippet carefully and transcribe the content.",
+                        },
+                        {"type": "audio", "url": url_to_local_path(audio_url)},
+                    ],
+                }
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "url": url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"),
+                        },
+                        {"type": "text", "text": "What is in this image?"},
+                    ],
+                }
+            ],
+        ]
+        inputs = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"padding": True},
+        ).to(torch_device)
+        output = model.generate(**inputs, max_new_tokens=32, do_sample=False)
+        decoded = processor.post_process_image_text_to_text(output[:, inputs["input_ids"].shape[1] :])
+        expected_texts = Expectations(
+            {
+                ("cuda", None): ["__EXPECTED_AUDIO__", "__EXPECTED_IMAGE__"],
+            }
+        )
+        self.assertEqual(decoded, expected_texts.get_expectation())
