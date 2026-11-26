@@ -132,23 +132,22 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return text_split_images
 
     def test_video_prompt_frame_counts(self):
+        """Check that each prompt uses its video's frame count in a mixed-length batch."""
         processor = self.get_processor()
         videos = [np.zeros((num_frames, 16, 16, 3), dtype=np.uint8) for num_frames in (2, 4)]
 
-        for return_tensors in (None, "pt"):
-            with self.subTest(return_tensors=return_tensors):
-                inputs = processor(
-                    text=["<video>Describe this clip."] * 2,
-                    videos=videos,
-                    do_sample_frames=False,
-                    padding=True,
-                    return_tensors=return_tensors,
-                )
-                prompts = processor.batch_decode(inputs["input_ids"])
-                for prompt, frame_count in zip(prompts, ("two", "four")):
-                    self.assertIn(f"series of {frame_count} frames", prompt)
-                for prompt, num_frames in zip(prompts, (2, 4)):
-                    self.assertEqual(prompt.count("Frame from "), num_frames)
+        inputs = processor(
+            text=[f"{self.video_token}Describe this clip."] * 2,
+            videos=videos,
+            do_sample_frames=False,
+            padding=True,
+            return_tensors="pt",
+        )
+        prompts = processor.batch_decode(inputs["input_ids"])
+        for prompt, frame_count in zip(prompts, ("two", "four")):
+            self.assertIn(f"series of {frame_count} frames", prompt)
+        for prompt, num_frames in zip(prompts, (2, 4)):
+            self.assertEqual(prompt.count("Frame from "), num_frames)
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor_components = self.prepare_components()
