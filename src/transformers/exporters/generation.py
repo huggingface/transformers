@@ -265,6 +265,15 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
             spec, mask = traced.get(mask_name, {}), kwargs.get(mask_name)
             if spec.get("rank") == 4 and (mask is None or mask.dim() == 2):
                 kwargs[mask_name] = self._causal_mask(kwargs, mask, spec["dtype"])
+            elif spec.get("rank") == 2 and mask is None:
+                # An unpadded prompt's padding mask: every cached token and every new one
+                text = kwargs[_text_name(kwargs)]
+                cache = kwargs.get("cache")
+                cache = getattr(cache, "self_attention_cache", cache)
+                width = (0 if cache is None else int(cache.get_seq_length())) + text.shape[1]
+                kwargs[mask_name] = torch.ones(
+                    text.shape[0], width, dtype=getattr(torch, spec["dtype"]), device=text.device
+                )
             elif "leaves" in spec and isinstance(mask, dict):
                 # Per layer type (mixed full / sliding attention): only the slots `generate` left empty, and none for a
                 # slot traced empty (an unpadded linear-attention mask), which the graph doesn't read.
