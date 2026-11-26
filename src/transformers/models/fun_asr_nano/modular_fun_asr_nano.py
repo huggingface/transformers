@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from collections.abc import Callable
+from typing import Any
 
 import torch.nn as nn
 
@@ -563,6 +564,10 @@ class FunAsrNanoForConditionalGeneration(Qwen3ASRForConditionalGeneration):
         >>> model = FunAsrNanoForConditionalGeneration.from_pretrained(model_id, device_map="auto")
         ```"""
         return super().forward(**super_kwargs)
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""None: unlike Qwen3-ASR's, FunAsrNano's audio encoder computes nothing with data-dependent ops."""
+        return {}
 
 
 __getattr__ = deprecate_attr(__name__, rename={"FunAsrNanoProcessorKwargs": (ProcessingKwargs, "5.29.0")})

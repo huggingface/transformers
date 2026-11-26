@@ -629,8 +629,8 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
         )
 
     def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
-        r"""See [`FunAsrNanoModel.get_data_dependent_inputs`]."""
-        return self.model.get_data_dependent_inputs(*args, **kwargs)
+        r"""None: unlike Qwen3-ASR's, FunAsrNano's audio encoder computes nothing with data-dependent ops."""
+        return {}
 
 
 __all__ = ["FunAsrNanoPreTrainedModel", "FunAsrNanoEncoder", "FunAsrNanoModel", "FunAsrNanoForConditionalGeneration"]
