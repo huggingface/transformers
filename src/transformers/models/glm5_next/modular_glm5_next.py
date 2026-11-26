@@ -1770,7 +1770,29 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
 
 
 class Glm5NextProcessor(Glm46VProcessor):
-    pass
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        video_processor=None,
+        chat_template=None,
+        reorder_tool_results_in_template_order: bool = True,
+        **kwargs,
+    ):
+        r"""
+        reorder_tool_results_in_template_order (`bool`, *optional*, defaults to `True`):
+            Whether to reorder consecutive tool messages and expand aggregated `{"id": ..., "output": [...]}`
+            results to match the preceding assistant's `tool_calls` order when extracting multimodal inputs from
+            conversations.
+        """
+        super().__init__(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            chat_template=chat_template,
+            **kwargs,
+        )
+        self.reorder_tool_results_in_template_order = reorder_tool_results_in_template_order
 
 
 def smart_resize(
