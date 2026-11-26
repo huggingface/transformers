@@ -88,7 +88,7 @@ _deps = [
     "huggingface-hub>=1.31.0,<3.0",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.6",
-    "kernels>=0.18.2,<0.19",
+    "kernels>=0.19.0,<0.20",
     "librosa",
     "mistral-common[image]>=1.11.7",
     "nltk<=3.8.1",
