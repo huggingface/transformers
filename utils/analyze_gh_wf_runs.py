@@ -124,13 +124,16 @@ def _strip_timestamp(line):
 # A failing test in pytest's short test summary: "FAILED <nodeid> - <message>" or "ERROR <nodeid> - <message>"
 # (ERROR = error in the test's setup/teardown). The node id must name a test ("file.py::..."): collection errors
 # ("ERROR file.py - ...") are not handled, and logger lines like "ERROR 08-25 10:31:30 [...] ..." don't match.
-_SUMMARY_ENTRY_RE = re.compile(r"(FAILED|ERROR)\s+(\S+\.py::\S+)(?:\s+-\s+(.*))?$")
+# "FAILED|ERROR <file>.py::<test> - <error>", or "ERROR <file>.py - <error>" for an error collecting a test file
+_SUMMARY_ENTRY_RE = re.compile(r"(FAILED|ERROR)\s+(\S+\.py(?:::\S+)?)(?:\s+-\s+(.*))?$")
 
 
 def extract_failures_with_errors(log):
     """
-    Parse the 'short test summary info' section of a pytest log.
-    Returns list of (test_nodeid, short_error_text) tuples, for both FAILED and ERROR entries.
+    Parse the 'short test summary info' sections of a pytest log (one per pytest run, e.g. a job running pytest in
+    several steps).
+    Returns list of (test_nodeid, short_error_text) tuples, for both FAILED and ERROR entries. For an error collecting
+    a test file, test_nodeid is the file path.
 
     Handles multi-line error messages — continuation lines between entries
     are joined and included in the error text, e.g.:
@@ -145,13 +148,9 @@ def extract_failures_with_errors(log):
     """
     lines = [_strip_timestamp(l) for l in log.splitlines()]
 
-    summary_start = None
-    for i, line in enumerate(lines):
-        if "short test summary info" in line:
-            summary_start = i + 1
-            break
+    summary_starts = [i + 1 for i, line in enumerate(lines) if "short test summary info" in line]
 
-    if summary_start is None:
+    if not summary_starts:
         # Fallback: parse FAILED/ERROR lines anywhere in log (single-line errors only)
         results = []
         for line in lines:
@@ -161,28 +160,29 @@ def extract_failures_with_errors(log):
         return results
 
     results = []
-    current_test = None
-    current_error_lines = []
+    for summary_start in summary_starts:
+        current_test = None
+        current_error_lines = []
 
-    for line in lines[summary_start:]:
-        stripped = line.strip()
+        for line in lines[summary_start:]:
+            stripped = line.strip()
 
-        # End of summary section (e.g. "=== 44 failed, 17 passed ... ===")
-        if re.match(r"=+", stripped):
-            break
+            # End of summary section (e.g. "=== 44 failed, 17 passed ... ===")
+            if re.match(r"=+", stripped):
+                break
 
-        m = _SUMMARY_ENTRY_RE.match(stripped)
-        if m:
-            if current_test is not None:
-                results.append((current_test, "\n".join(current_error_lines).strip()))
-            current_test = m.group(2)
-            current_error_lines = [(m.group(3) or "").strip()]
-        elif current_test is not None:
-            # Continuation line of a multi-line error (may be empty)
-            current_error_lines.append(stripped)
+            m = _SUMMARY_ENTRY_RE.match(stripped)
+            if m:
+                if current_test is not None:
+                    results.append((current_test, "\n".join(current_error_lines).strip()))
+                current_test = m.group(2)
+                current_error_lines = [(m.group(3) or "").strip()]
+            elif current_test is not None:
+                # Continuation line of a multi-line error (may be empty)
+                current_error_lines.append(stripped)
 
-    if current_test is not None:
-        results.append((current_test, "\n".join(current_error_lines).strip()))
+        if current_test is not None:
+            results.append((current_test, "\n".join(current_error_lines).strip()))
 
     return results
 
@@ -214,8 +214,9 @@ def extract_test_counts(log):
     return counts
 
 
-# Prefix of failure-block headers for errors outside the test call, e.g. "ERROR at setup of TestFoo.test_bar".
-_BLOCK_ERROR_PREFIX_RE = re.compile(r"^ERROR at (?:setup|teardown) of ")
+# Prefix of failure-block headers for errors outside the test call, e.g. "ERROR at setup of TestFoo.test_bar", or
+# "ERROR collecting tests/foo.py" (the key is then the file path, like the test_nodeid of `extract_failures_with_errors`).
+_BLOCK_ERROR_PREFIX_RE = re.compile(r"^ERROR (?:at (?:setup|teardown) of |collecting )")
 
 
 def extract_all_failure_blocks(log):
@@ -228,7 +229,8 @@ def extract_all_failure_blocks(log):
       E   ActualError: message
       ________ next test ________
 
-    Keys are the header names without the "ERROR at setup of " / "ERROR at teardown of " prefix.
+    Keys are the header names without the "ERROR at setup of " / "ERROR at teardown of " / "ERROR collecting " prefix.
+    The failure sections of all pytest runs in the log are parsed (e.g. a job running pytest in several steps).
     """
     lines = [_strip_timestamp(l) for l in log.splitlines()]
 
@@ -244,9 +246,11 @@ def extract_all_failure_blocks(log):
             current_name = _BLOCK_ERROR_PREFIX_RE.sub("", m.group(1))
             current_lines = []
         elif "short test summary info" in line or "warnings summary" in line:
+            # End of this pytest run's failure section: keep going, for the next pytest run in the log
             if current_name:
                 blocks[current_name] = current_lines
-            break
+            current_name = None
+            current_lines = []
         elif current_name and not re.match(r"-+ generated xml file: ", line):  # printed by `--junitxml`
             current_lines.append(line)
 

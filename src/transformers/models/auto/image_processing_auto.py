@@ -106,6 +106,7 @@ else:
                 {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"},
             ),
             ("ijepa", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
+            ("inkling2_loop", {"torchvision": "Inkling2ImageProcessor"}),
             ("inkling_mm_model", {"torchvision": "InklingImageProcessor"}),
             ("instructblip", {"torchvision": "BlipImageProcessor", "pil": "BlipImageProcessorPil"}),
             ("internvl", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
@@ -133,6 +134,7 @@ else:
             ("muse_spark", {"torchvision": "MuseGlimmerImageProcessor"}),
             ("omdet-turbo", {"torchvision": "DetrImageProcessor", "pil": "DetrImageProcessorPil"}),
             ("paligemma", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
+            ("pi05", {"torchvision": "PI0ImageProcessor"}),
             ("pixio", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
             ("pp_ocrv5_mobile_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
             ("pp_ocrv5_mobile_rec", {"torchvision": "PPOCRV5ServerRecImageProcessor"}),
@@ -512,7 +514,20 @@ class AutoImageProcessor:
 
     @classmethod
     @replace_list_option_in_docstrings(IMAGE_PROCESSOR_MAPPING_NAMES)
-    def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path,
+        *inputs,
+        config: PreTrainedConfig | str | os.PathLike | None = None,
+        cache_dir: str | os.PathLike | None = None,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: str | bool | None = None,
+        revision: str | None = None,
+        proxies: dict[str, str] | None = None,
+        subfolder: str = "",
+        **kwargs,
+    ):
         r"""
         Instantiate one of the image processor classes of the library from a pretrained model vocabulary.
 
@@ -533,22 +548,30 @@ class AutoImageProcessor:
                   `./my_model_directory/`.
                 - a path to a saved image processor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
+            config ([`PreTrainedConfig`] or `str` or `os.PathLike`, *optional*):
+                The model configuration used to infer the image processor class through its `model_type`. If not
+                provided, the configuration is loaded from `pretrained_model_name_or_path` when possible.
             cache_dir (`str` or `os.PathLike`, *optional*):
-                Path to a directory in which a downloaded pretrained model image processor should be cached if the
-                standard cache should not be used.
+                Path to a directory in which a downloaded pretrained image processor should be cached if the standard
+                cache should not be used.
             force_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to force to (re-)download the image processor files and override the cached versions if
-                they exist.
+                Whether or not to force the (re-)download of the image processor files, overriding the cached versions
+                if they exist.
+            local_files_only (`bool`, *optional*, defaults to `False`):
+                If `True`, only look for files in the local cache or directory and never try to download them.
             proxies (`dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            token (`str` or *bool*, *optional*):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.,
+                `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+            token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the image processor files are located inside a subfolder of the model repo on huggingface.co,
+                you can specify the folder name here.
             use_fast (`bool`, *optional*, defaults to `False`):
                 **Deprecated**: Use `backend="torchvision"` instead. This parameter is kept for backward compatibility.
                 Use a fast torchvision-based image processor if it is supported for a given model.
@@ -593,19 +616,31 @@ class AutoImageProcessor:
         >>> # If image processor files are in a directory (e.g. image processor was saved using *save_pretrained('./test/saved_model/')*)
         >>> # image_processor = AutoImageProcessor.from_pretrained("./test/saved_model/")
         ```"""
-        config = kwargs.pop("config", None)
+        config_dict = kwargs.pop("processor_config", None)
         use_fast = kwargs.pop("use_fast", None)
         backend_kwarg = kwargs.pop("backend", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
-        kwargs["_from_auto"] = True
 
-        # Resolve the revision once, so that all the files below come from the same repository state.
-        kwargs["revision"] = resolve_revision(
+        hub_kwargs = {
+            "cache_dir": cache_dir,
+            "force_download": force_download,
+            "local_files_only": local_files_only,
+            "proxies": proxies,
+            "subfolder": subfolder,
+            "_from_auto": True,
+        }
+        code_revision = kwargs.pop("code_revision", None)
+        kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
+        if token is not None:
+            hub_kwargs["token"] = token
+
+        # Resolve the revision once, so that all the files below come from the same repository state
+        hub_kwargs["revision"] = resolve_revision(
             pretrained_model_name_or_path,
-            kwargs.get("revision"),
-            token=kwargs.get("token"),
-            local_files_only=kwargs.get("local_files_only", False),
-            cache_dir=kwargs.get("cache_dir"),
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
         )
 
         # Resolve the image processor config filename
@@ -617,22 +652,22 @@ class AutoImageProcessor:
             image_processor_filename = IMAGE_PROCESSOR_NAME
 
         # Load the image processor config
-
-        try:
-            config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
-                pretrained_model_name_or_path, image_processor_filename=image_processor_filename, **kwargs
-            )
-        except Exception as initial_exception:
-            # Fallback for Hub TimmWrapper checkpoints (image processing in config.json, not preprocessor_config.json)
+        if config_dict is None:
             try:
                 config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
-                    pretrained_model_name_or_path, image_processor_filename=CONFIG_NAME, **kwargs
+                    pretrained_model_name_or_path, image_processor_filename=image_processor_filename, **hub_kwargs
                 )
-            except Exception:
-                raise initial_exception
+            except Exception as initial_exception:
+                # Fallback for Hub TimmWrapper checkpoints (image processing in config.json, not preprocessor_config.json)
+                try:
+                    config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
+                        pretrained_model_name_or_path, image_processor_filename=CONFIG_NAME, **hub_kwargs
+                    )
+                except Exception:
+                    raise initial_exception
 
-            if not is_timm_config_dict(config_dict):
-                raise initial_exception
+                if not is_timm_config_dict(config_dict):
+                    raise initial_exception
 
         image_processor_type = config_dict.get("image_processor_type", None)
         image_processor_auto_map = None
@@ -653,7 +688,10 @@ class AutoImageProcessor:
             try:
                 if not isinstance(config, PreTrainedConfig):
                     config = AutoConfig.from_pretrained(
-                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                        pretrained_model_name_or_path,
+                        trust_remote_code=trust_remote_code,
+                        code_revision=code_revision,
+                        **hub_kwargs,
                     )
 
                 image_processor_type = getattr(config, "image_processor_type", None)
@@ -697,19 +735,20 @@ class AutoImageProcessor:
             )
 
         if has_remote_code and trust_remote_code and not explicit_local_code:
-            image_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
-            _ = kwargs.pop("code_revision", None)
+            image_processor_class = get_class_from_dynamic_module(
+                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
+            )
             image_processor_class.register_for_auto_class()
-            return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return image_processor_class.from_dict(config_dict, *inputs, **kwargs)
         elif image_processor_class is not None:
-            return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return image_processor_class.from_dict(config_dict, *inputs, **kwargs)
         # Last try: we use the IMAGE_PROCESSOR_MAPPING.
         elif type(config) in IMAGE_PROCESSOR_MAPPING:
             image_processor_mapping = IMAGE_PROCESSOR_MAPPING[type(config)]
             image_processor_class = _load_class_with_fallback(image_processor_mapping, backend)
 
             if image_processor_class is not None:
-                return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                return image_processor_class.from_dict(config_dict, *inputs, **kwargs)
 
             raise ValueError(
                 _format_unavailable_image_processor_error(pretrained_model_name_or_path, image_processor_mapping)

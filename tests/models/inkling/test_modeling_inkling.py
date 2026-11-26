@@ -201,6 +201,10 @@ class InklingAudio2TextModelTest(ALMModelTest, unittest.TestCase):
     def test_get_image_features_attentions(self):
         pass
 
+    @unittest.skip("The tester has no image in input dict")
+    def test_multimodal_outputs_are_returned(self):
+        pass
+
     @parameterized.expand([True, False, None])
     @unittest.skip("The tester has no image in input dict")
     def test_get_image_features_output(self, return_dict: bool | None):
@@ -349,6 +353,14 @@ class InklingVision2TextModelTest(VLMModelTest, unittest.TestCase):
         inputs.pop("pixel_values", None)
         loss = model(**inputs).loss
         loss.backward()
+
+    def test_bfloat16_model_with_float32_pixel_values(self):
+        # The processor returns float32 pixel values, and the checkpoints load in bfloat16 (#51047)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = InklingForConditionalGeneration(config).to(torch_device, dtype=torch.bfloat16).eval()
+        self.assertEqual(inputs_dict["pixel_values"].dtype, torch.float32)
+        with torch.no_grad():
+            model(**inputs_dict)
 
     @unittest.skip("The tester has no audios in input dict")
     def test_get_audio_features_hidden_states(self):

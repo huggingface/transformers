@@ -25,22 +25,21 @@ from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import select_hidden_states
+from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..llava.modeling_llava import (
-    LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaModel,
-    LlavaModelOutputWithPast,
     LlavaPreTrainedModel,
     TransformersKwargs,
 )
-from ..mistral.modeling_mistral import MistralRMSNorm
 from .configuration_mistral3 import Mistral3Config
 
 
 logger = logging.get_logger(__name__)
 
 
-class Mistral3RMSNorm(MistralRMSNorm):
+class Mistral3RMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -110,11 +109,11 @@ class Mistral3MultiModalProjector(nn.Module):
         return hidden_states
 
 
-class Mistral3CausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
+class Mistral3CausalLMOutputWithPast(AriaCausalLMOutputWithPast):
     pass
 
 
-class Mistral3ModelOutputWithPast(LlavaModelOutputWithPast):
+class Mistral3ModelOutputWithPast(AriaModelOutputWithPast):
     pass
 
 
@@ -212,13 +211,7 @@ class Mistral3Model(LlavaModel):
             **kwargs,
         )
 
-        return Mistral3ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return Mistral3ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
@@ -311,7 +304,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 

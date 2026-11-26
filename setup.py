@@ -144,7 +144,7 @@ _deps = [
     "torchaudio",
     "torchvision",
     "tqdm>=4.60",
-    "transformers-mic[runtime]>=0.1.2",
+    "transformers-mic[runtime]>=0.1.4",
     "typer",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
@@ -315,7 +315,7 @@ if __name__ == "__main__":
 
     setup(
         name="transformers",
-        version="5.24.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+        version="5.25.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
         author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
         author_email="transformers@huggingface.co",
         description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",

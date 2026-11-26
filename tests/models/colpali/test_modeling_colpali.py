@@ -21,6 +21,7 @@ import pytest
 import torch
 from datasets import load_dataset
 
+from tests.model_tester_config import ModelTesterConfigMixin
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from transformers import (
@@ -42,18 +43,18 @@ if is_torch_available():
     import torch
 
 
-class ColPaliForRetrievalModelTester:
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        image_token_id=0,
-        projector_hidden_act="gelu",
-        seq_length=25,
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-1,
-        projection_dim=64,
-        text_config={
+class ColPaliForRetrievalModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "ignore_index": -100,
+        # `image_token_id` is set to 0 to pass "resize_embeddings" test, do not modify
+        "image_token_id": 0,
+        "projector_hidden_act": "gelu",
+        "seq_length": 25,
+        "vision_feature_select_strategy": "default",
+        "vision_feature_layer": -1,
+        "projection_dim": 64,
+        "text_config": {
             "model_type": "gemma",
             "seq_length": 128,
             "is_training": True,
@@ -77,8 +78,8 @@ class ColPaliForRetrievalModelTester:
             "num_choices": 4,
             "pad_token_id": 1,
         },
-        is_training=False,
-        vision_config={
+        "is_training": False,
+        "vision_config": {
             "use_labels": True,
             "image_size": 20,
             "patch_size": 5,
@@ -95,46 +96,40 @@ class ColPaliForRetrievalModelTester:
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
-        use_cache=False,
-        embedding_dim=128,
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        # `image_token_id` is set to 0 to pass "resize_embeddings" test, do not modify
-        self.image_token_id = image_token_id
-        self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.seq_length = seq_length
-        self.projection_dim = projection_dim
-        self.pad_token_id = text_config["pad_token_id"]
+        "use_cache": False,
+        "embedding_dim": 128,
+        "batch_size": 3,
+    }
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.num_channels = vision_config["num_channels"]
-        self.image_size = vision_config["image_size"]
-        self.encoder_seq_length = seq_length
-        self.use_cache = use_cache
-
-        self.embedding_dim = embedding_dim
-        self.vlm_config = {
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config, vision_config = values["text_config"], values["vision_config"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["num_channels"] = vision_config["num_channels"]
+        values["image_size"] = vision_config["image_size"]
+        values["encoder_seq_length"] = values["seq_length"]
+        values["vlm_config"] = {
             "model_type": "paligemma",
-            "text_config": self.text_config,
-            "vision_config": self.vision_config,
-            "ignore_index": self.ignore_index,
-            "image_token_id": self.image_token_id,
-            "projector_hidden_act": self.projector_hidden_act,
-            "projection_dim": self.projection_dim,
-            "vision_feature_select_strategy": self.vision_feature_select_strategy,
-            "vision_feature_layer": self.vision_feature_layer,
+            "text_config": text_config,
+            "vision_config": vision_config,
+            "ignore_index": values["ignore_index"],
+            "image_token_id": values["image_token_id"],
+            "projector_hidden_act": values["projector_hidden_act"],
+            "projection_dim": values["projection_dim"],
+            "vision_feature_select_strategy": values["vision_feature_select_strategy"],
+            "vision_feature_layer": values["vision_feature_layer"],
         }
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return ColPaliConfig(
@@ -179,6 +174,8 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Model tester for `ColPaliForRetrieval`.
     """
+
+    model_tester_class = ColPaliForRetrievalModelTester
 
     all_model_classes = (ColPaliForRetrieval,) if is_torch_available() else ()
     test_resize_embeddings = True
