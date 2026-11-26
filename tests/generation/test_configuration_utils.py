@@ -353,6 +353,123 @@ class GenerationConfigTest(unittest.TestCase):
         # 7. User sets BOTH `num_beams=1` and `length_penalty=0.8` explicitly -> WARN.
         self.assertNotEqual(_warn_count(lambda: GenerationConfig(num_beams=1, length_penalty=0.8)), 0)
 
+    def test_validate_contrastive_search(self):
+        """Tests that `top_k` is not flagged as sampling-only when configuring Contrastive Search."""
+        logger = transformers_logging.get_logger("transformers.generation.configuration_utils")
+
+        # 1 & 2. Valid Contrastive Search configs emit no warnings and pass `validate(strict=True)`
+        for kwargs in (
+            {"penalty_alpha": 0.6, "top_k": 4, "do_sample": False},
+            {"penalty_alpha": 0.6, "top_k": 4},
+        ):
+            logger.warning_once.cache_clear()
+            with CaptureLogger(logger) as captured_logs:
+                config = GenerationConfig(**kwargs)
+            self.assertEqual(config.get_generation_mode(), GenerationMode.CONTRASTIVE_SEARCH)
+            self.assertEqual(len(captured_logs.out), 0)
+            config.validate(strict=True)
+
+        # Updating an existing config to Contrastive Search (as done in `generate()`) also emits no warning
+        base_config = GenerationConfig(do_sample=False)
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as captured_logs:
+            base_config.update(penalty_alpha=0.6, top_k=4)
+        self.assertEqual(base_config.get_generation_mode(), GenerationMode.CONTRASTIVE_SEARCH)
+        self.assertEqual(len(captured_logs.out), 0)
+        base_config.validate(strict=True)
+
+        # Documented `custom_generate` callable flow (how `transformers-community/contrastive-search` invokes `generate()`)
+        if is_torch_available():
+            from transformers import GPT2Config, GPT2LMHeadModel
+
+            tiny_model = GPT2LMHeadModel(GPT2Config(vocab_size=64, n_positions=32, n_embd=16, n_layer=1, n_head=1))
+            input_ids = torch.tensor([[1, 2, 3]])
+            logger.warning_once.cache_clear()
+            with CaptureLogger(logger) as captured_logs:
+                out = tiny_model.generate(
+                    input_ids,
+                    custom_generate=lambda *args, **kwargs: kwargs["generation_config"],
+                    penalty_alpha=0.6,
+                    top_k=4,
+                    max_new_tokens=2,
+                )
+            self.assertEqual(out.get_generation_mode(), GenerationMode.CONTRASTIVE_SEARCH)
+            self.assertEqual(len(captured_logs.out), 0)
+
+        # Incompatible DoLa/assisted combinations must not emit duplicate warnings inside `validate()`
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as captured_logs:
+            GenerationConfig(penalty_alpha=0.6, top_k=4, do_sample=False, dola_layers="low")
+        self.assertEqual(len(captured_logs.out), 0)
+
+        # 3. Ordinary greedy search with `top_k=4` still warns and fails `strict=True`
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as captured_logs:
+            greedy_config = GenerationConfig(top_k=4, do_sample=False)
+        self.assertNotEqual(len(captured_logs.out), 0)
+        with self.assertRaises(ValueError) as exc:
+            greedy_config.validate(strict=True)
+        self.assertIn("`top_k`", str(exc.exception))
+
+        # 4. Invalid Contrastive Search parameters are not exempted
+        for invalid_kwargs in (
+            {"penalty_alpha": 0.0, "top_k": 4, "do_sample": False},
+            {"penalty_alpha": -0.5, "top_k": 4, "do_sample": False},
+            {"penalty_alpha": 0.6, "top_k": 1, "do_sample": False},
+            {"penalty_alpha": 0.6, "top_k": 4, "num_beams": 2, "do_sample": False},
+        ):
+            logger.warning_once.cache_clear()
+            with CaptureLogger(logger) as captured_logs:
+                invalid_config = GenerationConfig(**invalid_kwargs)
+            self.assertNotEqual(invalid_config.get_generation_mode(), GenerationMode.CONTRASTIVE_SEARCH)
+            self.assertNotEqual(len(captured_logs.out), 0)
+            with self.assertRaises(ValueError) as exc:
+                invalid_config.validate(strict=True)
+            self.assertIn("`top_k`", str(exc.exception))
+
+        # Sampling-only flags other than `top_k` are still rejected even in Contrastive Search
+        mixed_config = GenerationConfig(penalty_alpha=0.6, top_k=4, temperature=0.5, do_sample=False)
+        with self.assertRaises(ValueError) as exc:
+            mixed_config.validate(strict=True)
+        self.assertIn("`temperature`", str(exc.exception))
+        self.assertNotIn("`top_k`", str(exc.exception))
+
+        # 5. Beam search and sampling retain their existing validation behavior
+        for valid_kwargs in (
+            {"do_sample": True, "top_k": 4},
+            {"num_beams": 2, "early_stopping": True},
+        ):
+            logger.warning_once.cache_clear()
+            with CaptureLogger(logger) as captured_logs:
+                valid_config = GenerationConfig(**valid_kwargs)
+            self.assertEqual(len(captured_logs.out), 0)
+            valid_config.validate(strict=True)
+
+        bad_beam_config = GenerationConfig(num_beams=1, early_stopping=True)
+        with self.assertRaises(ValueError) as exc:
+            bad_beam_config.validate(strict=True)
+        self.assertIn("`early_stopping`", str(exc.exception))
+
+        # 6. `save_pretrained()` works for new and modified loaded Contrastive Search configs
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            GenerationConfig(penalty_alpha=0.6, top_k=4, do_sample=False).save_pretrained(tmp_dir)
+            reloaded = GenerationConfig.from_pretrained(tmp_dir)
+            self.assertEqual(reloaded.penalty_alpha, 0.6)
+            self.assertEqual(reloaded.top_k, 4)
+            self.assertEqual(reloaded.do_sample, False)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            GenerationConfig().save_pretrained(tmp_dir)
+            loaded = GenerationConfig.from_pretrained(tmp_dir)
+            loaded.penalty_alpha = 0.6
+            loaded.top_k = 4
+            loaded.do_sample = False
+            loaded.save_pretrained(tmp_dir)
+            reloaded = GenerationConfig.from_pretrained(tmp_dir)
+            self.assertEqual(reloaded.penalty_alpha, 0.6)
+            self.assertEqual(reloaded.top_k, 4)
+            self.assertEqual(reloaded.do_sample, False)
+
     def test_refuse_to_save(self):
         """Tests that we refuse to save a generation config that fails validation."""
 

@@ -537,6 +537,27 @@ class GenerationConfig(PushToHubMixin):
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string(ignore_metadata=True)}"
 
+    def _get_base_generation_mode(self) -> GenerationMode:
+        """Returns the base generation mode before assisted or DoLa extensions, without emitting warnings."""
+        if self.constraints is not None or self.force_words_ids is not None:
+            return GenerationMode.CONSTRAINED_BEAM_SEARCH
+        if self.num_beams is None or self.num_beams == 1:
+            if self.do_sample is not True:
+                if (
+                    self.top_k is not None
+                    and self.top_k > 1
+                    and self.penalty_alpha is not None
+                    and self.penalty_alpha > 0
+                ):
+                    return GenerationMode.CONTRASTIVE_SEARCH
+                return GenerationMode.GREEDY_SEARCH
+            return GenerationMode.SAMPLE
+        if self.num_beam_groups is not None and self.num_beam_groups > 1:
+            return GenerationMode.GROUP_BEAM_SEARCH
+        if self.do_sample is True:
+            return GenerationMode.BEAM_SAMPLE
+        return GenerationMode.BEAM_SEARCH
+
     def get_generation_mode(self, assistant_model: Optional["PreTrainedModel"] = None) -> GenerationMode:
         """
         Returns the generation mode triggered by the [`GenerationConfig`] instance.
@@ -551,28 +572,7 @@ class GenerationConfig(PushToHubMixin):
         """
         # TODO joao: find out a way of not depending on external fields (e.g. `assistant_model`), then make this a
         # property and part of the `__repr__`
-        if self.constraints is not None or self.force_words_ids is not None:
-            generation_mode = GenerationMode.CONSTRAINED_BEAM_SEARCH
-        elif self.num_beams is None or self.num_beams == 1:
-            if self.do_sample is not True:
-                if (
-                    self.top_k is not None
-                    and self.top_k > 1
-                    and self.penalty_alpha is not None
-                    and self.penalty_alpha > 0
-                ):
-                    generation_mode = GenerationMode.CONTRASTIVE_SEARCH
-                else:
-                    generation_mode = GenerationMode.GREEDY_SEARCH
-            else:
-                generation_mode = GenerationMode.SAMPLE
-        else:
-            if self.num_beam_groups is not None and self.num_beam_groups > 1:
-                generation_mode = GenerationMode.GROUP_BEAM_SEARCH
-            elif self.do_sample is True:
-                generation_mode = GenerationMode.BEAM_SAMPLE
-            else:
-                generation_mode = GenerationMode.BEAM_SEARCH
+        generation_mode = self._get_base_generation_mode()
 
         # Assisted generation may extend some generation modes
         if (
@@ -747,7 +747,12 @@ class GenerationConfig(PushToHubMixin):
                 minor_issues["typical_p"] = greedy_wrong_parameter_msg.format(
                     flag_name="typical_p", flag_value=self.typical_p
                 )
-            if self.top_k is not None and self.top_k != 50 and _should_warn("do_sample", "top_k", user_set_attributes):
+            if (
+                self.top_k is not None
+                and self.top_k != 50
+                and _should_warn("do_sample", "top_k", user_set_attributes)
+                and self._get_base_generation_mode() != GenerationMode.CONTRASTIVE_SEARCH
+            ):
                 minor_issues["top_k"] = greedy_wrong_parameter_msg.format(flag_name="top_k", flag_value=self.top_k)
             if (
                 self.epsilon_cutoff is not None
