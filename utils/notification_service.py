@@ -928,6 +928,17 @@ class Message:
                     time.sleep(1)
 
 
+def get_job_link(artifact_path: str, artifact_name_to_job_map: dict) -> str | None:
+    """Return the job link from the job of the upload step named after the report, else from `job_link.txt`."""
+    if artifact_path in artifact_name_to_job_map:
+        return artifact_name_to_job_map[artifact_path]["html_url"]
+    job_link_path = os.path.join(artifact_path, "job_link.txt")
+    if os.path.isfile(job_link_path):
+        with open(job_link_path, encoding="utf-8") as f:
+            return f.read().strip()
+    return None
+
+
 def retrieve_artifact(artifact_path: str, gpu: str | None):
     if gpu not in [None, "single", "multi"]:
         raise ValueError(f"Invalid GPU for artifact. Passed GPU: `{gpu}`.")
@@ -1256,7 +1267,8 @@ if __name__ == "__main__":
             path = artifact_path_dict["path"]
             artifact_gpu = artifact_path_dict["gpu"]
 
-            if path not in artifact_name_to_job_map:
+            job_link = get_job_link(path, artifact_name_to_job_map)
+            if job_link is None:
                 # Mismatch between available artifacts and reported jobs on github. It happens.
                 continue
 
@@ -1269,8 +1281,8 @@ if __name__ == "__main__":
 
             if "stats" in artifact:
                 # Link to the GitHub Action job
-                job = artifact_name_to_job_map[path]
-                matrix_job_results[matrix_name]["job_link"][artifact_gpu] = job["html_url"]
+                matrix_job_results[matrix_name]["job_link"][artifact_gpu] = job_link
+                job = artifact_name_to_job_map.get(path, {})
                 failed, errors, success, skipped, time_spent = handle_test_results(artifact["stats"])
                 matrix_job_results[matrix_name]["success"] += success
                 matrix_job_results[matrix_name]["errors"] += errors
@@ -1417,8 +1429,10 @@ if __name__ == "__main__":
             artifact_gpu = artifact_path_dict["gpu"]
 
             # Link to the GitHub Action job
-            job = artifact_name_to_job_map[path]
-            additional_results[key]["job_link"][artifact_gpu] = job["html_url"]
+            job_link = get_job_link(path, artifact_name_to_job_map)
+            if job_link is None:
+                raise KeyError(f"No job found for the artifact {path}")
+            additional_results[key]["job_link"][artifact_gpu] = job_link
 
             artifact = retrieve_artifact(path, artifact_gpu)
             stacktraces = handle_stacktraces(artifact["failures_line"])
