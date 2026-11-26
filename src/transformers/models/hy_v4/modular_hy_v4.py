@@ -24,7 +24,8 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_compression_mask
+from ...modeling_compression_utils import build_attention_mask_from_topk
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -306,32 +307,23 @@ class HYV4Attention(GlmMoeDsaAttention):
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
         if self.indexer is not None:
             topk_indices = self.indexer(
-                hidden_states,
-                q_resid,
-                position_embeddings,
-                attention_mask[:, 0, :, :],
-                position_ids,  # Kept for BC
+                hidden_states=hidden_states,
+                q_resid=q_resid,
+                position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
                 cache=cache,
-            )  # [B, S, topk]
+            )
         else:
             if prev_topk_indices is None:
                 raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
             topk_indices = prev_topk_indices
 
-        sparse_indices = None
-        if self.config._attn_implementation in ("eager", "sdpa"):
-            index_mask = (
-                topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
-                .scatter(-1, topk_indices.long(), False)
-                .unsqueeze(1)
-            )
-
-            if attention_mask.dtype == torch.bool:
-                attention_mask = attention_mask & ~index_mask
-            else:
-                attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
-        else:
-            sparse_indices = topk_indices
+        attention_mask = build_attention_mask_from_topk(
+            self.config,
+            topk_indices=topk_indices,
+            query_states=query_states,
+            kv_length=key_states.shape[2],
+        )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -344,7 +336,7 @@ class HYV4Attention(GlmMoeDsaAttention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            indices=sparse_indices,  # consumed by flash_mla_with_kvcache; ignored by eager / SDPA
+            indices=topk_indices,
             s_aux=self.sinks,
             **kwargs,
         )
@@ -557,15 +549,14 @@ class HYV4Model(Glm4MoeLiteModel):
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "cache": cache,
-                "position_ids": position_ids,
-                "allow_is_causal_skip": False,  # Always force creation to account for causality in the indexer
-            }
-            causal_mask_mapping = {"indexed_attention": create_causal_mask(**mask_kwargs)}
+            attention_mask = create_compression_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                cache=cache,
+            )
+
+            causal_mask_mapping = {"indexed_attention": attention_mask}
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)

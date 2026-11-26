@@ -28,7 +28,13 @@ from ...audio_utils import make_list_of_audio
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import (
+    create_bidirectional_mask,
+    create_causal_mask,
+    create_compression_mask,
+    create_sliding_window_causal_mask,
+)
+from ...modeling_compression_utils import build_attention_mask_from_topk
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MoeModelOutputWithPast,
@@ -525,28 +531,22 @@ class Dots3NoteTextAttention(DeepseekV3Attention):
         query_states = torch.cat((q_pass, q_rot), dim=-1)
         key_states, value_states = self.expand_kv(k_pass, k_rot)
 
-        sparse_indices = None
+        topk_indices = None
         if self.indexer is not None:
             topk_indices = self.indexer(
-                hidden_states,
-                q_resid,
-                position_embeddings,
-                attention_mask[:, 0],
-                position_ids=None,  # Unused backward-compatibility argument in the shared indexer.
+                hidden_states=hidden_states,
+                q_resid=q_resid,
+                position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
                 cache=cache,
             )
-            if self.config._attn_implementation in ("eager", "sdpa"):
-                index_mask = (
-                    topk_indices.new_ones((batch_size, seq_length, key_states.shape[-2]), dtype=torch.bool)
-                    .scatter(-1, topk_indices.long(), False)
-                    .unsqueeze(1)
-                )
-                if attention_mask.dtype == torch.bool:
-                    attention_mask = attention_mask & ~index_mask
-                else:
-                    attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
-            else:
-                sparse_indices = topk_indices
+
+            attention_mask = build_attention_mask_from_topk(
+                self.config,
+                topk_indices=topk_indices,
+                query_states=query_states,
+                kv_length=key_states.shape[2],
+            )
 
         attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -560,7 +560,7 @@ class Dots3NoteTextAttention(DeepseekV3Attention):
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
-            indices=sparse_indices,
+            indices=topk_indices,
             **kwargs,
         )
 
@@ -659,7 +659,7 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel, DeepseekV32Model):
             mask_functions = {
                 "full_attention": lambda: create_causal_mask(**mask_kwargs),
                 "sliding_attention": lambda: create_sliding_window_causal_mask(**mask_kwargs),
-                "indexed_attention": lambda: create_causal_mask(**mask_kwargs, allow_is_causal_skip=False),
+                "indexed_attention": lambda: create_compression_mask(**mask_kwargs),
             }
             causal_masks = {layer_type: mask_functions[layer_type]() for layer_type in set(self.config.layer_types)}
 

@@ -24,7 +24,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling, SizeDict
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_compression_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MoeCausalLMOutputWithPast,
@@ -302,21 +302,19 @@ class HYV4VLTextModel(HYV4Model):
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
         # As in Qwen2-VL, an optional leading text axis is used to build the causal mask
-        text_position_ids = None
         if position_ids.shape[0] == 4:
-            text_position_ids, position_ids = position_ids[0], position_ids[1:]
+            _, position_ids = position_ids[0], position_ids[1:]
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "cache": cache,
-                "position_ids": text_position_ids,
-                "allow_is_causal_skip": False,  # Always force creation to account for causality in the indexer
-            }
-            causal_mask_mapping = {"indexed_attention": create_causal_mask(**mask_kwargs)}
+            attention_mask = create_compression_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                cache=cache,
+            )
+
+            causal_mask_mapping = {"indexed_attention": attention_mask}
 
         position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids)
         # Prepare HC connections

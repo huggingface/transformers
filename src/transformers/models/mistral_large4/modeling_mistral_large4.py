@@ -29,10 +29,15 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, DynamicCompressedLayer, KVSharingDict
+from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_compression_mask
+from ...modeling_compression_utils import (
+    build_attention_mask_from_topk,
+    prepare_compression_groups,
+    select_compression_indices,
+)
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
@@ -223,7 +228,25 @@ class MistralLarge4TextIndexer(nn.Module):
         attention_mask: torch.Tensor,
         cache: Cache | None = None,
     ) -> torch.Tensor:
-        layer = DynamicCompressedLayer() if cache is None else cache.layers[self.layer_idx]
+        """
+        Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
+
+        Similar to [`DeepseekV32Indexer.forward`], but the indexer derives queries directly from
+        the hidden states, applies position-dependent query scaling and uses interleaved RoPE
+        rather than the non-interleaved half-split RoPE used by DeepSeek-V3.2.
+
+        Args:
+            hidden_states: Input hidden states `[B, S, hidden_size]`.
+            position_embeddings: `(cos, sin)` from RotaryEmbedding.
+            position_ids: Position indices used for query scaling.
+            attention_mask: Right-aligned cumulative valid-token counts.
+            cache: Cache object containing the indexer key states for this layer.
+
+        Returns:
+            `torch.Tensor`: the `int32` top-k physical KV indices of shape `[B, S, topk]`, with -1 for
+                unavailable selections. The eager / SDPA paths turn these into additive / boolean masks,
+                respectively, while compatible sparse Flash Attention kernels consume them directly.
+        """
         batch_size, seq_len, _ = hidden_states.shape
 
         # The indexer queries are derived directly from the hidden states
@@ -246,11 +269,12 @@ class MistralLarge4TextIndexer(nn.Module):
         k = k.squeeze(2)
 
         # Get pools (here it's each token as groups of size 1)
-        k = layer.prepare_compression_groups(k, attention_mask).squeeze(2)
+        groups, _ = prepare_compression_groups(k, attention_mask)
+        k = groups.squeeze(2)
 
         # No compression, as each token is taken raw
         if cache is not None:
-            k = layer.update_compressed_states(k, attention_mask, seq_len)
+            k = cache.layers[self.layer_idx].update_compressed_states(k, attention_mask, seq_len)
 
         # Score each token
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
@@ -261,7 +285,7 @@ class MistralLarge4TextIndexer(nn.Module):
         scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
         # Remap selected group mapping to actual tokens
-        return layer.select_indices(scores, attention_mask, self.index_topk)
+        return select_compression_indices(scores, attention_mask, self.index_topk)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -437,7 +461,7 @@ class MistralLarge4TextAttention(nn.Module):
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
         if self.indexer is not None:
             topk_indices = self.indexer(
-                hidden_states,
+                hidden_states=hidden_states,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 attention_mask=attention_mask,
@@ -448,7 +472,8 @@ class MistralLarge4TextAttention(nn.Module):
                 raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
             topk_indices = prev_topk_indices
 
-        attention_mask = self.build_attention_mask_from_topk(
+        attention_mask = build_attention_mask_from_topk(
+            self.config,
             topk_indices=topk_indices,
             query_states=query_states,
             kv_length=key_states.shape[2],
@@ -465,7 +490,7 @@ class MistralLarge4TextAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            indices=topk_indices,  # consumed by flash_mla_with_kvcache; ignored by eager / SDPA
+            indices=topk_indices,
             position_ids=position_ids,
             **kwargs,
         )
@@ -473,48 +498,6 @@ class MistralLarge4TextAttention(nn.Module):
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights, topk_indices
-
-    def build_attention_mask_from_topk(
-        self,
-        topk_indices: torch.Tensor,
-        query_states: torch.Tensor,
-        kv_length: int,
-    ) -> torch.Tensor | None:
-        """
-        Convert topk_indices into the mask expected by the active backend.
-
-        Only supporting SDPA and Eager as we have a 3D dependency which cannot be mapped to FA
-        without a custom kernel that can select on a per indices bases per row (query -> topk keys).
-        """
-        # TODO: return none under FA
-
-        # -1 is invalid as per convention in the indexer
-        # NOTE: The indexer already took care of also excluding padding tokens and causality
-        topk_valid = topk_indices.ge(0) & topk_indices.lt(kv_length)
-
-        # Clamp only so scatter has a legal index
-        safe_indices = topk_indices.clamp(0, kv_length - 1)
-        selected_counts = torch.zeros(
-            topk_indices.shape[0],  # batch size
-            topk_indices.shape[1],  # q_length
-            kv_length,  # kv_length
-            dtype=torch.int32,
-            device=topk_indices.device,
-        )
-        selected_counts.scatter_add_(-1, safe_indices.long(), topk_valid.int())
-
-        # Final mask 0 == False (not visible), 1 == True (visible)
-        mask = selected_counts.ne(0).unsqueeze(1)
-
-        # SDPA
-        if self.config._attn_implementation == "sdpa":
-            return mask
-
-        # Eager
-        min_dtype = torch.finfo(query_states.dtype).min
-        # we need 0s where the tokens should be taken into account, and -inf otherwise (mask is already of boolean type)
-        mask = torch.where(mask, torch.full((), 0.0, device=query_states.device, dtype=query_states.dtype), min_dtype)
-        return mask
 
 
 class MistralLarge4TextMLP(nn.Module):

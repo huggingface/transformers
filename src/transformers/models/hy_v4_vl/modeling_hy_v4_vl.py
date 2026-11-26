@@ -30,7 +30,8 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_compression_mask
+from ...modeling_compression_utils import build_attention_mask_from_topk
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
@@ -107,12 +108,12 @@ class HYV4VLIndexer(nn.Module):
     DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
 
     The Indexer has its own lightweight projections (wq_b, wk) separate from the main MLA attention,
-    and returns the additive top-k sparse mask directly (`0` at the selected tokens, `-inf` elsewhere);
-    the raw top-k indices are only ever scattered into that mask, so they are not surfaced.
+    and returns the top-k physical KV indices per query. Causality and padding are accounted for during
+    selection.
 
-    **Cache strategy**: the indexer key cache lives on the per-layer `DynamicIndexedLayer` (or the
-    `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
-    `cache.update_indexer()`.
+    **Cache strategy**: the indexer key states are stored in the per-layer `DynamicCompressedLayer` (or
+    `StaticCompressedLayer` for static caches) inside the shared cache, updated via
+    `update_compressed_states()`. With a group size of 1, each valid token is stored without compression.
     """
 
     def __init__(self, config: HYV4VLConfig, layer_idx: int):
@@ -153,18 +154,19 @@ class HYV4VLIndexer(nn.Module):
         scores directly in bf16/fp32.
 
         The scoring logic computes:
-            index_score[b,s,t] = Σ_h (weight[b,s,h] · softmax_scale · q[b,s,h,:] · k[b,t,:])
+            index_score[b,s,t] = Σ_h (weight[b,s,h] · ReLU(softmax_scale · (q[b,s,h,:] · k[b,t,:])))
 
         Args:
             hidden_states: Input hidden states `[B, S, hidden_size]`.
             q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
             position_embeddings: `(cos, sin)` from RotaryEmbedding.
-            attention_mask: Causal mask, broadcastable to `[B, S, T]`.
-            cache: Cache object containing the indexer key cache for this layer.
+            attention_mask: Right-aligned cumulative valid-token counts.
+            cache: Cache object containing the indexer key states for this layer.
 
         Returns:
-            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
-                turn these into an additive sparse mask; the `flash-mla` kernel consumes them directly.
+            `torch.Tensor`: the `int32` top-k physical KV indices of shape `[B, S, topk]`, with -1 for
+                unavailable selections. The eager / SDPA paths turn these into additive / boolean masks,
+                respectively, while compatible sparse Flash Attention kernels consume them directly.
         """
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
@@ -387,32 +389,23 @@ class HYV4VLAttention(nn.Module):
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
         if self.indexer is not None:
             topk_indices = self.indexer(
-                hidden_states,
-                q_resid,
-                position_embeddings,
-                attention_mask[:, 0, :, :],
-                position_ids,  # Kept for BC
+                hidden_states=hidden_states,
+                q_resid=q_resid,
+                position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
                 cache=cache,
-            )  # [B, S, topk]
+            )
         else:
             if prev_topk_indices is None:
                 raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
             topk_indices = prev_topk_indices
 
-        sparse_indices = None
-        if self.config._attn_implementation in ("eager", "sdpa"):
-            index_mask = (
-                topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
-                .scatter(-1, topk_indices.long(), False)
-                .unsqueeze(1)
-            )
-
-            if attention_mask.dtype == torch.bool:
-                attention_mask = attention_mask & ~index_mask
-            else:
-                attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
-        else:
-            sparse_indices = topk_indices
+        attention_mask = build_attention_mask_from_topk(
+            self.config,
+            topk_indices=topk_indices,
+            query_states=query_states,
+            kv_length=key_states.shape[2],
+        )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -425,7 +418,7 @@ class HYV4VLAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            indices=sparse_indices,  # consumed by flash_mla_with_kvcache; ignored by eager / SDPA
+            indices=topk_indices,
             s_aux=self.sinks,
             **kwargs,
         )
@@ -1185,21 +1178,19 @@ class HYV4VLTextModel(HYV4VLPreTrainedModel):
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
         # As in Qwen2-VL, an optional leading text axis is used to build the causal mask
-        text_position_ids = None
         if position_ids.shape[0] == 4:
-            text_position_ids, position_ids = position_ids[0], position_ids[1:]
+            _, position_ids = position_ids[0], position_ids[1:]
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "cache": cache,
-                "position_ids": text_position_ids,
-                "allow_is_causal_skip": False,  # Always force creation to account for causality in the indexer
-            }
-            causal_mask_mapping = {"indexed_attention": create_causal_mask(**mask_kwargs)}
+            attention_mask = create_compression_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                cache=cache,
+            )
+
+            causal_mask_mapping = {"indexed_attention": attention_mask}
 
         position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids)
         # Prepare HC connections

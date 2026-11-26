@@ -150,7 +150,17 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 
 class DeepseekV32Indexer(nn.Module):
-    """DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens."""
+    """
+    DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
+
+    The Indexer has its own lightweight projections (wq_b, wk) separate from the main MLA attention,
+    and returns the top-k physical KV indices per query. Causality and padding are accounted for during
+    selection.
+
+    **Cache strategy**: the indexer key states are stored in the per-layer `DynamicCompressedLayer` (or
+    `StaticCompressedLayer` for static caches) inside the shared cache, updated via
+    `update_compressed_states()`. With a group size of 1, each valid token is stored without compression.
+    """
 
     def __init__(self, config: "DeepseekV32Config", layer_idx: int):
         super().__init__()
@@ -180,6 +190,29 @@ class DeepseekV32Indexer(nn.Module):
         attention_mask: torch.Tensor,
         cache: Cache | None = None,
     ) -> torch.Tensor:
+        """
+        Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
+
+        This is the bf16 equivalent of the reference Indexer which uses `rotate_activation` (Hadamard transform)
+        and `fp8_index` (FP8 quantized scoring kernel). Since the Hadamard transform is orthogonal (dot products
+        are preserved: Hq·Hk = q·k), and FP8 quantization is a precision optimization, we skip both and compute
+        scores directly in bf16/fp32.
+
+        The scoring logic computes:
+            index_score[b,s,t] = Σ_h (weight[b,s,h] · ReLU(softmax_scale · (q[b,s,h,:] · k[b,t,:])))
+
+        Args:
+            hidden_states: Input hidden states `[B, S, hidden_size]`.
+            q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
+            position_embeddings: `(cos, sin)` from RotaryEmbedding.
+            attention_mask: Right-aligned cumulative valid-token counts.
+            cache: Cache object containing the indexer key states for this layer.
+
+        Returns:
+            `torch.Tensor`: the `int32` top-k physical KV indices of shape `[B, S, topk]`, with -1 for
+                unavailable selections. The eager / SDPA paths turn these into additive / boolean masks,
+                respectively, while compatible sparse Flash Attention kernels consume them directly.
+        """
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
 

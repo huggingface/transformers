@@ -30,7 +30,17 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
-from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import (
+    create_bidirectional_mask,
+    create_causal_mask,
+    create_compression_mask,
+    create_sliding_window_causal_mask,
+)
+from ...modeling_compression_utils import (
+    build_attention_mask_from_topk,
+    prepare_compression_groups,
+    select_compression_indices,
+)
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -194,12 +204,12 @@ class Dots3NoteTextIndexer(nn.Module):
     DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
 
     The Indexer has its own lightweight projections (wq_b, wk) separate from the main MLA attention,
-    and returns the additive top-k sparse mask directly (`0` at the selected tokens, `-inf` elsewhere);
-    the raw top-k indices are only ever scattered into that mask, so they are not surfaced.
+    and returns the top-k physical KV indices per query. Causality and padding are accounted for during
+    selection.
 
-    **Cache strategy**: the indexer key cache lives on the per-layer `DynamicIndexedLayer` (or the
-    `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
-    `cache.update_indexer()`.
+    **Cache strategy**: the indexer key states are stored in the per-layer `DynamicCompressedLayer` (or
+    `StaticCompressedLayer` for static caches) inside the shared cache, updated via
+    `update_compressed_states()`. With a group size of 1, each valid token is stored without compression.
     """
 
     def __init__(self, config: "Dots3NoteTextConfig", layer_idx: int):
@@ -228,58 +238,62 @@ class Dots3NoteTextIndexer(nn.Module):
         q_resid: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
-        position_ids: torch.Tensor,  # Kept for BC
         cache: Cache | None = None,
     ) -> torch.Tensor:
         """
         Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
 
-        Same as [`DeepseekV32Indexer.forward`], but the indexer applies **interleaved** RoPE
-        rather than the non-interleaved half-split RoPE used by DeepSeek-V3.2.
+        This is the bf16 equivalent of the reference Indexer which uses `rotate_activation` (Hadamard transform)
+        and `fp8_index` (FP8 quantized scoring kernel). Since the Hadamard transform is orthogonal (dot products
+        are preserved: Hq·Hk = q·k), and FP8 quantization is a precision optimization, we skip both and compute
+        scores directly in bf16/fp32.
+
+        The scoring logic computes:
+            index_score[b,s,t] = Σ_h (weight[b,s,h] · ReLU(softmax_scale · (q[b,s,h,:] · k[b,t,:])))
 
         Args:
             hidden_states: Input hidden states `[B, S, hidden_size]`.
             q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
             position_embeddings: `(cos, sin)` from RotaryEmbedding.
-            attention_mask: Causal mask, broadcastable to `[B, S, T]`.
-            cache: Cache object containing the indexer key cache for this layer.
+            attention_mask: Right-aligned cumulative valid-token counts.
+            cache: Cache object containing the indexer key states for this layer.
 
         Returns:
-            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
-                turn these into an additive sparse mask; the `flash-mla` kernel consumes them directly.
+            `torch.Tensor`: the `int32` top-k physical KV indices of shape `[B, S, topk]`, with -1 for
+                unavailable selections. The eager / SDPA paths turn these into additive / boolean masks,
+                respectively, while compatible sparse Flash Attention kernels consume them directly.
         """
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
-        q = self.wq_b(q_resid)  # [B, S, H*D]
-        q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
+
+        q = self.wq_b(q_resid).view(batch_size, seq_len, self.n_heads, self.head_dim)
         q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
+        k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)
         k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
         # GLM-MoE-DSA uses interleaved RoPE in the indexer
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
-        q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
-        k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
+        q = torch.cat([q_rot, q_pass], dim=-1)
+        k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)
 
+        # Get only the pools, as group size = 1 == raw token already
+        groups, _ = prepare_compression_groups(k, attention_mask)
+        k = groups.squeeze(2)
+
+        # No compression, as each token is taken raw
         if cache is not None:
-            k = cache.update_indexer(k, self.layer_idx)
+            k = cache.layers[self.layer_idx].update_compressed_states(k, attention_mask, seq_len)
 
-        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
-        scores = F.relu(scores)
+        # Score each token
+        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
+        scores = F.relu(scores * self.softmax_scale)
 
-        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
-        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
-        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float()
+        weights = weights * self.n_heads**-0.5
+        scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask.dtype == torch.bool:
-            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
-        else:
-            index_scores = index_scores + attention_mask
-
-        topk = min(self.index_topk, index_scores.shape[-1])
-        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
+        return select_compression_indices(scores, attention_mask, self.index_topk)
 
 
 class Dots3NoteTextMLP(nn.Module):
@@ -566,28 +580,22 @@ class Dots3NoteTextAttention(nn.Module):
         query_states = torch.cat((q_pass, q_rot), dim=-1)
         key_states, value_states = self.expand_kv(k_pass, k_rot)
 
-        sparse_indices = None
+        topk_indices = None
         if self.indexer is not None:
             topk_indices = self.indexer(
-                hidden_states,
-                q_resid,
-                position_embeddings,
-                attention_mask[:, 0],
-                position_ids=None,  # Unused backward-compatibility argument in the shared indexer.
+                hidden_states=hidden_states,
+                q_resid=q_resid,
+                position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
                 cache=cache,
             )
-            if self.config._attn_implementation in ("eager", "sdpa"):
-                index_mask = (
-                    topk_indices.new_ones((batch_size, seq_length, key_states.shape[-2]), dtype=torch.bool)
-                    .scatter(-1, topk_indices.long(), False)
-                    .unsqueeze(1)
-                )
-                if attention_mask.dtype == torch.bool:
-                    attention_mask = attention_mask & ~index_mask
-                else:
-                    attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
-            else:
-                sparse_indices = topk_indices
+
+            attention_mask = build_attention_mask_from_topk(
+                self.config,
+                topk_indices=topk_indices,
+                query_states=query_states,
+                kv_length=key_states.shape[2],
+            )
 
         attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -601,7 +609,7 @@ class Dots3NoteTextAttention(nn.Module):
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
-            indices=sparse_indices,
+            indices=topk_indices,
             **kwargs,
         )
 
@@ -763,7 +771,7 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel):
             mask_functions = {
                 "full_attention": lambda: create_causal_mask(**mask_kwargs),
                 "sliding_attention": lambda: create_sliding_window_causal_mask(**mask_kwargs),
-                "indexed_attention": lambda: create_causal_mask(**mask_kwargs, allow_is_causal_skip=False),
+                "indexed_attention": lambda: create_compression_mask(**mask_kwargs),
             }
             causal_masks = {layer_type: mask_functions[layer_type]() for layer_type in set(self.config.layer_types)}
 

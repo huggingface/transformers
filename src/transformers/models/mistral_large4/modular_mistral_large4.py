@@ -23,7 +23,12 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_compression_mask
+from ...modeling_compression_utils import (
+    build_attention_mask_from_topk,
+    prepare_compression_groups,
+    select_compression_indices,
+)
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -325,28 +330,30 @@ class MistralLarge4TextIndexer(DeepseekV32Indexer):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor,
         position_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
         cache: Cache | None = None,
     ) -> torch.Tensor:
         """
         Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
 
-        Same as [`DeepseekV32Indexer.forward`], but the indexer applies **interleaved** RoPE
+        Similar to [`DeepseekV32Indexer.forward`], but the indexer derives queries directly from
+        the hidden states, applies position-dependent query scaling and uses interleaved RoPE
         rather than the non-interleaved half-split RoPE used by DeepSeek-V3.2.
 
         Args:
             hidden_states: Input hidden states `[B, S, hidden_size]`.
             position_embeddings: `(cos, sin)` from RotaryEmbedding.
-            attention_mask: Causal mask, broadcastable to `[B, S, T]`.
-            cache: Cache object containing the indexer key cache for this layer.
+            position_ids: Position indices used for query scaling.
+            attention_mask: Right-aligned cumulative valid-token counts.
+            cache: Cache object containing the indexer key states for this layer.
 
         Returns:
-            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
-                turn these into an additive sparse mask; the `flash-mla` kernel consumes them directly.
+            `torch.Tensor`: the `int32` top-k physical KV indices of shape `[B, S, topk]`, with -1 for
+                unavailable selections. The eager / SDPA paths turn these into additive / boolean masks,
+                respectively, while compatible sparse Flash Attention kernels consume them directly.
         """
         batch_size, seq_len, _ = hidden_states.shape
-        cos, sin = position_embeddings
 
         # The indexer queries are derived directly from the hidden states
         q = self.q_input_norm(hidden_states)
@@ -358,6 +365,7 @@ class MistralLarge4TextIndexer(DeepseekV32Indexer):
         k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
 
         # If there is RoPE, apply it (interleaved)
+        cos, sin = position_embeddings
         if self.use_rope:
             q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
             k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
@@ -366,24 +374,24 @@ class MistralLarge4TextIndexer(DeepseekV32Indexer):
             k = torch.cat([k_rot, k_pass], dim=-1)  # [B, S, 1, D]
         k = k.squeeze(2)
 
+        # Get pools (here it's each token as groups of size 1)
+        groups, _ = prepare_compression_groups(k, attention_mask)
+        k = groups.squeeze(2)
+
+        # No compression, as each token is taken raw
         if cache is not None:
-            k = cache.update_indexer(k, self.layer_idx)
+            k = cache.layers[self.layer_idx].update_compressed_states(k, attention_mask, seq_len)
 
-        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
-        scores = F.relu(scores)
+        # Score each token
+        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
+        scores = F.relu(scores * self.softmax_scale)
 
-        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
-        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
-        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float()
+        weights = weights * self.n_heads**-0.5
+        scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask.dtype == torch.bool:
-            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
-        else:
-            index_scores = index_scores + attention_mask
-
-        topk = min(self.index_topk, index_scores.shape[-1])
-        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
+        # Remap selected group mapping to actual tokens
+        return select_compression_indices(scores, attention_mask, self.index_topk)
 
 
 class MistralLarge4TextAttention(GlmMoeDsaAttention):
@@ -466,31 +474,23 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
         if self.indexer is not None:
             topk_indices = self.indexer(
-                hidden_states,
-                position_embeddings,
-                attention_mask[:, 0, :, :],
-                position_ids,  # Kept for BC
+                hidden_states=hidden_states,
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                attention_mask=attention_mask,
                 cache=cache,
-            )  # [B, S, topk]
+            )
         else:
             if prev_topk_indices is None:
                 raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
             topk_indices = prev_topk_indices
 
-        sparse_indices = None
-        if self.config._attn_implementation in ("eager", "sdpa"):
-            index_mask = (
-                topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
-                .scatter(-1, topk_indices.long(), False)
-                .unsqueeze(1)
-            )
-
-            if attention_mask.dtype == torch.bool:
-                attention_mask = attention_mask & ~index_mask
-            else:
-                attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
-        else:
-            sparse_indices = topk_indices
+        attention_mask = build_attention_mask_from_topk(
+            self.config,
+            topk_indices=topk_indices,
+            query_states=query_states,
+            kv_length=key_states.shape[2],
+        )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -503,7 +503,7 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            indices=sparse_indices,  # consumed by flash_mla_with_kvcache; ignored by eager / SDPA
+            indices=topk_indices,
             position_ids=position_ids,
             **kwargs,
         )
@@ -660,17 +660,15 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
             position_ids = position_ids.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
-        if isinstance(attention_mask, dict):
-            causal_mask = attention_mask["indexed_attention"]
-        else:
-            causal_mask = create_causal_mask(
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            attention_mask = create_compression_mask(
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 cache=cache,
-                position_ids=position_ids,
-                allow_is_causal_skip=False,  # Always force creation to account for causality in the indexer
             )
+
+            causal_mask_mapping = {"indexed_attention": attention_mask}
 
         # Initialize as empty storage and it will be filled in the right layers.
         shared_kv_states = KVSharingDict()
@@ -682,7 +680,7 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=causal_mask_mapping["indexed_attention"],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 cache=cache,
