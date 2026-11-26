@@ -2087,7 +2087,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             request_id = manager.add_request(inputs, max_new_tokens=8)
             return next(manager.request_id_iter(request_id)).generated_tokens
 
-        cb_config = ContinuousBatchingConfig(page_size=32)
+        cb_config = ContinuousBatchingConfig(page_size=32, auto_switch_to_flash=False)
         with patch.object(PagedAttentionCache, "search_prefix_match", autospec=True, side_effect=spy_search):
             with model.continuous_batching_context_manager(
                 generation_config=model.generation_config, continuous_batching_config=cb_config
