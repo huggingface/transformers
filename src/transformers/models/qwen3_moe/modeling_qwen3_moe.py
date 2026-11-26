@@ -22,6 +22,7 @@ import os
 from collections.abc import Callable
 
 import torch
+from torch.distributed.tensor import DTensor
 import torch.nn.functional as F
 from torch import nn
 
@@ -174,11 +175,17 @@ class Qwen3MoeAttention(nn.Module):
 
         qkv_weight = self.__dict__.get("_proto_qkv_weight")
         if qkv_weight is not None:
-            num_heads, num_kv_heads = self.config.num_attention_heads, self.config.num_key_value_heads
+            # this rank's heads under tensor parallelism (`fuse_qkv_weights` records them)
+            num_heads, num_kv_heads = self.__dict__.get(
+                "_proto_qkv_heads", (self.config.num_attention_heads, self.config.num_key_value_heads)
+            )
             qkv = F.linear(hidden_states, qkv_weight)
             cos, sin = position_embeddings
+            q_norm_weight, k_norm_weight = (
+                w.to_local() if isinstance(w, DTensor) else w for w in (self.q_norm.weight, self.k_norm.weight)
+            )
             _proto_qk_norm_rope_(
-                qkv, cos, sin, self.q_norm.weight, self.k_norm.weight, self.q_norm.variance_epsilon, num_heads,
+                qkv, cos, sin, q_norm_weight, k_norm_weight, self.q_norm.variance_epsilon, num_heads,
                 num_kv_heads, self.head_dim,
             )  # fmt: skip
             q, k, v = qkv.split([num_heads * self.head_dim, num_kv_heads * self.head_dim, num_kv_heads * self.head_dim], -1)

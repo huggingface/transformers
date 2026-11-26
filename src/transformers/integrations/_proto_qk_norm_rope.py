@@ -80,11 +80,19 @@ def fuse_qkv_weights(model: torch.nn.Module) -> int:
             projections, attribute = (module.gate_proj, module.up_proj), "_proto_gate_up_weight"
         else:
             continue
-        # Only plain linears without bias concatenate into one GEMM: a quantized projection (FP8, ...) has its own forward,
-        # and a tensor parallel one (DTensor weight) holds this rank's heads only
-        if any(
-            type(p) is not torch.nn.Linear or p.bias is not None or isinstance(p.weight.data, DTensor) for p in projections
-        ):
+        # Only plain linears without bias concatenate into one GEMM: a quantized projection (FP8, ...) has its own forward
+        if any(type(p) is not torch.nn.Linear or p.bias is not None for p in projections):
+            continue
+        # [scratch] Tensor parallel q/k/v (colwise DTensor weights): this rank's heads concatenate the same way, into a
+        # plain local weight (a copy: the DTensor parameters stay as they are), and the attention reads its local head
+        # counts. Qwen3-235B-A22B TP2 decode ran q, k and v as three split-K GEMMs and the hub rotary as two kernels
+        if any(isinstance(p.weight.data, DTensor) for p in projections):
+            if attribute != "_proto_qkv_weight" or not all(isinstance(p.weight.data, DTensor) for p in projections):
+                continue
+            local = [p.weight.data.to_local() for p in projections]
+            module.__dict__["_proto_qkv_heads"] = (local[0].shape[0] // module.head_dim, local[1].shape[0] // module.head_dim)
+            setattr(module, attribute, torch.cat(local).detach())
+            fused += 1
             continue
         weight = torch.cat([p.weight for p in projections]).detach()
         offset = 0
