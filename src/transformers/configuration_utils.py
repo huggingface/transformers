@@ -490,20 +490,17 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         # Attention/Experts implementation to use, if relevant (it sets it recursively on sub-configs)
         self._output_attentions: bool | None = kwargs.pop("output_attentions", False)
-        # Some Hub configs serialize `_attn_implementation`: an explicit `attn_implementation` is applied on top of it
-        attn_implementation = kwargs.pop("attn_implementation", None)
-        self._attn_implementation: str | None = kwargs.pop("_attn_implementation", attn_implementation)
-        if attn_implementation is not None:
-            self._attn_implementation = attn_implementation
+        self._attn_implementation: str | None = kwargs.pop("attn_implementation", None)
         self._experts_implementation: str | None = kwargs.pop("experts_implementation", None)
 
         # HeterogeneousConfigMixin: `per_layer_config` should be applied last, as heterogeneity needs to have all of the other kwargs set
         per_layer_config = kwargs.pop("per_layer_config", None)
 
+        # Avoid deserializing problematic fields from hub configs - they should use the public field
+        ignored_keys = {"_attn_implementation", "_attn_implementation_internal", "_experts_implementation_internal"}
         # Additional attributes without default values
         for key, value in kwargs.items():
-            # Check this to avoid deserializing problematic fields from hub configs - they should use the public field
-            if key not in ("_attn_implementation_internal", "_experts_implementation_internal"):
+            if key not in ignored_keys:
                 try:
                     setattr(self, key, value)
                 except AttributeError as err:

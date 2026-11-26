@@ -434,12 +434,15 @@ class ConfigTestUtils(unittest.TestCase):
             config = PreTrainedConfig.from_pretrained(tmpdirname, torch_dtype="float32")
             self.assertEqual(config.dtype, "float32")
 
-    def test_attn_implementation_kwarg_overrides_serialized_key(self):
-        config_dict = {"_attn_implementation": "flash_attention_2"}
-        self.assertEqual(PreTrainedConfig.from_dict(config_dict)._attn_implementation, "flash_attention_2")
+    def test_serialized_implementation_keys_are_ignored(self):
+        for key in ("_attn_implementation", "_attn_implementation_internal", "_experts_implementation_internal"):
+            with self.subTest(key=key):
+                config = PreTrainedConfig.from_dict({key: "flash_attention_2"})
+                self.assertIsNone(config._attn_implementation)
+                self.assertIsNone(config._experts_implementation)
 
-        config = PreTrainedConfig.from_dict(config_dict, attn_implementation="sdpa")
-        self.assertEqual(config._attn_implementation, "sdpa")
+                config = PreTrainedConfig.from_dict({key: "flash_attention_2"}, attn_implementation="sdpa")
+                self.assertEqual(config._attn_implementation, "sdpa")
 
     def test_unserializable_json_is_encoded(self):
         class NewConfig(PreTrainedConfig):
