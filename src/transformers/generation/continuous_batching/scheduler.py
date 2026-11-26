@@ -115,7 +115,9 @@ class Scheduler(ABC):
         # [scratch] Qwen3-Next's mixed steps run uncompiled and without graphs (its chunked scans read the lengths on the
         # host): by default its prompts go in batches apart, one every 16 decode-only batches. B300 rolling: 1,558 tok/s
         # mixed, 2,626 / 3,163 / 3,772 / 2,861 every 4 / 8 / 16 / 32 (Granite-4.0-H-Small and Qwen3-8B lose 3-8%)
-        self._proto_default_apart = 16 if getattr(self.cache.config, "model_type", None) == "qwen3_next" else -1
+        # GLM-5.x too: its mixed steps take no graph (their keys would hold the context lengths). B300 rolling: 802 -> 1,584
+        model_type = getattr(self.cache.config, "model_type", None)
+        self._proto_default_apart = 16 if model_type in ("qwen3_next", "glm_moe_dsa") else -1
         # Active requests that failed cache allocation in the last scheduled batch w/ the length that was denied
         self.starved_requests: list[tuple[RequestState, int]] = []
 
