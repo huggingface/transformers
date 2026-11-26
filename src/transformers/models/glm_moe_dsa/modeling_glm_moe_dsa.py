@@ -45,6 +45,7 @@ from .configuration_glm_moe_dsa import GlmMoeDsaConfig
 
 
 # --- WP glue (bench only): fewer tiny kernels per decode step, each change behind an env var that defaults to off ------
+import importlib.util
 import os as _glue_os
 
 # [gap2 prototype] the decoder layer fuses each TP all-reduce with the residual add and the RMSNorm that follow it
@@ -56,6 +57,11 @@ if _TP_FUSED_ALL_REDUCE_NORM:
 _GLUE_RMSNORM = _glue_os.environ.get("GLUE_RMSNORM", "1") == "1"  # F.rms_norm: 1 kernel instead of 8
 _GLUE_ROPE = _glue_os.environ.get("GLUE_ROPE", "0") == "1"  # rotary written in place: 4 kernels per tensor instead of 7
 _GLUE_ROUTER = _glue_os.environ.get("GLUE_ROUTER", "1") == "1"  # no group selection when there is a single group
+# [scratch] vLLM's fused grouped top-k at inference (sigmoid, bias, top-k, gather, normalize and scale in one kernel), as
+# for DeepSeek-V3: same experts, weights within 1.2e-7; 17 vs ~215 us of launches at decode, 20 vs 325 us at 8,192 tokens
+_PROTO_VLLM_GROUPED_TOPK = (
+    _glue_os.environ.get("PROTO_VLLM_GROUPED_TOPK", "1") == "1" and importlib.util.find_spec("vllm") is not None
+)
 # cache writes of the prototype kept out of torch.compile graphs, like `PagedAttentionCache.update` upstream: traced, an
 # in-place write into a view of the cache pool is functionalized into a copy of the whole view
 _GLUE_OPAQUE_CACHE_WRITE = _glue_os.environ.get("GLUE_OPAQUE_CACHE_WRITE", "0") == "1"
@@ -1203,6 +1209,8 @@ class GlmMoeDsaTopkRouter(nn.Module):
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
         self.e_score_correction_bias = nn.Buffer(torch.zeros((self.num_experts), dtype=torch.float32))
+        if _PROTO_VLLM_GROUPED_TOPK:
+            import vllm._custom_ops  # noqa: F401  registers `_moe_C.grouped_topk` and its fake
 
     def proto_logits(self, hidden_states):
         """[scratch, bench only] PROTO_EXPERTS_TRTLLM_ROUTING: the fp32 router logits alone, as `forward` computes them
@@ -1241,6 +1249,12 @@ class GlmMoeDsaTopkRouter(nn.Module):
             router_logits = torch.mm(hidden_states, weight.t(), out_dtype=torch.float32)
         else:
             router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        if _PROTO_VLLM_GROUPED_TOPK and router_logits.is_cuda and not torch.is_grad_enabled():
+            topk_weights, topk_indices = torch.ops._moe_C.grouped_topk(
+                router_logits, self.num_group, self.topk_group, self.top_k, self.norm_topk_prob,
+                float(self.routed_scaling_factor), self.e_score_correction_bias.to(router_logits.dtype), 1, None,
+            )  # fmt: skip
+            return router_logits, topk_weights, topk_indices.long()
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias
         if _GLUE_ROUTER and self.num_group == 1 and self.topk_group == 1:
