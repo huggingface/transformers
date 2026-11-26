@@ -242,6 +242,10 @@ def _prefill_step(attn, allocator, q_nope, q_rope, kv, block_table, cu_seqlens_k
             cu_q_p = torch.tensor([0] + list(itertools.accumulate(q_lens[i] for i in prefill)), device=device, dtype=torch.int32)
             cu_k_p = torch.tensor([0] + list(itertools.accumulate(k_lens[i] for i in prefill)), device=device, dtype=torch.int32)
             max_q, max_k = max(q_lens[i] for i in prefill), max(k_lens[i] for i in prefill)
+            # consecutive prompts (the usual step: the prompts, then the decode tokens) are a row range, read and
+            # written as views instead of gathers and scatters
+            if prefill == list(range(prefill[0], prefill[-1] + 1)):
+                tokens = slice(cu_q[prefill[0]], cu_q[prefill[-1] + 1])
             plan["prefill"] = (tokens, key_rows, cu_q_p, cu_k_p, max_q, max_k)
         if decode:
             seqs = torch.tensor(decode, device=device)
@@ -256,24 +260,41 @@ def _prefill_step(attn, allocator, q_nope, q_rope, kv, block_table, cu_seqlens_k
     if plan["prefill"] is not None:
         tokens, key_rows, cu_q_p, cu_k_p, max_q, max_k = plan["prefill"]
         latents = kv[key_rows]  # [keys, kv_lora_rank + rope]
-        key_states, value_states = attn.expand_kv(
-            latents[None, None, :, : attn.kv_lora_rank], latents[None, None, :, attn.kv_lora_rank :]
-        )
-        query_states = torch.cat([q_nope[:, :, tokens], q_rope[:, :, tokens]], dim=-1)
         if _trtllm_ragged_available(device):
             # [scratch] Blackwell: flashinfer's TRT-LLM ragged DeepSeek prefill, as vLLM runs it (an 8,192-token prompt of
-            # DeepSeek-V3.1 at TP4, 32 heads: 0.55 ms vs 2.34 for FA2's varlen call)
-            prefill_out = _trtllm_ragged_prefill(
-                query_states[0].transpose(0, 1), key_states[0].transpose(0, 1), value_states[0].transpose(0, 1),
-                cu_q_p, cu_k_p, max_q, max_k, attn.scaling,
-            )  # fmt: skip
+            # DeepSeek-V3.1 at TP4, 32 heads: 0.55 ms vs 2.34 for FA2's varlen call). The token-major query and key are
+            # written once each, the value is a strided view of the decompressed latents, the output goes to its rows:
+            # the head-major states, their gathers and transposed copies cost ~0.9 ms a layer around the kernel's
+            # 0.46 on an 8,192-token prompt (B300)
+            nope = attn.qk_nope_head_dim
+            decompressed = attn.kv_b_proj(latents[None, None, :, : attn.kv_lora_rank])
+            decompressed = decompressed.view(-1, num_heads, nope + attn.v_head_dim)
+            key = decompressed.new_empty(decompressed.shape[0], num_heads, attn.qk_head_dim)
+            key[..., :nope].copy_(decompressed[..., :nope])
+            key[..., nope:].copy_(latents[:, None, attn.kv_lora_rank :])
+            query_nope, query_rope = q_nope[0, :, tokens].transpose(0, 1), q_rope[0, :, tokens].transpose(0, 1)
+            query = query_nope.new_empty(query_nope.shape[0], num_heads, attn.qk_head_dim)
+            query[..., :nope].copy_(query_nope)
+            query[..., nope:].copy_(query_rope)
+            if isinstance(tokens, slice):
+                _trtllm_ragged_prefill(
+                    query, key, decompressed[..., nope:], cu_q_p, cu_k_p, max_q, max_k, attn.scaling, out=out[tokens]
+                )  # fmt: skip
+            else:
+                out[tokens] = _trtllm_ragged_prefill(
+                    query, key, decompressed[..., nope:], cu_q_p, cu_k_p, max_q, max_k, attn.scaling
+                )  # fmt: skip
         else:
+            key_states, value_states = attn.expand_kv(
+                latents[None, None, :, : attn.kv_lora_rank], latents[None, None, :, attn.kv_lora_rank :]
+            )
+            query_states = torch.cat([q_nope[:, :, tokens], q_rope[:, :, tokens]], dim=-1)
             attention_interface = ALL_ATTENTION_FUNCTIONS[attn.config._attn_implementation]
             prefill_out, _ = attention_interface(
                 attn, query_states, key_states, value_states, None, dropout=0.0, scaling=attn.scaling,
                 cu_seq_lens_q=cu_q_p, cu_seq_lens_k=cu_k_p, max_length_q=max_q, max_length_k=max_k,
             )  # fmt: skip
-        out[tokens] = prefill_out.reshape(tokens.shape[0], num_heads, attn.v_head_dim)
+            out[tokens] = prefill_out.reshape(-1, num_heads, attn.v_head_dim)
     if plan["decode"] is not None:
         tokens, seqs, cu_q_d, cu_k_d = plan["decode"]
         q = torch.cat([torch.einsum("htn,hnc->thc", q_nope[0][:, tokens], w_uk), q_rope[0][:, tokens].transpose(0, 1)], dim=-1)
@@ -297,9 +318,10 @@ def _trtllm_ragged_available(device: torch.device) -> bool:
     )
 
 
-def _trtllm_ragged_prefill(query, key, value, cu_seqlens_q, cu_seqlens_k, max_q, max_k, scale):
+def _trtllm_ragged_prefill(query, key, value, cu_seqlens_q, cu_seqlens_k, max_q, max_k, scale, out=None):
     """Causal (bottom-right) varlen attention of `query` [tokens, heads, 192] on `key` [keys, heads, 192] and `value`
-    [keys, heads, 128]. Returns [tokens, heads, 128]."""
+    [keys, heads, 128] (read through its strides, as vLLM passes it). Returns [tokens, heads, 128], written to `out`
+    when given."""
     import flashinfer
 
     workspace = _RAGGED_WORKSPACE.get(query.device)
@@ -307,8 +329,8 @@ def _trtllm_ragged_prefill(query, key, value, cu_seqlens_q, cu_seqlens_k, max_q,
         workspace = _RAGGED_WORKSPACE[query.device] = torch.zeros(128 << 20, dtype=torch.uint8, device=query.device)
     seq_lens = (cu_seqlens_k[1:] - cu_seqlens_k[:-1]).to(torch.int32)
     return flashinfer.prefill.trtllm_ragged_attention_deepseek(
-        query.contiguous(), key.contiguous(), value.contiguous(), workspace, seq_lens, max_q, max_k, scale, 1.0, 1.0,
-        seq_lens.shape[0], -1, cu_seqlens_q, cu_seqlens_k, False, True, False,
+        query.contiguous(), key.contiguous(), value, workspace, seq_lens, max_q, max_k, scale, 1.0, 1.0,
+        seq_lens.shape[0], -1, cu_seqlens_q, cu_seqlens_k, False, True, False, out=out,
     )  # fmt: skip
 
 
