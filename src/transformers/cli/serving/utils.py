@@ -30,6 +30,7 @@ from queue import Queue
 from typing import TYPE_CHECKING
 
 from huggingface_hub import scan_cache_dir
+from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError, RevisionNotFoundError
 from tqdm import tqdm
 
 from transformers.utils import logging
@@ -91,6 +92,21 @@ def model_owner(model_id: str) -> str:
     if os.path.exists(model_id):
         return "local"
     return model_id.split("/")[0] if "/" in model_id else ""
+
+
+def _hub_error_status_code(error: BaseException) -> int | None:
+    """HTTP status for a model that couldn't be loaded because of the Hub, or `None` for any other error.
+
+    `from_pretrained` raises an `OSError` with a readable message whose cause is the Hub error, so the whole chain
+    is checked: 403 for a gated repo, 404 for a repo or revision that doesn't exist.
+    """
+    while error is not None:
+        if isinstance(error, GatedRepoError):
+            return 403
+        if isinstance(error, (RepositoryNotFoundError, RevisionNotFoundError)):
+            return 404
+        error = error.__cause__
+    return None
 
 
 @lru_cache
@@ -1217,7 +1233,15 @@ class BaseHandler:
         body["model"] = model
 
         model_id = self.model_manager.process_model_name(model)
-        model, processor = self.model_manager.load_model_and_processor(model_id, gguf_file=gguf_file)
+        try:
+            model, processor = self.model_manager.load_model_and_processor(model_id, gguf_file=gguf_file)
+        except OSError as e:
+            # A model name that doesn't exist on the Hub (or a gated repo, or a missing revision) is a client error.
+            # Without this it surfaces as a bare 500 "Internal Server Error", which OpenAI clients also retry.
+            status_code = _hub_error_status_code(e)
+            if status_code is None:
+                raise
+            raise HTTPException(status_code=status_code, detail=str(e)) from e
 
         return model_id, model, processor
 
