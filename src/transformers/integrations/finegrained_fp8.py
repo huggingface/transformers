@@ -719,12 +719,46 @@ def _fp8_vllm_fused_experts(self, hidden_states, top_k_index, top_k_weights):
     )  # fmt: skip
 
 
+_proto_fused_experts_warm = False
+
+
+def _proto_warm_fp8_fused_experts(model: nn.Module) -> None:
+    """[scratch] Once per process, before the CB loop: runs the fused experts at one token count per autotune bucket of
+    the hub kernel (log2 of the tokens per SM) between the decode kernels' range and vLLM's, and at vLLM's sizes, so
+    neither the hub kernel's autotuner nor Triton compiles in the timed part. Cold caches, Qwen3-30B-A3B-FP8 H100
+    256 x 512: one 14 s stall at the first prompts (5,139 tok/s, 11,072 with warm caches)."""
+    global _proto_fused_experts_warm
+    if _proto_fused_experts_warm or not _FP8_FUSED_EXPERTS:
+        return
+    experts = next((m for m in model.modules() if isinstance(m, FP8Experts) and not m._is_expert_parallel), None)
+    if experts is None or experts.gate_up_proj.device.type != "cuda":
+        return
+    _proto_fused_experts_warm = True
+    device, top_k = experts.gate_up_proj.device, model.config.num_experts_per_tok
+    num_sms = torch.cuda.get_device_properties(device).multi_processor_count
+    min_tokens = _FP8_FUSED_EXPERTS_MIN_ROWS * experts.num_experts // top_k + 1
+    sizes, tokens = [], min_tokens
+    while tokens < 2 * _PROTO_FP8_VLLM_MOE_MIN_TOKENS:
+        sizes.append(tokens)
+        tokens = max(tokens + 1, 2 ** ((tokens // num_sms).bit_length()) * num_sms)  # the next tokens-per-SM bucket
+    sizes += [4096, 8192]
+    t = time.perf_counter()
+    with torch.no_grad():
+        for num_tokens in sizes:
+            hidden = torch.randn(num_tokens, experts.hidden_dim, device=device, dtype=torch.bfloat16)
+            index = torch.rand(num_tokens, experts.num_experts, device=device).topk(top_k, dim=-1).indices
+            # same dtypes as the model's calls: they are part of the autotuner's key
+            weights = torch.full((num_tokens, top_k), 1 / top_k, device=device, dtype=torch.bfloat16)
+            if _can_use_fp8_fused_experts(experts, hidden, index):
+                _fp8_fused_experts_forward(experts, hidden, index, weights, grouped=True)
+    torch.cuda.synchronize(device)
+    logger.warning(f"FP8 fused experts warmed up at {sizes} tokens in {time.perf_counter() - t:.1f}s")
+
+
 def _fp8_fused_experts_forward(self, hidden_states, top_k_index, top_k_weights, grouped: bool):
     if _PROTO_FP8_VLLM_MOE and hidden_states.shape[0] >= _PROTO_FP8_VLLM_MOE_MIN_TOKENS:
         return _fp8_vllm_fused_experts(self, hidden_states, top_k_index, top_k_weights).to(hidden_states.dtype)
-    kernel = lazy_load_kernel("finegrained-fp8")
-    fused = kernel.moe_fused_grouped if grouped else kernel.moe_fused_batched
-    out = fused(
+    out = _hub_fused_experts(
         hidden_states,
         top_k_index,
         top_k_weights,
@@ -733,8 +767,28 @@ def _fp8_fused_experts_forward(self, hidden_states, top_k_index, top_k_weights, 
         self.gate_up_proj_scale_inv,
         self.down_proj_scale_inv,
         list(self.block_size),
+        grouped,
     )
     return out.to(hidden_states.dtype)
+
+
+# [scratch] Opaque to dynamo: traced, the hub kernel's Python autotuner and its tokens-per-SM bucket became guards
+# (`num_routed_tokens // num_sms == 31`, the autotuner's timestamps), so compiled steps recompiled at every new size
+@torch.compiler.disable
+def _hub_fused_experts(hidden_states, top_k_index, top_k_weights, gate_up, down, gate_up_scale, down_scale, block, grouped):
+    kernel = lazy_load_kernel("finegrained-fp8")
+    fused = kernel.moe_fused_grouped if grouped else kernel.moe_fused_batched
+    if os.environ.get("PROTO_DEBUG_SLOW_EXPERTS") == "1" and not torch.cuda.is_current_stream_capturing():
+        torch.cuda.synchronize()
+        t = time.perf_counter()
+        out = fused(hidden_states, top_k_index, top_k_weights, gate_up, down, gate_up_scale, down_scale, block)
+        torch.cuda.synchronize()
+        if time.perf_counter() - t > 0.2:
+            print(f"SLOW_EXPERTS {time.perf_counter() - t:.1f}s tokens={hidden_states.shape[0]} "
+                  f"routed={int((top_k_index < gate_up.shape[0]).sum())} index={top_k_index.dtype} hidden={hidden_states.dtype} "
+                  f"weights={top_k_weights.dtype} capturing={torch.cuda.is_current_stream_capturing()}", flush=True)
+        return out
+    return fused(hidden_states, top_k_index, top_k_weights, gate_up, down, gate_up_scale, down_scale, block)
 
 
 def _can_use_fp8_fused_experts(self, hidden_states, top_k_index) -> bool:

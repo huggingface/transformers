@@ -1556,9 +1556,10 @@ class ContinuousBatchingManager:
         """Create a new batch processor. If an already initialized batch processor exists, it is reset and returned."""
         self._proto_relayout_experts(trtllm=True)  # before any graph capture and before the cache is sized
         # WP experts (PROTO_EXPERTS_TRTLLM_AUTOTUNE=1, no-op otherwise): TRT-LLM MoE tactics, once per process, on every rank
-        from ...integrations.finegrained_fp8 import _proto_autotune_fp8_experts
+        from ...integrations.finegrained_fp8 import _proto_autotune_fp8_experts, _proto_warm_fp8_fused_experts
 
         _proto_autotune_fp8_experts(self.model, self.distributed_helper.cpu_comm_group)
+        _proto_warm_fp8_fused_experts(self.model)
         # Early return if a batch processor exists already
         batch_processor = getattr(self, "batch_processor", None)
         if isinstance(batch_processor, ContinuousBatchProcessor):

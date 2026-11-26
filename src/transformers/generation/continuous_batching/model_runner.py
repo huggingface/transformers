@@ -107,6 +107,9 @@ def infer_max_single_request_tokens(cache: PagedAttentionCache) -> int:
     return low
 
 
+_PROTO_WARMUP_HALF_STEP = os.environ.get("PROTO_WARMUP_HALF_STEP", "1") == "1"
+
+
 class ModelRunner:
     """This class is the continuous batching entry point for running the model. As a rule of thumb, anything running on
     the device should happen from this class."""
@@ -819,6 +822,11 @@ class ModelRunner:
             if self.cache.use_varlen_block_table:
                 num_q_tokens = self.cache.max_batch_tokens
                 total_duration += self.run_one_warmup(model=model, num_q_tokens=num_q_tokens, max_kv_read=0)
+                # [scratch] dynamo specializes the full step (its sizes equal the static buffers'): a smaller one compiles
+                # the general variant here rather than in the timed part (a cold cache stalled the first prompts of
+                # Qwen3-30B-A3B-FP8 256 x 512 for 7 s), and on the loop's side, past its recompile limit, it ran eager
+                if _PROTO_WARMUP_HALF_STEP:
+                    total_duration += self.run_one_warmup(model=model, num_q_tokens=num_q_tokens // 2, max_kv_read=0)
             # Otherwise, warm up the varlen path, w/ the largest possible sizes to get the biggest pool and avoid
             # fragmentation
             else:
