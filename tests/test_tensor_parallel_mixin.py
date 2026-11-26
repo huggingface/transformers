@@ -528,8 +528,14 @@ class TensorParallelTesterMixin(ABC):
         self._skip_if_not_supported()
 
         config = self._get_tp_config()
-        if hasattr(text_config := config.get_text_config(), "num_key_value_heads"):
+        text_config = config.get_text_config()
+        if hasattr(text_config, "num_key_value_heads"):
             text_config.num_key_value_heads = 1  # fewer KV heads than ranks: ranks replicate the head
+        # Replicate Q heads too so the rowwise output projection hits the 1/replicas scaling path.
+        if hasattr(text_config, "num_attention_heads"):
+            text_config.num_attention_heads = 1
+            if hasattr(text_config, "head_dim"):
+                text_config.head_dim = text_config.hidden_size
         model_class = self._get_tp_model_class()
         expected = {"q_proj": "colwise", "k_proj": "colwise", "v_proj": "colwise", "o_proj": "rowwise"}
         tp_plan = {}
