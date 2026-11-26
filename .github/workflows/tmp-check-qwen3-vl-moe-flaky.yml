@@ -1,0 +1,82 @@
+# [Temporary] Do not merge.
+# Run `Qwen3VLMoeModelTest::test_cached_decode_matches_cacheless` many times on the PR CI hardware (Intel m8i,
+# `aws-m8i-l-cache`) with the same image / env as the `tests_generate` job, to check whether it is flaky there.
+# It failed once in the merge queue (run 44786420520, commit 47f65ea302) but never on AMD runners (0 / 20,000).
+name: "[Temporary] Qwen3-VL-MoE flaky check on PR CI hardware"
+
+on:
+  push:
+    branches:
+      - tmp-check-qwen3-vl-moe-flaky-intel
+
+permissions:
+  contents: read
+
+jobs:
+  flakefinder:
+    name: "${{ matrix.commit.name }} [shard ${{ matrix.shard }}]"
+    runs-on:
+      group: aws-m8i-l-cache
+    container:
+      image: huggingface/transformers-torch-light
+      options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        commit:
+          - name: failing-commit
+            sha: 47f65ea3020ba2cfcba73ceacc0e258f8e856bca
+          - name: main
+            sha: main
+        shard: [0, 1, 2, 3]
+    env:
+      # Same as the PR CI `tests_generate` job
+      OMP_NUM_THREADS: 1
+      TRANSFORMERS_IS_CI: "true"
+      DISABLE_SAFETENSORS_CONVERSION: "true"
+      HF_HOME: /mnt/cache
+      HF_DATASETS_CACHE: /tmp/hf_datasets_cache
+      HF_MODULES_CACHE: /tmp/hf_modules_cache
+      HF_XET_CACHE: /tmp/hf_xet_cache
+      HF_METRICS_CACHE: /tmp/hf_metrics_cache
+      TEST_ID: tests/models/qwen3_vl_moe/test_modeling_qwen3_vl_moe.py::Qwen3VLMoeModelTest::test_cached_decode_matches_cacheless
+      FLAKE_RUNS: 2500
+      NUM_WORKERS: 8
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout the commit under test
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ matrix.commit.sha }}
+
+      - name: Fix git safe directory
+        run: git config --global --add safe.directory '*'
+
+      - name: Install
+        run: |
+          uv pip install -e .
+          uv pip install pytest-flakefinder
+
+      - name: Show the machine and versions
+        run: |
+          git log --oneline -1
+          lscpu | grep -E "Model name|^CPU\(s\)|Thread|Socket"
+          echo "flags: $(grep -o -wE 'avx512f|avx512_bf16|amx_bf16|amx_tile|avx2' /proc/cpuinfo | sort -u | tr '\n' ' ')"
+          python -c "import torch, transformers; print('torch', torch.__version__, '| transformers', transformers.__version__, '| threads', torch.get_num_threads())"
+
+      - name: Run the test with pytest-flakefinder
+        run: |
+          set -o pipefail
+          mkdir -p reports
+          python -m pytest -p no:cacheprovider --flake-finder --flake-runs=$FLAKE_RUNS -n $NUM_WORKERS -q -rf \
+            "$TEST_ID" 2>&1 | tee reports/pytest.log | tail -n 40
+
+      - name: Upload the log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: log-${{ matrix.commit.name }}-shard-${{ matrix.shard }}
+          path: reports/pytest.log
