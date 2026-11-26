@@ -812,6 +812,26 @@ def _triton_decode(q, k_cache, v_cache, block_table, seqused, softmax_scale, win
     return out
 
 
+_PROTO_TRITON_VARLEN = os.environ.get("PROTO_TRITON_VARLEN", "1") == "1"
+
+
+@torch.compiler.disable
+def _triton_varlen(q, k_cache, v_cache, block_table, seqused, cu_seqlens_q, max_seqlen_q, softmax_scale, window, softcap, sinks):
+    """A step with prompts on the paged cache through vLLM's Triton unified attention: `q` [tokens, heads, head_dim]
+    (padding tokens past `cu_seqlens_q[-1]` get no output). Returns [tokens, heads, head_dim]."""
+    from vllm.v1.attention.ops.triton_unified_attention import unified_attention
+
+    q = q.contiguous()
+    out = torch.empty_like(q)
+    unified_attention(
+        q=q, k=k_cache, v=v_cache, out=out, cu_seqlens_q=cu_seqlens_q.to(torch.int32), max_seqlen_q=max_seqlen_q,
+        seqused_k=seqused, max_seqlen_k=block_table.size(1) * k_cache.size(1), softmax_scale=softmax_scale, causal=True,
+        window_size=window, block_table=block_table, softcap=softcap, q_descale=None, k_descale=None, v_descale=None,
+        sinks=None if sinks is None else sinks.float(),
+    )  # fmt: skip
+    return out
+
+
 # [scratch] debug: attention sinks through the log-sum-exp rescale on Hopper too (see `_flash_attention_forward`)
 _PROTO_SINKS_BY_LSE = os.environ.get("PROTO_SINKS_BY_LSE") == "1"
 
@@ -968,6 +988,15 @@ def _flash_attention_forward(
                 out = torch.empty_like(q)
                 out[:num_sequences] = res[:, 0]
             else:
+                # [scratch] steps with prompts too, for layers with sinks or a window (PROTO_TRITON_VARLEN)
+                if _PROTO_TRITON_VARLEN and _PROTO_TRITON_DECODE and (sinks is not None or keywords.get("sliding_window")):
+                    scale = keywords.get("softmax_scale") or q.size(-1) ** -0.5
+                    window = (-1, -1) if keywords.get("sliding_window") is None else (keywords["sliding_window"] - 1, 0)
+                    out = _triton_varlen(
+                        q, k_cache, v_cache, block_table, seqused, cu_seq_lens_q, max_length_q, scale, window,
+                        keywords.get("softcap") or 0.0, sinks,
+                    )  # fmt: skip
+                    return out.view(batch_size, -1, *out.shape[-2:])
                 cu_seqlens_k = F.pad(seqused.cumsum(0, dtype=torch.int32), (1, 0))
                 max_seqlen_k = block_table.size(1) * k_cache.size(1)
                 flash_kwargs = partial(process_flash_kwargs_fn, **flash_kwargs_fn.keywords)(block_table=block_table)
