@@ -206,6 +206,17 @@ class Qwen3VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
 
+    def test_mixed_channel_layouts(self):
+        """Infer the channel layout of each clip in a batch."""
+        video_processor = self.fast_video_processing_class(**self.video_processor_dict)
+        channels_last = np.arange(4 * 56 * 84 * 3, dtype=np.uint8).reshape(4, 56, 84, 3)
+        channels_first = channels_last.transpose(0, 3, 1, 2).copy()
+        single = video_processor(channels_last, do_sample_frames=False, return_tensors="pt")
+        batch = video_processor([channels_last, channels_first], do_sample_frames=False, return_tensors="pt")
+
+        for key in ("video_grid_thw", self.input_name):
+            np.testing.assert_array_equal(batch[key], np.concatenate([single[key], single[key]]))
+
     def test_call_numpy(self):
         for video_processing_class in self.video_processor_list:
             video_processing = video_processing_class(**self.video_processor_dict)

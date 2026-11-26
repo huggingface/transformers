@@ -691,10 +691,11 @@ class BaseVideoProcessor(VideoProcessorMixin, TorchvisionBackend):
                 video = torch.from_numpy(video).contiguous()
 
             # Infer the channel dimension format if not provided
-            if input_data_format is None:
-                input_data_format = infer_channel_dimension_format(video)
+            video_data_format = (
+                input_data_format if input_data_format is not None else infer_channel_dimension_format(video)
+            )
 
-            if input_data_format == ChannelDimension.LAST:
+            if video_data_format == ChannelDimension.LAST:
                 video = video.permute(0, 3, 1, 2).contiguous()
 
             if do_convert_rgb:
