@@ -1913,12 +1913,19 @@ class Cache:
         record past states and is missing the `record_past` attribute, this returns False."""
         return getattr(self.layers[layer_idx], "record_past", False)
 
-    def get_recurrent_states_to_keep(self, layer_idx: int) -> int:
-        """Returns the number of intermediate recurrent states to compute if we are recording the past on a linear layer with recurrent
-        states."""
-        if not self.is_recording_past(layer_idx):
-            return 0
-        return getattr(self.layers[layer_idx], "recurrent_states_to_keep", 0)
+    def get_recurrent_states_to_keep(self, layer_idx: int | None = None) -> int:
+        """Returns the number of intermediate recurrent states to compute for layer `layer_idx`, if it is a linear layer with recurrent
+        states and we are recording the past. If `layer_idx` is `None`, this returns the maximum of all the layers."""
+        if layer_idx is not None:
+            if not self.is_recording_past(layer_idx):
+                return 0
+            return getattr(self.layers[layer_idx], "recurrent_states_to_keep", 0)
+
+        # If the layer_idx is None, return the max accross all layers
+        return max(
+            getattr(self.layers[i], "recurrent_states_to_keep", 0) if self.is_recording_past(i) else 0
+            for i in range(len(self.layers))
+        )
 
     @property
     def batch_size(self) -> int:
@@ -2415,6 +2422,9 @@ class EncoderDecoderCache(Cache):
 
     def activate_past_recording(self, **kwargs):
         self.self_attention_cache.activate_past_recording(**kwargs)
+
+    def get_recurrent_states_to_keep(self, layer_idx: int | None = None) -> int:
+        return self.self_attention_cache.get_recurrent_states_to_keep(layer_idx)
 
 
 # Deprecated alias: SlidingWindowCache was removed in transformers v5. StaticCache is the replacement.

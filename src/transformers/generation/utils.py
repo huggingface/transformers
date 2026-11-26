@@ -425,10 +425,10 @@ class DeferredStopCheck(StopCheck):
         # outputs or if the user passed an explicit Cache object
         self.cache = cache if cache_is_returned else None
         if self.cache is not None:
-            cache = cache.self_attention_cache if isinstance(cache, EncoderDecoderCache) else cache
-            current_num_to_keep = max(cache.get_recurrent_states_to_keep(i) for i in range(len(cache.layers)))  # ty:ignore[unresolved-attribute]
             # If not already set, we only need to crop at most 1 token
-            self.cache.activate_past_recording(recurrent_states_to_keep=max(1, current_num_to_keep))
+            self.cache.activate_past_recording(
+                recurrent_states_to_keep=max(1, self.cache.get_recurrent_states_to_keep())
+            )
         pinned = input_ids.device.type == "cuda"
         self.slots = deque(
             (
@@ -4520,8 +4520,8 @@ def _speculative_sampling(
 
 def _get_seq_len_dim(hidden_states: torch.Tensor, input_shape: tuple[int, int]) -> int:
     """
-    Hidden states are always `[..., batch_size, seq_len, ...]`, but some models have extra dims before the batch (e.g.
-    gemma3n) or after the sequence (glm5_next), so find the sequence dim dynamically.
+    Hidden states are usually 3D with [batch, seq_len, hidden_size], but for some models they are 4D with [x, batch, seq_len, y] (gemma3n)
+    or 4D with [batch, seq_len, x, y] (glm5_next), so find the sequence length dim dynamically.
     """
     batch_size, seq_len = input_shape
     for dim in range(1, hidden_states.ndim - 1):
@@ -4546,7 +4546,6 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
             if is_decoder_attention:
                 new_tuple += (layer[..., :cur_len, :cur_len],)
             else:
-                # hidden_states may be 4D sometimes, with seq_len on the 3rd dim (gemma3n) or 2nd dim (glm5_next)
                 dim = 1 if input_shape is None else _get_seq_len_dim(layer, input_shape)
                 new_tuple += (layer.narrow(dim, 0, cur_len),)
         outputs += (new_tuple,)
@@ -4560,7 +4559,6 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
             if is_decoder_attention:
                 new_tuple += (layer[..., i : i + 1, : cur_len + i],)
             else:
-                # hidden_states may be 4D sometimes, with seq_len on the 3rd dim (gemma3n) or 2nd dim (glm5_next)
                 dim = 1 if input_shape is None else _get_seq_len_dim(layer, input_shape)
                 new_tuple += (layer.narrow(dim, i, 1),)
         outputs += (new_tuple,)
