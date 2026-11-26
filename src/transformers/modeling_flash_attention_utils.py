@@ -752,6 +752,10 @@ _PROTO_KV_WRITE = os.environ.get("PROTO_KV_WRITE", "1") == "1"
 # [scratch] FA4 (Blackwell) decode-only steps through flashinfer's TRT-LLM decode kernel (vLLM's Blackwell backend):
 # it splits the keys of a few long sequences and reuses prefix-shared pages better than FA4's varlen call
 _PROTO_TRTLLM_DECODE = os.environ.get("PROTO_TRTLLM_DECODE", "1") == "1"
+# [scratch] dev knobs: TRT-LLM decode for layers with attention sinks / sliding windows too (the kernel matches a torch
+# reference on gpt-oss shapes with both, NHD pages: tonight/scripts/trtllm_sinks_check.py)
+_PROTO_TRTLLM_SINKS = os.environ.get("PROTO_TRTLLM_SINKS", "0") == "1"
+_PROTO_TRTLLM_SLIDING = os.environ.get("PROTO_TRTLLM_SLIDING", "0") == "1"
 _TRTLLM_WORKSPACE: dict = {}
 
 
@@ -762,13 +766,14 @@ def proto_trtllm_decode_workspace(device: torch.device) -> None:
 
 
 @torch.compiler.disable
-def _trtllm_decode(q, k_cache, v_cache, block_table, seqused, softmax_scale, window_left):
+def _trtllm_decode(q, k_cache, v_cache, block_table, seqused, softmax_scale, window_left, sinks=None):
     import flashinfer
 
+    # the kernel reads the queries as contiguous [tokens, heads, head_dim] (a head-major view came out as garbage)
     out = flashinfer.decode.trtllm_batch_decode_with_kv_cache(
-        q, (k_cache, v_cache), _TRTLLM_WORKSPACE[q.device], block_table, seqused,
+        q.contiguous(), (k_cache, v_cache), _TRTLLM_WORKSPACE[q.device], block_table, seqused,
         block_table.size(1) * k_cache.size(1), bmm1_scale=softmax_scale, bmm2_scale=1.0, window_left=window_left,
-        kv_layout="NHD",
+        sinks=None if sinks is None else sinks.float(), kv_layout="NHD",
     )  # fmt: skip
     return out
 # [scratch] debug: attention sinks through the log-sum-exp rescale on Hopper too (see `_flash_attention_forward`)
@@ -882,13 +887,14 @@ def _flash_attention_forward(
             if (
                 max_length_q == 1
                 and q.device in _TRTLLM_WORKSPACE
-                and keywords.get("s_aux") is None
+                and (keywords.get("s_aux") is None or _PROTO_TRTLLM_SINKS)
                 and keywords.get("softcap") is None
-                and keywords.get("sliding_window") is None  # gpt-oss came out wrong through it (sinks + window)
+                and (keywords.get("sliding_window") is None or _PROTO_TRTLLM_SLIDING)  # gpt-oss came out wrong
             ):
                 scale = keywords.get("softmax_scale") or q.size(-1) ** -0.5
                 window = keywords.get("sliding_window")
-                out = _trtllm_decode(q, k_cache, v_cache, block_table, seqused, scale, -1 if window is None else window - 1)
+                window = -1 if window is None else window - 1
+                out = _trtllm_decode(q, k_cache, v_cache, block_table, seqused, scale, window, keywords.get("s_aux"))
                 return out.view(batch_size, -1, *out.shape[-2:])
             flash_kwargs = partial(process_flash_kwargs_fn, **flash_kwargs_fn.keywords)(
                 max_seqlen_q=max_length_q, max_seqlen_k=block_table.size(1) * k_cache.size(1), block_table=block_table
