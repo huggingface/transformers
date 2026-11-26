@@ -142,6 +142,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "MaskFormerDetrDecoder": "DetrModel",
     "Qwen2_5_VLModel": "Qwen2VLModel",
     "Qwen2_5_VLForConditionalGeneration": "Qwen2VLForConditionalGeneration",
+    "LlavaOnevision15ForConditionalGeneration": "Qwen2VLForConditionalGeneration",
     "qwen2_5_omni_thinker": "Qwen2_5OmniThinkerForConditionalGeneration",
     "Qwen3OmniMoeThinkerModel": "Qwen2_5OmniThinkerModel",
     "Qwen3OmniMoeThinkerForConditionalGeneration": "Qwen2_5OmniThinkerForConditionalGeneration",
@@ -224,6 +225,19 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.self_attn\.to_out\.", ".self_attn.o_proj."),
             WeightRenaming(r"\.mlp\.up_proj\.", ".mlp.fc1."),
             WeightRenaming(r"\.mlp\.down_proj\.", ".mlp.fc2."),
+        ],
+        "LlavaOnevision15Model": [
+            WeightRenaming(r"^model\.(?!language_model\.|visual\.)", "language_model."),
+        ],
+        "llava_onevision1_5_vision": [
+            PrefixChange(prefix_to_remove="visual"),
+            WeightRenaming(r"^class_embedding", r"cls_embeddings\.class_embedding"),
+            WeightRenaming(r"^class_pos_emb", r"cls_embeddings\.class_pos_emb"),
+            WeightRenaming(r"merger\.fc1\.", "merger.linear_fc1."),
+            WeightRenaming(r"merger\.fc2\.", "merger.linear_fc2."),
+            WeightRenaming(r"merger\.mlp\.0\.", "merger.linear_fc1."),
+            WeightRenaming(r"merger\.mlp\.2\.", "merger.linear_fc2."),
+            WeightRenaming(r"merger\.ln_q\.", "merger.norm."),
         ],
         "ovis2_5": [
             WeightRenaming(r"^llm\.model\.", "model.language_model."),
