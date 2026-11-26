@@ -67,6 +67,7 @@ class Lfm3ModelTest(CausalLMModelTest, unittest.TestCase):
 
     def with_float16_default(test_func):
         """The kernels are dependent on half precision so we force it with this decorator"""
+
         @wraps(test_func)
         def wrapper(self, *args, **kwargs):
             previous_dtype = torch.get_default_dtype()
