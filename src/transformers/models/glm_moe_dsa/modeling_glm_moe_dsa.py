@@ -51,9 +51,11 @@ import os as _glue_os
 _TP_FUSED_ALL_REDUCE_NORM = _glue_os.environ.get("HF_TP_ALL_REDUCE", "nccl") == "flashinfer_fused"
 if _TP_FUSED_ALL_REDUCE_NORM:
     from ...distributed.parallel_utils import tp_all_reduce_add_rms_norm
-_GLUE_RMSNORM = _glue_os.environ.get("GLUE_RMSNORM", "0") == "1"  # F.rms_norm: 1 kernel instead of 8
+# [scratch] GLUE_RMSNORM, GLUE_ROUTER, GEMM_FUSE_QKV_A, GEMM_FUSE_GATE_UP, PROTO_TOPK_LENGTH, MOE_SHARED_STREAM on by default
+# (validated in the GLM-5.3 gap campaign; B300 TP4 + EP4, 8 requests: 243 -> 319 tok/s with all of them)
+_GLUE_RMSNORM = _glue_os.environ.get("GLUE_RMSNORM", "1") == "1"  # F.rms_norm: 1 kernel instead of 8
 _GLUE_ROPE = _glue_os.environ.get("GLUE_ROPE", "0") == "1"  # rotary written in place: 4 kernels per tensor instead of 7
-_GLUE_ROUTER = _glue_os.environ.get("GLUE_ROUTER", "0") == "1"  # no group selection when there is a single group
+_GLUE_ROUTER = _glue_os.environ.get("GLUE_ROUTER", "1") == "1"  # no group selection when there is a single group
 # cache writes of the prototype kept out of torch.compile graphs, like `PagedAttentionCache.update` upstream: traced, an
 # in-place write into a view of the cache pool is functionalized into a copy of the whole view
 _GLUE_OPAQUE_CACHE_WRITE = _glue_os.environ.get("GLUE_OPAQUE_CACHE_WRITE", "0") == "1"
@@ -69,8 +71,8 @@ _GLUE_OPAQUE_CACHE_WRITE = _glue_os.environ.get("GLUE_OPAQUE_CACHE_WRITE", "0") 
 # GEMM_ROUTER_BF16=1   router logits as bf16 x bf16 -> fp32 (`torch.mm(..., out_dtype=float32)`) instead of an fp32
 #   GEMM on fp32 copies of the hidden states and of the bf16 weight, made on every call: same products (bf16 values
 #   are exact in fp32 and in TF32), only the summation order changes.
-_GEMM_FUSE_QKV_A = _glue_os.environ.get("GEMM_FUSE_QKV_A", "0") == "1"
-_GEMM_FUSE_GATE_UP = _glue_os.environ.get("GEMM_FUSE_GATE_UP", "0") == "1"
+_GEMM_FUSE_QKV_A = _glue_os.environ.get("GEMM_FUSE_QKV_A", "1") == "1"
+_GEMM_FUSE_GATE_UP = _glue_os.environ.get("GEMM_FUSE_GATE_UP", "1") == "1"
 _GEMM_ROUTER_BF16 = _glue_os.environ.get("GEMM_ROUTER_BF16", "1") == "1"  # [scratch] on by default, like DS-V3's
 
 
@@ -586,7 +588,7 @@ _PROTO_PREFILL_MQA = _os.environ.get("PROTO_PREFILL_MQA", "1") == "1"
 _PROTO_PREFILL_MQA_SORTED = _os.environ.get("PROTO_PREFILL_MQA_SORTED", "0") == "1"
 # WP prefill (bench only): give FlashMLA's sparse kernel the number of valid entries of every list (`topk_length`), so
 # its time follows the keys a query really attends to instead of the padded list width. Same output, bit for bit
-_PROTO_TOPK_LENGTH = _os.environ.get("PROTO_TOPK_LENGTH", "0") == "1"
+_PROTO_TOPK_LENGTH = _os.environ.get("PROTO_TOPK_LENGTH", "1") == "1"
 # check only: prefill batches score even when every context fits in index_topk, so (with sorted lists) their lists
 # come in the order of the packed indexer and outputs can be compared bit for bit with the unpatched prefill
 _PROTO_PREFILL_NOSKIP = _os.environ.get("PROTO_PREFILL_NOSKIP", "0") == "1"
@@ -1317,7 +1319,7 @@ class GlmMoeDsaExperts(nn.Module):
 # one, the routed experts are issued first, the shared expert after them on the side stream, and the current stream
 # waits for the side stream before the sum, so the block's single all-reduce (HF_TP_SINGLE_MLP_ALL_REDUCE) sees both.
 # Captured as is by CUDA graphs (fork / join through stream waits). Same kernels and inputs: outputs bit-identical.
-_MOE_SHARED_STREAM = _glue_os.environ.get("MOE_SHARED_STREAM", "0") == "1"
+_MOE_SHARED_STREAM = _glue_os.environ.get("MOE_SHARED_STREAM", "1") == "1"
 _SHARED_STREAMS = {}  # device -> side stream, created once per process
 
 
