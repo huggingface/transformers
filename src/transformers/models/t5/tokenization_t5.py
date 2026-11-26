@@ -120,12 +120,8 @@ class T5Tokenizer(TokenizersBackend):
         if _spm_precompiled_charsmap is not None:
             self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
 
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [
-                pre_tokenizers.WhitespaceSplit(),
-                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True),
-            ]
-        )
+        # Only use Metaspace (matching SpmConverter) so whitespace tokens such as '\n' are preserved
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
         super().__init__(
