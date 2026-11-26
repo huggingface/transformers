@@ -20,8 +20,6 @@ from copy import deepcopy
 from inspect import isfunction, ismethod
 from typing import Any
 
-import regex as re
-
 from ..chat_template_utils import get_json_schema
 from .content_parsers import STREAMABLE_PARSERS, TYPED_STRUCTURED_PARSERS, process_field
 from .response_templates import ResponseTemplate, ResponseTemplateField, load_response_template
@@ -160,7 +158,6 @@ class ResponseParser:
         self._body: str = ""
         self._opened: bool = False
         self._finalized: bool = False
-        self._delimiters_patterns: dict[str | None, Any] = {}
         self.initial_events: list[dict] = []
         if prefix:
             self._consume_prefix(prefix)
@@ -212,10 +209,6 @@ class ResponseParser:
         return self._output, events
 
     def _process(self, events: list[dict], eos: bool) -> None:
-        if not eos and self._no_delimiter_in_new_text():
-            self._accumulate(events, self._buffer[self._pos :])
-            self._pos = len(self._buffer)
-            return
         while True:
             watch = self._watchlist()
             best, hold_start = self._scan(watch, eos)
@@ -255,28 +248,6 @@ class ResponseParser:
                 self._accumulate(events, self._buffer[self._pos : hold_start])
                 self._pos = hold_start
             break
-
-    def _no_delimiter_in_new_text(self) -> bool:
-        """Whether the text not processed yet holds no delimiter of `_watchlist`, whole or begun: it then all goes to
-        the current region. One search of the delimiters joined, instead of `_scan`'s one per delimiter."""
-        pattern = self._delimiters_pattern()
-        if pattern is None or self._pos == len(self._buffer):
-            return False
-        match = pattern.search(self._buffer, self._pos, partial=True)
-        return match is None or match.start() == len(self._buffer)
-
-    def _delimiters_pattern(self) -> Any:
-        """The delimiters of `_watchlist` as one pattern, made once per region. `None` when they can't be joined: with
-        different flags."""
-        if self._current not in self._delimiters_patterns:
-            delimiters = [field.open_re if kind == "open" else field.close_re for kind, field in self._watchlist()]
-            joined = None
-            if len({delimiter.flags for delimiter in delimiters}) == 1:
-                joined = re.compile(
-                    "|".join(f"(?:{delimiter.pattern})" for delimiter in delimiters), delimiters[0].flags
-                )
-            self._delimiters_patterns[self._current] = joined
-        return self._delimiters_patterns[self._current]
 
     def _watchlist(self) -> list[tuple[str, ResponseTemplateField]]:
         """Patterns we care about right now: the close of the currently-open
