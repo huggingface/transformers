@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
+import importlib.util
 import inspect
 import os
 from collections.abc import Callable
@@ -776,6 +777,41 @@ def _trtllm_decode(q, k_cache, v_cache, block_table, seqused, softmax_scale, win
         sinks=None if sinks is None else sinks.float(), kv_layout="NHD",
     )  # fmt: skip
     return out
+# [scratch] FA2 (Ampere, Ada, SM120) decode-only steps through vLLM's Triton unified attention when vLLM is installed:
+# FA2's split-kv kernel reads each sequence's keys once per query head and does not skip the pages of a sliding window
+# (gpt-oss-20b on an H100 with FA2: 205 us per full layer and 106 per sliding one at 128 sequences of ~800 tokens, for
+# 61 and 10 us of reads). The Triton kernel takes the query heads of a KV head together, windows and sinks natively.
+# For layers with sinks or a window only: on plain layers FA2 held up (Qwen3-8B rolling 7,395 FA2 vs 7,029 Triton).
+_PROTO_TRITON_DECODE = os.environ.get("PROTO_TRITON_DECODE", "1") == "1" and importlib.util.find_spec("vllm") is not None
+
+
+@torch.compiler.disable
+def _triton_decode(q, k_cache, v_cache, block_table, seqused, softmax_scale, window, softcap, sinks):
+    """Decode step on the paged cache through vLLM's Triton unified attention: `q` [sequences, heads, head_dim] (one
+    token per sequence), `k_cache` / `v_cache` [pages, page_size, kv_heads, head_dim]. Returns [sequences, heads,
+    head_dim]."""
+    import triton
+    from vllm.v1.attention.ops.triton_unified_attention import unified_attention
+
+    num_sequences, num_heads, head_dim = q.shape
+    q = q.contiguous()
+    out = torch.empty_like(q)
+    segments, dim_padded = 16, triton.next_power_of_2(head_dim)
+    segment_out = torch.empty(num_sequences, num_heads, segments, dim_padded, dtype=torch.float32, device=q.device)
+    segment_max = torch.empty(num_sequences, num_heads, segments, dtype=torch.float32, device=q.device)
+    segment_sum = torch.empty_like(segment_max)
+    unified_attention(
+        q=q, k=k_cache, v=v_cache, out=out,
+        cu_seqlens_q=torch.arange(num_sequences + 1, dtype=torch.int32, device=q.device), max_seqlen_q=1,
+        seqused_k=seqused, max_seqlen_k=block_table.size(1) * k_cache.size(1), softmax_scale=softmax_scale, causal=True,
+        window_size=window, block_table=block_table, softcap=softcap, q_descale=None, k_descale=None, v_descale=None,
+        seq_threshold_3D=max(1, 128 // k_cache.size(2)), num_par_softmax_segments=segments,
+        softmax_segm_output=segment_out, softmax_segm_max=segment_max, softmax_segm_expsum=segment_sum,
+        sinks=None if sinks is None else sinks.float(),
+    )  # fmt: skip
+    return out
+
+
 # [scratch] debug: attention sinks through the log-sum-exp rescale on Hopper too (see `_flash_attention_forward`)
 _PROTO_SINKS_BY_LSE = os.environ.get("PROTO_SINKS_BY_LSE") == "1"
 
@@ -910,7 +946,18 @@ def _flash_attention_forward(
             seqused = paged_kv_write(k, v, k_cache, v_cache, block_table, cache_seqlens, cu_seq_lens_q, max_length_q)
             # [scratch] FA2 takes no attention sinks: they join through the log-sum-exp, out * sigmoid(lse - sink)
             sinks = flash_kwargs_fn.keywords.get("s_aux")
-            if max_length_q == 1:
+            keywords = flash_kwargs_fn.keywords
+            if max_length_q == 1 and _PROTO_TRITON_DECODE and (sinks is not None or keywords.get("sliding_window")):
+                num_sequences = block_table.size(0)
+                scale = keywords.get("softmax_scale") or q.size(-1) ** -0.5
+                window = (-1, -1) if keywords.get("sliding_window") is None else (keywords["sliding_window"] - 1, 0)
+                res = _triton_decode(
+                    q[:num_sequences], k_cache, v_cache, block_table, seqused[:num_sequences], scale, window,
+                    keywords.get("softcap") or 0.0, sinks,
+                )  # fmt: skip
+                out = torch.empty_like(q)
+                out[:num_sequences] = res
+            elif max_length_q == 1:
                 num_sequences = block_table.size(0)
                 flash_kwargs = flash_kwargs_fn(max_seqlen_q=1, block_table=block_table, cache_seqlens=seqused)
                 if sinks is not None:
