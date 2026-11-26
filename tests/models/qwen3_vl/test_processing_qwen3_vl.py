@@ -77,8 +77,19 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIn(processor.vision_start_token + processor.video_token + processor.vision_end_token, prompt)
 
         inputs = processor(
-            text=prompt, videos=[self.prepare_videos_inputs()], do_sample_frames=False, return_tensors="pt"
+            text=prompt,
+            videos=[self.prepare_videos_inputs()],
+            do_sample_frames=False,
+            return_tensors="pt",
+            return_text_replacement_offsets=True,
         )
+        # Offsets point into the original prompt, which `return_assistant_tokens_mask` relies on
+        offset = inputs["text_replacement_offsets"][0][0]
+        self.assertEqual(prompt[slice(*offset["span"])], offset["text"])
+        self.assertEqual(
+            offset["text"], processor.vision_start_token + processor.video_token + processor.vision_end_token
+        )
+
         num_frames = inputs["video_grid_thw"][0][0].item()
         input_ids = inputs["input_ids"][0].tolist()
         self.assertEqual(input_ids.count(processor.vision_start_token_id), num_frames)
