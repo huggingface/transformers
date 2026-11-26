@@ -36,6 +36,7 @@ Everything below targets one of those gaps.
 """
 
 import json
+import math
 import tempfile
 import unittest
 from dataclasses import dataclass
@@ -431,21 +432,24 @@ class GatedDeltaRulePatchTest(unittest.TestCase):
         return exported
 
     def test_dynamo(self):
+        from torch.utils._pytree import tree_leaves
+
         from transformers.exporters import DynamoExporter
 
-        self._export_and_check_other_chunk_counts(DynamoExporter(), DynamoConfig(dynamic=True))
+        program = self._export_and_check_other_chunk_counts(DynamoExporter(), DynamoConfig(dynamic=True)).program
+        # Every backend converts this graph, and some refuse a non-finite constant (TensorRT's int8, from a `-inf` mask
+        # fill): none in the ops' arguments or the lifted constants
+        arguments = [leaf for node in program.graph.nodes for leaf in tree_leaves((node.args, node.kwargs))]
+        self.assertTrue(all(math.isfinite(argument) for argument in arguments if isinstance(argument, float)))
+        constants = [value for value in program.constants.values() if isinstance(value, torch.Tensor)]
+        self.assertTrue(all(constant.isfinite().all() for constant in constants if constant.is_floating_point()))
 
     @require_onnxscript
     @require_onnxruntime
     def test_onnx(self):
         from transformers.exporters import OnnxExporter
 
-        exported = self._export_and_check_other_chunk_counts(OnnxExporter(), OnnxConfig(dynamic=True))
-        # TensorRT's int8 refuses a non-finite constant, such as a `-inf` mask fill
-        constants = [
-            torch.from_numpy(value.const_value.numpy()) for value in exported.program.graph.initializers.values()
-        ]
-        self.assertTrue(all(constant.isfinite().all() for constant in constants if constant.is_floating_point()))
+        self._export_and_check_other_chunk_counts(OnnxExporter(), OnnxConfig(dynamic=True))
 
     @require_openvino
     def test_openvino(self):
