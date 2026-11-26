@@ -529,21 +529,23 @@ class TensorParallelTesterMixin(ABC):
 
         config = self._get_tp_config()
         text_config = config.get_text_config()
+        head_dim = getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
         if hasattr(text_config, "num_key_value_heads"):
             text_config.num_key_value_heads = 1  # fewer KV heads than ranks: ranks replicate the head
         # Replicate Q heads too so the rowwise output projection hits the 1/replicas scaling path.
         if hasattr(text_config, "num_attention_heads"):
             text_config.num_attention_heads = 1
-            if hasattr(text_config, "head_dim"):
-                text_config.head_dim = text_config.hidden_size
+            # Keep the per-head width (and anything derived from it, e.g. the mrope sections) unchanged.
+            text_config.head_dim = head_dim
         model_class = self._get_tp_model_class()
         expected = {"q_proj": "colwise", "k_proj": "colwise", "v_proj": "colwise", "o_proj": "rowwise"}
+        # Every head-aligned attention parameter must use the unit view: Beam's `gate_proj`/`gate_bias`
+        # and GraniteSWA's per-head `sinks` are sharded across heads like q/k/v.
         tp_plan = {}
         for key, style in model_class(config).tp_plan.items():
-            name = key.rsplit(".", 1)[-1]
-            if expected.get(name) == style:
+            if "self_attn" in key and style in ("colwise", "rowwise"):
                 tp_plan[key] = f"unit_{style}"
-        if {key.rsplit(".", 1)[-1] for key in tp_plan} != set(expected):
+        if not set(expected).issubset({key.rsplit(".", 1)[-1] for key in tp_plan}):
             self.skipTest("Attention is not a plain colwise q/k/v + rowwise o_proj")
 
         atol = self.tensor_parallel_atol
