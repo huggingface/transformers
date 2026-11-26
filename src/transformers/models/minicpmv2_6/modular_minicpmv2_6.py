@@ -18,7 +18,7 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...processing_utils import MultiModalData, Unpack
+from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -241,34 +241,6 @@ class MiniCPMV2_6Processor(MiniCPMV2_5Processor):
         num_rows, num_cols = image_inputs["grids"][image_idx]
         rows = [(self.slice_start_token + image_tokens + self.slice_end_token) * num_cols for _ in range(num_rows)]
         return self.image_start_token + image_tokens + self.image_end_token + "\n".join(rows)
-
-    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
-        """
-        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
-
-        Args:
-            image_sizes (`list[list[int]]`, *optional*):
-                The input sizes formatted as (height, width) per each image.
-
-        Returns:
-            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
-            input modalities, along with other useful data.
-        """
-        vision_data = {}
-        if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
-            max_slice_nums = images_kwargs.get("max_slice_nums") or self.image_processor.max_slice_nums
-            scale_resolution = images_kwargs.get("scale_resolution") or self.image_processor.scale_resolution
-            slice_mode = images_kwargs.get("slice_mode", self.image_processor.slice_mode)
-
-            num_image_patches = []
-            for image_size in image_sizes:
-                grid = self.image_processor.get_sliced_grid(image_size, max_slice_nums, scale_resolution)
-                num_image_patches.append(1 + grid[0] * grid[1] if slice_mode and grid is not None else 1)
-            num_image_tokens = [self.num_image_tokens * num_patches for num_patches in num_image_patches]
-            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
-
-        return MultiModalData(**vision_data)
 
 
 __all__ = [

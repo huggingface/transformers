@@ -244,9 +244,19 @@ class MiniCPMV2_6Resampler(nn.Module):
         patch_position_ids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        key_value_states = self.ln_kv(self.kv_proj(vision_features))
-        position_embeddings = self.position_embedding(patch_position_ids) * pixel_attention_mask[..., None]
-        query_states = self.ln_q(self.query).unsqueeze(0).expand(key_value_states.shape[0], -1, -1)
+        key_value_states = self.kv_proj(vision_features)
+        key_value_states = self.ln_kv(key_value_states)
+
+        # Position embeddings of the real patches only (padding gets none)
+        position_embeddings = self.position_embedding(patch_position_ids)
+        position_embeddings = position_embeddings * pixel_attention_mask[..., None]
+        position_embeddings = position_embeddings.to(key_value_states.dtype)
+
+        # The same learned queries for every slice
+        num_slices = key_value_states.shape[0]
+        query_states = self.ln_q(self.query)
+        query_states = query_states.unsqueeze(0).expand(num_slices, -1, -1)
+
         attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=query_states,
@@ -257,10 +267,11 @@ class MiniCPMV2_6Resampler(nn.Module):
             query_states,
             key_value_states,
             attention_mask=attention_mask,
-            encoder_position_embeddings=position_embeddings.to(key_value_states.dtype),
+            encoder_position_embeddings=position_embeddings,
             **kwargs,
         )
-        return self.ln_post(attention_output) @ self.proj
+        resampled_features = self.ln_post(attention_output) @ self.proj
+        return resampled_features
 
 
 @auto_docstring
