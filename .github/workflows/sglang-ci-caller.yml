@@ -180,15 +180,15 @@ jobs:
       - name: Install dependencies
         run: |
           apt-get update && apt-get install -y --no-install-recommends ffmpeg
-          uv pip install setuptools setuptools-scm wheel scikit-build-core ninja cmake
-          uv pip install pytest pytest-asyncio accelerate expecttest parameterized sentence-transformers psutil
+          uv pip install --prerelease=allow setuptools setuptools-scm wheel scikit-build-core ninja cmake
+          uv pip install --prerelease=allow pytest pytest-asyncio accelerate expecttest parameterized sentence-transformers psutil
           # Keep the image's PyTorch; compile this revision's CPU kernels against it.
           cp python/pyproject_cpu.toml python/pyproject.toml
-          SGLANG_BUILD_RUST_EXTS=none uv pip install --no-deps --no-build-isolation -e ./python
+          SGLANG_BUILD_RUST_EXTS=none uv pip install --prerelease=allow --no-deps --no-build-isolation -e ./python
           cp python/sglang/kernels/aot/pyproject_cpu.toml python/sglang/kernels/aot/pyproject.toml
-          uv pip install --no-deps --no-build-isolation ./python/sglang/kernels/aot
+          uv pip install --prerelease=allow --no-deps --no-build-isolation ./python/sglang/kernels/aot
           # Install the candidate last so the SGLang release pin cannot replace it.
-          uv pip install -e "${TRANSFORMERS_SOURCE}"
+          uv pip install --prerelease=allow -e "${TRANSFORMERS_SOURCE}"
 
       - name: System info
         run: |

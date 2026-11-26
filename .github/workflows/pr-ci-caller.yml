@@ -49,4 +49,4 @@ jobs:
       group: ${{ github.workflow }}-${{ needs.concurrency-key.outputs.key || format('run-{0}', github.run_id) }}
       cancel-in-progress: true
     # DON'T use commit sha here before the CI migration is finished
-    uses: huggingface/transformers-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@main # main
+    uses: ./.github/workflows/pr-ci_dynamic_caller_example.yml # patched for hfh prerelease
