@@ -941,6 +941,18 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 msg = f"{key} | MISSING |"
                 self.assertIn(msg, cl.out)
 
+    def test_peft_load_second_adapter_no_missing_keys(self):
+        """
+        Test that loading a second adapter does not report the first adapter's weights as missing, also when its name
+        is a substring of the first one's.
+        """
+        for model_id, peft_model_id in zip(self.transformers_test_model_ids, self.peft_test_model_ids):
+            for transformers_class in self.transformers_test_model_classes:
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+                model.load_adapter(peft_model_id, adapter_name="adapter_10")
+                loading_info = model.load_adapter(peft_model_id, adapter_name="adapter_1")
+                self.assertEqual(loading_info.missing_keys, set())
+
     def test_peft_load_adapter_training_inference_mode_true(self):
         """
         By default, when loading an adapter, the whole model should be in eval mode and no parameter should have
@@ -985,7 +997,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                             assert not module.training
                             assert all(not p.requires_grad for p in module.parameters())
 
-    @unittest.skip("Needs peft-side fix to handle cache name change from past_key_values->cache")
     def test_prefix_tuning_trainer_load_best_model_at_end_error(self):
         # Original issue: https://github.com/huggingface/peft/issues/2256
         # There is a potential error when using load_best_model_at_end=True with a prompt learning PEFT method. This is

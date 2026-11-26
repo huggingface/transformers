@@ -22,7 +22,7 @@
 from collections.abc import Callable
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -44,10 +44,10 @@ from .configuration_vaultgemma import VaultGemmaConfig
 
 
 class VaultGemmaRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, hidden_size: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.zeros(hidden_size))
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
@@ -340,7 +340,6 @@ class VaultGemmaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["VaultGemmaDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = False  # sdpa does not support softcapping
     _supports_flex_attn = True

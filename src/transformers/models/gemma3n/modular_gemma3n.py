@@ -458,56 +458,36 @@ class Gemma3nAudioEncoderModelOutput(BaseModelOutputWithPooling):
 
 
 class Gemma3nModelOutputWithPast(PaligemmaModelOutputWithPast):
-    r"""
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    audio_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
-    """
-
-    audio_hidden_states: torch.Tensor | None = None
+    @property
+    def audio_hidden_states(self):
+        logger.warning_once(
+            "`audio_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.audio_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.audio_outputs.pooler_output
 
 
 class Gemma3nCausalLMOutputWithPast(PaliGemmaCausalLMOutputWithPast):
-    r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
-    audio_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
-    """
-
-    audio_hidden_states: torch.Tensor | None = None
+    @property
+    def audio_hidden_states(self):
+        logger.warning_once(
+            "`audio_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.audio_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.audio_outputs.pooler_output
 
 
 class Gemma3nRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6, with_scale: bool = True):
+    def __init__(self, hidden_size: int, eps: float = 1e-6, with_scale: bool = True):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
         self.with_scale = with_scale
 
         if self.with_scale:
-            self.weight = nn.Parameter(torch.ones(dim), requires_grad=True)
+            self.weight = nn.Parameter(torch.ones(hidden_size), requires_grad=True)
 
     def _norm(self, hidden_states: torch.Tensor):
-        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
+        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.variance_epsilon
         # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to address compiler differences between Torch and JAX
         return hidden_states * torch.pow(mean_squared, -0.5)
 
@@ -1484,7 +1464,7 @@ class Gemma3nTextAttention(nn.Module):
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
-        self.q_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = Gemma3nRMSNorm(config.head_dim, eps=config.rms_norm_eps)
 
         # Layers sharing kv states don't need any weight matrices
         if not self.is_kv_shared_layer:
@@ -1494,8 +1474,8 @@ class Gemma3nTextAttention(nn.Module):
             self.v_proj = nn.Linear(
                 config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
             )
-            self.k_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
-            self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
+            self.k_norm = Gemma3nRMSNorm(config.head_dim, eps=config.rms_norm_eps)
+            self.v_norm = Gemma3nRMSNorm(config.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
@@ -1634,7 +1614,6 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
 class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
     config: Gemma3nConfig
     input_modalities = ("image", "text", "audio")
-    _skip_keys_device_placement = ["cache"]
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
     _can_record_outputs = {
         "hidden_states": Gemma3nTextDecoderLayer,
@@ -2250,6 +2229,7 @@ class Gemma3nModel(PaliGemmaModel):
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # Merge text and audio
+        audio_outputs = None
         if input_features is not None and input_features_mask is not None:
             audio_outputs = self.get_audio_features(input_features, ~input_features_mask, return_dict=True)
             audio_features = audio_outputs.pooler_output
@@ -2288,12 +2268,7 @@ class Gemma3nModel(PaliGemmaModel):
         )
 
         return Gemma3nModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-            audio_hidden_states=audio_features if input_features is not None else None,
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=audio_outputs
         )
 
     @can_return_tuple
@@ -2447,8 +2422,8 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-            audio_hidden_states=outputs.audio_hidden_states,
+            image_outputs=outputs.image_outputs,
+            audio_outputs=outputs.audio_outputs,
         )
 
     def _update_model_kwargs_for_generation(self, **super_kwargs):

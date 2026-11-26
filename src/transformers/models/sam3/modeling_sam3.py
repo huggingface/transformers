@@ -763,9 +763,10 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
 
             hw_grid = (image_size[1] // patch_size[1], image_size[0] // patch_size[0])
 
+        # fp32 like `inv_freq`: the global layers scale the positions by a fraction bf16 can't represent
         hpos_ids, wpos_ids = torch.meshgrid(
-            torch.arange(hw_grid[0]),
-            torch.arange(hw_grid[1]),
+            torch.arange(hw_grid[0], dtype=torch.float),
+            torch.arange(hw_grid[1], dtype=torch.float),
             indexing="ij",
         )
         position_ids = torch.stack([wpos_ids.flatten(), hpos_ids.flatten()], dim=-1)

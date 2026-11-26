@@ -46,6 +46,7 @@ from ...utils import (
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.output_capturing import select_hidden_states
 from ..auto import AutoConfig, AutoModel
+from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..deepseek_vl.configuration_deepseek_vl import DeepseekVLConfig
 from ..deepseek_vl.image_processing_deepseek_vl import DeepseekVLImageProcessor
 from ..deepseek_vl.image_processing_pil_deepseek_vl import DeepseekVLImageProcessorPil
@@ -56,7 +57,7 @@ from ..deepseek_vl.modeling_deepseek_vl import (
 )
 from ..deepseek_vl.processing_deepseek_vl import DeepseekVLProcessor
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
-from ..sam.modeling_sam import SamLayerNorm, SamVisionNeck
+from ..sam.modeling_sam import SamVisionNeck
 
 
 logger = logging.get_logger(__name__)
@@ -133,7 +134,7 @@ class DeepseekVLHybridCausalLMOutputWithPast(IdeficsCausalLMOutputWithPast):
     pass
 
 
-class DeepseekVLHybridLayerNorm(SamLayerNorm):
+class DeepseekVLHybridLayerNorm(ConvNextLayerNorm):
     pass
 
 
@@ -328,13 +329,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
             **kwargs,
         )
 
-        return DeepseekVLHybridBaseModelOutputWithPast(
-            last_hidden_state=lm_output.last_hidden_state,
-            cache=lm_output.cache,
-            hidden_states=lm_output.hidden_states,
-            attentions=lm_output.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return DeepseekVLHybridBaseModelOutputWithPast(**lm_output, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneration):
@@ -384,7 +379,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 

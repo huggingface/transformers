@@ -158,6 +158,19 @@ class Sam3VisionModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
+    def test_rope_positions_stay_fp32_when_loaded_in_bf16(self):
+        # A 12x12 patch grid with 4x4 windows scales the positions of the global layers by 1/3, which bf16 can't represent
+        config = self.model_tester.get_config()
+        config.backbone_config.image_size = 12 * config.backbone_config.patch_size
+        config.backbone_config.window_size = 4
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            Sam3VisionModel(config).save_pretrained(tmp_dir)
+            model = Sam3VisionModel.from_pretrained(tmp_dir, dtype=torch.bfloat16)
+
+        for layer in model.backbone.layers:
+            expected = layer.precompute_positions(layer.config, layer.window_size)
+            torch.testing.assert_close(layer.position_ids, expected, rtol=0, atol=0)
+
     @unittest.skip(reason="SAM3's vision encoder does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -894,16 +907,12 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         return
                     # model might return non-tensors objects (e.g. Cache class)
                     elif isinstance(tuple_object, torch.Tensor):
-                        self.assertTrue(
-                            torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
-                            ),
-                            msg=(
-                                "Tuple and dict output are not equal. Difference:"
-                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
-                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
-                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
-                            ),
+                        torch.testing.assert_close(
+                            set_nan_tensor_to_zero(tuple_object),
+                            set_nan_tensor_to_zero(dict_object),
+                            rtol=1e-5,
+                            atol=1e-5,
+                            msg=lambda m: f"Tuple and dict output are not equal.\n{m}",
                         )
 
                 recursive_check(tuple_output, dict_output)

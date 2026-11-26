@@ -445,7 +445,6 @@ class Ernie4_5_MoePreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Ernie4_5_MoeDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -459,7 +458,7 @@ class Ernie4_5_MoePreTrainedModel(PreTrainedModel):
     }
     # Not supporting multi-token prediction (MTP) atm
     _keys_to_ignore_on_load_unexpected = ["mtp"]
-    _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
+    _keep_in_fp32_modules_strict = ["gate.weight", "e_score_correction_bias"]
 
     def _init_weights(self, module):
         super()._init_weights(module)

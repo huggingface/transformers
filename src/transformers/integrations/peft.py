@@ -44,7 +44,7 @@ if is_accelerate_available():
     from accelerate.utils import get_balanced_memory, infer_auto_device_map
 
 # Minimum PEFT version supported for the integration
-MIN_PEFT_VERSION = "0.20.0"
+MIN_PEFT_VERSION = "0.22.0"
 
 
 logger = logging.get_logger(__name__)
@@ -253,12 +253,8 @@ class PeftAdapterMixin:
                     WeightRenaming(f"{module_name}.{source_key}", f"{module_name}.{target_key}")
                 )
 
-        adapter_key_markers = {adapter_name}
-        if peft_config is not None and getattr(peft_config, "peft_type", None) is not None:
-            adapter_key_markers.add(peft_config.peft_type.value.lower())
-
         def is_adapter_key(key: str) -> bool:
-            return any(marker in key for marker in adapter_key_markers)
+            return adapter_name in key.split(".")
 
         if not self._hf_peft_config_loaded:
             self._hf_peft_config_loaded = True

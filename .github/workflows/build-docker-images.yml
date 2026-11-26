@@ -47,8 +47,11 @@ jobs:
         name: Read Python version
         id: python
         run: echo "version=$(cat .python-version)" >> "$GITHUB_OUTPUT"
+      # Build, scan, push and register as separate steps, because the build needs
+      # `build-contexts`, which wiz-image-action/build-push does not take. `load: true`
+      # because the Wiz CLI reads the local image store and never pulls.
       -
-        name: Build and push
+        name: Build
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: ./docker/transformers-all-latest-gpu
@@ -56,8 +59,29 @@ jobs:
           build-args: |
             REF=main
             PYTHON_VERSION=${{ steps.python.outputs.version }}
-          push: true
+          load: true
           tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}
+      -
+        name: Scan
+        uses: huggingface/wiz-image-action/scan@53a5b4af184193adf1773753f29b3f903445e31b # v1.3.0
+        with:
+          image: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}
+          dockerfile: docker/transformers-all-latest-gpu/Dockerfile
+          clientId: ${{ vars.WIZ_CLI_CLIENT_ID }}
+          clientSecret: ${{ secrets.WIZ_CLI_CLIENT_SECRET }}
+          enforcement: audit
+      -
+        name: Push
+        env:
+          IMAGE: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}
+        run: docker push "$IMAGE"
+      -
+        name: Register with Wiz
+        uses: huggingface/wiz-image-action/register@53a5b4af184193adf1773753f29b3f903445e31b # v1.3.0
+        with:
+          image: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}
+          clientId: ${{ vars.WIZ_CLI_CLIENT_ID }}
+          clientSecret: ${{ secrets.WIZ_CLI_CLIENT_SECRET }}
 
       - name: Post to Slack
         if: always()
@@ -230,14 +254,16 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
-        name: Build and push
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        name: Build, scan and push
+        uses: huggingface/wiz-image-action/build-push@53a5b4af184193adf1773753f29b3f903445e31b # v1.3.0
         with:
+          image: huggingface/transformers-pytorch-amd-gpu${{ inputs.image_postfix }}
           context: ./docker/transformers-pytorch-amd-gpu
           build-args: |
             REF=${{ github.sha }}
-          push: true
-          tags: huggingface/transformers-pytorch-amd-gpu${{ inputs.image_postfix }}
+          clientId: ${{ vars.WIZ_CLI_CLIENT_ID }}
+          clientSecret: ${{ secrets.WIZ_CLI_CLIENT_SECRET }}
+          enforcement: audit
 
       - name: Post to Slack
         if: always()
@@ -279,6 +305,51 @@ jobs:
           mv -f "${tmp_path}" "${final_path}"
 
           echo "Cache populated successfully at ${final_path}"
+
+  # gfx1151 (AMD Ryzen "Strix Halo") CI image, built next to transformers-pytorch-amd-gpu.
+  # No cache job: the DevLab Dispatch pool is ephemeral and pulls the image from the
+  # registry at job time, so there is no persistent /mnt/image-cache to populate.
+  latest-pytorch-amd-gfx1151:
+    permissions:
+      contents: read
+    name: "Latest PyTorch (AMD) gfx1151 [dev]"
+    runs-on:
+      group: aws-highcpu-32-priv
+    steps:
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+      -
+        name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      -
+        name: Build, scan and push
+        uses: huggingface/wiz-image-action/build-push@53a5b4af184193adf1773753f29b3f903445e31b # v1.3.0
+        with:
+          image: huggingface/transformers-pytorch-amd-gpu-gfx1151${{ inputs.image_postfix }}
+          context: ./docker/transformers-pytorch-amd-gpu-gfx1151
+          build-args: |
+            REF=${{ github.sha }}
+          clientId: ${{ vars.WIZ_CLI_CLIENT_ID }}
+          clientSecret: ${{ secrets.WIZ_CLI_CLIENT_SECRET }}
+          enforcement: audit
+
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@63657f571a92cc9759159442936061c51d6d9ae4 # main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the huggingface/transformers-pytorch-amd-gpu-gfx1151 build
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   latest-pytorch-deepspeed-amd:
     permissions:

@@ -418,12 +418,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         """Greedy decoding with a cache must produce what recomputing the whole sequence produces.
 
         The two tests above run both configurations but only check their own shapes, so a cache that feeds
-        its layers the wrong positions or a mask of the wrong width passes both. Models whose state *is*
-        their cache (`_is_stateful`) have no cacheless form to compare against and are skipped.
+        its layers the wrong positions or a mask of the wrong width passes both.
         """
         for model_class in self.all_generative_model_classes:
-            if model_class._is_stateful:
-                self.skipTest(reason=f"{model_class.__name__} keeps recurrent state, so decode has no cacheless form")
             # Only the weights are pinned; the testers draw inputs from a `global_rng` this does not touch,
             # so the input varies per process — the invariant has to hold for any input.
             set_seed(42)
@@ -708,29 +705,28 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         # - assisted_decoding does not support `batch_size > 1`
 
         for model_class in self.all_generative_model_classes:
-            if model_class._is_stateful:
-                self.skipTest(reason="Stateful models don't support assisted generation")
-            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
-                self.skipTest(reason="Won't fix: old model with different cache format")
-            if any(
-                model_name in model_class.__name__.lower()
-                for model_name in [
-                    "moshi",
-                    "git",
-                    "prophetnet",
-                    "mllama",  # special cache sizes
-                    "blip2",  # overridden `generate()` all BLIP models
-                    "instructblip",
-                    "instructblipvideo",
-                ]
-            ):
-                self.skipTest(reason="May fix in the future: need model-specific fixes")
-
             # Set seed for deterministic test - ensures reproducible model initialization and inputs
             set_seed(42)
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
             set_config_for_less_flaky_test(config)
+
+            if config.model_type.replace("-", "_") in [
+                "moshi",
+                "git",
+                "prophetnet",
+                "mllama",  # special cache sizes
+                "blip_2",  # overridden `generate()` all BLIP models
+                "instructblip",
+                "instructblipvideo",
+                "zamba",  # special loop, and no real need to add support for now
+                "zaya",  # a bit specific, could work but need a bit more work and no need rn
+                "deepseek_v4",  # non standard cache, would require more work
+                "xlstm",  # extremely special cache mechanism, won't fix
+                "rwkv",  # does not use cache classes, won't fix
+                "reformer",  # does not use cache classes, won't fix
+            ]:
+                self.skipTest(reason="May fix in the future: need model-specific fixes")
 
             # force eager attention to support output attentions
             if self.has_attentions:
@@ -792,6 +788,13 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             for output in (output_greedy, output_assisted):
                 self._check_generate_outputs(output, model.config, use_cache=True)
 
+            # The same must hold with a static cache. Models that cannot use a static cache at all are skipped, see `test_generate_with_static_cache`
+            if model_class._can_compile_fullgraph and not config.is_encoder_decoder:
+                output_static = model.generate(
+                    **generation_kwargs, **inputs_dict, **logits_processor_kwargs, cache_implementation="static"
+                )
+                assert_similar_generate_outputs(output_assisted, output_static, atol=atol, rtol=rtol)
+
     @pytest.mark.generate
     @is_flaky
     def test_prompt_lookup_decoding_matches_greedy_search(self):
@@ -799,8 +802,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         # This test is mostly a copy of test_assisted_decoding_matches_greedy_search
 
         for model_class in self.all_generative_model_classes:
-            if model_class._is_stateful:
-                self.skipTest(reason="Stateful models don't support assisted generation")
             old_models = [  # models that we won't commit resources fixing because they are old and have little usage
                 # reformer: has a different cache format
                 "reformer",
@@ -879,26 +880,25 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         # match sample for the same seed, as the forward pass does not return the exact same logits (due to matmul with
         # different shapes, see https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535).
         for model_class in self.all_generative_model_classes:
-            if model_class._is_stateful:
-                self.skipTest(reason="Stateful models don't support assisted generation")
-            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
-                self.skipTest(reason="Won't fix: old model with different cache format")
-            if any(
-                model_name in model_class.__name__.lower()
-                for model_name in [
-                    "moshi",
-                    "git",
-                    "prophetnet",
-                    "mllama",  # special cache sizes
-                    "blip2",  # overridden `generate()` for all BLIP models
-                    "instructblip",
-                    "instructblipvideo",
-                ]
-            ):
-                self.skipTest(reason="May fix in the future: need model-specific fixes")
-
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
+
+            if config.model_type.replace("-", "_") in [
+                "moshi",
+                "git",
+                "prophetnet",
+                "mllama",  # special cache sizes
+                "blip_2",  # overridden `generate()` all BLIP models
+                "instructblip",
+                "instructblipvideo",
+                "zamba",  # special loop, and no real need to add support for now
+                "zaya",  # a bit specific, could work but need a bit more work and no need rn
+                "deepseek_v4",  # non standard cache, would require more work
+                "xlstm",  # extremely special cache mechanism, won't fix
+                "rwkv",  # does not use cache classes, won't fix
+                "reformer",  # does not use cache classes, won't fix
+            ]:
+                self.skipTest(reason="May fix in the future: need model-specific fixes")
 
             # force eager attention to support output attentions
             if self.has_attentions:
@@ -1565,6 +1565,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 self.skipTest(reason="This model is encoder-decoder VLM which is usually different per model arch")
 
             model = model_class(config).to(torch_device).eval()
+            if not model._supports_mm_encoder_outputs():
+                self.skipTest(reason=f"{model_class.__name__}.forward does not accept `mm_encoder_outputs`")
             model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
 
             generation_kwargs = {
@@ -3221,6 +3223,35 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertTrue(last_token_counts[1] > last_token_counts[3] > last_token_counts[7] > 0)
         self.assertTrue(last_token_counts[8] > last_token_counts[3])
 
+    def test_speculative_sampling_never_accepts_zero_probability_token(self):
+        """Deterministic check that a draft token with target probability 0 is never accepted.
+
+        `torch.rand` returns exactly `0.0` with probability 2**-24 (float32). Even then, a draft token that the target
+        gives probability 0 (e.g. filtered out by top-k / top-p) must be rejected: `0.0 < 0` is False.
+        """
+        candidate_length = 1
+        # Draft: token 0 is very likely
+        q_probs = torch.tensor([[[0.97, 0.01, 0.01, 0.01]]])
+        # Target: token 0 is forbidden (probability 0) + a valid distribution for the bonus-token slot
+        inf = float("inf")
+        new_logits = torch.tensor([[[-inf, 1.0, 2.0, 3.0], [0.0, 0.0, 0.0, 0.0]]])
+
+        candidate_logits = q_probs.log()
+        prefix = torch.zeros(1, 5, dtype=torch.long)
+        candidate_input_ids = torch.cat([prefix, torch.tensor([[0]])], dim=-1)
+
+        with patch("transformers.generation.utils.torch.rand_like", return_value=torch.tensor([0.0])):
+            validated_tokens, n_matches = _speculative_sampling(
+                candidate_input_ids,
+                candidate_logits,
+                candidate_length,
+                new_logits,
+            )
+
+        # the forbidden draft token is rejected, and its replacement is sampled among the allowed tokens
+        self.assertEqual(n_matches.item(), 0)
+        self.assertIn(validated_tokens.tolist()[0][0], [1, 2, 3])
+
     def test_speculative_sampling_ensemble_weight_none_equals_standard(self):
         """With `assistant_ensemble_weight=None`, behaviour must be identical to standard speculative sampling."""
         candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])
@@ -3455,6 +3486,30 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 @pytest.mark.generate
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase):
+    def test_prefix_constraints_with_multiple_sampled_returns(self):
+        config = AutoConfig.for_model(
+            "gpt2",
+            vocab_size=32,
+            n_positions=32,
+            n_embd=32,
+            n_layer=1,
+            n_head=2,
+            bos_token_id=1,
+            eos_token_id=2,
+            pad_token_id=0,
+        )
+        model = GPT2LMHeadModel(config).to(torch_device).eval()
+        inputs = torch.tensor([[10, 11], [20, 21]], device=torch_device)
+        allowed = [[5], [7]]
+        output = model.generate(
+            inputs,
+            do_sample=True,
+            num_return_sequences=3,
+            max_new_tokens=1,
+            prefix_allowed_tokens_fn=lambda batch_id, _: allowed[batch_id],
+        )
+        self.assertEqual(output[:, -1].tolist(), [5, 5, 5, 7, 7, 7])
+
     def test_generation_config_defaults(self):
         "Tests that we can set config value to a global default. See https://github.com/huggingface/transformers/issues/42762"
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
@@ -3487,6 +3542,25 @@ class GenerationIntegrationTests(unittest.TestCase):
             model.generation_config.cache_implementation = "dynamic"
             model.generation_config.use_cache = None
             model.save_pretrained(tmpdirname)
+
+    def test_generate_flex_attention_with_static_cache(self):
+        """A compileable cache makes `prepare_inputs_for_generation` build the mask ahead of the forward: with flex
+        attention it is a `BlockMask`, which has no `.contiguous()`"""
+        from transformers import LlamaConfig, LlamaForCausalLM
+
+        torch.manual_seed(0)
+        # head_dim 16: the smallest flex attention supports on GPU
+        config = LlamaConfig(
+            vocab_size=128, hidden_size=64, intermediate_size=128, num_hidden_layers=2, num_attention_heads=4
+        )
+        config._attn_implementation = "flex_attention"
+        model = LlamaForCausalLM(config).to(torch_device).eval()
+        input_ids = torch.randint(0, 128, (1, 8), device=torch_device)
+        generation_config = GenerationConfig(do_sample=False, max_new_tokens=4, eos_token_id=-1)
+
+        out = model.generate(input_ids, generation_config=generation_config, cache_implementation="static")
+        self.assertEqual(out.shape, (1, 12))
+        self.assertEqual(out[:, :8].tolist(), input_ids.tolist())
 
     @require_torch_accelerator
     def test_generate_with_inputs_on_cpu(self):

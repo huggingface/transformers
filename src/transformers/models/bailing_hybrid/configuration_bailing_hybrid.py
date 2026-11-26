@@ -30,6 +30,8 @@ from ...utils import auto_docstring
 @strict
 class BailingHybridConfig(PreTrainedConfig):
     r"""
+    q_lora_rank (`int`, *optional*, defaults to `None`):
+        Low-rank dimension of the query projection in MLA layers. When unset, queries use a single projection.
     n_group (`int`, *optional*, defaults to 8):
         Number of expert groups used by the group-limited router.
     first_k_dense_replace (`int`, *optional*, defaults to 2):
@@ -39,8 +41,6 @@ class BailingHybridConfig(PreTrainedConfig):
         inference uses only `num_hidden_layers` decoder layers.
     rope_theta (`float`, *optional*, defaults to 6000000.0):
         Base period of the rotary position embeddings used by MLA layers.
-    q_lora_rank (`int`, *optional*, defaults to `None`):
-        Low-rank dimension of the query projection in MLA layers. When unset, queries use a single projection.
     short_conv_kernel_size (`int`, *optional*, defaults to 4):
         Kernel size of the short depthwise convolutions in KDA layers.
     layer_group_size (`int`, *optional*, defaults to 6):
@@ -57,11 +57,7 @@ class BailingHybridConfig(PreTrainedConfig):
     """
 
     model_type = "bailing_hybrid"
-    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",

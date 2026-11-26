@@ -24,7 +24,7 @@ import tempfile
 import unittest
 
 from transformers import AutoTokenizer
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import get_tests_dir, require_torch
 from transformers.utils.chat_parsing import ResponseParser, parse_response
 from transformers.utils.chat_parsing.content_parsers import parse_content
 from transformers.utils.chat_parsing.response_parser import _coerce, _schema_types
@@ -237,6 +237,23 @@ beam_template = {
             },
             "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
         },
+    },
+}
+
+
+lfm2_template = {
+    "defaults": {"role": "assistant"},
+    "start_anchor": "<|im_start|>assistant\n",
+    "fields": {
+        "reasoning_content": {"open": "<think>", "close": "</think>", "content": "text"},
+        "tool_calls": {
+            "open": "<|tool_call_start|>",
+            "close": "<|tool_call_end|>",
+            "content": "python-call-list",
+            "transform_each": True,
+            "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{arguments}"}},
+        },
+        "content": {"close": "<|im_end|>", "content": "text"},
     },
 }
 
@@ -587,6 +604,28 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             },
         )
 
+    def test_lfm2_tool_calls(self):
+        model_out = (
+            "<think>Two lookups.</think>"
+            "<|tool_call_start|>[get_weather(city=\"Paris\", days=2), get_time(zone='Europe/Paris')]<|tool_call_end|>"
+            "Checking.<|im_end|>"
+        )
+        self.assertEqual(
+            parse_response(model_out, lfm2_template, prefix=""),
+            {
+                "role": "assistant",
+                "reasoning_content": "Two lookups.",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {"name": "get_weather", "arguments": {"city": "Paris", "days": 2}},
+                    },
+                    {"type": "function", "function": {"name": "get_time", "arguments": {"zone": "Europe/Paris"}}},
+                ],
+                "content": "Checking.",
+            },
+        )
+
     def test_gemma4_tool_call(self):
         model_out = (
             "<|channel>thought\nThe user is asking for the current temperature in Paris. I should check "
@@ -903,6 +942,23 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             {"role": "assistant", "metadata": {"name": "alice", "age": "30"}},
         )
 
+    def test_python_call_list_parser(self):
+        # The fixture is the shared test suite for every implementation of the format (e.g. Transformers.js).
+        with open(get_tests_dir("fixtures/chat_parsing/python_call_list.json"), encoding="utf-8") as f:
+            cases = json.load(f)
+        for case in cases["accepted"]:
+            with self.subTest(accepted=case["input"]):
+                self.assertEqual(parse_content(case["input"], "python-call-list", {}), case["output"])
+        for case in cases["rejected"]:
+            with self.subTest(rejected=case["input"], reason=case["reason"]):
+                with self.assertRaisesRegex(ValueError, "python-call-list"):
+                    parse_content(case["input"], "python-call-list", {})
+
+    def test_python_call_list_positional_arguments_error(self):
+        for text in ("[add_numbers(2, 3.5)]", "[add_numbers(a=2, 3.5)]", "[f(x)]"):
+            with self.subTest(text=text), self.assertRaisesRegex(ValueError, "positional arguments"):
+                parse_content(text, "python-call-list", {})
+
     def test_unknown_content_parser_rejected(self):
         bad_template = {
             "defaults": {"role": "assistant"},
@@ -1132,6 +1188,11 @@ _STREAMING_FIXTURES = [
         ),
     ),
     (
+        "lfm2",
+        lfm2_template,
+        '<think>Look it up.</think><|tool_call_start|>[get_weather(city="Paris")]<|tool_call_end|>Checking.<|im_end|>',
+    ),
+    (
         "beam",
         beam_template,
         (
@@ -1277,8 +1338,8 @@ class ResponseEventStreamTest(unittest.TestCase):
     def test_dirty_flag_marks_structured_regions(self):
         """A template with one text field and one structured field per parser
         family: text/int/float/bool stream chunks with `dirty=False`, while
-        json/xml-inline/kv-lines stream chunks with `dirty=True`, and those
-        dirty chunks concatenate to the raw region body before parsing."""
+        json/xml-inline/kv-lines/python-call-list stream
+        chunks with `dirty=True`, and those dirty chunks concatenate to the raw region body before parsing."""
         spec = {
             "defaults": {"role": "assistant"},
             "start_anchor": "<|assistant|>",
@@ -1297,9 +1358,13 @@ class ResponseEventStreamTest(unittest.TestCase):
                     "close": "</kv>",
                     "content": "kv-lines",
                 },
+                "py_call": {"open": "<p>", "close": "</p>", "content": "python-call-list"},
             },
         }
-        text = '<t>hello world</t><n>42</n><j>{"a": 1, "b": 2}</j><x><name=foo><age=10></x><kv>k1: v1\nk2: v2</kv>'
+        text = (
+            '<t>hello world</t><n>42</n><j>{"a": 1, "b": 2}</j><x><name=foo><age=10></x><kv>k1: v1\nk2: v2</kv>'
+            "<p>[f(x=1)]</p>"
+        )
         # Drive byte-by-byte to maximise chunk count.
         streamer = ResponseParser(spec, prefix="")
         events: list[dict] = []
@@ -1319,7 +1384,7 @@ class ResponseEventStreamTest(unittest.TestCase):
         for field in ("reasoning_content", "score"):
             self.assertEqual(per_field_dirty[field], {False}, f"{field} should be clean")
         # Dirty (structured) regions.
-        for field in ("json_call", "xml_call", "kv_call"):
+        for field in ("json_call", "xml_call", "kv_call", "py_call"):
             self.assertEqual(per_field_dirty[field], {True}, f"{field} should be dirty")
 
         # Dirty chunks reconstruct the raw region body (un-parsed). Clean
@@ -1329,6 +1394,7 @@ class ResponseEventStreamTest(unittest.TestCase):
         self.assertEqual("".join(per_field_chunks["json_call"]), '{"a": 1, "b": 2}')
         self.assertEqual("".join(per_field_chunks["xml_call"]), "<name=foo><age=10>")
         self.assertEqual("".join(per_field_chunks["kv_call"]), "k1: v1\nk2: v2")
+        self.assertEqual("".join(per_field_chunks["py_call"]), "[f(x=1)]")
 
     def test_long_regex_open_pattern_streams_byte_by_byte(self):
         """Regression: a regex `open_pattern` whose full match spans well past the
@@ -1441,6 +1507,20 @@ class ResponseEventStreamTest(unittest.TestCase):
             parse_content('{text:"note,warning: hot",nested:{n:1}}', "json", args),
             {"text": "note,warning: hot", "nested": {"n": 1}},
         )
+
+    def test_unquoted_keys_allows_whitespace_around_keys(self):
+        """A Javascript-style object literal usually has a space after each comma, and may be spread over
+        several lines. `unquoted_keys` must quote those keys too, not only keys glued to `{` or `,`."""
+        args = {"unquoted_keys": True}
+        expected = {"city": "London", "days": 3, "filter": {"tags": ["a, b: c"], "strict": True}}
+        texts = [
+            '{city: "London", days: 3, filter: {tags: ["a, b: c"], strict: true}}',
+            '{ city : "London" , days : 3 , filter : { tags : ["a, b: c"] , strict : true } }',
+            '{\n  city: "London",\n  days: 3,\n  filter: {\n    tags: ["a, b: c"],\n    strict: true\n  }\n}',
+        ]
+        for text in texts:
+            with self.subTest(text=text):
+                self.assertEqual(parse_content(text, "json", args), expected)
 
 
 class PrefixAndTruncationTest(unittest.TestCase):
@@ -2026,6 +2106,69 @@ class ToolArgCoercionTest(unittest.TestCase):
         with_tools = parse_response(model_out, cohere_template, prefix="", tools=_SET_ALARM_TOOLS)
         self.assertEqual(without, with_tools)
         self.assertEqual(_first_tool_args(with_tools), {"hour": 7, "enabled": True})
+
+    def test_tools_typed_parsers_preserve_string_schemas_and_coerce_non_string(self):
+        tools = _set_alarm_tools(
+            hour={"type": "integer"},
+            msg={"anyOf": [{"type": "string"}, {"type": "null"}]},
+            alt={"type": "string", "nullable": True},
+            code={"anyOf": [{"type": "string"}, {"type": "integer"}]},
+            flag={"anyOf": [{"type": "string"}, {"type": "boolean"}]},
+            items={"anyOf": [{"type": "string"}, {"type": "array"}]},
+            obj={"anyOf": [{"type": "string"}, {"type": "object"}]},
+        )
+        expected = {
+            "hour": 7,
+            "msg": "null",
+            "alt": "None",
+            "code": "0123",
+            "flag": "true",
+            "items": "[1, 2]",
+            "obj": "{}",
+        }
+        smollm_out = (
+            '<tool_call>{"name": "set_alarm", "arguments": '
+            '{"hour": "7", "msg": "null", "alt": "None", "code": "0123", '
+            '"flag": "true", "items": "[1, 2]", "obj": "{}"}}</tool_call>'
+        )
+        json_args = _first_tool_args(parse_response(smollm_out, smollm_template, prefix="", tools=tools))
+        self.assertEqual(json_args, expected)
+        self.assertIs(type(json_args["hour"]), int)
+
+        stream = ResponseParser(smollm_template, prefix="", tools=tools)
+        events = stream.feed(smollm_out[:25]) + stream.feed(smollm_out[25:])
+        _, tail_events = stream.finalize()
+        closes = [e for e in events + tail_events if e["type"] == "region_close" and e["field"] == "tool_calls"]
+        self.assertEqual(len(closes), 1)
+        self.assertEqual(closes[0]["value"]["function"]["arguments"], expected)
+
+        gemma_out = (
+            '<|tool_call>call:set_alarm{hour:<|"|>7<|"|>, msg:<|"|>null<|"|>, alt:<|"|>None<|"|>, '
+            'code:<|"|>0123<|"|>, flag:<|"|>true<|"|>, items:<|"|>[1, 2]<|"|>, obj:<|"|>{}<|"|>}<tool_call|>'
+        )
+        gemma_args = _first_tool_args(parse_response(gemma_out, gemma4_template, prefix="", tools=tools))
+        self.assertEqual(gemma_args, expected)
+        self.assertIs(type(gemma_args["hour"]), int)
+
+        lfm2_out = (
+            '<|tool_call_start|>[set_alarm(hour="7", msg="null", alt="None", code="0123", '
+            'flag="true", items="[1, 2]", obj="{}"), '
+            "set_alarm(hour=7, msg=None, alt=None, code=123, flag=True, items=[1, 2], obj={})]"
+            "<|tool_call_end|>"
+        )
+        lfm2_parsed = parse_response(lfm2_out, lfm2_template, prefix="", tools=tools)
+        str_args = lfm2_parsed["tool_calls"][0]["function"]["arguments"]
+        typed_args = lfm2_parsed["tool_calls"][1]["function"]["arguments"]
+        self.assertEqual(str_args, expected)
+        self.assertIs(type(str_args["hour"]), int)
+        for key in ("msg", "alt", "code", "flag", "items", "obj"):
+            self.assertIsInstance(str_args[key], str)
+        self.assertEqual(
+            typed_args,
+            {"hour": 7, "msg": None, "alt": None, "code": 123, "flag": True, "items": [1, 2], "obj": {}},
+        )
+        self.assertIs(type(typed_args["code"]), int)
+        self.assertIs(type(typed_args["flag"]), bool)
 
 
 if __name__ == "__main__":

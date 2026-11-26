@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -42,30 +43,24 @@ if is_torch_available():
     import torch
 
 
-class SLANetModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        image_size=488,
-        num_channels=3,
-        post_conv_out_channels=16,
-        out_channels=1,
-        hidden_size=16,
-        max_text_length=1,
-        num_stages=5,
-        is_training=False,
-    ):
+class SLANetModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 1,
+        "image_size": 488,
+        "num_channels": 3,
+        "post_conv_out_channels": 16,
+        "out_channels": 1,
+        "hidden_size": 16,
+        "max_text_length": 1,
+        "num_stages": 5,
+        "is_training": False,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.post_conv_out_channels = post_conv_out_channels
-        self.out_channels = out_channels
-        self.hidden_size = hidden_size
-        self.max_text_length = max_text_length
-        self.num_stages = num_stages
-        self.is_training = is_training
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
@@ -112,6 +107,8 @@ class SLANetModelTester:
 
 @require_torch
 class SLANetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = SLANetModelTester
+
     all_model_classes = (SLANetForTableRecognition,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-feature-extraction": SLANetForTableRecognition} if is_torch_available() else {}
 
@@ -120,11 +117,7 @@ class SLANetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torch_exportable = False  # data-dependent control flow in layout-OCR head
 
     def setUp(self):
-        self.model_tester = SLANetModelTester(
-            self,
-            batch_size=1,
-            image_size=488,
-        )
+        self.model_tester = SLANetModelTester(self)
         self.config_tester = ConfigTester(
             self,
             config_class=SLANetConfig,

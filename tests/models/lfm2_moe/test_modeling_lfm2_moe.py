@@ -41,17 +41,11 @@ class Lfm2MoeModelTester(CausalLMModelTester):
         base_model_class = Lfm2MoeModel
         causal_lm_class = Lfm2MoeForCausalLM
 
-    def __init__(
-        self,
-        parent,
-        num_dense_layers=1,
-        num_hidden_layers=2,
-        layer_types=["full_attention", "conv"],
-    ):
-        super().__init__(parent)
-        self.layer_types = layer_types
-        self.num_dense_layers = num_dense_layers
-        self.num_hidden_layers = num_hidden_layers
+    small_config_overrides = {
+        "num_dense_layers": 1,
+        "num_hidden_layers": 2,
+        "layer_types": ["full_attention", "conv"],
+    }
 
 
 @require_torch

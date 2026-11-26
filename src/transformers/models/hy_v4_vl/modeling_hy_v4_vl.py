@@ -33,12 +33,13 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
-    BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, yarn_apply_mscale
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
@@ -128,8 +129,8 @@ class HYV4VLIndexer(nn.Module):
 
         self.wq_b = nn.Linear(self.q_lora_rank, self.n_heads * self.head_dim, bias=False)
         self.wk = nn.Linear(self.hidden_size, self.head_dim, bias=False)
-        self.k_norm = nn.LayerNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
+        self.k_norm = nn.LayerNorm(self.head_dim, eps=config.rms_norm_eps, dtype=torch.float32)
+        self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False, dtype=torch.float32)
         self.softmax_scale = self.head_dim**-0.5
 
     @torch.no_grad()
@@ -253,21 +254,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
-
-
-def yarn_apply_mscale(rope_parameters, scaling):
-    if rope_parameters.get("rope_type", "default") != "default":
-        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
-        if mscale_all_dim:
-            mscale = yarn_get_mscale(rope_parameters["factor"], mscale_all_dim)
-            scaling = scaling * mscale * mscale
-    return scaling
-
-
 class HYV4VLAttention(nn.Module):
     """
     DeepSeek-V3.2 DSA extended with **cross-layer top-k sharing**.
@@ -323,7 +309,7 @@ class HYV4VLAttention(nn.Module):
         self.indexer = None if self.skip_topk else HYV4VLIndexer(config, layer_idx)
         self.gate_projection_size = self.v_head_dim
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.gate_projection_size, bias=False)
-        self.sinks = nn.Parameter(torch.full((self.num_heads,), config.learnable_sink_init))
+        self.sinks = nn.Parameter(torch.full((self.num_heads,), config.learnable_sink_init, dtype=torch.float32))
 
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
@@ -437,11 +423,11 @@ class HYV4VLAttention(nn.Module):
 class HYV4VLUnweightedRMSNorm(nn.Module):
     def __init__(self, eps: float = 1.0e-6):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # We compute the inverse (i.e. we do not apply `x * ...`)
-        return torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
+        return torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.variance_epsilon).to(x.dtype)
 
 
 class HYV4VLMLP(nn.Module):
@@ -466,7 +452,7 @@ class HYV4VLTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
@@ -576,9 +562,11 @@ class HYV4VLHyperConnection(nn.Module):
         self.hc_eps = config.hc_eps
         self.input_norm = HYV4VLUnweightedRMSNorm(eps=config.rms_norm_eps)
         concatenated_weights_size = 2 * self.hc_mult  # noqa: F841
-        self.fn = nn.Parameter(torch.empty(concatenated_weights_size, self.hc_mult * config.hidden_size))
-        self.base = nn.Parameter(torch.empty(concatenated_weights_size))
-        self.scale = nn.Parameter(torch.empty(2))
+        self.fn = nn.Parameter(
+            torch.empty(concatenated_weights_size, self.hc_mult * config.hidden_size, dtype=torch.float32)
+        )
+        self.base = nn.Parameter(torch.empty(concatenated_weights_size, dtype=torch.float32))
+        self.scale = nn.Parameter(torch.empty(2, dtype=torch.float32))
         self.hc_post_magnitude = config.hc_magnitude
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -611,9 +599,9 @@ class HYV4VLHyperHead(nn.Module):
         self.hc_mult = config.hc_mult
         self.input_norm = HYV4VLUnweightedRMSNorm(eps=config.rms_norm_eps)
         self.eps = config.hc_eps
-        self.hc_fn = nn.Parameter(torch.empty(self.hc_mult, self.hc_mult * config.hidden_size))
-        self.hc_base = nn.Parameter(torch.empty(self.hc_mult))
-        self.hc_scale = nn.Parameter(torch.empty(1))
+        self.hc_fn = nn.Parameter(torch.empty(self.hc_mult, self.hc_mult * config.hidden_size, dtype=torch.float32))
+        self.hc_base = nn.Parameter(torch.empty(self.hc_mult, dtype=torch.float32))
+        self.hc_scale = nn.Parameter(torch.empty(1, dtype=torch.float32))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Key difference is to force fp32 in any case
@@ -637,8 +625,8 @@ class HYV4VLDecoderLayer(GradientCheckpointingLayer):
         self.mlp = HYV4VLMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV4VLMLP(config)
         self.input_layernorm = HYV4VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = HYV4VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attn_hc = HYV4VLHyperConnection(config)
-        self.ffn_hc = HYV4VLHyperConnection(config)
+        self.attn_hc = HYV4VLHyperConnection(config).to(dtype=torch.float32)
+        self.ffn_hc = HYV4VLHyperConnection(config).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -687,7 +675,6 @@ class HYV4VLPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["HYV4VLDecoderLayer", "HYV4VLVisionBlock"]
-    _skip_keys_device_placement = ["cache"]
     # Combination of sinks and DSA disable anything but eager atm
     _supports_flash_attn = False
     _supports_sdpa = False
@@ -702,6 +689,7 @@ class HYV4VLPreTrainedModel(PreTrainedModel):
     }
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
+        "gate.weight",
         "fn",
         "scale",
         "base",
@@ -1532,7 +1520,7 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MultimodalMoeBaseModelOutputWithPast:
         if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
             raise ValueError(
                 "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
@@ -1590,7 +1578,9 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return outputs
+        return MultimodalMoeBaseModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 @auto_docstring
@@ -1603,7 +1593,9 @@ class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
     def __init__(self, config: HYV4VLConfig):
         super().__init__(config)
         self.model = HYV4VLModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(
+            config.text_config.hidden_size, config.text_config.vocab_size, bias=False, dtype=torch.float32
+        )
 
         self.post_init()
 
@@ -1713,13 +1705,15 @@ class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return MoeCausalLMOutputWithPast(
+        return MultimodalMoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):

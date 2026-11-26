@@ -27,7 +27,8 @@ from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3RMSNorm, Qwen3RotaryEmbedding
+from ..llama.modeling_llama import LlamaRMSNorm
+from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3RotaryEmbedding
 from .configuration_pe_audio_video import PeAudioVideoConfig, PeAudioVideoEncoderConfig
 
 
@@ -284,7 +285,7 @@ class PeAudioVideoEncoderLayer(Qwen3DecoderLayer):
         del self.attention_type
 
 
-class PeAudioVideoEncoderRMSNorm(Qwen3RMSNorm): ...
+class PeAudioVideoEncoderRMSNorm(LlamaRMSNorm): ...
 
 
 def stack_freqs(cos: torch.Tensor, sin: torch.Tensor):
@@ -312,7 +313,6 @@ class PeAudioVideoPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PeAudioVideoEncoderLayer", "TimmWrapperForImageClassification"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

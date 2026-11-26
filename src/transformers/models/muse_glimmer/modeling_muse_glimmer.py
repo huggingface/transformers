@@ -29,15 +29,20 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
-    ModelOutput,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    logging,
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
@@ -53,63 +58,44 @@ from ..auto import AutoModel
 from .configuration_muse_glimmer import MuseGlimmerConfig, MuseGlimmerTextConfig, MuseGlimmerVisionConfig
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for MuseGlimmer outputs, with hidden states and attentions.
-    """
-)
+logger = logging.get_logger(__name__)
+
+
+@auto_docstring
 @dataclass
-class MuseGlimmerModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
+class MuseGlimmerModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
-    image_hidden_states: torch.Tensor | None = None
 
-
-@auto_docstring(
-    custom_intro="""
-    Base class for MuseGlimmer causal language model (or autoregressive) outputs.
-    """
-)
+@auto_docstring
 @dataclass
-class MuseGlimmerCausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
-    """
-
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    cache: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
+class MuseGlimmerCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 class MuseGlimmerRMSNorm(nn.Module):
-    def __init__(self, dim: int | None = None, eps: float = 1e-6, with_scale: bool = True):
+    def __init__(self, hidden_size: int | None = None, eps: float = 1e-6, with_scale: bool = True):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
         self.with_scale = with_scale
 
         if self.with_scale:
-            self.weight = nn.Parameter(torch.ones(dim), requires_grad=True)
+            self.weight = nn.Parameter(torch.ones(hidden_size), requires_grad=True)
 
     def _norm(self, hidden_states: torch.Tensor):
-        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
+        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.variance_epsilon
         # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to address compiler differences between Torch and JAX
         return hidden_states * torch.pow(mean_squared, -0.5)
 
@@ -121,10 +107,10 @@ class MuseGlimmerRMSNorm(nn.Module):
 
 
 class MuseGlimmerTextCenteredRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, hidden_size: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.zeros(hidden_size))
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
@@ -414,7 +400,6 @@ class MuseGlimmerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MuseGlimmerTextDecoderLayer", "MuseGlimmerVisionEncoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -1052,10 +1037,7 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
             **kwargs,
         )
         return MuseGlimmerModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
         )
 
 
@@ -1193,7 +1175,8 @@ class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, Generation
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
 

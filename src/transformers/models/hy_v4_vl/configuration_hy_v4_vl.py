@@ -93,7 +93,6 @@ class HYV4VLTextConfig(PreTrainedConfig):
     """
 
     model_type = "hy_v4_vl_text"
-    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
@@ -105,9 +104,6 @@ class HYV4VLTextConfig(PreTrainedConfig):
         "layers.*.self_attn.gate_proj": "colwise",
         "layers.*.self_attn.sinks": "colwise",
         "layers.*.self_attn": "local_params",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -220,7 +216,6 @@ class HYV4VLConfig(PreTrainedConfig):
         "vision_config": HYV4VLVisionConfig,
         "text_config": HYV4VLTextConfig,
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

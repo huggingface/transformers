@@ -19,7 +19,7 @@ import pytest
 from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow
+from transformers.testing_utils import require_torch, require_torch_accelerator, skip_tpu, slow
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import (
@@ -110,29 +110,17 @@ class DeepseekV32ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = DeepseekV32Model
 
-    def __init__(
-        self,
-        parent,
-        n_routed_experts=8,
-        kv_lora_rank=32,
-        q_lora_rank=16,
-        qk_nope_head_dim=64,
-        qk_rope_head_dim=64,
-        first_k_dense_replace=1,
-        n_group=1,
-        topk_group=1,
-        index_topk=8,
-    ):
-        super().__init__(parent=parent)
-        self.n_routed_experts = n_routed_experts
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.first_k_dense_replace = first_k_dense_replace
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.index_topk = index_topk
+    small_config_overrides = {
+        "n_routed_experts": 8,
+        "kv_lora_rank": 32,
+        "q_lora_rank": 16,
+        "qk_nope_head_dim": 64,
+        "qk_rope_head_dim": 64,
+        "first_k_dense_replace": 1,
+        "n_group": 1,
+        "topk_group": 1,
+        "index_topk": 8,
+    }
 
 
 @require_torch
@@ -151,6 +139,15 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DeepseekV32ForCausalLM if is_torch_available() else None
+
+    def setUp(self):
+        super().setUp()
+        # Collect garbage right before every CUDA graph capture. Otherwise, Triton kernels left over from earlier
+        # compilations (unreachable, in reference cycles) can be finalized by an automatic GC pass *inside* the capture:
+        # `CompiledKernel.__del__` -> `cuModuleUnload` is not allowed during a capture and invalidates it
+        # ("operation failed due to a previous error during capture"). torch >= 2.15 no longer collects by default.
+        if hasattr(torch.compiler.config, "force_cudagraph_gc"):
+            self.enterContext(torch.compiler.config.patch(force_cudagraph_gc=True))
 
     @unittest.skip("DeepseekV32 applies RoPE to qk_rope_head_dim; generic rope scaling tests assume config.head_dim")
     def test_model_rope_scaling_frequencies(self):
@@ -220,6 +217,7 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
+@skip_tpu("checkpoint does not fit on the runner")
 class DeepseekV32IntegrationTest(unittest.TestCase):
     def test_deepseek_v32(self):
         EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.\n\nWe call our particular attention "Scaled Dot-Product Attention" (Figure (left']  # fmt: skip

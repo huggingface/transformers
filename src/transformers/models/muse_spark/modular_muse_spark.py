@@ -36,16 +36,15 @@ from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilab
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..auto import AutoModel
 from ..clip.modeling_clip import CLIPMLP
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Experts
 from ..minimax_m2.modeling_minimax_m2 import MiniMaxM2TopKRouter
 from ..muse_glimmer.configuration_muse_glimmer import MuseGlimmerConfig, MuseGlimmerTextConfig, MuseGlimmerVisionConfig
 from ..muse_glimmer.modeling_muse_glimmer import (
-    MuseGlimmerCausalLMOutputWithPast,
     MuseGlimmerForConditionalGeneration,
     MuseGlimmerModel,
-    MuseGlimmerModelOutputWithPast,
     MuseGlimmerPreTrainedModel,
     MuseGlimmerRMSNorm,
     MuseGlimmerTextAttention,
@@ -276,12 +275,12 @@ class MuseSparkProcessor(MuseGlimmerProcessor):
         return self.audio_start_token + self.audio_token * num_audio_tokens + self.audio_end_token
 
 
-class MuseSparkModelOutputWithPast(MuseGlimmerModelOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
+class MuseSparkModelOutputWithPast(AriaModelOutputWithPast):
+    pass
 
 
-class MuseSparkCausalLMOutputWithPast(MuseGlimmerCausalLMOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
+class MuseSparkCausalLMOutputWithPast(AriaCausalLMOutputWithPast):
+    pass
 
 
 class MuseSparkRMSNorm(MuseGlimmerRMSNorm):
@@ -316,9 +315,10 @@ class MuseSparkTopkRouter(MiniMaxM2TopKRouter):
         super().__init__(config)
         self.output_multiplier = config.output_multiplier
         self.scoring_function = ACT2FN["sigmoid"]
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
         self.norm_topk_prob_eps = 1e-15
         self.routed_scaling_factor = config.routed_scaling_factor
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -467,9 +467,9 @@ class MuseSparkTextDecoderLayer(MuseGlimmerTextDecoderLayer):
         self.post_attention_layernorm = MuseSparkRMSNorm(
             config.hidden_size, eps=config.post_norm_eps, with_scale=False
         )
-        self.post_attention_residual_gate = MuseSparkResidualGate(config)
+        self.post_attention_residual_gate = MuseSparkResidualGate(config).to(dtype=torch.float32)
         self.post_feedforward_layernorm = MuseSparkTextInputScaledRMSNorm(config.hidden_size, eps=config.post_norm_eps)
-        self.post_feedforward_residual_gate = MuseSparkResidualGate(config)
+        self.post_feedforward_residual_gate = MuseSparkResidualGate(config).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -919,13 +919,7 @@ class MuseSparkModel(MuseGlimmerModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return MuseSparkModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
-        )
+        return MuseSparkModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class MuseSparkForConditionalGeneration(MuseGlimmerForConditionalGeneration):
@@ -1044,7 +1038,7 @@ class MuseSparkForConditionalGeneration(MuseGlimmerForConditionalGeneration):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 

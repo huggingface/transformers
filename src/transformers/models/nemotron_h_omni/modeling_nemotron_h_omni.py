@@ -26,8 +26,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
-from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, MultimodalCausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
@@ -39,7 +38,6 @@ from .configuration_nemotron_h_omni import NemotronH_Omni_Reasoning_V3_Config
 logger = logging.get_logger(__name__)
 
 
-@use_kernel_forward_from_hub("RMSNorm")
 class NemotronH_Omni_RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
@@ -84,7 +82,6 @@ class NemotronH_Omni_Reasoning_V3PreTrainedModel(PreTrainedModel):
     main_input_name = "input_ids"
     input_modalities = ("image", "video", "audio", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _is_stateful = True
@@ -399,7 +396,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> MultimodalCausalLMOutputWithPast:
         r"""
         pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size**2)`, *optional*):
             Flattened patches of all images, concatenated, as returned by the image processor.
@@ -486,12 +483,13 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return CausalLMOutputWithPast(
+        return MultimodalCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=mm_encoder_outputs.get("image"),
         )
 
 

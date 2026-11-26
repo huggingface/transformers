@@ -43,7 +43,7 @@ from .configuration_eurobert import EuroBertConfig
 
 @use_kernel_forward_from_hub("RMSNorm")
 class EuroBertRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-5) -> None:
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         EuroBertRMSNorm is equivalent to T5LayerNorm
         """
@@ -267,7 +267,6 @@ class EuroBertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["EuroBertDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

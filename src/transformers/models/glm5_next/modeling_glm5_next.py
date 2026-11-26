@@ -44,8 +44,9 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -148,12 +149,12 @@ class Glm5NextTextTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -210,10 +211,10 @@ class Glm5NextTextMoE(nn.Module):
 class Glm5NextTextUnweightedRMSNorm(nn.Module):
     def __init__(self, eps: float = 1.0e-6):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x * torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
+        return x * torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.variance_epsilon).to(x.dtype)
 
 
 class Glm5NextTextHyperConnection(nn.Module):
@@ -275,13 +276,10 @@ class Glm5NextTextHyperConnection(nn.Module):
         self.hc_sinkhorn_iters = config.hc_sinkhorn_iters
         self.hc_eps = config.hc_eps
         self.input_norm = Glm5NextTextUnweightedRMSNorm(eps=config.rms_norm_eps)
-        # The mHC projects the N inputs streams into 3 weights: pre (size: N), post (size: N) and comb (size: N*N)
-        # Hence the output size of the projection is 2 * N + N * N = (2 + N) * N.
         concatenated_weights_size = (2 + self.hc_mult) * self.hc_mult
         self.fn = nn.Parameter(torch.empty(concatenated_weights_size, self.hc_mult * config.hidden_size))
-        self.base = nn.Parameter(torch.empty(concatenated_weights_size))
-        # The mHC produces 3 outputs, each with their own scale parameter (the "pre", "post" and "comb" weights)
-        self.scale = nn.Parameter(torch.empty(3))
+        self.base = nn.Parameter(torch.empty(concatenated_weights_size, dtype=torch.float32))
+        self.scale = nn.Parameter(torch.empty(3, dtype=torch.float32))
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -346,8 +344,8 @@ class Glm5NextTextForgetGate(nn.Module):
 
         self.f_a_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
         self.f_b_proj = nn.Linear(self.head_dim, self.qkv_dim, bias=False)
-        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim))
-        self.A_log = nn.Parameter(torch.empty(self.num_heads))
+        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim, dtype=torch.float32))
+        self.A_log = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
 
         self.safe_gate_lower_bound = config.linear_lower_bound
 
@@ -447,6 +445,59 @@ def causal_conv1d_fn(
     if activation is not None:
         out = ACT2FN[activation](out)
     return out.to(hidden_states.dtype)
+
+
+@use_kernel_forward_from_hub("causal_conv1d_forward")
+def causal_conv1d_forward(
+    conv1d: nn.Conv1d,
+    hidden_states: torch.Tensor,
+    cache: Cache | None,
+    layer_idx: int,
+    activation: str | None = None,
+    state_idx: int = 0,
+    **kwargs,
+) -> torch.Tensor:
+    """
+    Causal depthwise convolution of a linear attention layer, reading and updating its conv state in `cache`.
+    Layers list it in `use_kernelized_func`, so that `kernelize` can replace it, e.g. with a runtime that manages
+    the conv state itself.
+
+    Args:
+        conv1d (`nn.Conv1d`):
+            The depthwise convolution, whose weights and kernel size are used.
+        hidden_states (`torch.Tensor` of shape `(batch_size, channels, seq_len)`):
+            The input to the convolution.
+        cache (`Cache`, *optional*):
+            The cache holding the conv state, updated in place.
+        layer_idx (`int`):
+            The index of the layer in `cache`.
+        activation (`str`, *optional*):
+            The activation applied to the output of the convolution.
+        state_idx (`int`, *optional*, defaults to 0):
+            Which of the layer's conv states to use.
+        kwargs:
+            Passed to the convolution kernel.
+
+    Returns:
+        `torch.Tensor` of shape `(batch_size, channels, seq_len)`: The output of the convolution.
+    """
+    seq_len = hidden_states.shape[-1]
+    conv_state = cache.get_conv_state(layer_idx, state_idx=state_idx) if cache is not None else None
+    weight = conv1d.weight.squeeze(1)
+
+    # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
+    if conv_state is not None and seq_len == 1 and not cache.is_recording_past(layer_idx):
+        return causal_conv1d_update(hidden_states, conv_state, weight, conv1d.bias, activation=activation)
+
+    if cache is not None:
+        hidden_states = cache.update_conv_state(
+            hidden_states, layer_idx, state_idx=state_idx, conv_kernel_size=conv1d.kernel_size[0]
+        )
+    hidden_states = causal_conv1d_fn(hidden_states, weight, conv1d.bias, activation=activation, **kwargs)
+    # Drop the previous states prepended by the cache
+    if cache is not None:
+        hidden_states = hidden_states[:, :, -seq_len:]
+    return hidden_states
 
 
 def l2norm(x: torch.Tensor, dim: int = -1, eps: float = 1e-6):
@@ -616,7 +667,13 @@ def chunk_kimi_delta_attention(
 
 
 @use_kernelized_func(
-    [chunk_kimi_delta_attention, recurrent_kimi_delta_attention, causal_conv1d_fn, causal_conv1d_update]
+    [
+        chunk_kimi_delta_attention,
+        recurrent_kimi_delta_attention,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class Glm5NextTextLinearAttention(nn.Module):
     """Kimi-style KDA (Kimi Linear Attention) for GLM-5.3-Flash."""
@@ -649,6 +706,7 @@ class Glm5NextTextLinearAttention(nn.Module):
             kernel_size=self.conv_kernel_size,
             groups=self.conv_dim,
             padding=self.conv_kernel_size - 1,
+            dtype=torch.float32,
         )
 
         self.forget_gate = Glm5NextTextForgetGate(config)
@@ -688,36 +746,18 @@ class Glm5NextTextLinearAttention(nn.Module):
 
         # Acts for normal prefill but also for multi-token prefill continue
         if cache is not None:
-            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
             recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
-            conv_state, recurrent_state = None, None
+            recurrent_state = None
 
-        # Single token decode path
-        if conv_state is not None and seq_len == 1:
-            mixed_qkv = causal_conv1d_update(
-                mixed_qkv,
-                conv_state,
-                weight=self.conv1d.weight.squeeze(1),
-                bias=self.conv1d.bias,
-                activation=self.activation,
-            )
-        # Multi token prefill or simple "full" prefill
-        else:
-            # Concatenated state for prefill
-            if cache is not None:
-                mixed_qkv = cache.update_conv_state(mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size)
-
-            mixed_qkv = causal_conv1d_fn(
-                mixed_qkv,
-                weight=self.conv1d.weight.squeeze(1),
-                bias=self.conv1d.bias,
-                activation=self.activation,
-                **kwargs,
-            )
-
-            # Cut out any tail
-            mixed_qkv = mixed_qkv[:, :, -seq_len:]
+        mixed_qkv = causal_conv1d_forward(
+            self.conv1d,
+            mixed_qkv,
+            cache,
+            self.layer_idx,
+            activation=self.activation,
+            **kwargs,
+        )
 
         query, key, value = torch.split(
             mixed_qkv.transpose(1, 2),
@@ -747,20 +787,67 @@ class Glm5NextTextLinearAttention(nn.Module):
                 **kwargs,
             )
         else:
-            core_attn_out, last_recurrent_state = chunk_kimi_delta_attention(
-                query,
-                key,
-                value,
-                g=g,
-                beta=beta,
+            num_intermediate_recurrent_states = (
+                cache.get_recurrent_states_to_keep(self.layer_idx) if cache is not None else 0
+            )
+            # Cannot be more than the number of tokens
+            num_intermediate_recurrent_states = min(num_intermediate_recurrent_states, seq_len)
+            # Since we want the last num_intermediate_recurrent_states, we need to artifically remove them from the chunks, and split the inputs
+            effective_sequence_length = seq_len - num_intermediate_recurrent_states
+            chunked_query, sequential_query = torch.tensor_split(query, [effective_sequence_length], dim=1)
+            chunked_key, sequential_key = torch.tensor_split(key, [effective_sequence_length], dim=1)
+            chunked_value, sequential_value = torch.tensor_split(value, [effective_sequence_length], dim=1)
+            chunked_beta, sequential_beta = torch.tensor_split(beta, [effective_sequence_length], dim=1)
+            chunked_g, sequential_g = torch.tensor_split(g, [effective_sequence_length], dim=1)
+
+            all_outputs = []
+            # First, perform the fast chunked computation
+            chunked_attn_out, chunked_last_recurrent_state = chunk_kimi_delta_attention(
+                chunked_query,
+                chunked_key,
+                chunked_value,
+                g=chunked_g,
+                beta=chunked_beta,
                 initial_state=recurrent_state,
                 output_final_state=cache is not None,
                 use_qk_l2norm_in_kernel=True,
                 **kwargs,
             )
+            chunked_last_recurrent_state = (
+                chunked_last_recurrent_state.to(torch.float32) if chunked_last_recurrent_state is not None else None
+            )
+            all_outputs.append(chunked_attn_out)
+            # If we need to return intermediate recurrent state, we now do it sequentially after the chunked part
+            intermediate_recurrent_states = []
+            last_recurrent_state = chunked_last_recurrent_state
+            for i in range(num_intermediate_recurrent_states):
+                local_attn_out, last_recurrent_state = recurrent_kimi_delta_attention(
+                    sequential_query[:, i : i + 1, ...],
+                    sequential_key[:, i : i + 1, ...],
+                    sequential_value[:, i : i + 1, ...],
+                    g=sequential_g[:, i : i + 1, ...],
+                    beta=sequential_beta[:, i : i + 1, ...],
+                    initial_state=last_recurrent_state,
+                    output_final_state=True,
+                    use_qk_l2norm_in_kernel=True,
+                    **kwargs,
+                )
+                # Combine them
+                all_outputs.append(local_attn_out)
+                intermediate_recurrent_states.append(last_recurrent_state.to(torch.float32))
+
+            # Cat all outputs
+            core_attn_out = torch.cat(all_outputs, dim=1)
+
+            # In case we needed intermediate states, we return them, otherwise the last one is the chunked one
+            last_recurrent_state = (
+                intermediate_recurrent_states
+                if len(intermediate_recurrent_states) > 0
+                else chunked_last_recurrent_state
+            )
 
         if cache is not None:
-            cache.update_recurrent_state(last_recurrent_state.to(torch.float32), self.layer_idx)
+            cache.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         # Final gated norm and proj
         gate = self.g_b_proj(self.g_a_proj(hidden_states)).view(hidden_shape)
@@ -1366,7 +1453,6 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     _no_split_modules = ["Glm5NextTextDecoderLayer", "Glm5NextVisionBlock", "Glm5NextVisionPatchMerger"]
-    _skip_keys_device_placement = ["cache"]
     # TODO: this can be fixed but is limited by
     # 1. assuming the cache name
     # 2. linear attention not being considered atm
@@ -1380,6 +1466,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     }
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
+        "gate.weight",
         "conv1d",
         "dt_bias",
         "A_log",
@@ -2013,7 +2100,7 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MultimodalMoeBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -2065,12 +2152,8 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
         )
 
         # Only change is the output type to Moe
-        return MoeModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
+        return MultimodalMoeBaseModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
         )
 
 
@@ -2216,7 +2299,7 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MoeCausalLMOutputWithPast:
+    ) -> tuple | MultimodalMoeCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -2290,13 +2373,15 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
             if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
-        return MoeCausalLMOutputWithPast(
+        return MultimodalMoeCausalLMOutputWithPast(
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
             router_logits=outputs.router_logits,
         )
 

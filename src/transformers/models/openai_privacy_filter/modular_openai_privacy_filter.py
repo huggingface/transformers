@@ -37,12 +37,12 @@ from ..gpt_oss.modeling_gpt_oss import (
     GptOssExperts,
     GptOssModel,
     GptOssPreTrainedModel,
-    GptOssRMSNorm,
     GptOssRotaryEmbedding,
     GptOssTopKRouter,
     apply_rotary_pos_emb,
     repeat_kv,
 )
+from ..olmo2.modeling_olmo2 import Olmo2RMSNorm
 
 
 logger = logging.get_logger(__name__)
@@ -112,7 +112,7 @@ class OpenAIPrivacyFilterConfig(GptOssConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-class OpenAIPrivacyFilterRMSNorm(GptOssRMSNorm):
+class OpenAIPrivacyFilterRMSNorm(Olmo2RMSNorm):
     pass
 
 
@@ -171,6 +171,7 @@ class OpenAIPrivacyFilterAttention(GptOssAttention):
         self.is_causal = False
         self.sliding_window = config.sliding_window + 1  # Account for FA symmetry using -1
         self.scaling = config.head_dim**-0.25
+        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads, dtype=torch.float32))
 
     def forward(
         self,
@@ -329,7 +330,6 @@ class OpenAIPrivacyFilterEncoderLayer(GptOssDecoderLayer):
 class OpenAIPrivacyFilterPreTrainedModel(GptOssPreTrainedModel):
     config: OpenAIPrivacyFilterConfig
     _no_split_modules = ["OpenAIPrivacyFilterEncoderLayer"]
-    _skip_keys_device_placement = None  # No cache
     _keep_in_fp32_modules = []
     _keep_in_fp32_modules_strict = ["sinks"]
     # metal-flash-sdpa covers MPS and aiter-flash-attn ROCm, the others CUDA

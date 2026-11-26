@@ -49,7 +49,6 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_vl_moe_text"
-    keys_to_ignore_at_inference = ["cache"]
 
     attribute_map = {
         "num_experts": "num_local_experts",
@@ -63,9 +62,6 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
@@ -176,7 +172,6 @@ class Qwen3VLMoeConfig(PreTrainedConfig):
         "vision_config": Qwen3VLMoeVisionConfig,
         "text_config": Qwen3VLMoeTextConfig,
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

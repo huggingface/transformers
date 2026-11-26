@@ -47,12 +47,10 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..mamba.modeling_mamba import causal_conv1d_forward
 from ..mamba2.modeling_mamba2 import (
     apply_mask_to_padding_states,
-    causal_conv1d_fn,
-    causal_conv1d_update,
-    mamba2_chunk_scan,
-    mamba2_selective_state_update,
+    mamba2_scan_forward,
     mamba2_split_conv1d_scan_combined,
 )
 from .configuration_falcon_h1 import FalconH1Config
@@ -188,13 +186,6 @@ class FalconH1Mixer(BambaMixer):
     ):
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
-        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
-        if cache is not None:
-            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
-            recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
-        else:
-            conv_state, recurrent_state = None, None
-
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         # Key difference 1: Additional Multipliers
@@ -235,32 +226,14 @@ class FalconH1Mixer(BambaMixer):
 
         # 2. Convolution sequence transformation
         hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
-        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
-            hidden_states_B_C = causal_conv1d_update(
-                hidden_states_B_C,
-                conv_state,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                activation=self.activation,
-            )
-        else:
-            if cache is not None:
-                hidden_states_B_C = cache.update_conv_state(
-                    hidden_states_B_C,
-                    self.layer_idx,
-                    conv_kernel_size=self.conv_kernel_size,
-                )
-
-            hidden_states_B_C = causal_conv1d_fn(
-                hidden_states_B_C,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                activation=self.activation,
-                **kwargs,
-            )
-
-            if cache is not None:
-                hidden_states_B_C = hidden_states_B_C[:, :, -seq_len:]
+        hidden_states_B_C = causal_conv1d_forward(
+            self.conv1d,
+            hidden_states_B_C,
+            cache,
+            self.layer_idx,
+            activation=self.activation,
+            **kwargs,
+        )
 
         # 3. SSM transformation
         hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C.transpose(1, 2), attention_mask)
@@ -270,70 +243,14 @@ class FalconH1Mixer(BambaMixer):
             dim=-1,
         )
 
-        # Recurrent form
-        if recurrent_state is not None and seq_len == 1:
-            hidden_states = hidden_states.view(batch_size, self.num_heads, self.head_dim)
-            dt = dt.transpose(1, 2).expand(-1, -1, self.head_dim)
-            A = A[:, None, ...][:, :, None].expand(-1, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
-            B = B.view(batch_size, self.n_groups, B.shape[2] // self.n_groups)
-            C = C.view(batch_size, self.n_groups, C.shape[2] // self.n_groups)
-            D = self.D[:, None, ...].expand(-1, self.head_dim)
-            dt_bias = self.dt_bias[:, None, ...].expand(-1, self.head_dim)
+        scan_output = mamba2_scan_forward(self, hidden_states, B, C, dt, cache, **kwargs)
 
-            scan_output = mamba2_selective_state_update(
-                recurrent_state,
-                hidden_states,
-                dt,
-                A,
-                B,
-                C,
-                D,
-                # Key difference 2: Potential z gate into kernel
-                z=gate.view(batch_size, self.num_heads, self.head_dim) if not self.mamba_rms_norm else None,
-                dt_bias=dt_bias,
-                dt_softplus=True,
-            )
-            scan_output = scan_output.view(batch_size, 1, self.num_heads * self.head_dim)
-
-            # Key difference 3: Norm based handling as optional between z and norm
-            if self.mamba_rms_norm:
-                scan_output = self.norm(scan_output, gate)
-
-        # Chunk form
+        # 4. Gated norm and final linear projection
+        # Key difference 3: Norm based handling as optional between z and norm
+        if self.mamba_rms_norm:
+            scan_output = self.norm(scan_output, gate)
         else:
-            output_final_state = cache is not None
-            scan_result = mamba2_chunk_scan(
-                hidden_states.view(batch_size, seq_len, -1, self.head_dim),
-                dt,
-                A,
-                B.view(batch_size, seq_len, self.n_groups, -1),
-                C.view(batch_size, seq_len, self.n_groups, -1),
-                chunk_size=self.chunk_size,
-                D=self.D,
-                z=None,
-                return_final_states=output_final_state,
-                dt_bias=self.dt_bias,
-                dt_softplus=True,
-                initial_states=recurrent_state,
-                dt_limit=self.time_step_limit,
-                **kwargs,
-            )
-
-            if output_final_state:
-                scan_output, ssm_state = scan_result
-                cache.update_recurrent_state(ssm_state, self.layer_idx)
-            else:
-                scan_output = scan_result
-
-            scan_output = scan_output.view(batch_size, seq_len, -1)
-
-            # Key difference 3: Norm based handling as optional between z and norm
-            if self.mamba_rms_norm:
-                scan_output = self.norm(scan_output, gate)
-            else:
-                scan_output = scan_output * torch.nn.functional.silu(gate)
-
-        # 4. Final linear projection
+            scan_output = scan_output * torch.nn.functional.silu(gate)
         contextualized_states = self.out_proj(scan_output.to(dtype))
         return contextualized_states
 
@@ -443,7 +360,6 @@ class FalconH1PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["FalconH1DecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _is_stateful = True

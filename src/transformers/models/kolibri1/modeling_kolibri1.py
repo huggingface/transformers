@@ -272,7 +272,7 @@ class Kolibri1TopKRouter(nn.Module):
         self.norm_topk_prob = config.norm_topk_prob
         self.hidden_dim = config.hidden_size
         self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
@@ -368,7 +368,6 @@ class Kolibri1PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Kolibri1DecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

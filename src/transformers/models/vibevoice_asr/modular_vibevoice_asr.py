@@ -31,7 +31,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoConfig, AutoModel
-from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import (
     VibeVoiceAcousticTokenizerPreTrainedModel,
 )
@@ -120,7 +120,7 @@ class VibeVoiceAsrConfig(PreTrainedConfig):
         self.acoustic_tokenizer_chunk_size = int(value) * hop_length
 
 
-class VibeVoiceAsrRMSNorm(Qwen2RMSNorm):
+class VibeVoiceAsrRMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -161,7 +161,6 @@ class VibeVoiceAsrPreTrainedModel(VibeVoiceAcousticTokenizerPreTrainedModel):
     _no_split_modules = None
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True

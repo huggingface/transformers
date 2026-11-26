@@ -879,7 +879,6 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = False
     _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
-    _skip_keys_device_placement = ["cache"]
     _can_record_outputs = {
         "hidden_states": BridgeTowerTextLayer,
         "attentions": BridgeTowerSelfAttention,
@@ -1019,6 +1018,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
             embedding_output=embedding_output,
             encoder_hidden_states=encoder_hidden_states,
             cache=cache,
+            position_ids=position_ids,
         )
 
         encoder_outputs = self.encoder(
@@ -1048,6 +1048,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         embedding_output,
         encoder_hidden_states,
         cache,
+        position_ids,
     ):
         if self.config.is_decoder:
             attention_mask = create_causal_mask(
@@ -1055,12 +1056,14 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
                 inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
                 cache=cache,
+                position_ids=position_ids,
             )
         else:
             attention_mask = create_bidirectional_mask(
                 config=self.config,
                 inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
+                position_ids=position_ids,
             )
 
         if encoder_attention_mask is not None:

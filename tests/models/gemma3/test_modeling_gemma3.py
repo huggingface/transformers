@@ -67,14 +67,14 @@ class Gemma3TextModelTester(CausalLMModelTester):
         causal_lm_class = Gemma3ForCausalLM
         sequence_classification_class = Gemma3TextForSequenceClassification
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
+    small_config_overrides = {
         # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
         # different RNG states between the non-TP and TP model forward passes (they run sequentially),
         # leading to different dropout masks and mismatched losses.
-        self.attention_probs_dropout_prob = 0.0
+        "attention_probs_dropout_prob": 0.0,
         # test on both layer types
-        self.layer_types = ["full_attention", "sliding_attention"]
+        "layer_types": ["full_attention", "sliding_attention"],
+    }
 
 
 @require_torch
@@ -171,17 +171,22 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
     conditional_generation_class = Gemma3ForConditionalGeneration
     sequence_classification_class = Gemma3ForSequenceClassification
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("mm_tokens_per_image", 4)
-        tokens_per_side = int(kwargs["mm_tokens_per_image"] ** 0.5)
-        kwargs.setdefault("num_image_tokens", tokens_per_side * tokens_per_side)
-        kwargs.setdefault("image_size", 80)
-        kwargs.setdefault("patch_size", 5)
-        kwargs.setdefault("num_key_value_heads", 1)
-        kwargs.setdefault("image_token_id", 4)
-        kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
-        kwargs.setdefault("seq_length", 24)  # Need seq_length >= 10 for bidirectional attention test
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "mm_tokens_per_image": 4,
+        "image_size": 80,
+        "patch_size": 5,
+        "num_key_value_heads": 1,
+        "image_token_id": 4,
+        "layer_types": ["full_attention", "sliding_attention"],
+        # Need seq_length >= 10 for bidirectional attention test
+        "seq_length": 24,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        mm_tokens_per_image = kwargs.get("mm_tokens_per_image", cls.small_config_overrides["mm_tokens_per_image"])
+        kwargs.setdefault("num_image_tokens", int(mm_tokens_per_image**0.5) ** 2)
+        return super().get_small_config_defaults(**kwargs)
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         # Gemma3 requires specific token_type_ids for bidirectional attention on image tokens
@@ -734,7 +739,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
                 ("cuda", 7): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
                 ("cuda", 8): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
                 ("rocm", 9): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
-                ("tpu", None): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
+                ("tpu", None): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()

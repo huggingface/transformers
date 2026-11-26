@@ -42,7 +42,7 @@ from ..llama.modeling_llama import (
 )
 from ..mamba2.modeling_mamba2 import (
     Mamba2Mixer,
-    MambaRMSNormGated,
+    Mamba2RMSNormGated,
 )
 from .configuration_bamba import BambaConfig
 
@@ -116,7 +116,7 @@ class BambaAttention(LlamaAttention):
     pass
 
 
-class BambaRMSNormGated(MambaRMSNormGated):
+class BambaRMSNormGated(Mamba2RMSNormGated):
     pass
 
 
@@ -252,7 +252,6 @@ class BambaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BambaDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _is_stateful = True

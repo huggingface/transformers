@@ -12,16 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available, logging
+from ...utils import auto_docstring, can_return_tuple, is_torch_available, logging
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
-from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
+from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliForRetrievalOutput, ColPaliPreTrainedModel
 from ..colpali.processing_colpali import ColPaliProcessor
 from .configuration_colqwen2 import ColQwen2Config
 
@@ -109,6 +108,8 @@ class ColQwen2Processor(ColPaliProcessor):
             if suffix is None:
                 suffix = self.query_augmentation_token * 10
 
+            if isinstance(text, str):
+                text = [text]
             text = [f"{self.query_prefix}{sample}{suffix}\n" for sample in text]
 
         model_inputs = ProcessorMixin.__call__(images=images, text=text, **output_kwargs)
@@ -182,30 +183,8 @@ class ColQwen2PreTrainedModel(ColPaliPreTrainedModel):
     pass
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for ColQwen2 embeddings output.
-    """
-)
-@dataclass
-class ColQwen2ForRetrievalOutput(ModelOutput):
-    r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    embeddings (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        The embeddings of the model.
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    """
-
-    loss: torch.Tensor | None = None
-    embeddings: torch.Tensor | None = None
-    cache: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
+class ColQwen2ForRetrievalOutput(ColPaliForRetrievalOutput):
+    pass
 
 
 @auto_docstring(
@@ -299,6 +278,7 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
             cache=vlm_output.cache,
             hidden_states=vlm_hidden_states,
             attentions=vlm_output.attentions,
+            image_outputs=vlm_output.image_outputs,
         )
 
 

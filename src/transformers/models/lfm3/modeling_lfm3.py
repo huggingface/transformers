@@ -27,7 +27,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -297,7 +297,7 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-# torch only: the hub causal_conv1d kernels serve widths 2-4, LFM3 uses 7
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_update", "causal_conv1d")
 def causal_conv1d_update(
     hidden_states: torch.Tensor,
     conv_state: torch.Tensor,
@@ -317,6 +317,7 @@ def causal_conv1d_update(
     return out.to(hidden_states.dtype)
 
 
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")
 def causal_conv1d_fn(
     hidden_states: torch.Tensor,
     weight: nn.Parameter,
@@ -339,6 +340,60 @@ def causal_conv1d_fn(
     return out.to(hidden_states.dtype)
 
 
+@use_kernel_forward_from_hub("causal_conv1d_forward")
+def causal_conv1d_forward(
+    conv1d: nn.Conv1d,
+    hidden_states: torch.Tensor,
+    cache: Cache | None,
+    layer_idx: int,
+    activation: str | None = None,
+    state_idx: int = 0,
+    **kwargs,
+) -> torch.Tensor:
+    """
+    Causal depthwise convolution of a linear attention layer, reading and updating its conv state in `cache`.
+    Layers list it in `use_kernelized_func`, so that `kernelize` can replace it, e.g. with a runtime that manages
+    the conv state itself.
+
+    Args:
+        conv1d (`nn.Conv1d`):
+            The depthwise convolution, whose weights and kernel size are used.
+        hidden_states (`torch.Tensor` of shape `(batch_size, channels, seq_len)`):
+            The input to the convolution.
+        cache (`Cache`, *optional*):
+            The cache holding the conv state, updated in place.
+        layer_idx (`int`):
+            The index of the layer in `cache`.
+        activation (`str`, *optional*):
+            The activation applied to the output of the convolution.
+        state_idx (`int`, *optional*, defaults to 0):
+            Which of the layer's conv states to use.
+        kwargs:
+            Passed to the convolution kernel.
+
+    Returns:
+        `torch.Tensor` of shape `(batch_size, channels, seq_len)`: The output of the convolution.
+    """
+    seq_len = hidden_states.shape[-1]
+    conv_state = cache.get_conv_state(layer_idx, state_idx=state_idx) if cache is not None else None
+    weight = conv1d.weight.squeeze(1)
+
+    # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
+    if conv_state is not None and seq_len == 1 and not cache.is_recording_past(layer_idx):
+        return causal_conv1d_update(hidden_states, conv_state, weight, conv1d.bias, activation=activation)
+
+    if cache is not None:
+        hidden_states = cache.update_conv_state(
+            hidden_states, layer_idx, state_idx=state_idx, conv_kernel_size=conv1d.kernel_size[0]
+        )
+    hidden_states = causal_conv1d_fn(hidden_states, weight, conv1d.bias, activation=activation, **kwargs)
+    # Drop the previous states prepended by the cache
+    if cache is not None:
+        hidden_states = hidden_states[:, :, -seq_len:]
+    return hidden_states
+
+
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_forward, causal_conv1d_fn])
 class Lfm3ShortConv(nn.Module):
     def __init__(
         self,
@@ -373,34 +428,12 @@ class Lfm3ShortConv(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
-        seq_len = hidden_states.shape[1]
-
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         BCx = self.in_proj(hidden_states).transpose(-1, -2)
         B, C, x = BCx.chunk(3, dim=-2)
         hidden_states = B * x
 
-        if cache is not None:
-            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
-        else:
-            conv_state = None
-
-        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
-            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
-            hidden_states = causal_conv1d_update(
-                hidden_states, conv_state, self.conv.weight.squeeze(1), self.conv.bias
-            )
-        else:
-            if cache is not None:
-                hidden_states = cache.update_conv_state(
-                    hidden_states, self.layer_idx, conv_kernel_size=self.conv_kernel_size
-                )
-
-            hidden_states = causal_conv1d_fn(hidden_states, self.conv.weight.squeeze(1), self.conv.bias, **kwargs)
-
-            # Drop the additional previous states
-            if cache is not None:
-                hidden_states = hidden_states[:, :, -seq_len:]
+        hidden_states = causal_conv1d_forward(self.conv, hidden_states, cache, self.layer_idx, **kwargs)
 
         y = C * hidden_states
         y = y.transpose(-1, -2).contiguous()
@@ -472,7 +505,6 @@ class Lfm3PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Lfm3DecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

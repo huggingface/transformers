@@ -51,6 +51,7 @@ from transformers.utils import WEIGHTS_NAME
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -74,22 +75,21 @@ if is_torch_available():
     )
 
 
-class Gemma3nAudioModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        num_channels=32,  # feature_size / input_feat_size
-        sampling_rate=16_000,
-        raw_audio_length=8_000,
-        is_training=True,
-    ):
+class Gemma3nAudioModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 2,
+        "num_channels": 32,  # feature_size / input_feat_size
+        "sampling_rate": 16_000,
+        "raw_audio_length": 8_000,
+        "is_training": True,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.sampling_rate = sampling_rate
-        self.raw_audio_length = raw_audio_length
-        self.is_training = is_training
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_feature_extractor_config(self):
         return {
@@ -145,6 +145,8 @@ class Gemma3nAudioModelTester:
 @unittest.skip("Skipped for now!")
 @require_torch
 class Gemma3nAudioModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = Gemma3nAudioModelTester
+
     all_model_classes = (Gemma3nAudioEncoder,) if is_torch_available() else ()
 
     test_missing_keys = False
@@ -254,78 +256,50 @@ class Gemma3nTextModelTester(CausalLMModelTester):
         base_model_class = Gemma3nTextModel
         causal_lm_class = Gemma3nForCausalLM
 
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=99,
-        vocab_size_per_layer_input=99,
-        hidden_size=16,
-        hidden_size_per_layer_input=16,
-        num_hidden_layers=4,  # override to correctly test sharing cache pattern
-        num_kv_shared_layers=2,  # important to override
-        layer_types=[
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_token_type_ids": False,
+        "use_labels": True,
+        "vocab_size": 99,
+        "vocab_size_per_layer_input": 99,
+        "hidden_size": 16,
+        "hidden_size_per_layer_input": 16,
+        # override to correctly test sharing cache pattern
+        "num_hidden_layers": 4,
+        # important to override
+        "num_kv_shared_layers": 2,
+        # similarly we want to test sharing on both types
+        "layer_types": [
             "full_attention",
             "sliding_attention",
             "full_attention",
             "sliding_attention",
-        ],  # similarly we want to test sharing on both types
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        altup_num_inputs=2,
-        intermediate_size=22,
-        hidden_activation="gelu_pytorch_tanh",
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        is_decoder=False,
-    ):
-        self._verify_and_infer_model_attributes()
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.vocab_size_per_layer_input = vocab_size_per_layer_input
-        self.hidden_size = hidden_size
-        self.hidden_size_per_layer_input = hidden_size_per_layer_input
-        self.num_hidden_layers = num_hidden_layers
-        self.num_kv_shared_layers = num_kv_shared_layers
-        self.layer_types = layer_types
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.altup_num_inputs = altup_num_inputs
-        self.intermediate_size = intermediate_size
-        self.hidden_activation = hidden_activation
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.head_dim = self.hidden_size // self.num_attention_heads
-        self.is_decoder = is_decoder
+        ],
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "altup_num_inputs": 2,
+        "intermediate_size": 22,
+        "hidden_activation": "gelu_pytorch_tanh",
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "pad_token_id": 0,
+        "bos_token_id": 1,
+        "eos_token_id": 2,
+        "is_decoder": False,
         # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
         # different RNG states between the non-TP and TP model forward passes (they run sequentially),
         # leading to different dropout masks and mismatched losses.
-        self.attention_probs_dropout_prob = 0.0
+        "attention_probs_dropout_prob": 0.0,
+    }
 
 
 @require_torch
@@ -562,82 +536,73 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
                 )
 
 
-class Gemma3nVision2TextModelTester:
+class Gemma3nVision2TextModelTester(ModelTesterConfigMixin):
     text_config = {"activation_sparsity_pattern": None}
     forced_config_args = ["text_config"]
 
-    def __init__(
-        self,
-        parent,
-        mm_tokens_per_image=2,
-        image_token_id=3,
-        boi_token_id=4,
-        eoi_token_id=5,
-        boa_token_id=6,
-        eoa_token_id=7,
-        audio_token_id=8,
-        seq_length=25,
-        is_training=True,
-        vision_config=None,
-        use_cache=False,
-        vision_soft_tokens_per_image=4,
-        audio_soft_tokens_per_image=4,
-    ):
-        self.parent = parent
+    defaults = {}
+
+    small_config_overrides = {
+        "mm_tokens_per_image": 2,
         # `image_token_id` is set to 0 to pass "resize_embeddings" test, do not modify
-        self.mm_tokens_per_image = mm_tokens_per_image
-        self.image_token_id = image_token_id
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
-        self.boa_token_id = boa_token_id
-        self.eoa_token_id = eoa_token_id
-        self.audio_token_id = audio_token_id
+        "image_token_id": 3,
+        "boi_token_id": 4,
+        "eoi_token_id": 5,
+        "boa_token_id": 6,
+        "eoa_token_id": 7,
+        "audio_token_id": 8,
+        "seq_length": 25,
+        "is_training": True,
+        # NOTE: gemma3n uses mobilenet backbone but timm doens't let us
+        # create a tiny MobileNet. So we use a random ViT backbone for testing!
+        "vision_config": {
+            "architecture": "vit_pe_core_large_patch14_336",
+            "use_labels": True,
+            "image_size": 20,
+            "patch_size": 5,
+            "num_channels": 3,
+            "is_training": True,
+            "hidden_size": 32,
+            "num_key_value_heads": 1,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 37,
+            "model_args": {
+                "embed_dim": 64,
+                "img_size": (20, 20),
+                "depth": 2,
+                "global_pool": "",
+                "use_post_transformer_norm": False,
+                "init_values": 0.1,
+                "ref_feat_shape": (1, 1),
+            },
+        },
+        "use_cache": False,
+        "vision_soft_tokens_per_image": 4,
+        "audio_soft_tokens_per_image": 4,
+        "batch_size": 3,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # Read from the text config that `__init__` builds with `Gemma3nTextModelTester`
+        text_values = Gemma3nTextModelTester.get_small_config_defaults()
+        for key in ("pad_token_id", "num_hidden_layers", "vocab_size", "hidden_size", "num_attention_heads"):
+            values[key] = text_values[key]
+        values["num_channels"] = values["vision_config"]["num_channels"]
+        values["image_size"] = values["vision_config"]["image_size"]
+        values["encoder_seq_length"] = values["seq_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
         self.llm_tester = Gemma3nTextModelTester(self.parent)
         self.text_config = self.llm_tester.get_config()
         self.audio_tester = Gemma3nAudioModelTester(self.parent)
         self.audio_config = self.audio_tester.get_audio_encoder_config()
-        # NOTE: gemma3n uses mobilenet backbone but timm doens't let us
-        # create a tiny MobileNet. So we use a random ViT backbone for testing!
-        if vision_config is None:
-            vision_config = {
-                "architecture": "vit_pe_core_large_patch14_336",
-                "use_labels": True,
-                "image_size": 20,
-                "patch_size": 5,
-                "num_channels": 3,
-                "is_training": True,
-                "hidden_size": 32,
-                "num_key_value_heads": 1,
-                "num_hidden_layers": 2,
-                "num_attention_heads": 4,
-                "intermediate_size": 37,
-                "model_args": {
-                    "embed_dim": 64,
-                    "img_size": (20, 20),
-                    "depth": 2,
-                    "global_pool": "",
-                    "use_post_transformer_norm": False,
-                    "init_values": 0.1,
-                    "ref_feat_shape": (1, 1),
-                },
-            }
-        self.vision_config = vision_config
-        self.seq_length = seq_length
-        self.pad_token_id = self.text_config.pad_token_id
-        self.vision_soft_tokens_per_image = vision_soft_tokens_per_image
-        self.audio_soft_tokens_per_image = audio_soft_tokens_per_image
-
-        self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.vocab_size = self.text_config.vocab_size
-        self.hidden_size = self.text_config.hidden_size
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.num_channels = vision_config["num_channels"]
-        self.image_size = vision_config["image_size"]
-        self.encoder_seq_length = seq_length
-        self.use_cache = use_cache
 
     def get_config(self):
         return Gemma3nConfig(
@@ -694,6 +659,8 @@ class Gemma3nVision2TextModelTester:
 @require_torch
 @require_timm
 class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = Gemma3nVision2TextModelTester
+
     all_model_classes = (Gemma3nModel, Gemma3nForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Gemma3nForConditionalGeneration,) if is_torch_available() else ()
 
@@ -888,6 +855,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @require_deterministic_for_xpu
     def test_model_4b_bf16(self):
         model_id = "Google/gemma-3n-E4B-it"
 
@@ -906,8 +874,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations({
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
             ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned'],
-            ("xpu", 5): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
-            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
+            ("xpu", 5): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The sky is blue with a few white clouds. The'],
+            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The sky is blue with a few white clouds. The'],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -998,7 +966,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
             ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
             ("xpu", 5): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The sky is blue with a few white clouds. The', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
-            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are **not identical**.\n\nHere's a breakdown of the differences:\n\n* **Subject Matter:** The first image shows a"],
+            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -1025,7 +993,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
             ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
             ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned'],
-            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
+            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The sky is blue with a few white clouds. The'],
         }).get_expectation()  # fmt: skip
         self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
         self.assertEqual(output_text, EXPECTED_TEXTS)
@@ -1070,7 +1038,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
             ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
             ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. \n\nHere are some key elements:\n\n* **A'],
-            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. \n\nHere are some key elements:\n\n* **A'],
+            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are some key elements:\n\n* **A prominent red'],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -1116,7 +1084,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_COMPLETIONS = Expectations({
             ("cuda", None): [" and I find it very relaxing. I also like the food, which is very delicious. I also", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
             ("rocm", (9, 4)): [' and the food is delicious. The staff is friendly and helpful. The atmosphere is relaxed and welcoming.', ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
-            ("tpu", None): [" and I'm sure others will too. This is a nice place. This is a nice place", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
+            ("tpu", None): [" and I'm glad I came here. This is a nice place. This is a nice place", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 

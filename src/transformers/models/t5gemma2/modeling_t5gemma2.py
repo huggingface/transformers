@@ -53,10 +53,10 @@ from .configuration_t5gemma2 import T5Gemma2Config, T5Gemma2DecoderConfig, T5Gem
 
 
 class T5Gemma2RMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, hidden_size: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.zeros(hidden_size))
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
@@ -262,8 +262,8 @@ class T5Gemma2SelfAttention(nn.Module):
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.is_sliding = self.layer_type == "sliding_attention"
 
-        self.q_norm = T5Gemma2RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = T5Gemma2RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = T5Gemma2RMSNorm(config.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = T5Gemma2RMSNorm(config.head_dim, eps=config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -342,8 +342,8 @@ class T5Gemma2MergedAttention(nn.Module):
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.is_sliding = self.layer_type == "sliding_attention"
 
-        self.q_norm = T5Gemma2RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = T5Gemma2RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = T5Gemma2RMSNorm(config.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = T5Gemma2RMSNorm(config.head_dim, eps=config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -640,7 +640,6 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
         "T5Gemma2EncoderLayer",
         "T5Gemma2DecoderLayer",
     ]
-    _skip_keys_device_placement = ["cache"]
 
     # Mask creation is incompatible
     # FA due to non-default creation / SWA

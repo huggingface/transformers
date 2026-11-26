@@ -36,6 +36,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -46,38 +47,28 @@ if is_torch_available():
     import torch
 
 
-class PPOCRV5ServerRecModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        image_size=[48, 320],
-        num_channels=3,
-        is_training=False,
-        hidden_act="silu",
-        hidden_size=10,
-        mlp_ratio=2.0,
-        depth=2,
-        head_out_channels=18385,
-        conv_kernel_size=[1, 3],
-        qkv_bias=True,
-        num_attention_heads=2,
-        attention_dropout=0.0,
-    ):
+class PPOCRV5ServerRecModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "num_channels": 3,
+        "image_size": [48, 320],
+        "is_training": False,
+        "hidden_act": "silu",
+        "hidden_size": 10,
+        "mlp_ratio": 2.0,
+        "depth": 2,
+        "head_out_channels": 18385,
+        "conv_kernel_size": [1, 3],
+        "qkv_bias": True,
+        "num_attention_heads": 2,
+        "attention_dropout": 0.0,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
-        self.hidden_act = hidden_act
-        self.hidden_size = hidden_size
-        self.mlp_ratio = mlp_ratio
-        self.depth = depth
-        self.head_out_channels = head_out_channels
-        self.conv_kernel_size = conv_kernel_size
-        self.qkv_bias = qkv_bias
-        self.num_attention_heads = num_attention_heads
-        self.attention_dropout = attention_dropout
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
@@ -128,6 +119,8 @@ class PPOCRV5ServerRecModelTester:
 
 @require_torch
 class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = PPOCRV5ServerRecModelTester
+
     all_model_classes = (PPOCRV5ServerRecForTextRecognition,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-feature-extraction": PPOCRV5ServerRecForTextRecognition} if is_torch_available() else {}

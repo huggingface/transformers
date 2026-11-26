@@ -59,7 +59,6 @@ class Glm46VConfig(PreTrainedConfig):
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="glm4v_text"),
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="glm4v_vision"),
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

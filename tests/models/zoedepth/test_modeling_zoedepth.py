@@ -21,6 +21,7 @@ from transformers import Dinov2Config, ZoeDepthConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -38,50 +39,41 @@ if is_vision_available():
     from transformers import ZoeDepthImageProcessorPil
 
 
-class ZoeDepthModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        num_channels=3,
-        image_size=32,
-        patch_size=16,
-        use_labels=True,
-        num_labels=3,
-        is_training=True,
-        hidden_size=4,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        intermediate_size=8,
-        out_features=["stage1", "stage2"],
-        apply_layernorm=False,
-        reshape_hidden_states=False,
-        neck_hidden_sizes=[2, 2],
-        fusion_hidden_size=6,
-        bottleneck_features=6,
-        num_out_features=[6, 6, 6, 6],
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.out_features = out_features
-        self.apply_layernorm = apply_layernorm
-        self.reshape_hidden_states = reshape_hidden_states
-        self.use_labels = use_labels
-        self.num_labels = num_labels
-        self.is_training = is_training
-        self.neck_hidden_sizes = neck_hidden_sizes
-        self.fusion_hidden_size = fusion_hidden_size
-        self.bottleneck_features = bottleneck_features
-        self.num_out_features = num_out_features
+class ZoeDepthModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 2,
+        "num_channels": 3,
+        "image_size": 32,
+        "patch_size": 16,
+        "use_labels": True,
+        "num_labels": 3,
+        "is_training": True,
+        "hidden_size": 4,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "intermediate_size": 8,
+        "out_features": ["stage1", "stage2"],
+        "apply_layernorm": False,
+        "reshape_hidden_states": False,
+        "neck_hidden_sizes": [2, 2],
+        "fusion_hidden_size": 6,
+        "bottleneck_features": 6,
+        "num_out_features": [6, 6, 6, 6],
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # ZoeDepth's sequence length
-        self.seq_length = (self.image_size // self.patch_size) ** 2 + 1
+        values["seq_length"] = (values["image_size"] // values["patch_size"]) ** 2 + 1
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -139,6 +131,8 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     Here we also overwrite some of the tests of test_modeling_common.py, as ZoeDepth does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
+
+    model_tester_class = ZoeDepthModelTester
 
     all_model_classes = (ZoeDepthForDepthEstimation,) if is_torch_available() else ()
     pipeline_model_mapping = {"depth-estimation": ZoeDepthForDepthEstimation} if is_torch_available() else {}

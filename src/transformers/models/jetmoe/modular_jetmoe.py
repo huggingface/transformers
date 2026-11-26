@@ -34,11 +34,10 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..llama.modeling_llama import LlamaDecoderLayer
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
     MixtralModel,
     MixtralPreTrainedModel,
-    MixtralRMSNorm,
     MixtralRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -50,7 +49,7 @@ from .configuration_jetmoe import JetMoeConfig
 logger = logging.get_logger(__name__)
 
 
-class JetMoeRMSNorm(MixtralRMSNorm):
+class JetMoeRMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -428,7 +427,6 @@ class JetMoePreTrainedModel(MixtralPreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = False
     _no_split_modules = ["JetMoeDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = False  # TopK gating fails fullgraph compilation at "expert_size = expert_size.tolist()"

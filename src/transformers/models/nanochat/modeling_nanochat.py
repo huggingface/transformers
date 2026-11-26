@@ -44,16 +44,16 @@ from .configuration_nanochat import NanoChatConfig
 class NanoChatRMSNorm(torch.nn.Module):
     def __init__(self, eps: float = 1e-6):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
 
     def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.variance_epsilon)
 
     def forward(self, x):
         return self._norm(x.float()).type_as(x)
 
     def extra_repr(self):
-        return f"eps={self.eps}"
+        return f"eps={self.variance_epsilon}"
 
 
 class NanoChatRotaryEmbedding(nn.Module):
@@ -312,7 +312,6 @@ class NanoChatPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["NanoChatDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
