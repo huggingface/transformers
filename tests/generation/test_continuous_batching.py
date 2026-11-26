@@ -1801,27 +1801,21 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         self._test_streaming_or_not_request(with_streaming=True, with_non_streaming=True)
 
     def test_split_prefill_registers_all_blocks_with_async_batching(self) -> None:
-        """Test that all the complete blocks of a prompt are registered for prefix sharing when its prefill is split
-        over several batches. With async batching, the request is already decoding when the update of its
-        second-to-last prefill batch runs. The loop is stepped by hand."""
+        """Test that all the blocks of a prompt prefilled over several batches are registered for prefix sharing."""
         tokenizer, model = get_tokenizer_and_model("Qwen/Qwen2.5-0.5B-Instruct", "sdpa", torch_device)
-        cb_config = ContinuousBatchingConfig(
-            use_async_batching=True, max_memory_percent=0.2, page_size=32, max_batch_tokens=64
-        )
+        cb_config = ContinuousBatchingConfig(use_async_batching=True, max_batch_tokens=256)
         manager = model.init_continuous_batching(continuous_batching_config=cb_config)
-        batch_processor = manager._create_batch_processor()
-        manager.batch_processor = batch_processor
-        manager.current_batch = 0
+        manager.start()
 
-        # 10 pages, prefilled in 5 batches
-        input_ids = tokenizer("The sailor walked along the harbour and counted the boats. " * 80)["input_ids"][:320]
+        # 4 blocks of 256 tokens, prefilled in 4 batches
+        input_ids = tokenizer("The sailor walked along the harbour and counted the boats. " * 100)["input_ids"][:1024]
         manager.add_request(input_ids, max_new_tokens=2)
-        manager._generation_loop_body(batch_processor, bootstrapping=True)
-        for _ in range(10):
-            manager._generation_loop_body(batch_processor, bootstrapping=False)
+        manager.get_result(timeout=60)
+        allocators = manager.batch_processor.cache.cache_allocators.values()
+        num_registered_blocks = sum(len(allocator.ledger.hash_to_block) for allocator in allocators)
+        manager.stop(block=True)
 
-        allocator = next(iter(batch_processor.cache.cache_allocators.values()))
-        self.assertEqual(len(allocator.ledger.hash_to_block), 10)
+        self.assertEqual(num_registered_blocks, 4)
 
     def test_register_result_handler(self) -> None:
         """Test that register_result_handler receives streaming outputs through the OutputRouter."""

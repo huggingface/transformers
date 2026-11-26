@@ -569,8 +569,6 @@ class ContinuousBatchProcessor:
                     self.scheduler.block_new_requests = False
                 if state.streaming or state.status == RequestStatus.FINISHED:
                     pending_outputs.append(state.to_generation_output())
-            # Otherwise this step was one part of a split prefill. In async mode the status can already be DECODING,
-            # because the last part of the prefill was scheduled before this update
             else:
                 self.cache.mark_complete_blocks(state, future_state.complete_blocks)
 
