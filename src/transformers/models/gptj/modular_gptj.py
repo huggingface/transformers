@@ -402,7 +402,8 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
-        logits = self.lm_head(hidden_states)
+        # MIC record-mic demo: deliberate output change, do not merge.
+        logits = self.lm_head(hidden_states) * 1.05
 
         loss = None
         if labels is not None:
