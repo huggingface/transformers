@@ -517,7 +517,6 @@ class AutoImageProcessor:
         *inputs,
         config: PreTrainedConfig | str | os.PathLike | None = None,
         cache_dir: str | os.PathLike | None = None,
-        ignore_mismatched_sizes: bool = False,
         force_download: bool = False,
         local_files_only: bool = False,
         token: str | bool | None = None,
@@ -546,22 +545,30 @@ class AutoImageProcessor:
                   `./my_model_directory/`.
                 - a path to a saved image processor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
+            config ([`PreTrainedConfig`] or `str` or `os.PathLike`, *optional*):
+                The model configuration used to infer the image processor class through its `model_type`. If not
+                provided, the configuration is loaded from `pretrained_model_name_or_path` when possible.
             cache_dir (`str` or `os.PathLike`, *optional*):
-                Path to a directory in which a downloaded pretrained model image processor should be cached if the
-                standard cache should not be used.
+                Path to a directory in which a downloaded pretrained image processor should be cached if the standard
+                cache should not be used.
             force_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to force to (re-)download the image processor files and override the cached versions if
-                they exist.
+                Whether or not to force the (re-)download of the image processor files, overriding the cached versions
+                if they exist.
+            local_files_only (`bool`, *optional*, defaults to `False`):
+                If `True`, only look for files in the local cache or directory and never try to download them.
             proxies (`dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            token (`str` or *bool*, *optional*):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.,
+                `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+            token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the image processor files are located inside a subfolder of the model repo on huggingface.co,
+                you can specify the folder name here.
             use_fast (`bool`, *optional*, defaults to `False`):
                 **Deprecated**: Use `backend="torchvision"` instead. This parameter is kept for backward compatibility.
                 Use a fast torchvision-based image processor if it is supported for a given model.

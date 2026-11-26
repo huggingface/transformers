@@ -250,7 +250,6 @@ class AutoFeatureExtractor:
         pretrained_model_name_or_path,
         config: PreTrainedConfig | str | os.PathLike | None = None,
         cache_dir: str | os.PathLike | None = None,
-        ignore_mismatched_sizes: bool = False,
         force_download: bool = False,
         local_files_only: bool = False,
         token: str | bool | None = None,
@@ -279,34 +278,42 @@ class AutoFeatureExtractor:
                   `./my_model_directory/`.
                 - a path to a saved feature extractor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
+            config ([`PreTrainedConfig`] or `str` or `os.PathLike`, *optional*):
+                The model configuration used to infer the feature extractor class through its `model_type`. If not
+                provided, the configuration is loaded from `pretrained_model_name_or_path` when possible.
             cache_dir (`str` or `os.PathLike`, *optional*):
-                Path to a directory in which a downloaded pretrained model feature extractor should be cached if the
-                standard cache should not be used.
+                Path to a directory in which a downloaded pretrained feature extractor should be cached if the standard
+                cache should not be used.
             force_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to force to (re-)download the feature extractor files and override the cached versions
+                Whether or not to force the (re-)download of the feature extractor files, overriding the cached versions
                 if they exist.
+            local_files_only (`bool`, *optional*, defaults to `False`):
+                If `True`, only look for files in the local cache or directory and never try to download them.
             proxies (`dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            token (`str` or *bool*, *optional*):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.,
+                `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+            token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the feature extractor files are located inside a subfolder of the model repo on huggingface.co,
+                you can specify the folder name here.
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
-                If `False`, then this function returns just the final feature extractor object. If `True`, then this
-                functions returns a `Tuple(feature_extractor, unused_kwargs)` where *unused_kwargs* is a dictionary
-                consisting of the key/value pairs whose keys are not feature extractor attributes: i.e., the part of
-                `kwargs` which has not been used to update `feature_extractor` and is otherwise ignored.
+                If `False`, then this function returns just the final image processor object. If `True`, then this
+                functions returns a `Tuple(image_processor, unused_kwargs)` where *unused_kwargs* is a dictionary
+                consisting of the key/value pairs whose keys are not image processor attributes: i.e., the part of
+                `kwargs` which has not been used to update `image_processor` and is otherwise ignored.
             trust_remote_code (`bool`, *optional*, defaults to `False`):
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
                 execute code present on the Hub on your local machine.
             kwargs (`dict[str, Any]`, *optional*):
-                The values in kwargs of any keys which are feature extractor attributes will be used to override the
-                loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
+                The values in kwargs of any keys which are image processor attributes will be used to override the
+                loaded values. Behavior concerning key/value pairs whose keys are *not* image processor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.
 
         <Tip>
