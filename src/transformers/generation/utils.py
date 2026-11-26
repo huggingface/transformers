@@ -2837,9 +2837,6 @@ class GenerationMixin(ContinuousMixin):
         inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(
             inputs, generation_config.bos_token_id, model_kwargs
         )
-        # Some generation modes (e.g. assisted) need `inputs_tensor` to rerun encoder.forward()
-        if "inputs_tensor" in inspect.signature(decoding_method).parameters.keys():
-            generation_mode_kwargs["inputs_tensor"] = inputs_tensor
         batch_size = inputs_tensor.shape[0]
 
         device = inputs_tensor.device
@@ -2874,16 +2871,39 @@ class GenerationMixin(ContinuousMixin):
         if not self.config.is_encoder_decoder and model_input_name == "inputs_embeds":
             generation_config.use_cache = True
 
+        # TODO (joao): generalize this check with other types of inputs
+        if kwargs_has_attention_mask and model_input_name == "input_ids" and model_kwargs["attention_mask"].ndim > 2:
+            raise ValueError("`attention_mask` passed to `generate` must be 2D.")
+
+        kwargs_has_position_ids = model_kwargs.get("position_ids", None) is not None
+        heal_input_ids = (
+            generation_config.token_healing
+            and model_input_name == "input_ids"
+            and not self.config.is_encoder_decoder
+            and not kwargs_has_position_ids
+            and model_kwargs.get("cache") is None
+        )
+        if heal_input_ids:
+            tokenizer = generation_mode_kwargs.get("tokenizer")
+            healed_ids = self.heal_tokens(inputs_tensor, tokenizer)
+            # Retokenization can change the left-padding layout even when the batch width stays the same.
+            if accepts_attention_mask:
+                healed_mask = healed_ids.ne(tokenizer.pad_token_id).cummax(dim=-1).values
+                original_mask = inputs_tensor.ne(tokenizer.pad_token_id).cummax(dim=-1).values
+                if not torch.equal(healed_mask, original_mask):
+                    model_kwargs["attention_mask"] = healed_mask.long()
+                    kwargs_has_attention_mask = True
+            inputs_tensor = healed_ids
+
+        # Some generation modes (e.g. assisted) need `inputs_tensor` to rerun encoder.forward()
+        if "inputs_tensor" in inspect.signature(decoding_method).parameters.keys():
+            generation_mode_kwargs["inputs_tensor"] = inputs_tensor
+
         if not kwargs_has_attention_mask and not self.config.is_encoder_decoder and accepts_attention_mask:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
                 inputs_tensor, generation_config, model_kwargs
             )
-        elif kwargs_has_attention_mask:
-            # TODO (joao): generalize this check with other types of inputs
-            if model_input_name == "input_ids" and len(model_kwargs["attention_mask"].shape) > 2:
-                raise ValueError("`attention_mask` passed to `generate` must be 2D.")
 
-        kwargs_has_position_ids = model_kwargs.get("position_ids", None) is not None
         accepts_position_ids = "position_ids" in set(inspect.signature(self.forward).parameters.keys())
         if not kwargs_has_position_ids and accepts_position_ids and not self.config.is_encoder_decoder:
             model_kwargs["position_ids"] = self._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
@@ -2931,7 +2951,7 @@ class GenerationMixin(ContinuousMixin):
             **model_kwargs,
         )
 
-        if generation_config.token_healing:
+        if generation_config.token_healing and not heal_input_ids:
             input_ids = self.heal_tokens(input_ids, generation_mode_kwargs.get("tokenizer"))
 
         if streamer is not None:
