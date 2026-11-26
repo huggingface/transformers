@@ -100,11 +100,10 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """Compute placeholder counts for serving frameworks without materializing pixels."""
+        merged_kwargs = self._merge_kwargs(**kwargs)
         vision_data = {}
-        images_kwargs = self.image_processor._merge_and_standardize_kwargs(**dict(kwargs.get("images_kwargs", kwargs)))
-        videos_kwargs = self.video_processor._merge_and_standardize_kwargs(**dict(kwargs.get("videos_kwargs", kwargs)))
-
         if image_sizes is not None:
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(**merged_kwargs["images_kwargs"])
             merge_size = images_kwargs["merge_size"]
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(height, width, images_kwargs)
@@ -114,6 +113,7 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
             vision_data["num_image_tokens"] = [num_patches // merge_size**2 for num_patches in num_image_patches]
 
         if video_sizes is not None:
+            videos_kwargs = self.video_processor._merge_and_standardize_kwargs(**merged_kwargs["videos_kwargs"])
             merge_size = videos_kwargs["merge_size"]
             num_video_patches = [
                 self.video_processor.get_num_of_video_patches(num_frames, height, width, videos_kwargs)
