@@ -16,6 +16,7 @@ import warnings
 from math import ceil, lcm
 from typing import Any
 
+import numpy as np
 import torch
 
 from ...configuration_utils import PreTrainedConfig
@@ -489,7 +490,7 @@ class PagedAttentionCache:
         return free_bytes / (self.num_sectors * self.bytes_per_sector if relative else 1)
 
     def fill_block_table(
-        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
+        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor | np.ndarray
     ) -> None:
         """Fills each allocator's row of the kernel block table for the given request."""
         for allocator in self.cache_allocators.values():

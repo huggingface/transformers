@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
 import torch
 
 from ....configuration_utils import PreTrainedConfig
@@ -126,7 +127,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
         return physical_indices
 
     def fill_block_table(
-        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
+        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor | np.ndarray
     ) -> None:
         """Fills the block table for a given request_id, past_length and query_length."""
         raise NotImplementedError("Not implemented for sliding attention cache allocator")

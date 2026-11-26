@@ -379,6 +379,9 @@ class ContinuousBatchingIOs:
         cumulative_seqlens_k = {layer_type: [0] for layer_type in self.cumulative_seqlens_k.keys()}
         write_index = [[] for _ in range(num_attn_types)]
         read_index = None if self.max_kv_read == 0 else [[] for _ in range(num_attn_types)]
+        # A host table is filled through numpy: a torch view per request was most of the step's host time at hundreds
+        # of requests
+        block_table = self.block_table.numpy() if self.block_table.device.type == "cpu" else self.block_table
 
         # Go through all the requests in the batch
         for i, future_state in enumerate(requests_in_batch):
@@ -405,7 +408,7 @@ class ContinuousBatchingIOs:
             # We extend the read and write indices for the cache, or fill the block table if the kernel can read and
             # write the cache itself
             if self.use_block_table:
-                self.cache.fill_block_table(state.request_id, past_length, query_length, self.block_table[:, i])
+                self.cache.fill_block_table(state.request_id, past_length, query_length, block_table[:, i])
             else:
                 self.cache.extend_read_and_write_indices(
                     state.request_id, past_length, query_length, read_index, write_index
