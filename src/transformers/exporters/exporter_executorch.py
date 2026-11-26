@@ -124,8 +124,6 @@ class ExecutorchExporter(DynamoExporter):
     requires_trust_remote_code = False
 
     required_packages = ["torch", "executorch"]
-    # The patches dropped as fixed were checked on these: older ones may still need them
-    min_versions = {"torch": "2.11.0", "executorch": "1.5.1"}
     tested_versions = {"torch": "2.13.0", "executorch": "1.5.1"}
 
     def export_program(

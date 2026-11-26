@@ -120,8 +120,6 @@ class OpenVINOExporter(DynamoExporter):
     requires_trust_remote_code = False
 
     required_packages = ["torch", "openvino"]
-    # The patches dropped as fixed were checked on these: older ones may still need them
-    min_versions = {"torch": "2.11.0", "openvino": "2026.4.1"}
     tested_versions = {"torch": "2.13.0", "openvino": "2026.4.1"}
 
     def export_program(

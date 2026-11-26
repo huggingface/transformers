@@ -134,8 +134,6 @@ class OnnxExporter(DynamoExporter):
     requires_trust_remote_code = False
 
     required_packages = ["torch", "onnx", "onnxscript"]
-    # The patches dropped as fixed were checked on these: older ones may still need them
-    min_versions = {"torch": "2.11.0", "onnxscript": "0.7.2"}
     tested_versions = {"torch": "2.13.0", "onnx": "1.23.2", "onnxscript": "0.7.2"}
 
     def export_program(
@@ -912,9 +910,7 @@ if is_onnxscript_available():
             operator.floordiv: _operator_floordiv,
         }
     )
-    # `torch.mm(..., out_dtype=...)` exists from torch 2.8
-    if hasattr(torch.ops.aten.mm, "dtype"):
-        _ONNX_TRANSLATION_TABLE[torch.ops.aten.mm.dtype] = _aten_mm_dtype
+    _ONNX_TRANSLATION_TABLE[torch.ops.aten.mm.dtype] = _aten_mm_dtype
 
     # Registers the `quantized_decomposed` ops, so the per-channel dequant resolves as a table key.
     import torch.ao.quantization.fx._decomposed  # noqa: F401
