@@ -139,7 +139,13 @@ class DeepseekV3TopkRouter(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        if hidden_states.dtype == torch.bfloat16 and not torch.is_grad_enabled():
+            # [scratch] bf16 x bf16 -> fp32 instead of an fp32 GEMM (the checkpoint's weight is bf16, so the cast is
+            # exact): cuBLAS ran the fp32 one on SIMT cores, 520 us a layer of an 8,192-token step on a B300
+            weight = self.weight.to(torch.bfloat16)
+            router_logits = torch.mm(hidden_states, weight.t(), out_dtype=torch.float32)
+        else:
+            router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias
         group_scores = (

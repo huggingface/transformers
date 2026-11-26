@@ -71,7 +71,7 @@ _GLUE_OPAQUE_CACHE_WRITE = _glue_os.environ.get("GLUE_OPAQUE_CACHE_WRITE", "0") 
 #   are exact in fp32 and in TF32), only the summation order changes.
 _GEMM_FUSE_QKV_A = _glue_os.environ.get("GEMM_FUSE_QKV_A", "0") == "1"
 _GEMM_FUSE_GATE_UP = _glue_os.environ.get("GEMM_FUSE_GATE_UP", "0") == "1"
-_GEMM_ROUTER_BF16 = _glue_os.environ.get("GEMM_ROUTER_BF16", "0") == "1"
+_GEMM_ROUTER_BF16 = _glue_os.environ.get("GEMM_ROUTER_BF16", "1") == "1"  # [scratch] on by default, like DS-V3's
 
 
 def _gemm_local(tensor):
