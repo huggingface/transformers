@@ -910,6 +910,7 @@ class ModelRunner:
                         self.cache.free_blocks(fs.state.request_id)
         return captured
 
+    @with_fast_tp_all_reduce  # [gap2 prototype] warm-up captures take the engine's fast TP all-reduce
     def run_one_warmup(
         self, model: nn.Module, num_q_tokens: int, max_kv_read: int | None, decode_varlen: bool = False
     ) -> float:
