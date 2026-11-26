@@ -53,9 +53,10 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
     model_type = "granitemoehybrid"
     attribute_map = {"layers_block_type": "layer_types"}
     base_model_tp_plan = {
-        "layers.*.block_sparse_moe.experts.gate_up_proj": "packed_colwise",
-        "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
-        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
     }
     base_model_ep_plan = {
         "layers.*.block_sparse_moe.experts.gate_up_proj": "grouped_gemm",

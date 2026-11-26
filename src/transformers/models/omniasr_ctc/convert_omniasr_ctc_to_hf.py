@@ -64,8 +64,6 @@ def convert_omniasr_ctc_checkpoint(model_card, repo_id=None, bfloat16=False):
         audio_config=convert_audio_config(original_config),
         vocab_size=original_config.target_vocab_size,
         pad_token_id=pipeline.tokenizer.vocab_info.pad_idx,
-        bos_token_id=pipeline.tokenizer.vocab_info.bos_idx,
-        eos_token_id=pipeline.tokenizer.vocab_info.eos_idx,
     )
     hf_model = OmniASRForCTC(config)
     hf_model.to(device).to(dtype)
@@ -84,8 +82,8 @@ def convert_omniasr_ctc_checkpoint(model_card, repo_id=None, bfloat16=False):
 
     # 4) Prepare processor (feature extraction and tokenizer)
     tokenizer_path = download_tokenizer(model_card)
-    # The CTC loss does not depend on the padding side. `ParakeetTokenizer` decodes CTC outputs, collapsing repeats and
-    # dropping the pad token, which is the CTC blank.
+    # The CTC loss does not depend on the padding side. `ParakeetTokenizer` collapses repeats when decoding; the CTC
+    # blank `<s>` (id 0) is a special token, so it is removed with `skip_special_tokens=True`.
     tokenizer = convert_tokenizer(tokenizer_path, padding_side="right", tokenizer_class=ParakeetTokenizer)
     # Saved with the tokenizer, so that `_merge_kwargs` uses them as processor defaults.
     tokenizer.init_kwargs["padding"] = True

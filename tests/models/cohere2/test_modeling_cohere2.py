@@ -53,13 +53,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 class Cohere2ModelTester(CohereModelTester):
     config_class = Cohere2Config
-    if is_torch_available():
-        model_class = Cohere2Model
-        for_causal_lm_class = Cohere2ForCausalLM
+    model_class = Cohere2Model
 
 
 @require_torch
 class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Cohere2ModelTester
+
     all_model_classes = (Cohere2Model, Cohere2ForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {

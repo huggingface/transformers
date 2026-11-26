@@ -23,6 +23,7 @@ from transformers import CanaryConfig, CanaryDecoderConfig, ParakeetEncoderConfi
 from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -34,53 +35,41 @@ if is_torch_available():
     from transformers import CanaryForConditionalGeneration, CanaryModel, StaticCache
 
 
-class CanaryModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,  # need batch_size != num_hidden_layers
-        seq_length=80,
-        is_training=False,
-        use_labels=False,
-        num_mel_bins=80,
-        hidden_size=16,
-        intermediate_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        head_dim=8,
-        subsampling_factor=8,
-        subsampling_conv_channels=16,
-        decoder_seq_length=4,
-        vocab_size=99,
-        max_position_embeddings=40,
-        decoder_start_token_id=7,
-        pad_token_id=2,
-        bos_token_id=4,
-        eos_token_id=3,
-    ):
+class CanaryModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,  # need batch_size != num_hidden_layers
+        "seq_length": 80,
+        "is_training": False,
+        "use_labels": False,
+        "num_mel_bins": 80,
+        "hidden_size": 16,
+        "intermediate_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "head_dim": 8,
+        "subsampling_factor": 8,
+        "subsampling_conv_channels": 16,
+        "decoder_seq_length": 4,
+        "vocab_size": 99,
+        "max_position_embeddings": 40,
+        "decoder_start_token_id": 7,
+        "pad_token_id": 2,
+        "bos_token_id": 4,
+        "eos_token_id": 3,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["decoder_key_length"] = values["decoder_seq_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.decoder_seq_length = decoder_seq_length
-        self.decoder_key_length = decoder_seq_length
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.num_mel_bins = num_mel_bins
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
-        self.subsampling_factor = subsampling_factor
-        self.subsampling_conv_channels = subsampling_conv_channels
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.decoder_start_token_id = decoder_start_token_id
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         encoder_config = ParakeetEncoderConfig(
@@ -141,6 +130,8 @@ class CanaryModelTester:
 
 @require_torch
 class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = CanaryModelTester
+
     all_model_classes = (CanaryModel, CanaryForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (CanaryForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (

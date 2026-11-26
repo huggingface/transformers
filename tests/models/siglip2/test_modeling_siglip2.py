@@ -27,8 +27,10 @@ from transformers.testing_utils import (
     Expectations,
     is_flaky,
     require_flash_attn,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     require_vision,
     slow,
     torch_device,
@@ -95,11 +97,22 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence(self):
+        self._flash_attn_padded_inference_equivalence("flash_attention_2")
+
+    # The common test compares padded patches too, which differ between eager and Flash Attention
+    @require_kernels
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_kernels_inference_equivalence(self):
+        self._flash_attn_padded_inference_equivalence("kernels-community/flash-attn3")
+
+    def _flash_attn_padded_inference_equivalence(self, attn_implementation):
         dtype = torch.float16
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention")
 
             # Prepare inputs
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -121,7 +134,7 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
                 model.save_pretrained(tmp_dir)
 
                 model = model_class.from_pretrained(tmp_dir, dtype=dtype)
-                model_fa = model_class.from_pretrained(tmp_dir, dtype=dtype, attn_implementation="flash_attention_2")
+                model_fa = model_class.from_pretrained(tmp_dir, dtype=dtype, attn_implementation=attn_implementation)
 
             model_fa.to(torch_device)
             model.to(torch_device)

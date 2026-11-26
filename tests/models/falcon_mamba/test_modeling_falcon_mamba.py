@@ -33,6 +33,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -45,49 +46,40 @@ if is_torch_available():
 
 
 # Copied from transformers.tests.models.mamba.MambaModelTester with Mamba->FalconMamba,mamba->falcon_mamba
-class FalconMambaModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=14,
-        seq_length=7,
-        is_training=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        intermediate_size=32,
-        hidden_act="silu",
-        hidden_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        num_labels=3,
-        num_choices=4,
-        scope=None,
-        tie_word_embeddings=False,
-    ):
+class FalconMambaModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 14,
+        "seq_length": 7,
+        "is_training": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "intermediate_size": 32,
+        "hidden_act": "silu",
+        "hidden_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "num_labels": 3,
+        "num_choices": 4,
+        "scope": None,
+        "tie_word_embeddings": False,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["bos_token_id"] = values["vocab_size"] - 1
+        values["eos_token_id"] = values["vocab_size"] - 1
+        values["pad_token_id"] = values["vocab_size"] - 1
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
-        self.bos_token_id = vocab_size - 1
-        self.eos_token_id = vocab_size - 1
-        self.pad_token_id = vocab_size - 1
-        self.tie_word_embeddings = tie_word_embeddings
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -259,6 +251,8 @@ class FalconMambaModelTester:
 
 @require_torch
 class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = FalconMambaModelTester
+
     all_model_classes = (FalconMambaModel, FalconMambaForCausalLM) if is_torch_available() else ()
     has_attentions = False  # FalconMamba does not support attentions
     test_missing_keys = False
@@ -358,14 +352,12 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                     elif tuple_object is None:
                         return
                     else:
-                        self.assertTrue(
-                            torch.allclose(tuple_object, dict_object, atol=1e-5),
-                            msg=(
-                                "Tuple and dict output are not equal. Difference:"
-                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
-                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
-                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
-                            ),
+                        torch.testing.assert_close(
+                            tuple_object,
+                            dict_object,
+                            rtol=1e-5,
+                            atol=1e-5,
+                            msg=lambda m: f"Tuple and dict output are not equal.\n{m}",
                         )
 
                 recursive_check(tuple_output, dict_output)

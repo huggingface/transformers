@@ -29,7 +29,13 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
@@ -649,8 +655,8 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
     def __init__(self, config: Apertus1p5Config):
         super().__init__(config)
         self.language_model = Apertus1p5TextModel(config.text_config)
-        self.vision_tokenizer = Apertus1p5VisionTokenizerModel(config.vision_config)
-        self.audio_tokenizer = AutoModel.from_config(config.audio_config)
+        self.vision_tokenizer = Apertus1p5VisionTokenizerModel(config.vision_config).to(dtype=torch.float32)
+        self.audio_tokenizer = AutoModel.from_config(config.audio_config).to(dtype=torch.float32)
         self.post_init()
 
     def get_image_tokens(self, pixel_values: torch.Tensor, image_sizes: torch.LongTensor) -> list[torch.LongTensor]:
@@ -791,7 +797,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MultimodalBaseModelOutputWithPast:
         r"""
         padding_mask (`torch.Tensor` of shape `(num_clips, max_length)`, *optional*):
             Right-padded mask with 1 for valid samples and 0 for padding, required with `input_values`.
@@ -807,26 +813,26 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        audio_outputs = None
+        image_features = audio_features = None
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
             mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_sizes, return_dict=True)
 
-        image_features = None
         if mm_encoder_outputs.get("image") is not None:
             image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
-        audio_features = None
         if input_values is not None:
-            audio_features = self.get_audio_features(input_values, padding_mask, return_dict=True).pooler_output
-            audio_features = torch.cat(audio_features, dim=0)
+            audio_outputs = self.get_audio_features(input_values, padding_mask, return_dict=True)
+            audio_features = torch.cat(audio_outputs.pooler_output, dim=0)
 
-        if image_features is not None or audio_features is not None:
+        if mm_encoder_outputs.get("image") is not None or input_values is not None:
             special_image_mask, special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features, audio_features=audio_features
             )
-            if image_features is not None:
+            if mm_encoder_outputs.get("image") is not None:
                 inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
-            if audio_features is not None:
+            if input_values is not None:
                 inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_features)
 
         outputs = self.language_model(
@@ -837,7 +843,9 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return outputs
+        return MultimodalBaseModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=audio_outputs
+        )
 
 
 @auto_docstring
@@ -897,7 +905,7 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> tuple | MultimodalCausalLMOutputWithPast:
         r"""
         padding_mask (`torch.Tensor` of shape `(num_clips, max_length)`, *optional*):
             Audio sample mask: 1 for valid samples, 0 for right padding. Required with `input_values`.
@@ -933,12 +941,14 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.lm_head.out_features, **kwargs)
 
-        return CausalLMOutputWithPast(
+        return MultimodalCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
+            audio_outputs=outputs.audio_outputs,
         )
 
     def _expand_inputs_for_generation(

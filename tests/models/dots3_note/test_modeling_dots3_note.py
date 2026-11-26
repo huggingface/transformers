@@ -43,6 +43,8 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 if is_torch_available():
     import torch
 
+    from transformers.core_model_loading import build_glob_alternation
+
 
 class Dots3NoteTextModelTester(CausalLMModelTester):
     # The common tester's constructor-signature filter omits the inherited per_layer_config argument.
@@ -282,6 +284,10 @@ class Dots3NoteAudio2TextModelTest(ALMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @unittest.skip("Image features are covered by Dots3NoteVision2TextModelTest")
+    def test_multimodal_outputs_are_returned(self):
+        pass
+
     def _image_features_prepare_config_and_inputs(self):
         self.skipTest("Image features are covered by Dots3NoteVision2TextModelTest")
 
@@ -373,7 +379,11 @@ class Dots3NoteHubIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         model = model.to(torch_device).eval()
         for key in ("missing_keys", "unexpected_keys", "mismatched_keys", "error_msgs"):
             self.assertFalse(loading_info.get(key), loading_info)
-        self.assertTrue(all(parameter.dtype == torch.bfloat16 for parameter in model.parameters()))
+        # Parameters matching `_keep_in_fp32_modules_strict` (e.g. the MoE router `gate.weight`) stay in fp32
+        fp32_modules, _, _ = build_glob_alternation(list(model._keep_in_fp32_modules_strict))
+        for name, parameter in model.named_parameters():
+            expected_dtype = torch.float32 if fp32_modules.search(name) else torch.bfloat16
+            self.assertEqual(parameter.dtype, expected_dtype, name)
 
         content = [] if url is None else [{"type": modality, "url": url_to_local_path(url)}]
         content.append({"type": "text", "text": question})
