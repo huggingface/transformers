@@ -541,6 +541,7 @@ class MiniCPMO2_6Processor(MiniCPMV2_6Processor):
             scale_resolution = images_kwargs.get("scale_resolution") or self.image_processor.scale_resolution
             slice_mode = images_kwargs.get("slice_mode", self.image_processor.slice_mode)
 
+            # The overview image, plus one slice per grid cell when the image is sliced
             num_image_patches = []
             for image_size in image_sizes:
                 grid = self.image_processor.get_sliced_grid(image_size, max_slice_nums, scale_resolution)
