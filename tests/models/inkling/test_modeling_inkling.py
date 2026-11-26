@@ -125,6 +125,34 @@ class InklingTextModelTests(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(weights.dtype, dtype)
         self.assertEqual(gammas.dtype, dtype)
 
+    def test_sconv_kwargs_forwarding(self):
+        from unittest.mock import patch
+
+        config = self.model_tester.get_config()
+        model = self.model_tester.base_model_class(config)
+
+        received_kwargs = []
+
+        def hook(module, args, kwargs):
+            received_kwargs.append(kwargs.get("seq_idx"))
+
+        hooks = []
+        for name, m in model.named_modules():
+            if "sconv" in name and hasattr(m, "conv1d"):
+                hooks.append(m.register_forward_pre_hook(hook, with_kwargs=True))
+
+        dummy_seq_idx = torch.tensor([0, 0, 1, 1])
+        x = torch.randint(0, config.vocab_size, (1, 4))
+        try:
+            with patch("transformers.models.inkling.modeling_inkling.causal_conv1d_fn", return_value=torch.zeros(1, config.hidden_size, 4)):
+                model(input_ids=x, seq_idx=dummy_seq_idx)
+        finally:
+            for h in hooks:
+                h.remove()
+
+        self.assertGreater(len(received_kwargs), 0)
+        self.assertTrue(all(s is dummy_seq_idx for s in received_kwargs))
+
 
 class InklingAudio2TextModelTester(ALMModelTester):
     base_model_class = InklingModel
