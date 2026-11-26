@@ -1417,6 +1417,37 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         self.assertIs(param, model.mlp.down_proj._parameters["weight"])
         torch.testing.assert_close(param, weight)
 
+    def test_get_placements_shards_on_read_without_dtensors(self):
+        """An engine whose params are plain tensors can describe their layout instead: `get_placements` gives the
+        mesh and placements, and the loader reads only this rank's slice of the checkpoint."""
+        with torch.device("meta"):
+            model = DummyRoot(PreTrainedConfig())
+        # the engine's own param: already this rank's shard (2 rows of 4)
+        model.mlp.down_proj.weight = nn.Parameter(torch.empty(2, 2))
+
+        weight = torch.arange(8.0).reshape(4, 2)  # the checkpoint tensor: 4 rows
+        mesh = FakeMesh(shape=(2,), rank=1)
+        loaded = {}
+
+        def load_in_place(param, value):  # what an engine does with its own params
+            loaded["shape"] = tuple(value.shape)
+            param.data.copy_(value)
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            {"mlp.down_proj.weight": weight},
+            LoadStateDictConfig(
+                get_placements=(
+                    lambda name, param, source: (mesh, [Shard(0)], (4, 2)) if name == "mlp.down_proj.weight" else None
+                ),
+                load_in_place=load_in_place,
+            ),
+        )
+
+        self.assertNotIn("mlp.down_proj.weight", loading_info.missing_keys)
+        self.assertEqual(loaded["shape"], (2, 2))  # this rank's half, not the whole tensor
+        torch.testing.assert_close(model.mlp.down_proj.weight, weight[2:])
+
     def test_copy_keeps_force_cpu(self):
         converter = WeightConverter("a", "b", operations=[Concatenate(dim=0)], force_cpu=True)
         self.assertTrue(converter.copy("c", "d", operations=converter.operations).force_cpu)

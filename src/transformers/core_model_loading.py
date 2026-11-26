@@ -1962,10 +1962,18 @@ def convert_and_load_state_dict_in_model(
             # 4. Handle DTensor sharding or device_map placement
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
-            if load_config.get_sharding_op is not None:
+            described = (
+                load_config.get_placements(renamed_key, empty_param, source_pattern)
+                if load_config.get_placements
+                else None
+            )
+            if described is not None:  # an engine describing its params' layout instead of holding DTensors
+                mesh, placements, shape = described
+                sharding_op = DtensorShardOperation(empty_param.shape if shape is None else shape, mesh, placements)
+            elif load_config.get_sharding_op is not None:
                 sharding_op = load_config.get_sharding_op(renamed_key, empty_param, mapping, source_pattern)
             elif is_dtensor(empty_param):
-                sharding_op = DtensorShardOperation(empty_param)
+                sharding_op = DtensorShardOperation(empty_param.shape, empty_param.device_mesh, empty_param.placements)
 
             # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
             # directly on the device, as it will completely blow up the memory during the ops memory spike. So defer to "cpu", then

@@ -186,10 +186,19 @@ class LoadStateDictConfig:
     device_mesh: "DeviceMeshLike | None" = None
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
-    # An engine owning its params (e.g. vLLM): `get_sharding_op(target, param, converter, source_pattern)` returns the
-    # op sharding each source on read, instead of the DTensor placements, and `load_in_place(param, value)` writes the
+    # An engine owning its params (e.g. vLLM): `get_placements(target, param, source_pattern)` returns `(device_mesh,
+    # placements, shape)` for a model whose params are not DTensors (see `DtensorShardOperation`), `shape` being the
+    # global one when the engine's param is only this rank's shard (`None`: the param's own shape is the global one).
+    # It is per source, as a fused param's sources may shard differently (e.g. q and kv heads), and only for layouts a
+    # placement fully describes: a converter op that needs the whole tensor, or a param fused from sources sharded
+    # differently, goes through `get_sharding_op(target, param, converter, source_pattern)`, which also covers the
+    # layouts that are not placements at all (padding, several sharded segments, a per-expert map).
+    # `load_in_place(param, value)` writes the
     # loaded tensors into the engine's own params (it checks their shape: padded, fused). Without it, the loader sets
     # the params itself, keeping their class: see `set_param_for_module`
+    get_placements: (
+        Callable[[str, "torch.Tensor", str], tuple["DeviceMeshLike", list, tuple[int, ...] | None] | None] | None
+    ) = None
     get_sharding_op: Callable | None = None
     load_in_place: Callable | None = None
     disable_mmap: bool | None = None
