@@ -284,8 +284,8 @@ class GlmImageImageProcessorPil(PilBackend):
             `int`: Number of image patches per image.
         """
         images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
-        min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
-        max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
+        min_pixels = images_kwargs["size"].shortest_edge
+        max_pixels = images_kwargs["size"].longest_edge
         patch_size = images_kwargs["patch_size"]
         merge_size = images_kwargs["merge_size"]
 
