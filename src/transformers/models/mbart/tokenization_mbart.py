@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_python import AddedToken
@@ -74,6 +74,7 @@ class MBartTokenizer(TokenizersBackend):
         src_lang=None,
         tgt_lang=None,
         additional_special_tokens=None,
+        _spm_precompiled_charsmap: str | None = None,
         **kwargs,
     ):
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
@@ -99,7 +100,12 @@ class MBartTokenizer(TokenizersBackend):
         self._vocab = vocab
         self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
 
-        self._tokenizer.normalizer = None
+        list_normalizers = []
+        if _spm_precompiled_charsmap is not None:
+            list_normalizers.append(normalizers.Precompiled(_spm_precompiled_charsmap))
+        list_normalizers.append(normalizers.Strip(left=False, right=True))
+        list_normalizers.append(normalizers.Replace(Regex(" {2,}"), "▁"))
+        self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
@@ -121,6 +127,7 @@ class MBartTokenizer(TokenizersBackend):
             src_lang=src_lang,
             tgt_lang=tgt_lang,
             additional_special_tokens=_additional_special_tokens,
+            _spm_precompiled_charsmap=_spm_precompiled_charsmap,
             **kwargs,
         )
 
