@@ -20,6 +20,12 @@ This page lists all the utility functions that can be used by the audio [`Featur
 
 Most of those are only useful if you are studying the code of the audio processors in the library.
 
+## Audio loading
+
+Load audio from a URL, local path, or base64 string, with a choice of decoding backend.
+
+[[autodoc]] audio_utils.load_audio
+
 ## Audio Transformations
 
 [[autodoc]] audio_utils.hertz_to_mel
