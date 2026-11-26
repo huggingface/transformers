@@ -38,7 +38,7 @@ from ...integrations import (
     use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
-from ...integrations.linear_attention_paged import causal_conv1d_varlen
+from ...integrations.linear_attention_paged import causal_conv1d_varlen, compiled_gated_norm
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -689,7 +689,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         else:
             self._paged_varlen_scan(x, dt, A, B, C, ssm_state, cu_seqlens, out, cache)
             cache.write_cache_states(self.layer_idx, (conv_state, ssm_state), kwargs)
-        scan_output = self.norm(out.view(1, num_tokens, -1), gate)
+        scan_output = compiled_gated_norm(self.norm, out.view(1, num_tokens, -1), gate)
         return self.out_proj(scan_output.to(dtype))
 
     @force_accelerate_hooks("conv1d")

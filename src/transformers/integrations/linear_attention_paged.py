@@ -17,7 +17,7 @@ import torch
 from ..activations import ACT2FN
 
 
-def causal_conv1d_varlen(
+def _causal_conv1d_varlen(
     hidden_states: torch.Tensor,
     conv_states: torch.Tensor,
     cu_seqlens: torch.Tensor,
@@ -78,3 +78,16 @@ def causal_conv1d_varlen(
     next_states = window(sequences, cu_seqlens[:-1].unsqueeze(-1), last.unsqueeze(-1) - (state_len - 1 - offsets))
 
     return output.transpose(0, 1).unsqueeze(0).to(hidden_states.dtype), next_states.transpose(1, 2)
+
+
+# [scratch] The mixed steps of linear attention models run uncompiled (the chunked scans read lengths on the host): eager,
+# this gather-heavy convolution was ~18 full-size kernels a layer. Compiled on its own (no host reads, dynamic shapes),
+# it is a couple; inside a compiled step dynamo inlines it
+causal_conv1d_varlen = torch.compile(_causal_conv1d_varlen, dynamic=True)
+causal_conv1d_varlen.__doc__ = _causal_conv1d_varlen.__doc__
+
+
+@torch.compile(dynamic=True)
+def compiled_gated_norm(norm, hidden_states, gate):
+    """[scratch] A gated RMSNorm module applied as one compiled region (its eager form is ~8 full-size fp32 kernels)."""
+    return norm(hidden_states, gate)
