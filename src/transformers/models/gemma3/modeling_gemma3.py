@@ -18,6 +18,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -57,6 +58,10 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_gemma3 import Gemma3Config, Gemma3TextConfig
+
+
+# [scratch] fused q/k/v and gate/up projections under continuous batching (PROTO_QKV=1, `fuse_qkv_weights`)
+_PROTO_QKV = os.environ.get("PROTO_QKV", "1") == "1"
 
 
 logger = logging.get_logger(__name__)
@@ -110,8 +115,14 @@ class Gemma3MLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_activation]
+        if _PROTO_QKV:  # [scratch] set by fuse_qkv_weights: one GEMM for gate/up
+            self._proto_gate_up_weight = None
 
     def forward(self, x):
+        gate_up_weight = self.__dict__.get("_proto_gate_up_weight")
+        if gate_up_weight is not None:
+            gate, up = nn.functional.linear(x, gate_up_weight).chunk(2, dim=-1)
+            return self.down_proj(self.act_fn(gate) * up)
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
@@ -309,6 +320,8 @@ class Gemma3Attention(nn.Module):
 
         self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
+        if _PROTO_QKV:  # [scratch] set by fuse_qkv_weights: one GEMM for q/k/v
+            self._proto_qkv_weight = None
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -322,9 +335,18 @@ class Gemma3Attention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        qkv_weight = self.__dict__.get("_proto_qkv_weight")
+        if qkv_weight is not None:  # [scratch] one GEMM for q/k/v (PROTO_QKV)
+            q, k, v = nn.functional.linear(hidden_states, qkv_weight).split(
+                [self.q_proj.out_features, self.k_proj.out_features, self.v_proj.out_features], dim=-1
+            )
+            query_states = q.view(hidden_shape).transpose(1, 2)
+            key_states = k.view(hidden_shape).transpose(1, 2)
+            value_states = v.view(hidden_shape).transpose(1, 2)
+        else:
+            query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+            key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+            value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         query_states = self.q_norm(query_states)
         key_states = self.k_norm(key_states)
