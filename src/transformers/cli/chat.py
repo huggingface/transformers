@@ -126,13 +126,14 @@ class RichInterface:
             start_time = time.time()
             finish_reason: str | None = None
             async for token in await stream:
-                outputs = token.choices[0].delta.content
-                finish_reason = getattr(token.choices[0], "finish_reason", finish_reason)
-
                 usage = getattr(token, "usage", None)
                 if usage is not None:
                     completion_tokens = getattr(usage, "completion_tokens", completion_tokens)
+                if not token.choices:  # the usage, in a last chunk of its own
+                    continue
 
+                outputs = token.choices[0].delta.content
+                finish_reason = getattr(token.choices[0], "finish_reason", finish_reason)
                 if not outputs:
                     continue
 
@@ -573,6 +574,7 @@ class Chat:
                     stream = client.chat_completion(
                         chat,
                         stream=True,
+                        stream_options={"include_usage": True},
                         model=self.model_id,
                         extra_body=extra_body,
                     )
