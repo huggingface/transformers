@@ -112,8 +112,8 @@ class LiquidCodecOverlapAddCache:
 @dataclass
 class LiquidCodecEncoderModelOutput(ModelOutput):
     r"""
-    latents (`torch.FloatTensor` of shape `(batch_size, quantization_dim, num_frames)`):
-        Latents given to the quantizer, one per codec frame.
+    latents (`torch.FloatTensor` of shape `(batch_size, num_codebooks * codebook_dim, num_frames)`):
+        Latents given to the FSQ quantizer, one per codec frame.
     latents_mask (`torch.BoolTensor` of shape `(batch_size, num_frames)`, *optional*, returned with an
     `input_features_mask`):
         Valid frames of each clip.
@@ -223,9 +223,16 @@ class LiquidCodecEncoderSubsampler(nn.Module):
         self.act = ACT2FN["silu"]
 
     def forward(self, input_features: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.act(self.in_proj(input_features))
-        hidden_states = self.act(self.conv(hidden_states)[:, :, : hidden_states.shape[-1]])
-        return self.out_proj(hidden_states).transpose(1, 2)
+        hidden_states = self.in_proj(input_features)
+        hidden_states = self.act(hidden_states)
+
+        # causal: drop the right padding
+        num_frames = hidden_states.shape[-1]
+        hidden_states = self.conv(hidden_states)[:, :, :num_frames]
+        hidden_states = self.act(hidden_states)
+
+        hidden_states = self.out_proj(hidden_states)
+        return hidden_states.transpose(1, 2)
 
 
 class LiquidCodecDecoderUpsampler(nn.Module):
@@ -234,11 +241,10 @@ class LiquidCodecDecoderUpsampler(nn.Module):
         self.upsampling_factor = config.upsampling_factor
         self.proj = nn.Linear(config.quantization_dim, config.hidden_size)
 
-    def forward(self, latents: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.proj(latents.transpose(1, 2).to(self.proj.weight.dtype))
-        hidden_states = F.interpolate(
-            hidden_states.transpose(1, 2), scale_factor=self.upsampling_factor, mode="nearest-exact"
-        )
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.proj(hidden_states)
+        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = F.interpolate(hidden_states, scale_factor=self.upsampling_factor, mode="nearest-exact")
         return hidden_states.transpose(1, 2)
 
 
@@ -328,21 +334,19 @@ class LiquidCodecQuantizer(nn.Module):
         self.codebook_dim = len(config.quantization_levels)
 
         self.quantizer = LiquidCodecFiniteScalarQuantization(config)
-        self.project_in = nn.Linear(config.quantization_dim, self.num_codebooks * self.codebook_dim)
-        self.project_out = nn.Linear(self.num_codebooks * self.codebook_dim, config.quantization_dim)
 
     def encode(self, latents: torch.Tensor) -> torch.Tensor:
-        latents = self.project_in(latents.movedim(1, -1))
+        batch_size, _, num_frames = latents.shape
+        latents = latents.transpose(1, 2).reshape(batch_size, num_frames, self.num_codebooks, self.codebook_dim)
+        _, audio_codes = self.quantizer(latents)
+        return audio_codes.transpose(1, 2).long()
 
-        _, indices = self.quantizer(latents.reshape(*latents.shape[:-1], self.num_codebooks, self.codebook_dim))
-        return indices.long().transpose(1, 2)
-
-    def decode(self, codes: torch.Tensor) -> torch.Tensor:
-        # from integer levels: half precision rounds the `codebook` buffer
-        latents = self.quantizer._indices_to_codes(codes.transpose(1, 2)).to(self.project_out.weight.dtype)
-        latents = latents.reshape(*latents.shape[:-2], self.num_codebooks * self.codebook_dim)
-
-        return self.project_out(latents).movedim(-1, 1)
+    def decode(self, audio_codes: torch.Tensor) -> torch.Tensor:
+        batch_size, _, num_frames = audio_codes.shape
+        # from the integer levels, not the `codebook` buffer: half precision rounds it
+        latents = self.quantizer._indices_to_codes(audio_codes.transpose(1, 2))
+        latents = latents.reshape(batch_size, num_frames, self.num_codebooks * self.codebook_dim)
+        return latents.transpose(1, 2)
 
 
 class LiquidCodecISTFTHead(nn.Module):
@@ -380,7 +384,8 @@ class LiquidCodecISTFTHead(nn.Module):
 
         # Back to audio (ISTFT with manual "same" padding: torch.istft lacks a native same-padding mode,
         # so we use irfft + fold with explicit pre-computed padding to replicate it)
-        time_frames = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=-1, norm="backward").transpose(1, 2)
+        time_frames = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=-1, norm="backward")
+        time_frames = time_frames.transpose(1, 2)
         time_frames = time_frames * self.window[None, :, None]
         num_frames = spectrogram_complex.shape[1]
 
@@ -390,7 +395,8 @@ class LiquidCodecISTFTHead(nn.Module):
             frames_mask = self.window.new_ones((time_frames.shape[0], num_frames))
         frames_mask = frames_mask.to(time_frames)
         # a frame owns the `hop_length` samples at the center of its window
-        samples_mask = F.pad(frames_mask.bool().repeat_interleave(self.hop_length, dim=-1), (self.padding,) * 2)
+        samples_mask = frames_mask.bool().repeat_interleave(self.hop_length, dim=-1)
+        samples_mask = F.pad(samples_mask, (self.padding, self.padding))
         frames_mask = frames_mask[:, None, :]
         output_size = (num_frames - 1) * self.hop_length + self.n_fft
         audio = F.fold(
@@ -891,8 +897,8 @@ class LiquidCodecPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The encoder half of Liquid Codec: embedder, LFM3 layers and output projection, from spectrogram to continuous
-    latents.
+    The encoder half of Liquid Codec: embedder, LFM3 layers and output projections, from spectrogram to the continuous
+    latents of the FSQ quantizer.
     """
 )
 class LiquidCodecEncoderModel(LiquidCodecPreTrainedModel):
@@ -910,6 +916,7 @@ class LiquidCodecEncoderModel(LiquidCodecPreTrainedModel):
         self.embedding_norm = LiquidCodecRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.subsampler = LiquidCodecEncoderSubsampler(config)
         self.output_proj = nn.Linear(config.hidden_size, config.quantization_dim)
+        self.quantizer_in_proj = nn.Linear(config.quantization_dim, config.num_codebooks * config.codebook_dim)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -963,7 +970,9 @@ class LiquidCodecEncoderModel(LiquidCodecPreTrainedModel):
             )
 
         hidden_states = self.embedding_norm(hidden_states)
-        latents = self.output_proj(hidden_states).transpose(1, 2)
+        hidden_states = self.output_proj(hidden_states)
+        latents = self.quantizer_in_proj(hidden_states)
+        latents = latents.transpose(1, 2)
 
         latents_mask = None
         if input_features_mask is not None:
@@ -975,7 +984,7 @@ class LiquidCodecEncoderModel(LiquidCodecPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The decoder half of Liquid Codec: upsampler, LFM3 layers and ISTFT head, from continuous latents to audio.
+    The decoder half of Liquid Codec: input projection, upsampler, LFM3 layers and ISTFT head, from FSQ values to audio.
     """
 )
 class LiquidCodecDecoderModel(LiquidCodecPreTrainedModel):
@@ -992,6 +1001,7 @@ class LiquidCodecDecoderModel(LiquidCodecPreTrainedModel):
         self.rotary_emb = LiquidCodecRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.embedding_norm = LiquidCodecRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.quantizer_out_proj = nn.Linear(config.num_codebooks * config.codebook_dim, config.quantization_dim)
         self.upsampler = LiquidCodecDecoderUpsampler(config)
         self.head = LiquidCodecISTFTHead(config)
 
@@ -1010,14 +1020,16 @@ class LiquidCodecDecoderModel(LiquidCodecPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> LiquidCodecDecoderOutput:
         r"""
-        latents (`torch.FloatTensor` of shape `(batch_size, quantization_dim, num_frames)`):
-            Quantizer latents, one per codec frame.
+        latents (`torch.FloatTensor` of shape `(batch_size, num_codebooks * codebook_dim, num_frames)`):
+            FSQ values from the quantizer, one per codec frame.
         latents_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
             Valid frames of each clip (right-padded): each clip decoded as alone; returns `audio_values_mask`.
         overlap_add_cache ([`LiquidCodecOverlapAddCache`], *optional*):
             Overlap-add cache from the previous chunk.
         """
-        hidden_states = self.upsampler(latents)
+        latents = latents.transpose(1, 2).to(self.quantizer_out_proj.weight.dtype)
+        hidden_states = self.quantizer_out_proj(latents)
+        hidden_states = self.upsampler(hidden_states)
 
         if position_ids is None:
             past_seen_tokens = cache.get_seq_length() if cache is not None else 0

@@ -1502,7 +1502,10 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^_frontend\.(in_proj|conv)\.", target_patterns=r"encoder.subsampler.\1."),
             WeightRenaming(source_patterns=r"^to_quantizer\.", target_patterns="encoder.output_proj."),
             WeightRenaming(
-                source_patterns=r"^quantizer\.fsq\.(project_in|project_out)\.", target_patterns=r"quantizer.\1."
+                source_patterns=r"^quantizer\.fsq\.project_in\.", target_patterns="encoder.quantizer_in_proj."
+            ),
+            WeightRenaming(
+                source_patterns=r"^quantizer\.fsq\.project_out\.", target_patterns="decoder.quantizer_out_proj."
             ),
             WeightRenaming(
                 source_patterns=r"^encoder\.lfm\.(layers|embedding_norm)\.", target_patterns=r"encoder.\1."

@@ -98,13 +98,14 @@ class LiquidCodecModelTester:
                 layer_type: {"rope_type": "default", "rope_theta": 1_000_000.0} for layer_type in layer_types[1:]
             },
             "quantization_dim": self.quantization_dim,
+            "num_codebooks": self.num_codebooks,
+            "codebook_dim": len(self.quantization_levels),
         }
 
     def get_config(self):
         return LiquidCodecConfig(
             encoder_config={**self.get_backbone_config(), "subsampling_conv_channels": self.subsampling_conv_channels},
             decoder_config=self.get_backbone_config(),
-            quantization_dim=self.quantization_dim,
             num_codebooks=self.num_codebooks,
             quantization_levels=self.quantization_levels,
         )
@@ -226,9 +227,9 @@ class LiquidCodecModelTest(ModelTesterMixin, unittest.TestCase):
         with self.assertRaisesRegex(StrictDataclassClassValidationError, "at least one"):
             LiquidCodecConfig(encoder_config=None, decoder_config=None)
 
-        # halves must share quantization_dim
-        with self.assertRaisesRegex(StrictDataclassClassValidationError, "quantization_dim=16"):
-            LiquidCodecConfig(decoder_config={"quantization_dim": 8}, quantization_dim=16)
+        # halves must match the quantizer's codebooks
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "num_codebooks=12"):
+            LiquidCodecConfig(decoder_config={"num_codebooks": 8})
 
 
 @require_torch

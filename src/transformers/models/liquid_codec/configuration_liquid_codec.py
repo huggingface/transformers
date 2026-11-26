@@ -46,7 +46,11 @@ class LiquidCodecEncoderConfig(PreTrainedConfig):
     subsampling_conv_channels (`int`, *optional*, defaults to 256):
         Channels of the convolutional subsampler before the backbone.
     quantization_dim (`int`, *optional*, defaults to 256):
-        Width of the latent given to the quantizer.
+        Width of the bottleneck between the backbone and the quantizer projection.
+    num_codebooks (`int`, *optional*, defaults to 12):
+        Number of FSQ codebooks the output latent is split into.
+    codebook_dim (`int`, *optional*, defaults to 4):
+        FSQ dimensions per codebook: the output latent has `num_codebooks * codebook_dim` channels.
     """
 
     model_type = "liquid_codec_encoder"
@@ -78,6 +82,8 @@ class LiquidCodecEncoderConfig(PreTrainedConfig):
     subsampling_factor: int = 6
     subsampling_conv_channels: int = 256
     quantization_dim: int = 256
+    num_codebooks: int = 12
+    codebook_dim: int = 4
 
     def __post_init__(self, **kwargs):
         if self.rope_parameters is None:
@@ -123,7 +129,11 @@ class LiquidCodecDecoderConfig(PreTrainedConfig):
     upsampling_factor (`int`, *optional*, defaults to 6):
         STFT frames per codec frame: each codec frame is repeated this many times before the backbone.
     quantization_dim (`int`, *optional*, defaults to 256):
-        Width of the latent from the quantizer.
+        Width of the bottleneck between the quantizer projection and the backbone.
+    num_codebooks (`int`, *optional*, defaults to 12):
+        Number of FSQ codebooks the input latent is made of.
+    codebook_dim (`int`, *optional*, defaults to 4):
+        FSQ dimensions per codebook: the input latent has `num_codebooks * codebook_dim` channels.
     """
 
     model_type = "liquid_codec_decoder"
@@ -155,6 +165,8 @@ class LiquidCodecDecoderConfig(PreTrainedConfig):
     hop_length: int = 320
     upsampling_factor: int = 6
     quantization_dim: int = 256
+    num_codebooks: int = 12
+    codebook_dim: int = 4
 
     def __post_init__(self, **kwargs):
         if self.rope_parameters is None:
@@ -191,8 +203,6 @@ class LiquidCodecConfig(PreTrainedConfig):
         Encoder config. `None`: no encoder (`from_pretrained(..., encoder_config=None)` loads the decoder only).
     decoder_config (`dict` or [`LiquidCodecDecoderConfig`], *optional*):
         Decoder config. `None`: no decoder (`from_pretrained(..., decoder_config=None)` loads the encoder only).
-    quantization_dim (`int`, *optional*, defaults to 256):
-        Width of the quantizer's latent.
     quantization_levels (`list[int]`, *optional*, defaults to `[8, 7, 6, 6]`):
         Levels per FSQ dimension; their product is the codebook size.
     num_codebooks (`int`, *optional*, defaults to 12):
@@ -207,7 +217,6 @@ class LiquidCodecConfig(PreTrainedConfig):
 
     encoder_config: dict | PreTrainedConfig | None = field(default_factory=dict)
     decoder_config: dict | PreTrainedConfig | None = field(default_factory=dict)
-    quantization_dim: int = 256
     quantization_levels: list[int] | tuple[int, ...] = (8, 7, 6, 6)
     num_codebooks: int = 12
     sampling_rate: int = 24_000
@@ -216,11 +225,16 @@ class LiquidCodecConfig(PreTrainedConfig):
     def validate_architecture(self):
         if self.encoder_config is None and self.decoder_config is None:
             raise ValueError("The codec needs at least one of `encoder_config` and `decoder_config`.")
+        codebook_dim = len(self.quantization_levels)
         for half in (self.encoder_config, self.decoder_config):
-            if isinstance(half, PreTrainedConfig) and half.quantization_dim != self.quantization_dim:
+            if isinstance(half, PreTrainedConfig) and (half.num_codebooks, half.codebook_dim) != (
+                self.num_codebooks,
+                codebook_dim,
+            ):
                 raise ValueError(
-                    f"The halves must read and write the quantizer's `quantization_dim={self.quantization_dim}` "
-                    f"latent, got {half.quantization_dim} for {type(half).__name__}."
+                    f"The halves must match the quantizer's `num_codebooks={self.num_codebooks}` and "
+                    f"`codebook_dim={codebook_dim}`, got {half.num_codebooks} and {half.codebook_dim} for "
+                    f"{type(half).__name__}."
                 )
 
     @property
