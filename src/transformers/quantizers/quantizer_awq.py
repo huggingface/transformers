@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 from packaging import version
 
 from .base import HfQuantizer
+from .quantizers_utils import should_convert_module
 
 
 if TYPE_CHECKING:
@@ -67,6 +68,16 @@ class AwqQuantizer(HfQuantizer):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules, add_default_skips=True
         )
+
+        if model.config.model_type == "minicpm5_moe":
+            # Check exclusions against the original fused projection before replacing linears.
+            split_exclusions = []
+            for name, _ in model.named_modules():
+                if name.endswith("self_attn.query_proj"):
+                    attention = name.removesuffix(".query_proj")
+                    if not should_convert_module(f"{attention}.q_proj", self.modules_to_not_convert):
+                        split_exclusions.extend([name, f"{attention}.gate_proj"])
+            self.modules_to_not_convert.extend(split_exclusions)
 
         model = replace_with_awq_linear(
             model,

@@ -250,6 +250,14 @@ class Interleave(ConversionOps):
         shape = list(tensor.shape)
         if self.num_groups_attribute is not None:
             groups = getattr(kwargs["config"].get_text_config(), self.num_groups_attribute)
+            # Shard-on-read has already sliced the fused tensor to this rank's heads.
+            if not self.inverse and kwargs.get("model") is not None:
+                target = kwargs["model"].get_parameter_or_buffer(kwargs["full_layer_name"])
+                if is_dtensor(target):
+                    local_size = target.to_local().shape[self.dim]
+                    groups, remainder = divmod(groups * local_size, target.shape[self.dim])
+                    if remainder or groups == 0:
+                        raise ValueError("Interleaved projections must be sharded on whole group boundaries")
             if shape[self.dim] % (2 * groups):
                 raise ValueError(f"Cannot split dimension of size {shape[self.dim]} into {groups} pairs of blocks")
             block = shape[self.dim] // (2 * groups)

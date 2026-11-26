@@ -11,10 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import tempfile
 import unittest
+from unittest.mock import patch
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, torch_device
+from transformers.utils import is_torch_distributed_available
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -22,7 +25,14 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import AutoModelForCausalLM, MiniCPM5MoeForCausalLM, MiniCPM5MoeModel
+    from transformers import (
+        AutoModelForCausalLM,
+        AwqConfig,
+        DistributedConfig,
+        MiniCPM5MoeConfig,
+        MiniCPM5MoeForCausalLM,
+        MiniCPM5MoeModel,
+    )
 
 
 class MiniCPM5MoeModelTester(CausalLMModelTester):
@@ -62,6 +72,50 @@ class MiniCPM5MoeModelTest(CausalLMModelTest, unittest.TestCase):
         torch.testing.assert_close(unpacked, torch.cat((query.flatten(0, 1), gate.flatten(0, 1))))
         repacked = operation.reverse_op.convert({"split": unpacked}, ["split"], ["q"], config=config)["q"]
         torch.testing.assert_close(repacked, packed)
+
+    @unittest.skipUnless(is_torch_distributed_available(), "test requires torch.distributed")
+    def test_interleaved_checkpoint_loads_local_heads(self):
+        from torch.testing._internal.distributed.fake_pg import FakeStore
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_key_value_heads = 2
+        model = AutoModelForCausalLM.from_config(config)
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            torch.distributed.init_process_group("fake", rank=0, world_size=2, store=FakeStore())
+            try:
+                sharded = AutoModelForCausalLM.from_pretrained(
+                    directory, distributed_config=DistributedConfig(tp_size=2, tp_plan="auto")
+                )
+                for name in ("query_proj", "gate_proj"):
+                    reference = getattr(model.model.layers[0].self_attn, name)
+                    local = getattr(sharded.model.layers[0].self_attn, name)
+                    for weight, expected in zip(local.parameters(), reference.parameters()):
+                        torch.testing.assert_close(weight.to_local().cpu(), expected.chunk(2)[0], atol=0, rtol=0)
+            finally:
+                torch.distributed.destroy_process_group()
+
+    def test_awq_fused_projection_exclusion(self):
+        from transformers.quantizers.quantizer_awq import AwqQuantizer
+        from transformers.quantizers.quantizers_utils import should_convert_module
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = AutoModelForCausalLM.from_config(config)
+        quantizer = AwqQuantizer(AwqConfig(modules_to_not_convert=["model.layers.0.self_attn.q_proj"]))
+        with (
+            patch("transformers.integrations.replace_with_awq_linear", return_value=model),
+            patch("transformers.integrations.replace_quantization_scales"),
+        ):
+            quantizer._process_model_before_weight_loading(model)
+        skips = quantizer.modules_to_not_convert
+        for name in ("query_proj", "gate_proj"):
+            self.assertFalse(should_convert_module(f"model.layers.0.self_attn.{name}", skips))
+            self.assertTrue(should_convert_module(f"model.layers.1.self_attn.{name}", skips))
+        self.assertTrue(should_convert_module("model.layers.0.mlp.gate_proj", skips))
+
+    def test_legacy_ungated_config(self):
+        with self.assertRaisesRegex(ValueError, "use_gated_attention=False"):
+            MiniCPM5MoeConfig.from_dict({"use_gated_attention": False})
 
     def test_router_preserves_fp32_under_autocast(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
