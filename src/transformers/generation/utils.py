@@ -1442,6 +1442,7 @@ class GenerationMixin(ContinuousMixin):
                     unconditional_ids=negative_prompt_ids,
                     unconditional_attention_mask=negative_prompt_attention_mask,
                     use_cache=generation_config.use_cache,
+                    logits_to_keep=1 if self._supports_logits_to_keep() else None,
                 )
             )
         if generation_config.sequence_bias is not None:

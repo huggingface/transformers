@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 from parameterized import parameterized
@@ -1088,6 +1089,43 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == normalized_scores))
+
+    def test_cfg_projects_only_last_negative_prompt_position(self):
+        from transformers import LlamaConfig, LlamaForCausalLM
+
+        config = LlamaConfig(
+            vocab_size=64,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            pad_token_id=0,
+        )
+        model = LlamaForCausalLM(config).to(torch_device).eval()
+        positive = torch.tensor([[1, 4, 5]], device=torch_device)
+        negative = torch.tensor([[1, 6, 7, 8, 9]], device=torch_device)
+        generation_kwargs = {
+            "negative_prompt_ids": negative,
+            "guidance_scale": 1.5,
+            "do_sample": False,
+            "max_new_tokens": 1,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+        with patch.object(model, "_supports_logits_to_keep", return_value=False):
+            reference = model.generate(positive, **generation_kwargs)
+        positions = []
+        hook = model.get_output_embeddings().register_forward_pre_hook(
+            lambda module, args: positions.append(args[0].shape[1])
+        )
+        try:
+            output = model.generate(positive, **generation_kwargs)
+        finally:
+            hook.remove()
+        self.assertEqual(positions, [1, 1])
+        torch.testing.assert_close(output.scores[0], reference.scores[0])
+        self.assertTrue(torch.equal(output.sequences, reference.sequences))
 
     def test_classifier_free_guidance(self):
         class Namespace(dict):

@@ -2297,6 +2297,8 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             Attention mask for unconditional_ids.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether to cache key/values during the negative prompt forward pass.
+        logits_to_keep (`int`, *optional*):
+            How many trailing positions to project in the unconditional branch on models that support this option.
 
 
     Examples:
@@ -2332,9 +2334,11 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         unconditional_ids: torch.LongTensor | None = None,
         unconditional_attention_mask: torch.LongTensor | None = None,
         use_cache: bool = True,
+        logits_to_keep: int | None = None,
     ):
         self.guidance_scale = guidance_scale
         self.model = model
+        self._logits_kwargs = {} if logits_to_keep is None else {"logits_to_keep": logits_to_keep}
         self.unconditional_context = {
             "input_ids": unconditional_ids,
             "attention_mask": unconditional_attention_mask,
@@ -2374,6 +2378,7 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             attention_mask=attention_mask,
             use_cache=self.unconditional_context["use_cache"],
             cache=self.unconditional_context["cache"],
+            **self._logits_kwargs,
         )
         self.unconditional_context["cache"] = out.get("cache", None)
 
