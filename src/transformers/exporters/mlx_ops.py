@@ -187,6 +187,49 @@ def _sdpa(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, e
     return mx.fast.scaled_dot_product_attention(q, k, v, scale=scale, mask=mask)
 
 
+def rms_norm(x, weight, eps, dtype):
+    """`mx.fast.rms_norm`, which `mlx_fusions` writes in place of the ops of an RMS norm."""
+    return mx.fast.rms_norm(x, weight.astype(x.dtype), eps).astype(dtype)
+
+
+def swiglu(gate, up):
+    """`silu(gate) * up`, which `mlx_fusions` writes in place of its three ops."""
+    return gate * mx.sigmoid(gate) * up
+
+
+def _native_layer_norm(x, normalized_shape, weight=None, bias=None, eps=1e-5):
+    axes = list(range(-len(normalized_shape), 0))
+    mean = mx.mean(x, axis=axes, keepdims=True)
+    rstd = mx.rsqrt(mx.var(x, axis=axes, keepdims=True) + eps)
+    if len(normalized_shape) == 1:
+        out = mx.fast.layer_norm(x, weight, bias, eps)
+    else:
+        out = (x - mean) * rstd
+        out = out if weight is None else out * weight
+        out = out if bias is None else out + bias
+    # The mean and inverse deviation, which MLX only computes if read (backward graphs)
+    return out, mean, rstd
+
+
+def _linear(x, weight, bias=None):
+    # A matmul on the transposed view, rather than the permute and `addmm` the decomposition writes
+    out = x @ weight.T
+    return out if bias is None else out + bias
+
+
+def _layer_norm(x, normalized_shape, weight=None, bias=None, eps=1e-5, cudnn_enable=True):
+    return _native_layer_norm(x, normalized_shape, weight, bias, eps)[0]
+
+
+def _rms_norm(x, normalized_shape, weight=None, eps=None):
+    eps = mx.finfo(x.dtype).eps if eps is None else eps
+    if len(normalized_shape) == 1:
+        return mx.fast.rms_norm(x, weight, eps)
+    axes = list(range(-len(normalized_shape), 0))
+    out = x * mx.rsqrt(mx.mean(mx.square(x), axis=axes, keepdims=True) + eps)
+    return out if weight is None else out * weight
+
+
 def _identity(x, *_, **__):
     return x
 
@@ -331,6 +374,14 @@ if is_mlx_available():
         "aten.bmm.default": mx.matmul,
         "aten.addmm.default": lambda bias, a, b, beta=1, alpha=1: mx.addmm(bias, a, b, alpha=alpha, beta=beta),
         "aten.scaled_dot_product_attention.default": _sdpa,
+        "aten.native_layer_norm.default": _native_layer_norm,
+        "aten.layer_norm.default": _layer_norm,
+        "aten.rms_norm.default": _rms_norm,
+        "aten.linear.default": _linear,
+        "aten.silu.default": lambda x: x * mx.sigmoid(x),
+        # Fusions (`mlx_fusions`)
+        "transformers.exporters.mlx_ops.rms_norm": rms_norm,
+        "transformers.exporters.mlx_ops.swiglu": swiglu,
     }
 
 

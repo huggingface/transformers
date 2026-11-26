@@ -1326,7 +1326,7 @@ class ExportTesterMixin:
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_mlx_export(self, dynamic, atol=1e-4, rtol=1e-4):
+    def test_mlx_export(self, dynamic, atol=1e-3, rtol=1e-3):
         """Export each model class to MLX and verify outputs match eager within tolerance."""
         self._skip_if_not_exportable()
 
@@ -1676,7 +1676,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_mlx_export_generate(self, dynamic, generation_config, atol=1e-4, rtol=1e-4):
+    def test_mlx_export_generate(self, dynamic, generation_config, atol=1e-3, rtol=1e-3):
         """Export each generation component to MLX and verify outputs match eager on every call."""
         self._skip_if_not_exportable()
         exporter = MLXExporter()

@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 from ..utils.import_utils import is_mlx_available, is_torch_available
 from .configs import ExportFormat, MLXConfig
 from .exporter_dynamo import DynamoExporter
+from .mlx_fusions import fuse_for_mlx
 from .mlx_ops import MLX_OPS, MLXProgram, to_mlx, to_torch
 from .utils import apply_patches
 
@@ -70,7 +71,7 @@ class MLXExporter(DynamoExporter):
         super().__init__()
         # The MLX copy of each torch tensor the exports read, by storage: the components of one model (a generation
         # export's prefill and decode) share their weights instead of each holding a copy
-        self._mlx_arrays: dict[tuple, mx.array] = {}
+        self._mlx_arrays: dict[tuple, tuple] = {}
 
     def export_program(
         self,
@@ -81,6 +82,7 @@ class MLXExporter(DynamoExporter):
         with apply_patches("mlx"):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
         exported_program = exported_program.run_decompositions(_mlx_decompositions())
+        fuse_for_mlx(exported_program.graph)
         program, metadata.out_constants = _to_mlx_program(exported_program, self._mlx_arrays)
         return program, metadata
 
@@ -103,9 +105,18 @@ class MLXExporter(DynamoExporter):
 
 
 def _mlx_decompositions() -> dict:
-    """The core ATen decompositions, keeping the ops MLX runs fused (`mx.fast`)."""
+    """The core ATen decompositions, keeping the ops MLX has: they map to its fused kernels (`mx.fast`) and matmuls,
+    which their decompositions would lose."""
+    aten = torch.ops.aten
     table = torch.export.default_decompositions()
-    table.pop(torch.ops.aten.scaled_dot_product_attention.default, None)
+    for op in (
+        aten.scaled_dot_product_attention.default,
+        aten.linear.default,
+        aten.layer_norm.default,
+        aten.rms_norm.default,
+        aten.silu.default,
+    ):
+        table.pop(op, None)
     return table
 
 
@@ -135,21 +146,21 @@ def _tensor_key(tensor: torch.Tensor) -> tuple:
     return tensor.data_ptr(), tensor.dtype, tuple(tensor.shape), tensor.stride()
 
 
-def _shared_mlx_array(tensor: torch.Tensor, mlx_arrays: dict[tuple, mx.array]) -> mx.array:
+def _shared_mlx_array(tensor: torch.Tensor, mlx_arrays: dict[tuple, tuple]) -> mx.array:
     """The MLX copy of `tensor`, made once. A CPU tensor then reads it: its data becomes a view of the MLX array, so the
     model and its export share one copy of the weights."""
-    if (array := mlx_arrays.get(_tensor_key(tensor))) is not None:
-        return array
+    if (cached := mlx_arrays.get(_tensor_key(tensor))) is not None:
+        return cached[0]
     array = to_mlx(tensor)
     mx.eval(array)
-    mlx_arrays[_tensor_key(tensor)] = array
     if tensor.device.type == "cpu":
         tensor.data = to_torch(array)
-        mlx_arrays[_tensor_key(tensor)] = array
+    # Keyed by the storage the tensor now has, and holding the tensor: no other tensor can take that address
+    mlx_arrays[_tensor_key(tensor)] = (array, tensor)
     return array
 
 
-def _to_mlx_program(exported_program: ExportedProgram, mlx_arrays: dict[tuple, mx.array]) -> tuple[MLXProgram, list]:
+def _to_mlx_program(exported_program: ExportedProgram, mlx_arrays: dict[tuple, tuple]) -> tuple[MLXProgram, list]:
     """The program's graph and weights, and its non-tensor outputs as `[leaf index, value]`.
 
     The graph returns the mutated inputs' new values (a `StaticCache` write), then the tensor outputs, as the program
