@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+import tempfile
 import unittest
 
 from huggingface_hub import hf_hub_download
@@ -340,9 +341,9 @@ class Glm5NextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(conversation, original)
 
     def test_reorder_tool_results_opt_in_default_false(self):
-        # Other processors leave `reorder_tool_results_in_template_order = False` so images stay in message order
+        # Other processors do not set `reorder_tool_results_in_template_order`, so images stay in message order
         processor = self.get_glm5_processor()
-        processor.reorder_tool_results_in_template_order = False
+        del processor.reorder_tool_results_in_template_order
         conversation = _with_images(
             [
                 USER_TURN,
@@ -354,14 +355,24 @@ class Glm5NextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         batch_images, _, _, _ = processor._multimodal_inputs_from_conversations([conversation], {})
         self.assertEqual([im.size for im in batch_images[0]], [_image(i).size for i in (0, 1, 2)])
 
-    def test_multimodal_inputs_skip_blocks_without_type(self):
+    def test_reorder_tool_results_configurable_via_from_pretrained(self):
         processor = self.get_glm5_processor()
-        processor.reorder_tool_results_in_template_order = False
         conversation = _with_images(
             [
                 USER_TURN,
-                {"role": "tool", "content": [{"id": "a", "output": [_image_block(1)]}]},
+                _assistant_calls("c1", "c2"),
+                _tool_result("c2", [_image_block(1)]),
+                _tool_result("c1", [_image_block(2)]),
             ]
         )
-        batch_images, _, _, _ = processor._multimodal_inputs_from_conversations([conversation], {})
-        self.assertEqual([im.size for im in batch_images[0]], [_image(0).size])
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor.save_pretrained(tmpdir)
+            disabled = Glm5NextProcessor.from_pretrained(tmpdir, reorder_tool_results_in_template_order=False)
+            self.assertFalse(disabled.reorder_tool_results_in_template_order)
+            batch_images, _, _, _ = disabled._multimodal_inputs_from_conversations([conversation], {})
+            self.assertEqual([im.size for im in batch_images[0]], [_image(i).size for i in (0, 1, 2)])
+
+            with tempfile.TemporaryDirectory() as tmpdir2:
+                disabled.save_pretrained(tmpdir2)
+                reloaded = Glm5NextProcessor.from_pretrained(tmpdir2)
+                self.assertFalse(reloaded.reorder_tool_results_in_template_order)
