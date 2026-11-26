@@ -15,7 +15,6 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from tokenizers import normalizers
 
@@ -174,47 +173,32 @@ class Siglip2VisionEmbeddings(nn.Module):
         Returns:
             `torch.Tensor`: Embeddings of shape (batch_size, max_length, embed_dim)
         """
-        batch_size = spatial_shapes.shape[0]
-        embed_dim = positional_embeddings.shape[-1]
-        source_dtype = positional_embeddings.dtype
-
-        resulted_positional_embeddings = torch.empty(
-            (batch_size, max_length, embed_dim),
-            device=positional_embeddings.device,
-            dtype=source_dtype,
+        torch_compilable_check((spatial_shapes > 0).all(), "Resized positional embeddings must have a positive size.")
+        torch_compilable_check(
+            (spatial_shapes.prod(-1) <= max_length).all(), "Resized positional embeddings exceed max_length."
         )
+        grid_size = positional_embeddings.shape[0]
 
-        # (height, width, embed_dim) -> (1, embed_dim, height, width) for interpolation
-        positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
+        # Each output position's row and column in its image, the padding positions taking the first one
+        sizes = spatial_shapes.float()[:, None]
+        positions = torch.arange(max_length, device=spatial_shapes.device, dtype=torch.float32)[None, :, None]
+        rows = torch.div(positions, sizes[..., 1:], rounding_mode="floor")
+        output_index = torch.cat([rows, positions - rows * sizes[..., 1:]], dim=-1)
+        output_index = output_index * (positions < sizes.prod(-1, keepdim=True))
 
-        # Upcast to float32 on CPU because antialias is not supported for bfloat16/float16 on CPU
-        if positional_embeddings.device.type == "cpu":
-            positional_embeddings = positional_embeddings.to(torch.float32)
+        # The weights of `F.interpolate(mode="bilinear", align_corners=False, antialias=True)` along each axis
+        scale = grid_size / sizes
+        support = scale.clamp(min=1)
+        center = (output_index + 0.5) * scale - 0.5
+        source = torch.arange(grid_size, device=spatial_shapes.device, dtype=torch.float32)
+        weights = (1 - (source - center[..., None]).abs_().div_(support[..., None])).clamp_(min=0)
+        weights = weights / weights.sum(-1, keepdim=True)
 
-        for i in range(batch_size):
-            # (1, dim, height, width) -> (1, dim, target_height, target_width)
-            height, width = spatial_shapes[i].tolist()  # will be itemized in F.interpolate either way
-            torch_compilable_check((width > 0), "Width of resized positional embeddings must be positive.")
-            torch_compilable_check((height > 0), "Height of resized positional embeddings must be positive.")
-            torch_compilable_check((height * width) <= max_length, "Resized positional embeddings exceed max_length.")
-            resized_embeddings = F.interpolate(
-                positional_embeddings,
-                size=(height, width),
-                mode="bilinear",
-                align_corners=False,
-                antialias=True,
-            )
-
-            # (1, dim, target_height, target_width) -> (target_height * target_width, dim)
-            resized_embeddings = resized_embeddings.reshape(embed_dim, height * width).transpose(0, 1)
-
-            # Cast to original dtype
-            resized_embeddings = resized_embeddings.to(source_dtype)
-
-            resulted_positional_embeddings[i, : height * width] = resized_embeddings
-            resulted_positional_embeddings[i, height * width :] = resized_embeddings[0]
-
-        return resulted_positional_embeddings
+        # Resizing is linear: each output is the grid weighted by its row's and its column's weights
+        weights = (weights[..., 0, :, None] * weights[..., 1, None, :]).flatten(-2)
+        flat_embeddings = positional_embeddings.reshape(-1, positional_embeddings.shape[-1])
+        resized_embeddings = weights.to(flat_embeddings.device) @ flat_embeddings.float()
+        return resized_embeddings.to(positional_embeddings.dtype)
 
     def forward(self, pixel_values: torch.Tensor, spatial_shapes: torch.LongTensor) -> torch.Tensor:
         """
@@ -245,7 +229,6 @@ class Siglip2VisionEmbeddings(nn.Module):
 class Siglip2PreTrainedModel(SiglipPreTrainedModel):
     # nn.MultiHeadAttention mask doesn't allow for non 4d mask
     _supports_flex_attn = False
-    _supports_flash_attn = False
 
 
 class Siglip2VisionModel(SiglipVisionModel):
@@ -330,27 +313,10 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
         batch_size = hidden_state.shape[0]
         probe = self.probe.repeat(batch_size, 1, 1)
 
-        if attention_mask is not None:
-            target_len, source_len = probe.shape[1], hidden_state.shape[1]
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=probe,
-                attention_mask=attention_mask,
-                encoder_hidden_states=hidden_state,
-            )
-            if attention_mask is not None:
-                attention_mask = attention_mask.repeat(1, self.num_heads, target_len, 1)
-                attention_mask = attention_mask.reshape(-1, target_len, source_len)
-
-                # `nn.MultiheadAttention` cannot handle boolean masks (which SDPA can)
-                if attention_mask.dtype == torch.bool:
-                    attention_mask = torch.where(
-                        attention_mask,
-                        torch.full((), 0.0, device=attention_mask.device, dtype=probe.dtype),
-                        torch.finfo(probe.dtype).min,
-                    )
-
-        hidden_state = self.attention(probe, hidden_state, hidden_state, attn_mask=attention_mask)[0]
+        # `nn.MultiheadAttention` takes the padding as `key_padding_mask` (True = ignored), whatever the attention
+        # implementation of the encoder
+        key_padding_mask = ~attention_mask.bool() if attention_mask is not None else None
+        hidden_state = self.attention(probe, hidden_state, hidden_state, key_padding_mask=key_padding_mask)[0]
 
         residual = hidden_state
         hidden_state = self.layernorm(hidden_state)

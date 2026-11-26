@@ -44,9 +44,9 @@ class GlmAsrModelTester(ALMModelTester):
 
     audio_mask_key = "input_features_mask"
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("head_dim", 8)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "head_dim": 8,
+    }
 
     def create_audio_mask(self, batch_size: int | None = None):
         # Deterministic full-length mask: the base default randomizes lengths in [1, feat_seq_length],

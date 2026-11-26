@@ -94,7 +94,6 @@ class ZayaRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -640,7 +639,6 @@ class ZayaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ZayaDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -653,7 +651,6 @@ class ZayaPreTrainedModel(PreTrainedModel):
         "attentions": ZayaAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, ZayaResidualScaling):
@@ -793,7 +790,6 @@ class ZayaForCausalLM(ZayaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     _fsdp_plan = {"lm_head": "keep_full_weight"}
-    _is_stateful = True
 
     def __init__(self, config: ZayaConfig, **kwargs):
         super().__init__(config)

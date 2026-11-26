@@ -89,6 +89,8 @@ use `ALL=1` when unsure whether indirect dependencies are covered.
 `model_type` defined in `models/bert`. Composite models that merely embed BERT are not run;
 use the default changed-files selection (or `ALL=1`) to include them.
 
+When your PR changes a model's outputs on purpose, see [Model integration contracts](./pr_checks#model-integration-contracts) to update its baselines.
+
 ## Pick a base test class
 
 Three base classes cover the most common model families. Pick the one that matches your model's modality.
@@ -370,9 +372,13 @@ Mixin tests use tiny configs with random weights to verify model behavior quickl
 Place integration tests in a separate test class, mark them with `@slow`, and mix in `MemoryCleanupMixin`. Each test downloads real weights, runs inference, and checks outputs against expected values. The mixin frees the memory each test takes and runs the test methods under `torch.no_grad()` — see [Releasing memory between tests](#releasing-memory-between-tests) for what it does and how to opt out.
 
 ```py
+import unittest
+
 import torch
 from transformers import AutoTokenizer
-from transformers.testing_utils import MemoryCleanupMixin, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
+
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 class MyModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @slow

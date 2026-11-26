@@ -77,11 +77,7 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
     """
 
     model_type = "qwen4_exp_text"
-    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_expert.gate_proj": "colwise",
         "layers.*.mlp.shared_expert.up_proj": "colwise",
         "layers.*.mlp.shared_expert.down_proj": "rowwise",
@@ -307,7 +303,6 @@ class Qwen4ExpConfig(PreTrainedConfig):
         "vision_config": Qwen4ExpVisionConfig,
         "text_config": Qwen4ExpTextConfig,
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

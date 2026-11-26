@@ -47,18 +47,18 @@ from ...vision_utils import (
     get_vision_window_index,
 )
 from ..afmoe.modeling_afmoe import AfmoeAttention
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2DecoderLayer,
     Gemma2MLP,
     Gemma2Model,
     Gemma2PreTrainedModel,
-    Gemma2RMSNorm,
     Gemma2RotaryEmbedding,
     apply_rotary_pos_emb,
 )
 from ..gemma3.modeling_gemma3 import Gemma3CausalLMOutputWithPast, Gemma3ModelOutputWithPast
-from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
+from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..kimi_k25.configuration_kimi_k25 import Kimi_K25VisionConfig
 from ..kimi_k25.modeling_kimi_k25 import (
@@ -686,12 +686,12 @@ class MuseGlimmerConfig(PreTrainedConfig):
     projector_hidden_act: str = "gelu"
 
 
-class MuseGlimmerRMSNorm(Gemma4RMSNorm):
-    def __init__(self, dim: int | None = None, eps: float = 1e-6, with_scale: bool = True):
-        super().__init__(dim, eps, with_scale)
+class MuseGlimmerRMSNorm(Gemma3nRMSNorm):
+    def __init__(self, hidden_size: int | None = None, eps: float = 1e-6, with_scale: bool = True):
+        super().__init__(hidden_size, eps, with_scale)
 
 
-class MuseGlimmerTextCenteredRMSNorm(Gemma2RMSNorm):
+class MuseGlimmerTextCenteredRMSNorm(GemmaRMSNorm):
     pass
 
 
@@ -918,11 +918,12 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
             grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
-        target_dtype = self.patch_embedding.weight.dtype
-        embeddings = self.patch_embedding(pixel_values.to(dtype=target_dtype))
+        embeddings = self.patch_embedding(pixel_values.to(dtype=self.patch_embedding.weight.dtype))
 
+        # Patch (h, w) reads the position table at (w, h): ref code passes
+        # `meshgrid(pos_h, pos_w, indexing="xy")` to `grid_sample` which takes first coord as width.
         interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
-            grid_thw,
+            grid_thw[:, [0, 2, 1]],
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
@@ -932,9 +933,7 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
         )
         # helper returns `(total_thw, n_taps)`, so sum over the taps axis
         pos_embeds = (self.position_embedding_table(interp_indices) * interp_weights[:, :, None]).sum(1)
-        embeddings = embeddings + pos_embeds.to(embeddings.dtype)
-
-        return embeddings
+        return embeddings + pos_embeds.to(embeddings.dtype)
 
 
 class MuseGlimmerVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
@@ -1156,7 +1155,8 @@ class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
 

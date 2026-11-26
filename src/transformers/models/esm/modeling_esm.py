@@ -138,7 +138,6 @@ class EsmRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type=None):
         inv_freq = getattr(self, "inv_freq")
@@ -584,7 +583,6 @@ class EsmPreTrainedModel(PreTrainedModel):
         ],
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -720,6 +718,7 @@ class EsmModel(EsmPreTrainedModel):
             embedding_output=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             cache=None,
+            position_ids=position_ids,
         )
 
         if self.position_embedding_type == "rotary":
@@ -754,6 +753,7 @@ class EsmModel(EsmPreTrainedModel):
         embedding_output,
         encoder_hidden_states,
         cache,
+        position_ids,
     ):
         if self.config.is_decoder:
             attention_mask = create_causal_mask(
@@ -761,12 +761,14 @@ class EsmModel(EsmPreTrainedModel):
                 inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
                 cache=cache,
+                position_ids=position_ids,
             )
         else:
             attention_mask = create_bidirectional_mask(
                 config=self.config,
                 inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
+                position_ids=position_ids,
             )
 
         if encoder_attention_mask is not None:

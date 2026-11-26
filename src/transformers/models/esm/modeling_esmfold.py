@@ -886,7 +886,6 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
     config: EsmFoldConfig
 
     # Subclass `EsMPreTrainedModel` to deal with special init
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, EsmFoldLinear):

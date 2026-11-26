@@ -43,13 +43,13 @@ from ...utils.generic import (
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..phi3.configuration_phi3 import Phi3Config
 from ..phi3.modeling_phi3 import (
     Phi3DecoderLayer,
     Phi3ForCausalLM,
     Phi3Model,
     Phi3PreTrainedModel,
-    Phi3RMSNorm,
 )
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
@@ -339,7 +339,6 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
         "attentions": Phi4MultimodalVisionAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)
@@ -919,7 +918,6 @@ class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Phi4MultimodalAudioGluPointWiseConv):
@@ -1176,7 +1174,7 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
 #################################################### TEXT ####################################################
 
 
-class Phi4MultimodalRMSNorm(Phi3RMSNorm):
+class Phi4MultimodalRMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -1245,7 +1243,6 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
 class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
     input_modalities = ("image", "audio", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Phi4MultimodalImageEmbedding):

@@ -43,10 +43,10 @@ _MAX_SQRT_GRADIENT = 1000.0
 
 # Copied from transformers.models.gemma.modeling_gemma.GemmaRMSNorm with Gemma->RecurrentGemma
 class RecurrentGemmaRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, hidden_size: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.zeros(hidden_size))
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
@@ -99,7 +99,6 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.forward with Llama->RecurrentGemma
     def forward(self, x, position_ids):
@@ -536,19 +535,16 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["RecurrentGemmaDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True
-    _is_stateful = True
 
     _can_record_outputs = {
         "hidden_states": RecurrentGemmaDecoderLayer,
         "attentions": RecurrentGemmaAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = math.sqrt(self.config.w_init_variance_scale / self.config.conv1d_width)

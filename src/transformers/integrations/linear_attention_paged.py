@@ -15,8 +15,48 @@
 from collections.abc import Callable
 
 import torch
+from torch import nn
 
 from ..activations import ACT2FN
+from ..generation.continuous_batching.cache import PagedAttentionCache
+
+
+def paged_causal_conv1d_forward(
+    conv1d: nn.Conv1d,
+    hidden_states: torch.Tensor,
+    cache: PagedAttentionCache,
+    layer_idx: int,
+    activation: str | None = None,
+    **kwargs,
+) -> torch.Tensor:
+    """
+    The `causal_conv1d_forward` of a linear attention layer under continuous batching: the batch is one row of packed
+    sequences, and each sequence is convolved from the conv state its request left in the paged cache, which the
+    convolution then advances.
+
+    Args:
+        conv1d (`nn.Conv1d`):
+            The depthwise convolution, whose weights are used.
+        hidden_states (`torch.Tensor` of shape `(1, channels, total_tokens)`):
+            The packed input to the convolution.
+        cache (`PagedAttentionCache`):
+            The paged cache holding the conv state of every request, updated in place.
+        layer_idx (`int`):
+            The index of the layer in `cache`.
+        activation (`str`, *optional*):
+            The activation applied to the output of the convolution.
+        kwargs:
+            The batch's continuous batching kwargs: `cu_seq_lens_q` and the indices of the cache blocks.
+
+    Returns:
+        `torch.Tensor` of shape `(1, channels, total_tokens)`: The output of the convolution.
+    """
+    (conv_states,) = cache.read_cache_states(layer_idx, ("conv",), kwargs)
+    hidden_states, conv_states = causal_conv1d_varlen(
+        hidden_states, conv_states, kwargs["cu_seq_lens_q"], conv1d.weight.squeeze(1), conv1d.bias, activation
+    )
+    cache.write_cache_states(layer_idx, {"conv": conv_states}, kwargs)
+    return hidden_states
 
 
 def _previous_inputs_varlen(

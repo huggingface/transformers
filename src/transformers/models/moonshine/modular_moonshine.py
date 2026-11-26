@@ -92,7 +92,6 @@ class MoonshineConfig(PreTrainedConfig):
     ```"""
 
     model_type = "moonshine"
-    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "num_key_value_heads": "decoder_num_key_value_heads",
         "num_attention_heads": "decoder_num_attention_heads",
@@ -604,9 +603,6 @@ class MoonshineDecoder(LlamaModel):
 
 
 class MoonshineModel(WhisperModel):
-    def _mask_input_features(self):
-        raise AttributeError("Not needed for Moonshine")
-
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -678,6 +674,12 @@ class MoonshineModel(WhisperModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+    def freeze_encoder(self):
+        raise AttributeError("Not needed for Moonshine")
+
+    def _mask_input_features(self):
+        raise AttributeError("Not needed for Moonshine")
 
 
 @auto_docstring(

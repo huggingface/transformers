@@ -29,6 +29,7 @@ from transformers import (
 from transformers.audio_utils import load_audio
 from transformers.testing_utils import cleanup, is_torch_available, require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
@@ -38,28 +39,24 @@ if is_torch_available():
 
 
 @require_torch
-class VibeVoiceAcousticTokenizerModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        channels=1,
-        hidden_size=32,
-        kernel_size=3,
-        n_filters=4,
-        downsampling_ratios=[2],
-        depths=[1, 1],
-        is_training=False,
-    ):
+class VibeVoiceAcousticTokenizerModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 2,
+        "channels": 1,
+        "hidden_size": 32,
+        "kernel_size": 3,
+        "n_filters": 4,
+        "downsampling_ratios": [2],
+        "depths": [1, 1],
+        "is_training": False,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.channels = channels
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.kernel_size = kernel_size
-        self.n_filters = n_filters
-        self.downsampling_ratios = downsampling_ratios
-        self.depths = depths
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.channels, self.hidden_size], scale=1.0)
@@ -104,6 +101,8 @@ class VibeVoiceAcousticTokenizerModelTester:
 
 @require_torch
 class VibeVoiceAcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = VibeVoiceAcousticTokenizerModelTester
+
     all_model_classes = (VibeVoiceAcousticTokenizerModel,) if is_torch_available() else ()
     is_encoder_decoder = False
     test_resize_embeddings = False
@@ -225,16 +224,12 @@ class VibeVoiceAcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
                     elif tuple_object is None:
                         return
                     else:
-                        self.assertTrue(
-                            torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
-                            ),
-                            msg=(
-                                "Tuple and dict output are not equal. Difference:"
-                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
-                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
-                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
-                            ),
+                        torch.testing.assert_close(
+                            set_nan_tensor_to_zero(tuple_object),
+                            set_nan_tensor_to_zero(dict_object),
+                            rtol=1e-5,
+                            atol=1e-5,
+                            msg=lambda m: f"Tuple and dict output are not equal.\n{m}",
                         )
 
                 recursive_check(tuple_output, dict_output)

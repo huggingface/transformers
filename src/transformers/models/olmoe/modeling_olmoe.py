@@ -42,7 +42,7 @@ from .configuration_olmoe import OlmoeConfig
 
 @use_kernel_forward_from_hub("RMSNorm")
 class OlmoeRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-5) -> None:
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         OlmoeRMSNorm is equivalent to T5LayerNorm
         """
@@ -97,7 +97,6 @@ class OlmoeRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -401,7 +400,6 @@ class OlmoePreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OlmoeDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_record_outputs = {
@@ -413,7 +411,6 @@ class OlmoePreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_compile_fullgraph = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, OlmoeExperts):

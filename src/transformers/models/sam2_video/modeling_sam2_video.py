@@ -39,13 +39,8 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    can_return_tuple,
-    logging,
-)
-from ...utils.generic import TransformersKwargs, is_flash_attention_requested
+from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.generic import TransformersKwargs, can_return_tuple, is_flash_attention_requested
 from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoModel
 from .configuration_sam2_video import Sam2VideoConfig, Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
@@ -720,7 +715,6 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_attention_backend = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Sam2VideoModel):
@@ -783,7 +777,6 @@ class Sam2VideoVisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)

@@ -29,11 +29,11 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
+from ..cohere.modeling_cohere import CohereLayerNorm
 from ..cohere2.modeling_cohere2 import (
     Cohere2Attention,
     Cohere2DecoderLayer,
     Cohere2ForCausalLM,
-    Cohere2LayerNorm,
     Cohere2MLP,
     Cohere2Model,
     Cohere2PreTrainedModel,
@@ -50,7 +50,7 @@ class Cohere2MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Cohere2MoeLayerNorm(Cohere2LayerNorm):
+class Cohere2MoeLayerNorm(CohereLayerNorm):
     pass
 
 
@@ -202,7 +202,6 @@ class Cohere2MoePreTrainedModel(Cohere2PreTrainedModel):
         "router_logits": OutputRecorder(Cohere2MoeTopKRouter, index=0),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range

@@ -24,6 +24,7 @@ from transformers import set_seed
 from transformers.generation.configuration_utils import ALL_CACHE_IMPLEMENTATIONS
 from transformers.testing_utils import (
     CaptureStderr,
+    Expectations,
     backend_device_count,
     backend_torch_accelerator_module,
     cleanup,
@@ -87,6 +88,8 @@ if is_torch_available():
         Fp8QuantizedLayer,
         LinearAttentionAndFullAttentionLayer,
         LinearAttentionAndSlidingWindowAttentionLayer,
+        LinearAttentionAndStaticFullAttentionLayer,
+        LinearAttentionAndStaticSlidingWindowAttentionLayer,
         LinearAttentionLayer,
         QuantoQuantizedLayer,
         StaticLayer,
@@ -1107,6 +1110,29 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = self.tokenizer.decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
+    def test_is_linear_property(self):
+        """Test that hybrid linear + attention layers report `is_linear=False` correctly."""
+        layer_classes = [
+            LinearAttentionLayer,
+            LinearAttentionAndFullAttentionLayer,
+            LinearAttentionAndSlidingWindowAttentionLayer,
+            LinearAttentionAndStaticFullAttentionLayer,
+            LinearAttentionAndStaticSlidingWindowAttentionLayer,
+        ]
+        is_expected_linear = [True, False, False, False, False]
+        init_kwargs = [
+            {},
+            {},
+            {"sliding_window": 5},
+            {"max_cache_len": 20},
+            {"max_cache_len": 20, "sliding_window": 5},
+        ]
+
+        for layer_cls, expected_result, kwargs in zip(layer_classes, is_expected_linear, init_kwargs):
+            cache = Cache(layers=[layer_cls(**kwargs)])
+            # The is_linear property is only based on the type of the layer, so check that the types do not derive
+            self.assertEqual(cache.is_linear, [expected_result])
+
 
 @require_torch_accelerator
 class CacheHardIntegrationTest(unittest.TestCase):
@@ -1138,21 +1164,42 @@ class CacheHardIntegrationTest(unittest.TestCase):
         input_length = inputs.input_ids.shape[1]
         score_sum = sum(score[0][gen_out.sequences[0][input_length + idx]] for idx, score in enumerate(gen_out.scores))
 
-        EXPECTED_GENERATION = (
-            "Here's everything I know about cats. Cats are mammals, they have four legs, they have a tail, they have "
-            "a face with a nose, eyes, and mouth. They have fur, they have claws, and they have whiskers. They are "
-            "usually small, but some are big. They are usually gray or black or white, but they can be many colors. "
-            "They have a soft body, they are usually quiet, but they can be loud. They are good at catching mice, "
-            "and they are good at climbing trees. They are often kept as pets, and they are often seen in homes. "
-            "They are independent, but they can be affectionate with their owners. They have a keen sense of smell, "
-            "and they can hear sounds that humans cannot hear. They have a good sense of balance, which helps them "
-            "to jump and climb. They are also good at hunting, and they can be trained to do tricks. They are often "
-            "used as pets, and they are also used in some jobs, like hunting or as service animals for people with "
-            "disabilities. They have a long life span, and they can live for many years. They are also known for "
-            "their agility and gracefulness. They are often associated with mystery and independence. They are also "
-            "known for their ability to land on their feet when they fall. They"
-        )
-        EXPECTED_SCORE_SUM = 10834.7919921875
+        EXPECTED_GENERATION = Expectations(
+            {
+                (None, None): (
+                    "Here's everything I know about cats. Cats are mammals, they have four legs, they have a tail, they have "
+                    "a face with a nose, eyes, and mouth. They have fur, they have claws, and they have whiskers. They are "
+                    "usually small, but some are big. They are usually gray or black or white, but they can be many colors. "
+                    "They have a soft body, they are usually quiet, but they can be loud. They are good at catching mice, "
+                    "and they are good at climbing trees. They are often kept as pets, and they are often seen in homes. "
+                    "They are independent, but they can be affectionate with their owners. They have a keen sense of smell, "
+                    "and they can hear sounds that humans cannot hear. They have a good sense of balance, which helps them "
+                    "to jump and climb. They are also good at hunting, and they can be trained to do tricks. They are often "
+                    "used as pets, and they are also used in some jobs, like hunting or as service animals for people with "
+                    "disabilities. They have a long life span, and they can live for many years. They are also known for "
+                    "their agility and gracefulness. They are often associated with mystery and independence. They are also "
+                    "known for their ability to land on their feet when they fall. They"
+                ),
+                ("cuda", (8, 6)): (
+                    "Here's everything I know about cats. Cats are mammals, they have fur, they have four legs, they "
+                    "have a tail, they have a face, they have a nose, they have a mouth, they have a body, they have a "
+                    "heart, they have a brain, they have a liver, they have a stomach, they have a kidney, they have a "
+                    "bladder, they have a skeleton, they have a circulatory system, they have a respiratory system, they "
+                    "have a digestive system, they have a nervous system, they have a muscular system, they have a "
+                    "skeletal system, they have a lymphatic system, they have a reproductive system, they have a "
+                    "excretory system, they have a endocrine system, they have a immune system, they have a "
+                    "integumentary system, they have a sensory system, they have a excretory system, they have a "
+                    "digestive system, they have a circulatory system, they have a respiratory system, they have a "
+                    "nervous system, they have a muscular system, they have a skeletal system, they have a lymphatic "
+                    "system, they have a reproductive system, they have a excretory system, they have a endocrine "
+                    "system, they have a immune system, they have a integumentary system, they have a sensory system. "
+                    "\n\nOkay, so I have"
+                ),
+            }
+        ).get_expectation()
+        EXPECTED_SCORE_SUM = Expectations(
+            {(None, None): 10834.7919921875, ("cuda", (8, 6)): 11565.626953125}
+        ).get_expectation()
         self.assertEqual(decoded[0], EXPECTED_GENERATION)
         self.assertAlmostEqual(score_sum.item(), EXPECTED_SCORE_SUM, places=2)
         self.assertIsInstance(gen_out.cache, DynamicCache)  # sanity check
@@ -1306,13 +1353,22 @@ class CacheHardIntegrationTest(unittest.TestCase):
             response = tokenizer.decode(outputs)[0]
             responses.append(response)
 
-        EXPECTED_DECODED_TEXT = [
-            "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is a "
-            "wonderful way to explore the world, learn about different cultures, and create unforgettable "
-            "memories. Whether you're a seasoned traveler or someone",
-            "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital"
-            " of France.\n\n\n\nAs an AI, I am not a human being.\n\n\n\nThe Great Wall of China is",
-        ]
+        EXPECTED_DECODED_TEXT = Expectations({
+            (None, None): [
+                "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is a "
+                "wonderful way to explore the world, learn about different cultures, and create unforgettable "
+                "memories. Whether you're a seasoned traveler or someone",
+                "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital"
+                " of France.\n\n\n\nAs an AI, I am not a human being.\n\n\n\nThe Great Wall of China is",
+            ],
+            ("cuda", (8, 6)): [
+                "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is a "
+                "wonderful way to explore new places, cultures, and experiences. Whether you are a seasoned "
+                "traveler or a first-time adventurer, there is always something",
+                "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital"
+                " of France.\n\n\n\nAs an AI, I am not a human being.\n\n\n\nThe Great Wall of China is",
+            ],
+        }).get_expectation()  # fmt: skip
 
         self.assertEqual(responses, EXPECTED_DECODED_TEXT)
 
@@ -1885,6 +1941,31 @@ class SyntheticCacheTest(unittest.TestCase):
             static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "StaticCache Scenario 2 failed"
         )
 
+    def test_static_cache_keys_and_values_dtypes(self):
+        """Test StaticCache when keys and values have different dtypes.
+
+        Under autocast with a float32 model, RoPE returns float32 keys while the values stay in the autocast dtype.
+        """
+        static_cache = StaticCache(config=self.config, max_cache_len=self.max_cache_len)
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
+        static_cache.update(key_states=prefill, value_states=prefill.bfloat16(), layer_idx=0)
+        static_cache.update(
+            key_states=torch.tensor(3.0)[None, None, None, None],
+            value_states=torch.tensor(3.0, dtype=torch.bfloat16)[None, None, None, None],
+            layer_idx=0,
+        )
+        self.assertEqual(static_cache.layers[0].keys.dtype, torch.float32)
+        self.assertEqual(static_cache.layers[0].values.dtype, torch.bfloat16)
+        self.assertEqual(static_cache.layers[0].values[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 0.0])
+
+    def test_dynamic_cache_keys_and_values_dtypes(self):
+        """Test DynamicCache when keys and values have different dtypes, as in `test_static_cache_keys_and_values_dtypes`."""
+        dynamic_cache = DynamicCache(config=self.config)
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
+        dynamic_cache.update(key_states=prefill, value_states=prefill.bfloat16(), layer_idx=0)
+        self.assertEqual(dynamic_cache.layers[0].keys.dtype, torch.float32)
+        self.assertEqual(dynamic_cache.layers[0].values.dtype, torch.bfloat16)
+
     def test_sliding_window_cache(self):
         """Test fully sliding StaticCache with manually prefilled states and hardcoded assertions.
 
@@ -2428,6 +2509,59 @@ class CacheCroppingTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "Calling `crop` with a positive value"):
                 layer.crop(self.seq_len - 3)
+
+    def test_crop_static_layers(self):
+        """Test that `crop` rolls the write offset of the static layers back, in-place"""
+        keys = torch.rand(*self.attention_shape)
+        values = torch.rand(*self.attention_shape)
+        # `max_cache_len <= sliding_window`, so the sliding layer never slides and stays croppable
+        layer_kwargs = {"max_cache_len": self.seq_len, "sliding_window": self.seq_len}
+        for layer_cls in (StaticLayer, StaticSlidingWindowLayer):
+            layer = layer_cls(**layer_kwargs)
+            self.assertTrue(layer.is_croppable)
+
+            # Prefill, then draft 3 more tokens
+            layer.update(keys[..., :-3, :], values[..., :-3, :])
+            layer.update(keys[..., -3:, :], values[..., -3:, :])
+            self.assertEqual(layer.get_seq_length(), self.seq_len)
+            keys_data_ptr, values_data_ptr = layer.keys.data_ptr(), layer.values.data_ptr()
+
+            # Reject the 3 drafted tokens
+            layer.crop(-3)
+
+            # The backing tensors keep their shape and their static address, only the offset moved back
+            self.assertEqual(layer.get_seq_length(), self.seq_len - 3)
+            self.assertEqual(layer.keys.shape[-2], self.seq_len)
+            self.assertEqual(layer.values.shape[-2], self.seq_len)
+            self.assertEqual(layer.keys.data_ptr(), keys_data_ptr)
+            self.assertEqual(layer.values.data_ptr(), values_data_ptr)
+
+            # The next `update` overwrites the rejected slots, so the live states match a run that never drafted
+            new_keys, new_values = (
+                torch.rand(*self.attention_shape[:-2], 1, 32),
+                torch.rand(*self.attention_shape[:-2], 1, 32),
+            )
+            layer.update(new_keys, new_values)
+            live = layer.get_seq_length()
+            self.assertTrue((layer.keys[..., : live - 1, :] == keys[..., : self.seq_len - 3, :]).all())
+            self.assertTrue((layer.values[..., : live - 1, :] == values[..., : self.seq_len - 3, :]).all())
+            self.assertTrue((layer.keys[..., live - 1 : live, :] == new_keys).all())
+            self.assertTrue((layer.values[..., live - 1 : live, :] == new_values).all())
+
+    def test_static_sliding_window_layer_is_croppable_only_without_eviction(self):
+        """Test that a static sliding layer only advertises itself as croppable while the window cannot slide"""
+        self.assertTrue(StaticSlidingWindowLayer(max_cache_len=10, sliding_window=10).is_croppable)
+        self.assertTrue(StaticSlidingWindowLayer(max_cache_len=10, sliding_window=20).is_croppable)
+        # Here the window slides, so the evicted states cannot be recovered by `crop`
+        self.assertFalse(StaticSlidingWindowLayer(max_cache_len=20, sliding_window=10).is_croppable)
+
+    def test_crop_static_layers_with_positive_value(self):
+        """Test that `crop` on the static layers raises when called with a positive value"""
+        for layer_cls in (StaticLayer, StaticSlidingWindowLayer):
+            layer = layer_cls(max_cache_len=self.seq_len, sliding_window=self.seq_len)
+            layer.update(torch.rand(*self.attention_shape), torch.rand(*self.attention_shape))
+            with self.assertRaises(RuntimeError):
+                layer.crop(3)
 
     def test_update_with_recording_returns_advertised_kv_width(self):
         """Test that with past recording activated, `update` returns exactly the states advertised by `get_mask_sizes`"""

@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -62,48 +63,33 @@ def prepare_inputs_dict(
 
 
 @require_torch
-class MimiModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=5,
-        num_channels=1,
-        is_training=False,
-        intermediate_size=40,
-        hidden_size=32,
-        num_filters=8,
-        num_residual_layers=1,
-        upsampling_ratios=[8, 4],
-        codebook_size=64,
-        vector_quantization_hidden_dimension=64,
-        codebook_dim=64,
-        upsample_groups=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        sliding_window=4,
-        use_cache=False,
-        max_position_embeddings=512,
-    ):
+class MimiModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 5,
+        "num_channels": 1,
+        "is_training": False,
+        "intermediate_size": 40,
+        "hidden_size": 32,
+        "num_filters": 8,
+        "num_residual_layers": 1,
+        "upsampling_ratios": [8, 4],
+        "codebook_size": 64,
+        "vector_quantization_hidden_dimension": 64,
+        "codebook_dim": 64,
+        "upsample_groups": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "sliding_window": 4,
+        "use_cache": False,
+        "max_position_embeddings": 512,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.intermediate_size = intermediate_size
-        self.hidden_size = hidden_size
-        self.num_filters = num_filters
-        self.num_residual_layers = num_residual_layers
-        self.upsampling_ratios = upsampling_ratios
-        self.codebook_size = codebook_size
-        self.vector_quantization_hidden_dimension = vector_quantization_hidden_dimension
-        self.codebook_dim = codebook_dim
-        self.upsample_groups = upsample_groups
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.sliding_window = sliding_window
-        self.use_cache = use_cache
-        self.max_position_embeddings = max_position_embeddings
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self, input_values_length=None):
         input_values = floats_tensor(
@@ -162,6 +148,8 @@ class MimiModelTester:
 
 @require_torch
 class MimiModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = MimiModelTester
+
     all_model_classes = (MimiModel,) if is_torch_available() else ()
     is_encoder_decoder = True
 
@@ -266,16 +254,12 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertTrue(isinstance(dict_output, dict))
 
                 for tuple_value, dict_value in zip(tuple_output, dict_output.values()):
-                    self.assertTrue(
-                        torch.allclose(
-                            set_nan_tensor_to_zero(tuple_value), set_nan_tensor_to_zero(dict_value), atol=1e-5
-                        ),
-                        msg=(
-                            "Tuple and dict output are not equal. Difference:"
-                            f" {torch.max(torch.abs(tuple_value - dict_value))}. Tuple has `nan`:"
-                            f" {torch.isnan(tuple_value).any()} and `inf`: {torch.isinf(tuple_value)}. Dict has"
-                            f" `nan`: {torch.isnan(dict_value).any()} and `inf`: {torch.isinf(dict_value)}."
-                        ),
+                    torch.testing.assert_close(
+                        set_nan_tensor_to_zero(tuple_value),
+                        set_nan_tensor_to_zero(dict_value),
+                        rtol=1e-5,
+                        atol=1e-5,
+                        msg=lambda m: f"Tuple and dict output are not equal.\n{m}",
                     )
 
         for model_class in self.all_model_classes:

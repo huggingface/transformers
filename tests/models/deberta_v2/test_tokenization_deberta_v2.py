@@ -134,3 +134,14 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         sep_indices = [i for i, t in enumerate(tokens_pair) if t == "[SEP]"]
         self.assertEqual(len(sep_indices), 2)
         self.assertEqual(sep_indices[-1], len(tokens_pair) - 1)
+
+    def test_sentencepiece_normalization(self):
+        # Regression test for #50674: test the SentencePiece charsmap.
+        # Expected values fixed from transformers v4.57.6.
+        text = "Ｈｅｌｌｏ，ｗｏｒｌｄ！ ﬁne Wait… a\u200bb a \u200bb a\u00a0b hello  "
+        expected_tokens = ['▁Hello', ',', 'world', '!', '▁fine', '▁Wait', '...', '▁a', '▁b', '▁a', '▁b', '▁a', '▁b', '▁hello']  # fmt: skip
+        expected_ids = [4800, 6, 5504, 48, 1087, 9515, 263, 10, 1787, 10, 1787, 10, 1787, 11496]  # fmt: skip
+
+        tokenizer = self.get_tokenizer()
+        self.assertEqual(tokenizer.tokenize(text), expected_tokens)
+        self.assertEqual(tokenizer.encode(text, add_special_tokens=False), expected_ids)

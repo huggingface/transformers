@@ -41,8 +41,6 @@ from ...models.deepseek_v3.modeling_deepseek_v3 import (
 from ...models.glm5_next.modeling_glm5_next import (
     Glm5NextTextLinearAttention,
     Glm5NextTextRMSNormGated,
-    causal_conv1d_fn,
-    causal_conv1d_update,
     chunk_kimi_delta_attention,
     recurrent_kimi_delta_attention,
 )
@@ -57,20 +55,22 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
+from ..mamba.modeling_mamba import causal_conv1d_forward
 
 
 @auto_docstring(checkpoint="inclusionAI/Ling-3.0-Flash")
 @strict
 class BailingHybridConfig(DeepseekV3Config):
     r"""
+    q_lora_rank (`int`, *optional*, defaults to `None`):
+        Low-rank dimension of the query projection in MLA layers. When unset, queries use a single projection.
     n_group (`int`, *optional*, defaults to 8):
         Number of expert groups used by the group-limited router.
     first_k_dense_replace (`int`, *optional*, defaults to 2):
         Number of initial decoder layers that use a dense MLP instead of routed experts.
     num_mtp_layers (`int`, *optional*, defaults to 1):
-        Number of Multi-Token Prediction (MTP) modules available to append after the base transformer model. When `0`,
-        the model behaves as a standard decoder. When `>0`, each extra module can predict one additional future token at inference
-        time (speculative decoding via `generate(..., use_mtp=True)`).
+        Number of Multi-Token Prediction (MTP) layers stored after the main decoder in the checkpoint. Standard causal
+        inference uses only `num_hidden_layers` decoder layers.
     rope_theta (`float`, *optional*, defaults to 6000000.0):
         Base period of the rotary position embeddings used by MLA layers.
     short_conv_kernel_size (`int`, *optional*, defaults to 4):
@@ -89,11 +89,7 @@ class BailingHybridConfig(DeepseekV3Config):
     """
 
     model_type = "bailing_hybrid"
-    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -150,6 +146,7 @@ class BailingHybridConfig(DeepseekV3Config):
     output_router_logits: bool = False
 
     kv_lora_rank: int = 512
+    q_lora_rank: int | None = None
     qk_nope_head_dim: int = 128
     qk_rope_head_dim: int = 64
     v_head_dim: int = 128
@@ -168,7 +165,6 @@ class BailingHybridConfig(DeepseekV3Config):
     # Ling checkpoints use `num_experts`; the DeepSeek compatibility name is not part of this architecture.
     n_routed_experts = AttributeError()
     rope_interleave = AttributeError()
-    q_lora_rank = AttributeError()
 
     def __post_init__(self, **kwargs):
         self.linear_head_dim = self.head_dim
@@ -212,16 +208,11 @@ class BailingHybridMLP(DeepseekV3MLP):
 
 
 class BailingHybridAttention(DeepseekV3Attention):
-    """Multi-head latent attention with the head-wise output gate used by Ling 3.0."""
+    """Multi-head latent attention with the head-wise output gate used by Ling 3 models."""
 
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.g_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        del self.q_a_proj
-        del self.q_a_layernorm
-        del self.q_b_proj
-        del self.q_lora_rank
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -235,7 +226,10 @@ class BailingHybridAttention(DeepseekV3Attention):
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
-        q_states = self.q_proj(hidden_states)
+        if self.q_lora_rank is None:
+            q_states = self.q_proj(hidden_states)
+        else:
+            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
         q_states = q_states.view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
@@ -283,8 +277,8 @@ class BailingHybridForgetGate(nn.Module):
         self.qkv_dim = self.head_dim * self.num_heads
         self.safe_gate = config.kda_safe_gate
         self.lower_bound = config.kda_lower_bound
-        self.A_log = nn.Parameter(torch.empty(self.num_heads))
-        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim))
+        self.A_log = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
+        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim, dtype=torch.float32))
         self.f_proj = nn.Linear(config.hidden_size, self.qkv_dim, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -328,33 +322,20 @@ class BailingHybridDeltaAttention(Glm5NextTextLinearAttention):
             [self.q_proj(hidden_states), self.k_proj(hidden_states), self.v_proj(hidden_states)], dim=-1
         ).transpose(1, 2)
 
-        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
+        # Retrieve the recurrent state if there is a cache. It may be None if the layer is not initialized.
         if cache is not None:
-            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
             recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
-            conv_state, recurrent_state = None, None
+            recurrent_state = None
 
-        if conv_state is not None and seq_len == 1:
-            mixed_qkv = causal_conv1d_update(
-                mixed_qkv,
-                conv_state,
-                weight=self.conv1d.weight.squeeze(1),
-                bias=self.conv1d.bias,
-                activation=self.activation,
-            )
-        else:
-            if cache is not None:
-                mixed_qkv = cache.update_conv_state(mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size)
-            mixed_qkv = causal_conv1d_fn(
-                mixed_qkv,
-                weight=self.conv1d.weight.squeeze(1),
-                bias=self.conv1d.bias,
-                activation=self.activation,
-                **kwargs,
-            )
-            if cache is not None:
-                mixed_qkv = mixed_qkv[:, :, -seq_len:]
+        mixed_qkv = causal_conv1d_forward(
+            self.conv1d,
+            mixed_qkv,
+            cache,
+            self.layer_idx,
+            activation=self.activation,
+            **kwargs,
+        )
 
         query, key, value = torch.split(mixed_qkv.transpose(1, 2), [self.qkv_dim] * 3, dim=-1)
         query, key, value = [states.view(hidden_shape) for states in (query, key, value)]
@@ -374,20 +355,67 @@ class BailingHybridDeltaAttention(Glm5NextTextLinearAttention):
                 **kwargs,
             )
         else:
-            output, last_recurrent_state = chunk_kimi_delta_attention(
-                query,
-                key,
-                value,
-                g=decay,
-                beta=beta,
+            num_intermediate_recurrent_states = (
+                cache.get_recurrent_states_to_keep(self.layer_idx) if cache is not None else 0
+            )
+            # Cannot be more than the number of tokens
+            num_intermediate_recurrent_states = min(num_intermediate_recurrent_states, seq_len)
+            # Since we want the last num_intermediate_recurrent_states, we need to artifically remove them from the chunks, and split the inputs
+            effective_sequence_length = seq_len - num_intermediate_recurrent_states
+            chunked_query, sequential_query = torch.tensor_split(query, [effective_sequence_length], dim=1)
+            chunked_key, sequential_key = torch.tensor_split(key, [effective_sequence_length], dim=1)
+            chunked_value, sequential_value = torch.tensor_split(value, [effective_sequence_length], dim=1)
+            chunked_beta, sequential_beta = torch.tensor_split(beta, [effective_sequence_length], dim=1)
+            chunked_decay, sequential_decay = torch.tensor_split(decay, [effective_sequence_length], dim=1)
+
+            all_outputs = []
+            # First, perform the fast chunked computation
+            chunked_attn_out, chunked_last_recurrent_state = chunk_kimi_delta_attention(
+                chunked_query,
+                chunked_key,
+                chunked_value,
+                g=chunked_decay,
+                beta=chunked_beta,
                 initial_state=recurrent_state,
                 output_final_state=cache is not None,
                 use_qk_l2norm_in_kernel=True,
                 **kwargs,
             )
+            chunked_last_recurrent_state = (
+                chunked_last_recurrent_state.to(torch.float32) if chunked_last_recurrent_state is not None else None
+            )
+            all_outputs.append(chunked_attn_out)
+            # If we need to return intermediate recurrent state, we now do it sequentially after the chunked part
+            intermediate_recurrent_states = []
+            last_recurrent_state = chunked_last_recurrent_state
+            for i in range(num_intermediate_recurrent_states):
+                local_attn_out, last_recurrent_state = recurrent_kimi_delta_attention(
+                    sequential_query[:, i : i + 1, ...],
+                    sequential_key[:, i : i + 1, ...],
+                    sequential_value[:, i : i + 1, ...],
+                    g=sequential_decay[:, i : i + 1, ...],
+                    beta=sequential_beta[:, i : i + 1, ...],
+                    initial_state=last_recurrent_state,
+                    output_final_state=True,
+                    use_qk_l2norm_in_kernel=True,
+                    **kwargs,
+                )
+                # Combine them
+                all_outputs.append(local_attn_out)
+                intermediate_recurrent_states.append(last_recurrent_state.to(torch.float32))
+
+            # Cat all outputs
+            output = torch.cat(all_outputs, dim=1)
+
+            # In case we needed intermediate states, we return them, otherwise the last one is the chunked one
+            last_recurrent_state = (
+                intermediate_recurrent_states
+                if len(intermediate_recurrent_states) > 0
+                else chunked_last_recurrent_state
+            )
 
         if cache is not None:
-            cache.update_recurrent_state(last_recurrent_state.to(torch.float32), self.layer_idx)
+            cache.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         output_gate = self.g_proj(hidden_states)
         output = self.o_norm(output, output_gate.view(hidden_shape)).reshape(batch_size, seq_len, -1)
@@ -409,9 +437,10 @@ class BailingHybridDecoderLayer(KimiLinearDecoderLayer):
 @auto_docstring
 class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
     _no_split_modules = ["BailingHybridDecoderLayer"]
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.42\..*"]
+    _keys_to_ignore_on_load_unexpected = None
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
+        "gate.weight",
         "conv1d",
         "dt_bias",
         "A_log",
@@ -422,7 +451,6 @@ class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
         "attentions": BailingHybridAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, BailingHybridForgetGate):
@@ -442,7 +470,12 @@ class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
 
 @auto_docstring
 class BailingHybridModel(Qwen3NextModel):
-    pass
+    def __init__(self, config: BailingHybridConfig):
+        super().__init__(config)
+        self._keys_to_ignore_on_load_unexpected = [
+            rf"(^|\.)layers\.{layer_idx}\."
+            for layer_idx in range(config.num_hidden_layers, config.num_hidden_layers + config.num_mtp_layers)
+        ]
 
 
 class BailingHybridForCausalLM(DeepseekV3ForCausalLM, GenerationMixin):
