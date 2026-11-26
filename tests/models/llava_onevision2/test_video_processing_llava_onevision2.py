@@ -21,15 +21,65 @@ from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.video_utils import VideoMetadata
 
+from ...test_video_processing_common import VideoProcessingTestMixin, prepare_video_inputs
+
+
+class LlavaOnevision2VideoProcessingTester:
+    batch_size = 3
+    num_frames = 6
+    num_channels = 3
+
+    def prepare_video_inputs(self, equal_resolution=False, return_tensors="pil"):
+        return prepare_video_inputs(
+            self.batch_size,
+            self.num_frames,
+            self.num_channels,
+            8,
+            9,
+            equal_resolution,
+            return_tensors,
+        )
+
+    def expected_output_video_shape(self, videos):
+        return (sum(len(video) for video in videos) * 16, 12)
+
 
 @require_torch
 @require_torchvision
 @require_vision
-class LlavaOnevision2VideoProcessorTest(unittest.TestCase):
+class LlavaOnevision2VideoProcessorTest(VideoProcessingTestMixin, unittest.TestCase):
+    fast_video_processing_class = LlavaOnevision2VideoProcessor
+    video_processor_dict = {
+        "patch_size": 2,
+        "size": {"shortest_edge": 64, "longest_edge": 64},
+        "do_sample_frames": False,
+    }
+
     def setUp(self):
+        super().setUp()
+        self.video_processor_tester = LlavaOnevision2VideoProcessingTester()
         self.processor = LlavaOnevision2VideoProcessor(patch_size=2, size={"shortest_edge": 16, "longest_edge": 64})
 
-    def test_sampling_and_source_coordinates(self):
+    def assert_expected_videos_shape(self, encoded_videos, expected_output_video_shape, num_videos):
+        self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
+
+    def test_call_numpy_4_channels(self):
+        self.video_processor_tester.num_channels = 4
+        videos = self.video_processor_tester.prepare_video_inputs(return_tensors="np")
+        processor = self.fast_video_processing_class(**self.video_processor_dict)
+        for inputs in (videos[:1], videos):
+            output = processor(inputs, return_tensors="pt", input_data_format="channels_last")
+            self.assertEqual(
+                tuple(output.pixel_values_videos.shape),
+                self.video_processor_tester.expected_output_video_shape(inputs),
+            )
+
+    def test_video_processor_from_dict_with_kwargs(self):
+        size = {"shortest_edge": 64, "longest_edge": 256}
+        processor = self.fast_video_processing_class.from_dict(self.video_processor_dict, size=size)
+        self.assertEqual(processor.size, size)
+
+    def test_call_sample_frames(self):
         video = np.zeros((32, 8, 8, 3), dtype=np.uint8)
         outputs = self.processor(
             video, video_metadata={"total_num_frames": 32, "fps": 8}, num_frames=4, return_tensors="pt"

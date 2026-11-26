@@ -22,7 +22,7 @@ import torch
 from PIL import Image
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension, PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import auto_docstring, is_av_available, is_decord_available
 from ...video_processing_utils import BaseVideoProcessor
@@ -31,7 +31,7 @@ from ...vision_utils import get_vision_position_ids
 from .image_processing_pil_llava_onevision2 import LlavaOnevision2ImageProcessorPil, smart_resize
 
 
-class LlavaOnevision2VideosKwargs(VideosKwargs, total=False):
+class LlavaOnevision2VideoProcessorKwargs(VideosKwargs, total=False):
     """
     patch_size (`int`, *optional*, defaults to 14):
         Spatial patch size.
@@ -63,7 +63,7 @@ class LlavaOnevision2VideoProcessor(BaseVideoProcessor):
         Whether to convert decoded frames to RGB before patch extraction.
     """
 
-    valid_kwargs = LlavaOnevision2VideosKwargs
+    valid_kwargs = LlavaOnevision2VideoProcessorKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw", "patch_positions"]
     size = {"shortest_edge": 256 * 28 * 28, "longest_edge": 1605632}
     resample = PILImageResampling.BICUBIC
@@ -80,7 +80,7 @@ class LlavaOnevision2VideoProcessor(BaseVideoProcessor):
     video_backend = "frames"
     codec_config = None
 
-    def __init__(self, do_convert_rgb: bool = True, **kwargs: Unpack[LlavaOnevision2VideosKwargs]):
+    def __init__(self, do_convert_rgb: bool = True, **kwargs: Unpack[LlavaOnevision2VideoProcessorKwargs]):
         """
         Args:
             do_convert_rgb (`bool`, *optional*, defaults to `True`):
@@ -133,7 +133,7 @@ class LlavaOnevision2VideoProcessor(BaseVideoProcessor):
             sample_indices_fn=sample_indices_fn,
         )
 
-    def preprocess(self, videos, **kwargs: Unpack[LlavaOnevision2VideosKwargs]):
+    def preprocess(self, videos, **kwargs: Unpack[LlavaOnevision2VideoProcessorKwargs]):
         for name in ("patch_size", "merge_size", "temporal_patch_size"):
             if name in kwargs and kwargs[name] != getattr(self, name):
                 raise ValueError(f"{name} must match the video processor configuration ({getattr(self, name)})")
@@ -203,10 +203,10 @@ class LlavaOnevision2VideoProcessor(BaseVideoProcessor):
                     max_pixels=size.longest_edge,
                 )
                 video = self.resize(video, SizeDict(height=height, width=width), resample=resample)
-            frames = [frame.permute(1, 2, 0).cpu().numpy() for frame in video]
+            frames = list(video.cpu().numpy())
             # Frames are already aligned to the merge grid. A second resize would
             # change the rounded minimum-area result and its source coordinates.
-            data = processor(frames, do_resize=False, return_tensors="np")
+            data = processor(frames, input_data_format=ChannelDimension.FIRST, do_resize=False, return_tensors="np")
             grid = data["image_grid_thw"]
             pixels.append(data["pixel_values"])
             grids.append([len(frames), *grid[0, 1:].tolist()])

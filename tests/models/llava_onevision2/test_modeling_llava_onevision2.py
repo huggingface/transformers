@@ -19,17 +19,21 @@ from transformers import (
     AutoConfig,
     AutoModel,
     AutoModelForImageTextToText,
+    AutoProcessor,
     LlavaOnevision2Config,
     LlavaOnevision2ForConditionalGeneration,
     LlavaOnevision2Model,
+    LlavaOnevision2Processor,
     LlavaOnevision2VisionConfig,
     LlavaOnevision2VisionModel,
     Qwen3Config,
     is_torch_available,
 )
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision, slow, torch_device
 from transformers.vision_utils import get_vision_position_ids
 
+from ...test_image_processing_common import load_test_image
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -76,21 +80,6 @@ class LlavaOnevision2ModelTest(VLMModelTest, unittest.TestCase):
     @unittest.skip("The packed vision attention returns hidden states without attention weights.")
     def test_get_image_features_attentions(self):
         pass
-
-    def test_save_load_auto_classes(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        model = LlavaOnevision2ForConditionalGeneration(config).to(torch_device).eval()
-        with tempfile.TemporaryDirectory() as directory:
-            model.save_pretrained(directory)
-            config = AutoConfig.from_pretrained(directory, trust_remote_code=False)
-            reloaded, loading = AutoModelForImageTextToText.from_pretrained(
-                directory, trust_remote_code=False, output_loading_info=True
-            )
-            self.assertIsInstance(config, LlavaOnevision2Config)
-            self.assertIsInstance(AutoModel.from_config(config), LlavaOnevision2Model)
-            self.assertFalse(any(loading.values()))
-            with torch.no_grad():
-                torch.testing.assert_close(reloaded.to(torch_device)(**inputs).logits, model(**inputs).logits)
 
     def test_generate_encodes_visuals_once(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -163,3 +152,42 @@ class LlavaOnevision2VisionModelTest(unittest.TestCase):
             model = AutoModel.from_pretrained(directory)
         self.assertIsInstance(config, LlavaOnevision2VisionConfig)
         self.assertIsInstance(model, LlavaOnevision2VisionModel)
+
+
+@slow
+@require_torch
+@require_torch_accelerator
+@require_vision
+class LlavaOnevision2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    model_id = "lmms-lab-encoder/LLaVA-OneVision-2-8B-Instruct"
+
+    def test_image_generation_and_vision_loading(self):
+        processor = AutoProcessor.from_pretrained(self.model_id, trust_remote_code=False)
+        self.assertIsInstance(processor, LlavaOnevision2Processor)
+        model, loading_info = AutoModelForImageTextToText.from_pretrained(
+            self.model_id, dtype="auto", device_map=torch_device, output_loading_info=True, trust_remote_code=False
+        )
+        self.assertFalse(any(loading_info.values()), loading_info)
+
+        image = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+        )
+        messages = [
+            {"role": "user", "content": [{"type": "image"}, {"type": "text", "text": "What animal is in the image?"}]}
+        ]
+        prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        inputs = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
+        generated = model.generate(**inputs, max_new_tokens=16, do_sample=False)
+        result = processor.decode(generated[0, inputs.input_ids.shape[-1] :], skip_special_tokens=True)
+        self.assertRegex(result.lower(), r"cat|lynx")
+
+        vision_model, loading_info = LlavaOnevision2VisionModel.from_pretrained(
+            self.model_id, dtype="auto", device_map=torch_device, output_loading_info=True
+        )
+        unexpected_keys = loading_info.pop("unexpected_keys")
+        self.assertTrue(all(key.startswith(("model.language_model.", "lm_head.")) for key in unexpected_keys))
+        self.assertFalse(any(loading_info.values()), loading_info)
+        vision_inputs = {name: inputs[name] for name in ("pixel_values", "image_grid_thw", "patch_positions")}
+        expected = model.get_image_features(**vision_inputs).last_hidden_state
+        result = vision_model(**vision_inputs).last_hidden_state
+        torch.testing.assert_close(result, expected, rtol=0, atol=0)
