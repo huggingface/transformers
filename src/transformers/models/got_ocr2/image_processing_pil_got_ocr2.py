@@ -288,17 +288,13 @@ class GotOcr2ImageProcessorPil(PilBackend):
         images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
         min_patches = images_kwargs["min_patches"]
         max_patches = images_kwargs["max_patches"]
-        patch_size = images_kwargs.get("patch_size", self.size)
+        size = images_kwargs["size"]
         crop_to_patches = images_kwargs["crop_to_patches"]
 
         num_patches = 1
         if crop_to_patches and max_patches > 1:
-            if isinstance(patch_size, dict):
-                patch_height, patch_width = patch_size["height"], patch_size["width"]
-            else:
-                patch_height, patch_width = patch_size.height, patch_size.width
             num_columns, num_rows = get_optimal_tiled_canvas(
-                (height, width), (patch_height, patch_width), min_patches, max_patches
+                (height, width), (size.height, size.width), min_patches, max_patches
             )
             if num_columns * num_rows > 1:
                 num_patches += num_columns * num_rows
