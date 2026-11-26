@@ -147,6 +147,28 @@ very different from the raw text. This final parsing will only happen when `regi
 up to you what you want to do with the `dirty` chunks until then - you can display them as-is to show the user the 
 "raw" output, or you can simply wait until you have something clean to display.
 
+## Parsing token ids
+
+Decoded text can't tell a control token from the same characters spelled out with ordinary tokens: a model that
+quotes `<|end|>` in its answer produces the same text as one that ends its turn, and parsing that text cuts the
+message short. Parsing token ids avoids this. With a fast tokenizer, `parse_response` parses token ids directly, and
+`get_response_parser(..., token_ids=True)` returns a streaming parser that you feed generated token ids:
+
+```python
+message = tokenizer.parse_response(outputs, prefix=input_ids[0])
+
+parser = tokenizer.get_response_parser(prefix=input_ids[0], token_ids=True)
+for token_id in generated_token_ids:
+    for event in parser.feed([token_id]):
+        render(event)
+message, final_events = parser.finalize()
+```
+
+Control tokens then only match a response template's delimiters when they were generated as token ids. These are
+the tokens `apply_chat_template(..., sanitize_control_tokens=True)` protects on the input side: the tokenizer's special
+tokens, plus the added tokens listed in `tokenizer.chat_control_tokens`, or, if that isn't set, the added tokens its
+chat template writes. Response templates don't need any change.
+
 This concludes most of what you need to know to use response templates. The rest of this document is focused on
 the internals of the parsing system and how to write response templates. This is mostly relevant for developers
 and model authors. Most people can safely stop here!

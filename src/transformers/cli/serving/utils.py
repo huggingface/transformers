@@ -316,7 +316,7 @@ def build_response_parser(
     Returns ``None`` when no template is available for the model (then text
     streams through unparsed).
 
-    `input_ids` is decoded and passed to the parser as `prefix=` so templates
+    The parser is fed generated token ids, with `input_ids` as `prefix=` so templates
     that declare a `start_anchor` get prefill-aware parsing (e.g. for a future
     prefilled `<think>\\n` opener). Templates without `start_anchor` fail
     closed and ignore the prefix — safe for chat templates where the anchor
@@ -326,7 +326,7 @@ def build_response_parser(
     if template is None:
         return None
     tokenizer = getattr(processor, "tokenizer", processor)
-    return ResponseParser(template, prefix=_decode_prefix(tokenizer, input_ids), tools=tools)
+    return ResponseParser(template, prefix=_unwrap_ids(input_ids), tools=tools, tokenizer=tokenizer)
 
 
 def _normalize_tool_call(value: dict) -> ToolCall:
@@ -346,18 +346,18 @@ def _normalize_tool_call(value: dict) -> ToolCall:
     return ToolCall(name=fn["name"], arguments=args)
 
 
-def _decode_prefix(tokenizer, input_ids) -> str:
-    """Decode ``input_ids`` to the chat prompt string the parser expects as ``prefix=``.
+def _unwrap_ids(input_ids) -> list[int]:
+    """Unwrap ``input_ids`` to the token ids the parser expects as ``prefix=``.
 
     Serve always handles one request at a time, but the upstream shape varies:
     ``apply_chat_template(return_tensors="pt")`` hands us a 2D ``[1, N]`` tensor
     while continuous batching hands us a flat ``list[int]``. Both forms hold a
-    single sequence; this helper unwraps it before decoding."""
+    single sequence."""
     if hasattr(input_ids, "tolist"):
         input_ids = input_ids.tolist()
     if input_ids and isinstance(input_ids[0], list):
         input_ids = input_ids[0]
-    return tokenizer.decode(input_ids)
+    return input_ids
 
 
 def parse_assistant_message(
@@ -375,16 +375,14 @@ def parse_assistant_message(
     ``(cleaned_content, None, None)`` — i.e., surface the raw model decode.
 
     ``cleaned_content`` is the ``skip_special_tokens=True`` decode of
-    ``generated_ids``. The parser itself runs on the raw decode (keeping
-    special tokens so it can match delimiters like Gemma 4's ``<|tool_call>``);
+    ``generated_ids``. The parser itself runs on the token ids (so it can match
+    special-token delimiters like Gemma 4's ``<|tool_call>``);
     ``cleaned_content`` is only used on the no-template path."""
     template = get_response_template(processor, model)
     if template is None:
         return cleaned_content, None, None
     tokenizer = getattr(processor, "tokenizer", processor)
-    parsed = tokenizer.parse_response(
-        generated_ids, template, prefix=_decode_prefix(tokenizer, input_ids), tools=tools
-    )
+    parsed = tokenizer.parse_response(generated_ids, template, prefix=_unwrap_ids(input_ids), tools=tools)
     # Absent ``content`` key means the model emitted only tool calls / thinking;
     # surface that as an empty string rather than swapping in the raw decode.
     content = parsed.get("content", "")
@@ -567,7 +565,7 @@ class DirectStreamer:
             loop (`asyncio.AbstractEventLoop`): The event loop to push decoded text to.
             queue (`asyncio.Queue`): The queue that receives decoded text chunks.
             response_parser (`ResponseParser`, *optional*): When provided, every
-                decoded chunk is fed through this parser; the resulting events
+                generated token id is fed through this parser; the resulting events
                 are translated into typed queue items (plain ``str`` for content,
                 :class:`ReasoningText` for thinking, :class:`ToolCall` on tool
                 call close). Without a parser, raw decoded text is streamed.
@@ -577,8 +575,7 @@ class DirectStreamer:
         self._tokenizer = tokenizer
         self._loop = loop
         self._queue = queue
-        skip_special_tokens = response_parser is None
-        self._decode_stream = DecodeStream([], skip_special_tokens=skip_special_tokens)
+        self._decode_stream = DecodeStream([], skip_special_tokens=True)
         self._parser = response_parser
         self._first = True
         self._cancelled = threading.Event()
@@ -600,14 +597,11 @@ class DirectStreamer:
             return
         for token_id in value.tolist():
             self.total_tokens += 1
-            text = self._decode_stream.step(self._tokenizer, token_id)
-            if text is None:
-                continue
-            if self._parser is None:
-                self._enqueue(text)
-            else:
-                for item in response_events_to_chunks(self._parser.feed(text)):
+            if self._parser is not None:
+                for item in response_events_to_chunks(self._parser.feed([token_id])):
                     self._enqueue(item)
+            elif (text := self._decode_stream.step(self._tokenizer, token_id)) is not None:
+                self._enqueue(text)
 
     def end(self) -> None:
         """Flush any final parser events, then push the EOS sentinel."""
@@ -662,9 +656,7 @@ class CBStreamer:
         self._loop = loop
         self._queue = queue
         self._tokenizer = tokenizer
-        # See note in DirectStreamer: keep special tokens when a parser is active.
-        skip_special_tokens = response_parser is None
-        self._decode_stream = DecodeStream([], skip_special_tokens=skip_special_tokens)
+        self._decode_stream = DecodeStream([], skip_special_tokens=True)
         self._parser = response_parser
         self._prev_len = 0
         self.total_tokens = 0
@@ -678,14 +670,11 @@ class CBStreamer:
         self._prev_len = len(output.generated_tokens)
         for token_id in new_tokens:
             self.total_tokens += 1
-            text = self._decode_stream.step(self._tokenizer, token_id)
-            if text is None:
-                continue
-            if self._parser is None:
-                self._queue.put_nowait(text)
-            else:
-                for item in response_events_to_chunks(self._parser.feed(text)):
+            if self._parser is not None:
+                for item in response_events_to_chunks(self._parser.feed([token_id])):
                     self._queue.put_nowait(item)
+            elif (text := self._decode_stream.step(self._tokenizer, token_id)) is not None:
+                self._queue.put_nowait(text)
 
     def end(self) -> None:
         """Flush any final parser events, then push the EOS sentinel."""
