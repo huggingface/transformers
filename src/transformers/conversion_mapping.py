@@ -994,6 +994,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
         "llava_onevision2_vision": [
+            PrefixChange(prefix_to_remove="model.visual"),
             WeightRenaming(r"merger\.mlp\.0\.", "merger.fc1."),
             WeightRenaming(r"merger\.mlp\.2\.", "merger.fc2."),
         ],

@@ -68,7 +68,12 @@ class LlavaOnevision2VisionConfig(PreTrainedConfig):
     max_position_embeddings: int = 8192
 
     def __post_init__(self, **kwargs):
+        if kwargs.get("model_type") == "onevision_encoder":
+            kwargs["model_type"] = type(self).model_type
         super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        super().validate_architecture()
         if self.temporal_patch_size != 1:
             raise ValueError("OV2 requires temporal_patch_size=1")
         if self.hidden_size % self.num_attention_heads or (self.hidden_size // self.num_attention_heads) % 32:
@@ -102,11 +107,8 @@ class LlavaOnevision2Config(PreTrainedConfig):
     vision_end_token_id: int = 151653
     tie_word_embeddings: bool = False
 
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = dict(self.vision_config)
-            self.vision_config["model_type"] = LlavaOnevision2VisionConfig.model_type
-        super().__post_init__(**kwargs)
+    def validate_architecture(self):
+        super().validate_architecture()
         if self.vision_config.out_hidden_size != self.text_config.hidden_size:
             raise ValueError("vision_config.out_hidden_size must match text_config.hidden_size")
 

@@ -175,7 +175,6 @@ class LlavaOnevision2PreTrainedModel(LlavaPreTrainedModel):
 @auto_docstring
 class LlavaOnevision2VisionModel(LlavaOnevision2PreTrainedModel):
     config_class = LlavaOnevision2VisionConfig
-    base_model_prefix = "visual"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_record_outputs = {"hidden_states": LlavaOnevision2VisionBlock}
