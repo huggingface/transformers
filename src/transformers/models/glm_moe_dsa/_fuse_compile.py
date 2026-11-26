@@ -346,7 +346,7 @@ def _prepare(model, cache):
         mesh = o_proj_weight.device_mesh
         _tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
         if TP_MODE == "twin":
-            if os.environ.get("HF_TP_SINGLE_MLP_ALL_REDUCE", "0") != "1":
+            if os.environ.get("HF_TP_SINGLE_MLP_ALL_REDUCE", "1") != "1":
                 raise NotImplementedError("FUSE_COMPILE under TP expects HF_TP_SINGLE_MLP_ALL_REDUCE=1")
             if any(layer.self_attn.o_proj.bias is not None for layer in layers):
                 raise NotImplementedError("FUSE_COMPILE under TP expects bias-free row-parallel projections")

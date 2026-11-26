@@ -1000,7 +1000,7 @@ def proto_trtllm_moe_routing(experts: nn.Module, router: nn.Module, hidden_state
     if (
         torch.distributed.is_initialized()
         and torch.distributed.get_world_size() > 1
-        and os.environ.get("HF_TP_SINGLE_MLP_ALL_REDUCE", "0") != "1"
+        and os.environ.get("HF_TP_SINGLE_MLP_ALL_REDUCE", "1") != "1"
         and os.environ.get("HF_TP_ALL_REDUCE", "nccl") != "flashinfer_fused"
     ):
         raise NotImplementedError("PROTO_EXPERTS_TRTLLM_ROUTING under TP needs the experts' partial sums reduced by the MLP block")

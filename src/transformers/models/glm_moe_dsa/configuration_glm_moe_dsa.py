@@ -74,7 +74,7 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
-    if os.environ.get("HF_TP_SINGLE_MLP_ALL_REDUCE", "0") == "1":
+    if os.environ.get("HF_TP_SINGLE_MLP_ALL_REDUCE", "1") == "1":
         # [gap prototype] One all-reduce per MLP block: the routed experts, the shared experts and the dense MLP keep
         # their partial sums, the block's output is all-reduced once (2 all-reduces per layer instead of 3).
         base_model_tp_plan = {
@@ -105,6 +105,9 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "ep_dispatch_experts",
     }
+    if "layers.*.mlp.experts" in base_model_tp_plan:
+        # [scratch, bench only] under expert parallelism the routed experts' partial sums are reduced by the block too
+        base_model_ep_plan = {**base_model_ep_plan, "layers.*.mlp.experts": "ep_dispatch_experts_partial"}
 
     attribute_map = {"num_local_experts": "n_routed_experts"}
 

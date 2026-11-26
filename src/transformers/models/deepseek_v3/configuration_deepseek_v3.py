@@ -15,6 +15,8 @@
 # limitations under the License.
 """DeepSeekV3 model configuration"""
 
+import os
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -64,15 +66,26 @@ class DeepseekV3Config(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
-    base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "norm": (["hidden_states"], ["hidden_states"]),
-    }
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "ep_dispatch_experts",
+    }
+    if os.environ.get("HF_TP_SINGLE_MLP_ALL_REDUCE", "1") == "1":
+        # [scratch, bench only] One all-reduce per MLP block, as vLLM reduces the routed and shared experts together:
+        # the routed experts (`AllReduceEP`), the shared experts and the dense MLP keep their partial sums, the block's
+        # output is all-reduced once (2 all-reduces per layer instead of 3)
+        base_model_tp_plan = {
+            **base_model_tp_plan,
+            "layers.*.mlp.shared_experts.down_proj": "rowwise_partial",
+            "layers.*.mlp.down_proj": "rowwise_partial",
+            "layers.*.mlp": "all_reduce",
+        }
+        base_model_ep_plan = {**base_model_ep_plan, "layers.*.mlp.experts": "ep_dispatch_experts_partial"}
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
     }
 
     attribute_map = {

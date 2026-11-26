@@ -198,7 +198,7 @@ def apply_fully_sharded_data_parallelism(
         else:
             expert_mesh = mesh_manager.get_mesh("efsdp")
         for module_name, module in model.named_modules():
-            if ep_plan.get(module_name) == "ep_dispatch_experts":
+            if ep_plan.get(module_name, "").startswith("ep_dispatch_experts"):
                 fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
                 # an EP group holds ep_size / tp_size distinct batches
                 # the efsdp reduce the sums on efsdp_size copies of that expert.

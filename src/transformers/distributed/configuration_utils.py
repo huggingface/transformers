@@ -195,7 +195,7 @@ class DistributedConfig:
         if self.ep_size <= 1 or not ep_plan:
             return
 
-        if "ep_dispatch_experts" in ep_plan.values():
+        if any(style.startswith("ep_dispatch_experts") for style in ep_plan.values()):
             if self.pp_size > 1:
                 raise ValueError("Combining token dispatch with pipeline parallelism is not supported/tested yet.")
             if not is_torch_greater_or_equal("2.7"):
