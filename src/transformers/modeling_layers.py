@@ -28,6 +28,7 @@ from .cache_utils import Cache
 from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import WeightRenaming, convert_and_load_state_dict_in_model
 from .masking_utils import LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING, create_causal_mask
+from .modeling_multimodal_utils import MultimodalMixin
 from .modeling_outputs import (
     BaseModelOutputWithPast,
     QuestionAnsweringModelOutput,
@@ -129,6 +130,8 @@ class GradientCheckpointingLayer(nn.Module):
 @auto_docstring
 class GenericForSequenceClassification:
     base_model_prefix = "model"
+    # The base model's, which a multimodal one computes for its forward (see `MultimodalMixin`)
+    get_data_dependent_inputs = MultimodalMixin.get_data_dependent_inputs
 
     def __init__(self, config):
         super().__init__(config)
@@ -205,6 +208,8 @@ class GenericForSequenceClassification:
 @auto_docstring
 class GenericForQuestionAnswering:
     base_model_prefix = "model"
+    # The base model's, which a multimodal one computes for its forward (see `MultimodalMixin`)
+    get_data_dependent_inputs = MultimodalMixin.get_data_dependent_inputs
 
     def __init__(self, config):
         super().__init__(config)
@@ -267,6 +272,8 @@ class GenericForQuestionAnswering:
 @auto_docstring
 class GenericForTokenClassification:
     base_model_prefix = "model"
+    # The base model's, which a multimodal one computes for its forward (see `MultimodalMixin`)
+    get_data_dependent_inputs = MultimodalMixin.get_data_dependent_inputs
 
     def __init__(self, config):
         super().__init__(config)
