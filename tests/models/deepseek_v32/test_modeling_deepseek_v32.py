@@ -19,7 +19,7 @@ import pytest
 from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow
+from transformers.testing_utils import require_torch, require_torch_accelerator, skip_tpu, slow
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -175,6 +175,7 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
+@skip_tpu("checkpoint does not fit on the runner")
 class DeepseekV32IntegrationTest(unittest.TestCase):
     def test_deepseek_v32(self):
         EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.\n\nWe call our particular attention "Scaled Dot-Product Attention" (Figure (left']  # fmt: skip

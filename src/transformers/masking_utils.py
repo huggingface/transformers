@@ -1028,6 +1028,7 @@ def create_bidirectional_mask(
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     allow_is_bidirectional_skip: bool = True,
+    position_ids: torch.Tensor | None = None,
     **kwargs,
 ) -> torch.Tensor | BlockMask | None:
     """
@@ -1058,13 +1059,17 @@ def create_bidirectional_mask(
             Whether to allow returning `None` (no bias) when the mask is plain bidirectional with no padding. Set to
             `False` to always materialize the mask, e.g. when it is later concatenated with another mask. Defaults to
             `True`.
+        position_ids (`torch.Tensor`, optional)
+            A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
     """
     # If we have a hybrid cache structure (i.e. sliding or linear layers), here we want to create the mask for the full layers
     layer_idx = find_first_full_attention_index(cache)
 
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
-    early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
-        config, inputs_embeds, attention_mask, cache, None, layer_idx, encoder_hidden_states
+    early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
+        _preprocess_mask_arguments(
+            config, inputs_embeds, attention_mask, cache, position_ids, layer_idx, encoder_hidden_states
+        )
     )
     if early_exit:
         return attention_mask
@@ -1094,6 +1099,15 @@ def create_bidirectional_mask(
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
         allow_is_bidirectional_skip = False
         use_vmap = True
+
+    # If we detected packing format or blockwise overlay
+    if packed_sequence_mask is not None:
+        # The position ids are sometimes just unsqueezed, without being expanded
+        mask_factory_function = remap_positions_for_packed_sequence(
+            mask_factory_function, position_ids.expand(batch_size, -1)
+        )
+        mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
+        allow_is_bidirectional_skip = False
 
     # We now create the mask
     attention_mask = mask_interface(
@@ -1263,6 +1277,7 @@ def create_bidirectional_sliding_window_mask(
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     allow_is_bidirectional_skip: bool = True,
+    position_ids: torch.Tensor | None = None,
     **kwargs,
 ) -> torch.Tensor | BlockMask | None:
     """
@@ -1293,6 +1308,8 @@ def create_bidirectional_sliding_window_mask(
             Whether to allow returning `None` (no bias) when the mask is plain bidirectional with no padding. Set to
             `False` to always materialize the mask, e.g. when it is later concatenated with another mask. Defaults to
             `True`.
+        position_ids (`torch.Tensor`, optional)
+            A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
     """
     # If we have a hybrid cache structure, here we want to create the mask for the sliding layers
     if hasattr(cache, "is_sliding") and True in cache.is_sliding:
@@ -1301,8 +1318,10 @@ def create_bidirectional_sliding_window_mask(
         layer_idx = 0
 
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
-    early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
-        config, inputs_embeds, attention_mask, cache, None, layer_idx, encoder_hidden_states
+    early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
+        _preprocess_mask_arguments(
+            config, inputs_embeds, attention_mask, cache, position_ids, layer_idx, encoder_hidden_states
+        )
     )
     if early_exit:
         return attention_mask
@@ -1330,6 +1349,15 @@ def create_bidirectional_sliding_window_mask(
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
         allow_is_bidirectional_skip = False
         use_vmap = True
+
+    # If we detected packing format or blockwise overlay
+    if packed_sequence_mask is not None:
+        # The position ids are sometimes just unsqueezed, without being expanded
+        mask_factory_function = remap_positions_for_packed_sequence(
+            mask_factory_function, position_ids.expand(batch_size, -1)
+        )
+        mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
+        allow_is_bidirectional_skip = False
 
     attention_mask = mask_interface(
         batch_size=batch_size,
@@ -1598,7 +1626,10 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "linear_attention": create_recurrent_attention_mask,
     "conv": create_recurrent_attention_mask,
     "hybrid": {"full_attention": create_causal_mask, "linear_attention": create_recurrent_attention_mask},
-    "hybrid_sliding": {"sliding_attention": create_causal_mask, "linear_attention": create_recurrent_attention_mask},
+    "hybrid_sliding": {
+        "sliding_attention": create_sliding_window_causal_mask,
+        "linear_attention": create_recurrent_attention_mask,
+    },
 }
 
 

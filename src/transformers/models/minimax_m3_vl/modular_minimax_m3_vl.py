@@ -39,7 +39,7 @@ from ...vision_utils import get_vision_attention_seqlens, get_vision_position_id
 from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..clip.modeling_clip import CLIPMLP, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
-from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..laguna.modeling_laguna import LagunaSparseMoeBlock
 from ..llama.modeling_llama import eager_attention_forward
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel
@@ -219,7 +219,7 @@ class MiniMaxM3VLConfig(PreTrainedConfig):
         self.merged_hidden_size = self.text_config.hidden_size * (self.vision_config.spatial_merge_size**2)
 
 
-class MiniMaxM3VLRMSNorm(Gemma3RMSNorm):
+class MiniMaxM3VLRMSNorm(GemmaRMSNorm):
     """Gemma-style RMSNorm: normalizes in fp32 and scales by `weight + 1`."""
 
 

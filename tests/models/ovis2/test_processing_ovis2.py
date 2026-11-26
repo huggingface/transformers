@@ -30,6 +30,7 @@ if is_vision_available():
 @require_vision
 class Ovis2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Ovis2Processor
+    num_image_tokens_images_kwargs = {"crop_to_patches": True, "max_patches": 4}
     # Tiny processor created with make_tiny_processor.py from "thisisiron/Ovis2-1B-hf"
     tiny_model_id = "hf-internal-testing/tiny-processor-ovis2"
 

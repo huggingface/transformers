@@ -874,6 +874,7 @@ class ModelTesterMixin(ExportTesterMixin):
             "Gemma3nTextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
             "Gemma3nVision2TextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
             "MistralLarge4ModelTest": 4,  # need to test KV shared layer for both types: RoPE and NoPE
+            "Kolibri1_1ModelTest": 5,  # a sliding layer, plus sparse indexers and reindexers that produce or reuse K/V
             "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
             "Wav2Vec2BertModelTest": 4,
@@ -3179,16 +3180,12 @@ class ModelTesterMixin(ExportTesterMixin):
                         return
                     # model might return non-tensors objects (e.g. Cache class)
                     elif isinstance(tuple_object, torch.Tensor):
-                        self.assertTrue(
-                            torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
-                            ),
-                            msg=(
-                                "Tuple and dict output are not equal. Difference:"
-                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
-                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
-                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
-                            ),
+                        torch.testing.assert_close(
+                            set_nan_tensor_to_zero(tuple_object),
+                            set_nan_tensor_to_zero(dict_object),
+                            rtol=1e-5,
+                            atol=1e-5,
+                            msg=lambda m: f"Tuple and dict output are not equal.\n{m}",
                         )
 
                 recursive_check(tuple_output, dict_output)
@@ -4158,6 +4155,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 "parakeet_encoder",
                 "parakeet_ctc",
                 "pi0",
+                "pi05",
                 "pixtral",
                 "sam",
                 "sam_hq",
@@ -4592,6 +4590,15 @@ class ModelTesterMixin(ExportTesterMixin):
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_train_cls`.")
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Disable dropout to avoid randomized outcomes
+        if hasattr(config, "attention_dropout"):
+            config.attention_dropout = 0.0
+        if hasattr(config, "attention_probs_dropout_prob"):
+            config.attention_probs_dropout_prob = 0.0
+        if hasattr(config, "dropout_rate"):
+            config.dropout_rate = 0.0
+
         cls = self._torch_compile_train_cls
         attn_implementation = getattr(self, "_torch_compile_train_attn_implementation", None)
         if attn_implementation is not None:

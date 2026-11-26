@@ -27,7 +27,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowLayer
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
+from ...integrations import use_experts_implementation
 from ...masking_utils import create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -42,7 +42,6 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_deepseek_v4 import DeepseekV4Config
 
 
-@use_kernel_forward_from_hub("RMSNorm")
 class DeepseekV4RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
@@ -52,13 +51,12 @@ class DeepseekV4RMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        # DSV4: norm weights are kept in float32, so multiply in float32 and cast once at the end
-        return (self.weight * hidden_states).to(input_dtype)
+        return (self.weight * hidden_states).to(input_dtype)  # main diff with Llama
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
@@ -67,10 +65,10 @@ class DeepseekV4RMSNorm(nn.Module):
 class DeepseekV4UnweightedRMSNorm(nn.Module):
     def __init__(self, eps: float = 1.0e-6):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x * torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
+        return x * torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.variance_epsilon).to(x.dtype)
 
 
 class DeepseekV4RotaryEmbedding(nn.Module):
@@ -177,6 +175,7 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
     """
 
     _layer_type = "heavily_compressed_attention"
+    is_croppable = False
 
     def __init__(self, config: "DeepseekV4Config", **kwargs):
         super().__init__(sliding_window=config.sliding_window)
@@ -1263,12 +1262,6 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
         "self_attn.compressor.indexer.scorer.weights_proj",
     ]
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
-    # ``_is_stateful`` opts out of generation modes that need to roll the cache
-    # back across drafts (assisted generation, prompt lookup, contrastive search).
-    # The compressor's running-window state isn't rewindable, so `generate`
-    # raises a clear error early instead of failing deep in the compressor with
-    # a missing-method `AttributeError`.
-    _is_stateful = True
 
     def _init_weights(self, module):
         super()._init_weights(module)

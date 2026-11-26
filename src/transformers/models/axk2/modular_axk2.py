@@ -32,7 +32,6 @@ from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from ..clip.modeling_clip import CLIPMLP
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3RMSNorm,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
@@ -50,6 +49,7 @@ from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32TopkRouter,
     yarn_apply_mscale,
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 
 
 logger = logging.get_logger(__name__)
@@ -179,7 +179,7 @@ class AXK2Config(DeepseekV32Config):
                 raise ValueError(f"`topk_group` ({self.topk_group}) cannot exceed `n_group` ({self.n_group}).")
 
 
-class AXK2RMSNorm(DeepseekV3RMSNorm):
+class AXK2RMSNorm(LlamaRMSNorm):
     pass
 
 

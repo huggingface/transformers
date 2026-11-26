@@ -362,6 +362,10 @@ each argument as its own tag rather than as a JSON blob:
 - `value_parser` (dict, optional): nested content parser applied to each captured `value`. A dict
   with `name` (the parser, e.g. `"json"`, `"int"`) and optional `args` (its `content_args`). If
   omitted, values stay as raw strings.
+- `value_parser_by` (dict, optional): picks the value parser for each tag from something else the
+  tag says. A dict with `group` (another named group in `tag_pattern`) and `parsers` (a dict mapping
+  what that group captures to a parser, each in the same `{"name": ..., "args": ...}` format as
+  `value_parser`). A capture with no entry in `parsers` falls back to `value_parser`.
 - `merge_duplicates` (bool, default `false`): when the same key appears multiple times, collect the
   values into a list instead of letting later matches overwrite earlier ones.
 
@@ -388,6 +392,21 @@ Note the nested `value_parser`: each parameter value is itself run through the `
 ```python
 input = "<tool_call><function=get_weather><parameter=city>London</parameter><parameter=units>celsius</parameter></function></tool_call>"
 # Returns: {"tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {"city": "London", "units": "celsius"}}}]}
+```
+
+Some formats have the model say how each value should be read. Below, a `string` attribute marks a value
+as either a literal string or JSON, and `value_parser_by` follows it, so `"2"` and `2` stay distinct:
+
+```python
+"content_args": {
+    "tag_pattern": r'<parameter name="(?P<key>[^"]+)" string="(?P<string>true|false)">(?P<value>.*?)</parameter>',
+    "value_parser_by": {
+        "group": "string",
+        "parsers": {"true": {"name": "text", "args": {"strip": False}}, "false": {"name": "json"}},
+    },
+}
+input = '<parameter name="label" string="true">2</parameter><parameter name="count" string="false">2</parameter>'
+# Returns: {"label": "2", "count": 2}
 ```
 
 #### kv-lines
@@ -473,6 +492,9 @@ message = parse_response(model_out, template, prefix="", tools=tools)
 # message["tool_calls"][0]["function"]["arguments"] ==
 # {"hour": 7, "enabled": True, "label": "wake up"}
 ```
+
+A field whose `xml-inline` parser uses `value_parser_by` is not cast, because the model's output has
+already said how to read each value.
 
 
 ### Transform
