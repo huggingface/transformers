@@ -127,7 +127,7 @@ class PagedAttentionCache:
         distributed_helper: DistributedHelper,
         dtype: torch.dtype = torch.float16,
         model_supports_logits_to_keep: bool = False,
-        cache_states: dict[int, list[StateSpec]] | None = None,
+        cache_states: dict[int, dict[str, StateSpec]] | None = None,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
@@ -140,8 +140,8 @@ class PagedAttentionCache:
             dtype: Data type of the activation and the cache (for now, these are the same)
             model_supports_logits_to_keep: When True, memory sizing charges the LM head peak per request instead of
                 per batch token, since the model slices hidden states before the LM head
-            cache_states: The shape and dtype of the per-request states of each linear attention layer,
-                by layer index, as the layers declare them through `cache_states`
+            cache_states: The shape and dtype of the per-request states of each linear attention layer, by layer index
+                then by name, as the layers declare them through `cache_states`
         """
         self.config = config
         self.dtype = dtype
@@ -244,7 +244,9 @@ class PagedAttentionCache:
         self.max_tokens_read = max(ca.tokens_per_page * ca.num_blocks for ca in self.cache_allocators.values())
 
     @staticmethod
-    def _get_cache_states(layer_indices: list[int], cache_states: dict[int, list[StateSpec]]) -> list[StateSpec]:
+    def _get_cache_states(
+        layer_indices: list[int], cache_states: dict[int, dict[str, StateSpec]]
+    ) -> dict[str, StateSpec]:
         """The states the linear attention layers declare, which have to be the same for all of them since the
         allocator gives every layer the same page."""
         states = []
@@ -470,22 +472,30 @@ class PagedAttentionCache:
         return key_states, value_states
 
     @torch.compiler.disable  # does not play well with the views of the cache tensor
-    def read_cache_states(self, layer_idx: int, kwargs: dict[str, Any]) -> tuple[torch.Tensor, ...]:
-        """Reads the states of the batch's sequences for a linear attention layer, in batch order and in the order the
-        layer declares them, each of shape [num_sequences, *shape]. A sequence with no past reads zeros, from the
-        read trash block."""
+    def read_cache_states(
+        self, layer_idx: int, names: tuple[str, ...], kwargs: dict[str, Any]
+    ) -> tuple[torch.Tensor, ...]:
+        """Reads the given states of a linear attention layer for the batch's sequences, in batch order, each of shape
+        [num_sequences, *shape]. A sequence with no past reads zeros, from the read trash block."""
         allocator: LinearAttentionCacheAllocator = self.layer_to_allocator[layer_idx]  # type: ignore
         index = self._linear_attention_state_index(allocator, kwargs, write=False)
-        return tuple(view[index] for view in allocator.state_views(layer_idx))
+        views = allocator.state_views(layer_idx)
+        return tuple(views[name][index] for name in names)
 
     @torch.compiler.disable  # does not play well with the views of the cache tensor
-    def write_cache_states(self, layer_idx: int, states: tuple[torch.Tensor, ...], kwargs: dict[str, Any]) -> None:
-        """Writes the states of the batch's sequences for a linear attention layer, given in batch order and in the
-        order the layer declares them. Padding sequences write to the write trash block."""
+    def write_cache_states(self, layer_idx: int, states: dict[str, torch.Tensor], kwargs: dict[str, Any]) -> None:
+        """Writes the given states of a linear attention layer, by name, for the batch's sequences, given in batch
+        order. Padding sequences write to the write trash block."""
         allocator: LinearAttentionCacheAllocator = self.layer_to_allocator[layer_idx]  # type: ignore
         index = self._linear_attention_state_index(allocator, kwargs, write=True)
-        for view, state in zip(allocator.state_views(layer_idx), states):
-            view.index_copy_(0, index, state.to(view.dtype))
+        views = allocator.state_views(layer_idx)
+        for name, state in states.items():
+            views[name].index_copy_(0, index, state.to(views[name].dtype))
+
+    def get_recurrent_states_to_keep(self, layer_idx: int | None = None) -> int:
+        """The number of intermediate recurrent states a linear attention layer keeps to roll back to: none, since
+        continuous batching never rolls a request back."""
+        return 0
 
     @staticmethod
     def _linear_attention_state_index(allocator: CacheAllocator, kwargs: dict[str, Any], write: bool) -> torch.Tensor:

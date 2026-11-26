@@ -22,7 +22,7 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation.continuous_batching.cache import PagedAttentionCache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
-from ...integrations.linear_attention_paged import causal_conv1d_varlen
+from ...integrations.linear_attention_paged import paged_causal_conv1d_forward
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import (
     GenericForSequenceClassification,
@@ -250,7 +250,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         paged_cache = cache if isinstance(cache, PagedAttentionCache) else None
         # Retrieve the recurrent state if there is a cache. It may be None if the layer is not initialized.
         if paged_cache is not None:
-            conv_state, recurrent_state = paged_cache.read_cache_states(self.layer_idx, kwargs)
+            (recurrent_state,) = paged_cache.read_cache_states(self.layer_idx, ("recurrent",), kwargs)
         elif cache is not None:
             recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
@@ -265,25 +265,16 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
 
-        if paged_cache is not None:
-            # Every packed sequence is convolved from its own conv state, which the convolution also advances
-            mixed_qkv, conv_state = causal_conv1d_varlen(
-                mixed_qkv,
-                conv_state,
-                kwargs["cu_seq_lens_q"],
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                self.activation,
-            )
-        else:
-            mixed_qkv = causal_conv1d_forward(
-                self.conv1d,
-                mixed_qkv,
-                cache,
-                self.layer_idx,
-                activation=self.activation,
-                **kwargs,
-            )
+        # The paged cache has its own convolution, which convolves every packed sequence from its own conv state
+        conv1d_forward = paged_causal_conv1d_forward if paged_cache is not None else causal_conv1d_forward
+        mixed_qkv = conv1d_forward(
+            self.conv1d,
+            mixed_qkv,
+            cache,
+            self.layer_idx,
+            activation=self.activation,
+            **kwargs,
+        )
 
         mixed_qkv = mixed_qkv.transpose(1, 2)
         query, key, value = torch.split(
@@ -304,24 +295,8 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         # If the model is loaded in fp16, without the .float() here, A might be -inf
         g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
 
-        if paged_cache is not None:
-            # The batch is all single decode tokens when its longest sequence has one token
-            delta_rule = (
-                torch_recurrent_gated_delta_rule if kwargs["max_length_q"] == 1 else torch_chunk_gated_delta_rule
-            )
-            core_attn_out, last_recurrent_state = delta_rule(
-                query,
-                key,
-                value,
-                g=g,
-                beta=beta,
-                initial_state=recurrent_state,
-                output_final_state=True,
-                use_qk_l2norm_in_kernel=True,
-                cu_seqlens=kwargs["cu_seq_lens_q"],
-            )
-            paged_cache.write_cache_states(self.layer_idx, (conv_state, last_recurrent_state), kwargs)
-        elif recurrent_state is not None and seq_len == 1:
+        # Decode: every sequence has a single token, which `max_length_q` tells for a batch of packed sequences
+        if recurrent_state is not None and kwargs.get("max_length_q", seq_len) == 1:
             core_attn_out, last_recurrent_state = torch_recurrent_gated_delta_rule(
                 query,
                 key,
@@ -392,8 +367,10 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 else chunked_last_recurrent_state
             )
 
-        # Update cache. The paged cache already holds the new states, written above
-        if cache is not None and paged_cache is None:
+        # Update cache
+        if paged_cache is not None:
+            paged_cache.write_cache_states(self.layer_idx, {"recurrent": last_recurrent_state}, kwargs)
+        elif cache is not None:
             cache.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         # reshape input data into 2D tensor

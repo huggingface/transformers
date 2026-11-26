@@ -38,7 +38,7 @@ from ...integrations import (
     use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
-from ...integrations.linear_attention_paged import causal_conv1d_varlen
+from ...integrations.linear_attention_paged import paged_causal_conv1d_forward
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -614,13 +614,13 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         self.in_proj_b = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
         self.in_proj_a = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
 
-    def cache_states(self) -> list[tuple[tuple[int, ...], torch.dtype]]:
+    def cache_states(self) -> dict[str, tuple[tuple[int, ...], torch.dtype]]:
         """The shape and dtype of the states continuous batching keeps per request for this layer: the last inputs of
-        the causal convolution, then the recurrent state."""
-        return [
-            ((self.conv_dim, self.conv_kernel_size - 1), self.conv1d.weight.dtype),
-            ((self.num_v_heads, self.head_k_dim, self.head_v_dim), torch.float32),
-        ]
+        the causal convolution and the recurrent state."""
+        return {
+            "conv": ((self.conv_dim, self.conv_kernel_size - 1), self.conv1d.weight.dtype),
+            "recurrent": ((self.num_v_heads, self.head_k_dim, self.head_v_dim), torch.float32),
+        }
 
     @force_accelerate_hooks("conv1d")
     @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
@@ -640,7 +640,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         paged_cache = cache if isinstance(cache, PagedAttentionCache) else None
         # Retrieve the recurrent state if there is a cache. It may be None if the layer is not initialized.
         if paged_cache is not None:
-            conv_state, recurrent_state = paged_cache.read_cache_states(self.layer_idx, kwargs)
+            (recurrent_state,) = paged_cache.read_cache_states(self.layer_idx, ("recurrent",), kwargs)
         elif cache is not None:
             recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
@@ -655,25 +655,16 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
 
-        if paged_cache is not None:
-            # Every packed sequence is convolved from its own conv state, which the convolution also advances
-            mixed_qkv, conv_state = causal_conv1d_varlen(
-                mixed_qkv,
-                conv_state,
-                kwargs["cu_seq_lens_q"],
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                self.activation,
-            )
-        else:
-            mixed_qkv = causal_conv1d_forward(
-                self.conv1d,
-                mixed_qkv,
-                cache,
-                self.layer_idx,
-                activation=self.activation,
-                **kwargs,
-            )
+        # The paged cache has its own convolution, which convolves every packed sequence from its own conv state
+        conv1d_forward = paged_causal_conv1d_forward if paged_cache is not None else causal_conv1d_forward
+        mixed_qkv = conv1d_forward(
+            self.conv1d,
+            mixed_qkv,
+            cache,
+            self.layer_idx,
+            activation=self.activation,
+            **kwargs,
+        )
 
         mixed_qkv = mixed_qkv.transpose(1, 2)
         query, key, value = torch.split(
@@ -694,24 +685,8 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         # If the model is loaded in fp16, without the .float() here, A might be -inf
         g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
 
-        if paged_cache is not None:
-            # The batch is all single decode tokens when its longest sequence has one token
-            delta_rule = (
-                torch_recurrent_gated_delta_rule if kwargs["max_length_q"] == 1 else torch_chunk_gated_delta_rule
-            )
-            core_attn_out, last_recurrent_state = delta_rule(
-                query,
-                key,
-                value,
-                g=g,
-                beta=beta,
-                initial_state=recurrent_state,
-                output_final_state=True,
-                use_qk_l2norm_in_kernel=True,
-                cu_seqlens=kwargs["cu_seq_lens_q"],
-            )
-            paged_cache.write_cache_states(self.layer_idx, (conv_state, last_recurrent_state), kwargs)
-        elif recurrent_state is not None and seq_len == 1:
+        # Decode: every sequence has a single token, which `max_length_q` tells for a batch of packed sequences
+        if recurrent_state is not None and kwargs.get("max_length_q", seq_len) == 1:
             core_attn_out, last_recurrent_state = torch_recurrent_gated_delta_rule(
                 query,
                 key,
@@ -782,8 +757,10 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
                 else chunked_last_recurrent_state
             )
 
-        # Update cache. The paged cache already holds the new states, written above
-        if cache is not None and paged_cache is None:
+        # Update cache
+        if paged_cache is not None:
+            paged_cache.write_cache_states(self.layer_idx, {"recurrent": last_recurrent_state}, kwargs)
+        elif cache is not None:
             cache.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         # reshape input data into 2D tensor

@@ -56,7 +56,7 @@ class LinearAttentionCacheAllocator(CacheAllocator):
         page_size: int,
         layer_indices: list[int],
         allow_block_sharing: bool,
-        states: list[StateSpec],
+        states: dict[str, StateSpec],
         block_alignment: int = 1,
     ) -> None:
         """Initializes the cache allocator for a group of linear attention layers.
@@ -68,17 +68,16 @@ class LinearAttentionCacheAllocator(CacheAllocator):
             - page_size: unused, a page holds one set of states rather than tokens
             - layer_indices: the indices of the layers which cache is handled by this allocator
             - allow_block_sharing: unused, states are never shared
-            - states: the shape and dtype of each per-request state of a layer, in the order the layer reads and
-              writes them
+            - states: the shape and dtype of each per-request state of a layer, by name
             - block_alignment: the block is sized to a multiple of this, so the sectors shared with the other
               allocators stay small (the sector is the LCM of all block sizes)
         """
         self.states = states
         # Each state starts on a 128-byte boundary, so every dtype can be viewed from the page bytes
-        self.state_offsets = []
+        self.state_offsets = {}
         bytes_per_page = 0
-        for shape, dtype in states:
-            self.state_offsets.append(bytes_per_page)
+        for name, (shape, dtype) in states.items():
+            self.state_offsets[name] = bytes_per_page
             bytes_per_page += (torch.Size(shape).numel() * dtype.itemsize + 127) // 128 * 128
         # Pages are padded so a block (one page per layer) is a multiple of the alignment
         page_alignment = block_alignment // gcd(block_alignment, len(layer_indices))
@@ -113,10 +112,11 @@ class LinearAttentionCacheAllocator(CacheAllocator):
         total_bytes = non_trash_bytes + 2 * bytes_per_sector
         num_blocks = total_bytes // self.bytes_per_block
         pages = cache_tensor[: num_blocks * self.bytes_per_block].view(num_blocks, self.pages_per_block, -1)
-        self._state_views: list[torch.Tensor] = []
-        for (shape, dtype), offset in zip(self.states, self.state_offsets):
+        self._state_views: dict[str, torch.Tensor] = {}
+        for name, (shape, dtype) in self.states.items():
+            offset = self.state_offsets[name]
             state_bytes = pages[:, :, offset : offset + torch.Size(shape).numel() * dtype.itemsize]
-            self._state_views.append(state_bytes.view(dtype).view(num_blocks, self.pages_per_block, *shape))
+            self._state_views[name] = state_bytes.view(dtype).view(num_blocks, self.pages_per_block, *shape)
         self._after_cache_tensor_init(non_trash_bytes, bytes_per_sector, cache_tensor, pool)
 
         # States are indexed by block: the read trash is the first block of sector 0 (zeroed, never written) and the
@@ -166,10 +166,10 @@ class LinearAttentionCacheAllocator(CacheAllocator):
 
     # ________________________________________________ RUNTIME UPDATE ________________________________________________ #
 
-    def state_views(self, layer_idx: int) -> list[torch.Tensor]:
+    def state_views(self, layer_idx: int) -> dict[str, torch.Tensor]:
         """The states of all blocks for the given layer, one view of shape [num_blocks, *shape] per declared state."""
         page = self.layer_indices.index(layer_idx)
-        return [view[:, page] for view in self._state_views]
+        return {name: view[:, page] for name, view in self._state_views.items()}
 
     def update(
         self,
