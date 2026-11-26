@@ -94,22 +94,16 @@ def get_modified_cards() -> list[str]:
     """Get the list of model names from modified files in docs/source/en/model_doc/"""
 
     current_branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
+    _debug_git_state()
+    print(f"[DEBUG] current_branch={current_branch!r}", flush=True)
     if current_branch == "main":
         # On main branch, only uncommitted changes detected
         result = subprocess.check_output(["git", "diff", "--name-only", "HEAD"], text=True)
     else:
-        # CI checks out a detached merge ref without a local `main` branch, so fall back to `origin/main`.
-        base_ref = next(
-            (
-                ref
-                for ref in ("main", "origin/main")
-                if subprocess.run(["git", "rev-parse", "--verify", "--quiet", ref], capture_output=True).returncode
-                == 0
-            ),
-            "main",
-        )
-        fork_point_sha = subprocess.check_output(["git", "merge-base", base_ref, "HEAD"]).decode("utf-8")
+        fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")
+        print(f"[DEBUG] fork_point_sha={fork_point_sha!r}", flush=True)
         result = subprocess.check_output(f"git diff --name-only {fork_point_sha}".split()).decode("utf-8")
+    print(f"[DEBUG] git diff --name-only result={result!r}", flush=True)
 
     model_names = []
     for line in result.strip().split("\n"):
@@ -122,7 +116,25 @@ def get_modified_cards() -> list[str]:
                     if model_name not in ["auto", "timm_wrapper"]:
                         model_names.append(model_name)
 
+    print(f"[DEBUG] modified model cards={model_names}", flush=True)
     return model_names
+
+
+def _debug_git_state():
+    cmds = [
+        "git --version",
+        "git rev-parse HEAD",
+        "git rev-parse --is-shallow-repository",
+        "git rev-parse --verify main",
+        "git rev-parse --verify origin/main",
+        "git log -1 --format=%H%n%P%n%s HEAD",
+        "git merge-base main HEAD",
+        "git status --short",
+    ]
+    print(f"[DEBUG] cwd={os.getcwd()!r} ROOT={ROOT!r}", flush=True)
+    for cmd in cmds:
+        r = subprocess.run(cmd.split(), capture_output=True, text=True)
+        print(f"[DEBUG] $ {cmd} -> rc={r.returncode} out={r.stdout.strip()!r} err={r.stderr.strip()!r}", flush=True)
 
 
 def get_paper_link(model_card: str | None, path: str | None) -> str:
@@ -306,6 +318,11 @@ def check_incorrect_dates(model_card_list: list[str]) -> list[str]:
             existing_hf_date = match.group(2)
             actual_hf_date = get_first_commit_date(model_name=model_card)
 
+            print(
+                f"[DEBUG] {model_card}: existing_hf_date={existing_hf_date!r} actual_hf_date={actual_hf_date!r} "
+                f"existing_release_date={existing_release_date!r} release_date={release_date!r}",
+                flush=True,
+            )
             if _dates_differ_significantly(existing_hf_date, actual_hf_date) or existing_release_date != release_date:
                 incorrect_dates.append(model_card)
 
@@ -394,22 +411,17 @@ def main(all=False, models=None, check_only=False):
         # Check all model cards for missing dates
         all_model_cards = get_all_model_cards()
         missing_dates = check_missing_dates(all_model_cards)
-        if missing_dates:
-            model_names = [card.replace(".md", "") for card in missing_dates]
-            raise ValueError(
-                f"Missing dates in the following model cards: {' '.join(missing_dates)}\n"
-                f"Run `python utils/add_dates.py --models {' '.join(model_names)}` to fix them."
-            )
 
         # Check modified model cards for incorrect dates
         modified_cards = get_modified_cards()
         incorrect_dates = check_incorrect_dates(modified_cards)
+        print(f"[DEBUG] missing_dates={missing_dates} incorrect_dates={incorrect_dates}", flush=True)
 
-        if incorrect_dates:
-            problematic_cards = incorrect_dates
+        if missing_dates or incorrect_dates:
+            problematic_cards = missing_dates + incorrect_dates
             model_names = [card.replace(".md", "") for card in problematic_cards]
             raise ValueError(
-                f"Incorrect dates in the following model cards: {' '.join(problematic_cards)}\n"
+                f"Missing or incorrect dates in the following model cards: {' '.join(problematic_cards)}\n"
                 f"Run `python utils/add_dates.py --models {' '.join(model_names)}` to fix them."
             )
         return
@@ -435,12 +447,18 @@ if __name__ == "__main__":
     group.add_argument("--check-only", action="store_true", help="Check if the dates are already present")
 
     args = parser.parse_args()
+    outcome = "OLD LOGIC WOULD PASS (exit 0)"
     try:
         main(args.all, args.models, args.check_only)
     except subprocess.CalledProcessError as e:
-        if args.check_only:
-            # Never let a git failure turn the check into a silent pass.
-            raise
+        outcome = f"OLD LOGIC WOULD SILENTLY PASS (swallowed CalledProcessError: {e}, output={e.output!r})"
         print(
             f"An error occurred while executing git commands but it can be ignored (git issue) most probably local: {e}"
         )
+    except Exception as e:
+        outcome = f"OLD LOGIC WOULD FAIL (exit 1): {type(e).__name__}: {e}"
+    finally:
+        print(f"[DEBUG] RESULT: {outcome}", flush=True)
+    # DEBUG ONLY: always fail in --check-only so `utils/checkers.py` shows this output in the CI log.
+    if args.check_only:
+        raise SystemExit(1)
