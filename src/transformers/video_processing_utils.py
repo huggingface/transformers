@@ -17,7 +17,7 @@ import os
 import warnings
 from collections.abc import Callable
 from functools import partial
-from typing import Any
+from typing import Any, Union
 
 import numpy as np
 from huggingface_hub import is_offline_mode
@@ -719,6 +719,8 @@ class BaseVideoProcessor(VideoProcessorMixin, TorchvisionBackend):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         return_tensors: str | TensorType | None = None,
+        device: Union["torch.device", str] | None = None,
+        dtype: Union["torch.dtype", str] | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group videos by size for batched resizing
@@ -745,7 +747,9 @@ class BaseVideoProcessor(VideoProcessorMixin, TorchvisionBackend):
 
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
 
-        return BatchFeature(data={"pixel_values_videos": processed_videos}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values_videos": processed_videos}, tensor_type=return_tensors, dtype=dtype, device=device
+        )
 
 
 VideoProcessorMixin.push_to_hub = copy_func(VideoProcessorMixin.push_to_hub)

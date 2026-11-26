@@ -232,6 +232,10 @@ class BatchEncoding(UserDict, Generic[_V]):
             parameter has an effect if the parameter `tensor_type` is set, *otherwise has no effect*.
         n_sequences (`Optional[int]`, *optional*):
             The number of input sequences represented by each encoding (`None` for unknown, `1` for a single sequence and `2` for a pair of sequences).
+        device (`str`, `int` or `torch.device`, *optional*):
+            Device to place the tensors on. If `None`, tensors are left on their current device (or the default
+            device for newly created ones). Only supported when `tensor_type="pt"`: passing a non-null `device`
+            with `tensor_type="np"` raises a `ValueError`, since NumPy arrays live on the CPU.
     """
 
     def __init__(
@@ -241,6 +245,7 @@ class BatchEncoding(UserDict, Generic[_V]):
         tensor_type: None | str | TensorType = None,
         prepend_batch_axis: bool = False,
         n_sequences: int | None = None,
+        device: str | int | torch.device | None = None,
     ):
         super().__init__(data)
 
@@ -255,7 +260,7 @@ class BatchEncoding(UserDict, Generic[_V]):
 
         self._n_sequences = n_sequences
 
-        self.convert_to_tensors(tensor_type=tensor_type, prepend_batch_axis=prepend_batch_axis)
+        self.convert_to_tensors(tensor_type=tensor_type, prepend_batch_axis=prepend_batch_axis, device=device)
 
     @property
     def n_sequences(self) -> int | None:
@@ -677,7 +682,12 @@ class BatchEncoding(UserDict, Generic[_V]):
             char_index = batch_or_char_index
         return self._encodings[batch_index].char_to_word(char_index, sequence_index)
 
-    def convert_to_tensors(self, tensor_type: str | TensorType | None = None, prepend_batch_axis: bool = False):
+    def convert_to_tensors(
+        self,
+        tensor_type: str | TensorType | None = None,
+        prepend_batch_axis: bool = False,
+        device: str | int | torch.device | None = None,
+    ):
         """
         Convert the inner content to tensors.
 
@@ -687,6 +697,10 @@ class BatchEncoding(UserDict, Generic[_V]):
                 `None`, no modification is done.
             prepend_batch_axis (`bool`, *optional*, defaults to `False`):
                 Whether or not to add the batch dimension during the conversion.
+            device (`str`, `int` or `torch.device`, *optional*):
+                Device to place the tensors on. If `None`, tensors are left on their current device (or the default
+                device for newly created ones). Only supported when `tensor_type="pt"`: passing a non-null `device`
+                with `tensor_type="np"` raises a `ValueError`, since NumPy arrays live on the CPU.
         """
         if tensor_type is None:
             return self
@@ -700,12 +714,12 @@ class BatchEncoding(UserDict, Generic[_V]):
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             import torch
 
-            def as_tensor(value, dtype=None):
+            def as_tensor(value, dtype=None, device=None):
                 if isinstance(value, list) and len(value) > 0 and isinstance(value[0], np.ndarray):
                     return torch.from_numpy(np.array(value))
                 if _is_empty(value) and dtype is None:
                     dtype = torch.int64
-                return torch.tensor(value, dtype=dtype)
+                return torch.tensor(value, dtype=dtype, device=device)
 
             is_tensor = torch.is_tensor
 
@@ -715,15 +729,18 @@ class BatchEncoding(UserDict, Generic[_V]):
             import mlx.core as mx
 
             def as_tensor(value, dtype=None):
-                if _is_empty(value) and dtype is None:
+                if len(flatten(value)) == 0 and dtype is None:
                     dtype = mx.int32
-                return mx.array(value, dtype=dtype)
+                return mx.array(value, dtype=dtype, device=device)
 
             def is_tensor(obj):
                 return isinstance(obj, mx.array)
         else:
 
-            def as_tensor(value, dtype=None):
+            def as_tensor(value, dtype=None, device=None):
+                if device is not None and getattr(device, "type", device) != "cpu":
+                    raise ValueError(f"Returning numpy arrays doesn't support non-null `device` but got {device}.")
+
                 if (
                     isinstance(value, (list, tuple))
                     and len(value) > 0
@@ -746,7 +763,7 @@ class BatchEncoding(UserDict, Generic[_V]):
                     value = [value]
 
                 if not is_tensor(value):
-                    tensor = as_tensor(value)
+                    tensor = as_tensor(value, device=device)
 
                     # Removing this for now in favor of controlling the shape with `prepend_batch_axis`
                     # # at-least2d

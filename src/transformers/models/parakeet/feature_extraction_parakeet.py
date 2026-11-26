@@ -95,7 +95,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         # spectrogram
         window = torch.hann_window(self.win_length, periodic=False, device=device)
         stft = torch.stft(
-            waveform,
+            waveform.to(device=device),
             self.n_fft,
             hop_length=self.hop_length,
             win_length=self.win_length,
@@ -131,6 +131,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: int | None = None,
         do_normalize: bool | None = None,
         device: str | None = "cpu",
+        dtype: str | None = None,
         return_token_timestamps: bool | None = None,
         **kwargs,
     ) -> BatchFeature:
@@ -239,6 +240,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
             return_tensors="pt",
+            device=device,
         )
         input_features = padded_inputs.input_features.squeeze(-1)
 
@@ -274,6 +276,8 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
                 "attention_mask": attention_mask,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

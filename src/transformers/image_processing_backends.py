@@ -413,6 +413,8 @@ class TorchvisionBackend(BaseImageProcessor):
         pad_size: SizeDict | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: Union["torch.device", str] | None = None,
+        dtype: Union["torch.dtype", str] | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Preprocess using Torchvision backend (fast, GPU-accelerated)."""
@@ -441,7 +443,9 @@ class TorchvisionBackend(BaseImageProcessor):
         if do_pad:
             processed_images = self.pad(processed_images, pad_size=pad_size, disable_grouping=disable_grouping)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, dtype=dtype, device=device
+        )
 
 
 @requires(backends=("vision",))
@@ -669,6 +673,8 @@ class PilBackend(BaseImageProcessor):
         do_pad: bool | None,
         pad_size: SizeDict | None,
         return_tensors: str | TensorType | None,
+        device: Union["torch.device", str] | None = None,
+        dtype: Union["torch.dtype", str] | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Preprocess using PIL backend (portable, CPU-only)."""
@@ -687,7 +693,9 @@ class PilBackend(BaseImageProcessor):
         if do_pad:
             processed_images = self.pad(processed_images, pad_size=pad_size)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, dtype=dtype, device=device
+        )
 
     def to_dict(self) -> dict[str, Any]:
         processor_dict = super().to_dict()

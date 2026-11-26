@@ -677,6 +677,75 @@ class ProcessorTesterMixin:
 
         self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
 
+    def test_processor_accepts_dtype_and_device(self):
+        processor = self.get_processor()
+
+        text = self.prepare_text_inputs(modalities=["image", "video", "audio"])
+        image_input = self.prepare_images_inputs()
+        video_inputs = self.prepare_videos_inputs()
+        audio_inputs = self.prepare_audio_inputs()
+        inputs_dict = {"text": text, "images": image_input, "videos": video_inputs, "audio": audio_inputs}
+
+        call_signature = inspect.signature(processor.__call__)
+        input_args = [param.name for param in call_signature.parameters.values()]
+        inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
+        # Shouldn't sample when input is a decoded video without metadata (fpx/duration/etc.)
+        if "videos" in inputs_dict:
+            inputs_dict["do_sample_frames"] = False
+
+        # The default is fp32 on cpu
+        inputs = processor(**inputs_dict, return_tensors="pt")
+        for key, value in inputs.items():
+            self.assertEqual(
+                value.device.type, "cpu",
+                f"`{key}` is on `{value.device}` but expected `cpu`",
+            )
+            if value.is_floating_point():
+                self.assertEqual(
+                    value.dtype, torch.float32,
+                    f"`{key}` has dtype `{value.dtype}` but expected `torch.float32`",
+                )
+            else:
+                self.assertNotEqual(
+                    value.dtype, torch.float32,
+                    f"`{key}` is non-floating but has dtype `{value.dtype}`, which should not be `torch.float32`",
+                )
+
+        inputs = processor(**inputs_dict, return_tensors="pt", device="cuda", dtype=torch.bfloat16)
+        for key, value in inputs.items():
+            self.assertEqual(
+                value.device.type, "cuda",
+                f"`{key}` is on `{value.device}` but expected `cuda`",
+            )
+            if value.is_floating_point():
+                self.assertEqual(
+                    value.dtype, torch.bfloat16,
+                    f"`{key}` has dtype `{value.dtype}` but expected `torch.bfloat16`",
+                )
+            else:
+                self.assertNotEqual(
+                    value.dtype, torch.bfloat16,
+                    f"`{key}` is non-floating but has dtype `{value.dtype}`, which should not be `torch.bfloat16`",
+                )
+
+        inputs = processor(**inputs_dict, return_tensors="np", dtype="float16")
+        for key, value in inputs.items():
+            if np.issubdtype(value.dtype, np.floating):
+                self.assertEqual(
+                    value.dtype, np.float16,
+                    f"`{key}` has dtype `{value.dtype}` but expected `float16`",
+                )
+            else:
+                self.assertNotEqual(
+                    value.dtype, np.float16,
+                    f"`{key}` is non-floating but has dtype `{value.dtype}`, which should not be `float16`",
+                )
+
+        with self.assertRaisesRegex(
+            ValueError, "Returning numpy arrays doesn't support non-null `device` but got cuda"
+        ):
+            processor(**inputs_dict, return_tensors="np", device="cuda")
+
     @parameterized.expand(
         [
             ("text",),

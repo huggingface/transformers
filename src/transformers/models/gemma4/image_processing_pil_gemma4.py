@@ -212,6 +212,8 @@ class Gemma4ImageProcessorPil(PilBackend):
         max_soft_tokens: int | None = None,
         patch_size: int | None = None,
         pooling_kernel_size: int | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if max_soft_tokens not in _SUPPORTED_SOFT_TOKENS:
@@ -272,7 +274,7 @@ class Gemma4ImageProcessorPil(PilBackend):
             "image_position_ids": position_ids,
             "num_soft_tokens_per_image": num_soft_tokens_per_image,
         }
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, dtype=dtype, device=device)
 
 
 __all__ = ["Gemma4ImageProcessorPil"]

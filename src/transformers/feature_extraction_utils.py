@@ -44,7 +44,13 @@ from .utils.hub import cached_file, hf_api, resolve_revision
 
 
 if TYPE_CHECKING:
+    import numpy as np
+    import numpy.typing as npt
+
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor
+
+    if is_torch_available():
+        import torch
 
 
 logger = logging.get_logger(__name__)
@@ -68,6 +74,14 @@ class BatchFeature(UserDict):
         tensor_type (`Union[None, str, TensorType]`, *optional*):
             You can give a tensor_type here to convert the lists of integers in PyTorch/Numpy Tensors at
             initialization.
+        dtype (`str`, `torch.dtype` or `np.dtype`, *optional*, defaults to `"float32"`):
+            Target dtype for floating-point values only. Non-floating values (e.g. `input_ids`, `attention_mask`)
+            keep their own dtype. Accepts a string name (e.g. `"float16"`), a `torch.dtype` (when
+            `tensor_type="pt"`) or anything NumPy accepts as a dtype (when `tensor_type="np"`).
+        device (`str`, `int` or `torch.device`, *optional*):
+            Device to place the tensors on. If `None`, tensors are left on their current device (or the default
+            device for newly created ones). Only supported when `tensor_type="pt"`: passing a non-null `device`
+            with `tensor_type="np"` raises a `ValueError`, since NumPy arrays live on the CPU.
         skip_tensor_conversion (`list[str]` or `set[str]`, *optional*):
             List or set of keys that should NOT be converted to tensors, even when `tensor_type` is specified.
     """
@@ -76,11 +90,13 @@ class BatchFeature(UserDict):
         self,
         data: dict[str, Any] | None = None,
         tensor_type: None | str | TensorType = None,
+        dtype: Union[str, "torch.dtype", "np.dtype", "npt.DTypeLike"] = "float32",
+        device: Union[str, int, "torch.device"] | None = None,
         skip_tensor_conversion: list[str] | set[str] | None = None,
     ):
         super().__init__(data)
         self.skip_tensor_conversion = skip_tensor_conversion
-        self.convert_to_tensors(tensor_type=tensor_type)
+        self.convert_to_tensors(tensor_type=tensor_type, dtype=dtype, device=device)
 
     def __getitem__(self, item: str) -> Any:
         """
@@ -118,16 +134,16 @@ class BatchFeature(UserDict):
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             import torch
 
-            def as_tensor(value):
+            def as_tensor(value, dtype=None, device=None):
                 if torch.is_tensor(value):
-                    return value
+                    value = value.to(device=device)
 
                 # stack list of tensors if tensor_type is PyTorch (# torch.tensor() does not support list of tensors)
-                if isinstance(value, (list, tuple)) and len(value) > 0 and torch.is_tensor(value[0]):
-                    return torch.stack(value)
+                elif isinstance(value, (list, tuple)) and len(value) > 0 and torch.is_tensor(value[0]):
+                    value = torch.stack(value).to(device=device)
 
                 # convert list of numpy arrays to numpy array (stack) if tensor_type is Numpy
-                if isinstance(value, (list, tuple)) and len(value) > 0:
+                elif isinstance(value, (list, tuple)) and len(value) > 0:
                     if isinstance(value[0], np.ndarray):
                         value = np.array(value)
                     elif (
@@ -136,29 +152,58 @@ class BatchFeature(UserDict):
                         and isinstance(value[0][0], np.ndarray)
                     ):
                         value = np.array(value)
-                if isinstance(value, np.ndarray):
-                    return torch.from_numpy(value)
+                    value = torch.as_tensor(value, device=device)
                 else:
-                    return torch.tensor(value)
+                    value = torch.as_tensor(value, device=device)
 
-            is_tensor = torch.is_tensor
+                if isinstance(dtype, str):
+                    dtype = getattr(torch, dtype)
+                return value.to(dtype) if value.is_floating_point() else value
+
+            def is_tensor(value, dtype, device):
+                """True if `value` is a tensor already on `device` (if given), with `dtype` if it's floating point."""
+                # Resolve once, outside the per-value check.
+                if isinstance(dtype, str):
+                    dtype = getattr(torch, dtype.removeprefix("torch."))
+                if device is not None:
+                    device = torch.device(device)
+
+                return (
+                    torch.is_tensor(value)
+                    and (device is None or value.device == device)
+                    and (not value.is_floating_point() or value.dtype == dtype)
+                )
         else:
 
-            def as_tensor(value, dtype=None):
+            def as_tensor(value, dtype=None, device=None):
+                if device is not None and getattr(device, "type", device) != "cpu":
+                    raise ValueError(f"Returning numpy arrays doesn't support non-null `device` but got {device}.")
+
                 if isinstance(value, (list, tuple)) and isinstance(value[0], (list, tuple, np.ndarray)):
                     value_lens = [len(val) for val in value]
                     if len(set(value_lens)) > 1 and dtype is None:
                         # we have a ragged list so handle explicitly
                         value = as_tensor([np.asarray(val) for val in value], dtype=object)
-                return np.asarray(value, dtype=dtype)
 
-            is_tensor = is_numpy_array
+                dtype = np.dtype(dtype)  # resolve if string
+                arr = np.asarray(value)
+                return arr.astype(dtype, copy=False) if np.issubdtype(arr.dtype, np.floating) else arr
+
+            def is_tensor(value, dtype=None, device=None):
+                if device is not None and getattr(device, "type", device) != "cpu":
+                    raise ValueError(f"Returning numpy arrays doesn't support non-null `device` but got {device}.")
+
+                dtype = np.dtype(dtype)  # resolve if string
+                return is_numpy_array(value) and (not np.issubdtype(value.dtype, np.floating) or value.dtype == dtype)
+
         return is_tensor, as_tensor
 
     def convert_to_tensors(
         self,
         tensor_type: str | TensorType | None = None,
         skip_tensor_conversion: list[str] | set[str] | None = None,
+        dtype: Union[str, "torch.dtype", "np.dtype", "npt.DTypeLike"] = "float32",
+        device: Union[str, int, "torch.device"] | None = None,
     ):
         """
         Convert the inner content to tensors.
@@ -169,6 +214,14 @@ class BatchFeature(UserDict):
                 `None`, no modification is done.
             skip_tensor_conversion (`list[str]` or `set[str]`, *optional*):
                 List or set of keys that should NOT be converted to tensors, even when `tensor_type` is specified.
+            dtype (`str`, `torch.dtype` or `np.dtype`, *optional*, defaults to `"float32"`):
+                Target dtype for floating-point values only. Non-floating values (e.g. `input_ids`, `attention_mask`)
+                keep their own dtype. Accepts a string name (e.g. `"float16"`), a `torch.dtype` (when
+                `tensor_type="pt"`) or anything NumPy accepts as a dtype (when `tensor_type="np"`).
+            device (`str`, `int` or `torch.device`, *optional*):
+                Device to place the tensors on. If `None`, tensors are left on their current device (or the default
+                device for newly created ones). Only supported when `tensor_type="pt"`: passing a non-null `device`
+                with `tensor_type="np"` raises a `ValueError`, since NumPy arrays live on the CPU.
 
         Note:
             Values that don't have an array-like structure (e.g., strings, dicts, lists of strings) are
@@ -193,9 +246,12 @@ class BatchFeature(UserDict):
             if not _is_tensor_or_array_like(value):
                 continue
 
+            if not is_tensor(value, dtype=dtype, device=device):
+                tensor = as_tensor(value, dtype=dtype, device=device)
+                self[key] = tensor
             try:
-                if not is_tensor(value):
-                    tensor = as_tensor(value)
+                if not is_tensor(value, dtype=dtype, device=device):
+                    tensor = as_tensor(value, dtype=dtype, device=device)
                     self[key] = tensor
             except Exception as e:
                 if key == "overflowing_values":

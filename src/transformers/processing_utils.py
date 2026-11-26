@@ -250,6 +250,7 @@ class TextKwargs(TypedDict, total=False):
     return_text_replacement_offsets: bool | None
     sanitize_control_tokens: bool | None
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
+    device: str | torch.device | None
 
 
 class ImagesKwargs(TypedDict, total=False):
@@ -324,6 +325,7 @@ class ImagesKwargs(TypedDict, total=False):
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
     disable_grouping: bool | None
     image_seq_length: int | None
+    dtype: str | torch.dtype | np.dtype | None
 
 
 class VideosKwargs(TypedDict, total=False):
@@ -401,6 +403,8 @@ class VideosKwargs(TypedDict, total=False):
     num_frames: Annotated[int | None, positive_int()]
     return_metadata: bool | None
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
+    dtype: str | torch.dtype | np.dtype | None
+    device: str | torch.device | None
 
 
 class AudioKwargs(TypedDict, total=False):
@@ -454,6 +458,7 @@ class AudioKwargs(TypedDict, total=False):
     device: Annotated[Union[str, "torch.device"] | None, device_validator()]
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
     load_audio_backend: str | None
+    dtype: str | torch.dtype | np.dtype | None
 
 
 class ProcessingKwargs(TypedDict, total=False):
@@ -631,6 +636,8 @@ class ProcessorMixin(PushToHubMixin):
 
     return_mm_token_type_ids = False
     return_text_replacement_offsets = False
+    dtype = "float32"
+    device = None
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
@@ -702,6 +709,7 @@ class ProcessorMixin(PushToHubMixin):
 
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
+        device = merged_kwargs["text_kwargs"].get("device", None)
         if getattr(self, "tokenizer", None) is not None and text is not None:
             # text_kwargs has priority for backwards compatibility. Remove in v5.29.0.
             return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
@@ -733,7 +741,13 @@ class ProcessorMixin(PushToHubMixin):
         if not kwargs.get("return_metadata"):
             data.pop("video_metadata", None)
 
-        return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
+        return BatchFeature(
+            data,
+            tensor_type=return_tensors,
+            device=device,
+            dtype=merged_kwargs['images_kwargs'].get('dtype'),
+            skip_tensor_conversion=self.skip_tensor_conversion,
+        )
 
     def prepare_inputs_layout(
         self,
