@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-06-12 and contributed to Hugging Face Transformers on 2026-11-18.*
+*This model was published in HF papers on 2025-06-12 and contributed to Hugging Face Transformers on 2026-11-26.*
 
 # WeatherNext 2
 
@@ -37,10 +37,16 @@ Released checkpoints, all sharing this architecture:
 | [kashif/weathernext2](https://huggingface.co/kashif/weathernext2) | 0.25° | 183.8M | also predicts 100m winds |
 | [kashif/weathernext-cyclones](https://huggingface.co/kashif/weathernext-cyclones) | 0.25° | 183.8M | operational cyclone model; `main`, `<2024`, `<2023` revisions |
 
-The 0.25° releases are four separate training runs rather than one checkpoint. Each repository holds all four: run 1 at
-the root and the rest in `model2`/`model3`/`model4` subfolders, so `from_pretrained(..., subfolder="model3")` selects
-one. Combining them into a multi-model ensemble - loading each in turn and pooling its members - is left to the caller,
-as it is upstream. The examples below use the smaller Mini checkpoint.
+Each 0.25° release has four independently trained checkpoints. The default repositories above serve run 1. Use the
+numbered repositories to select a run and load both the model and feature extractor from the same repository and revision.
+
+| Checkpoint | Training runs |
+|---|---|
+| WeatherNext 2 | [1](https://huggingface.co/kashif/weathernext2-model1), [2](https://huggingface.co/kashif/weathernext2-model2), [3](https://huggingface.co/kashif/weathernext2-model3), [4](https://huggingface.co/kashif/weathernext2-model4) |
+| WeatherNext Cyclones | [1](https://huggingface.co/kashif/weathernext-cyclones-model1), [2](https://huggingface.co/kashif/weathernext-cyclones-model2), [3](https://huggingface.co/kashif/weathernext-cyclones-model3), [4](https://huggingface.co/kashif/weathernext-cyclones-model4) |
+
+For a multi-model ensemble, load each run in turn and pool its forecasts. Each Cyclones run supports the same revisions
+as the default Cyclones repository. The examples below use the smaller Mini checkpoint.
 
 ## Getting initial conditions
 
