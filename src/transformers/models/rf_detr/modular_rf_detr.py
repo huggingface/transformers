@@ -53,7 +53,7 @@ from ...utils import (
 )
 from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple
 from ..clip.modeling_clip import CLIPMLP
-from ..convnext.modeling_convnext import ConvNextLayer
+from ..convnext.modeling_convnext import ConvNextLayer, ConvNextLayerNorm
 from ..detr.image_processing_detr import (
     SUPPORTED_ANNOTATION_FORMATS,
     DetrImageProcessor,
@@ -74,7 +74,6 @@ from ..lw_detr.modeling_lw_detr import (
     LwDetrConvEncoder,
     LwDetrConvNormLayer,
     LwDetrForObjectDetection,
-    LwDetrLayerNorm,
     LwDetrModel,
     LwDetrObjectDetectionOutput,
     LwDetrPreTrainedModel,
@@ -822,7 +821,7 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
         )
 
 
-class RfDetrLayerNorm(LwDetrLayerNorm):
+class RfDetrLayerNorm(ConvNextLayerNorm):
     pass
 
 
@@ -883,7 +882,6 @@ class RfDetrPreTrainedModel(LwDetrPreTrainedModel):
     # Roboflow checkpoints use bare keys with no top-level prefix
     _checkpoint_conversion_prefix_free = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if hasattr(module, "segmentation_bias") and isinstance(module.segmentation_bias, nn.Parameter):

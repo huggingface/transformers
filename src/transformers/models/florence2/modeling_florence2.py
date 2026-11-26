@@ -635,7 +635,6 @@ class Florence2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -810,7 +809,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
     _tied_weights_keys = {
         "lm_head.weight": "model.language_model.shared.weight",
     }
-    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: Florence2Config):
         super().__init__(config)

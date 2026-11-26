@@ -88,7 +88,7 @@ _deps = [
     "huggingface-hub>=1.31.0,<3.0",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.6",
-    "kernels>=0.18.2,<0.19",
+    "kernels>=0.19.0,<0.20",
     "librosa",
     "mistral-common[image]>=1.11.7",
     "nltk<=3.8.1",
@@ -100,7 +100,7 @@ _deps = [
     "optuna",
     "packaging>=20.0",
     "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
-    "peft>=0.20.0",
+    "peft>=0.22.0",
     "phonemizer",
     "protobuf",
     "psutil",
@@ -144,7 +144,7 @@ _deps = [
     "torchaudio",
     "torchvision",
     "tqdm>=4.60",
-    "transformers-mic[runtime]>=0.1.2",
+    "transformers-mic[runtime]>=0.1.4",
     "typer",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
@@ -315,7 +315,7 @@ if __name__ == "__main__":
 
     setup(
         name="transformers",
-        version="5.24.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+        version="5.25.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
         author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
         author_email="transformers@huggingface.co",
         description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",

@@ -45,38 +45,38 @@ class KimiLinearModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = KimiLinearModel
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
+    small_config_overrides = {
         # NOTE: must be 0.0 for TP backward tests. In train mode, non-zero dropout causes different RNG
         # states between the non-TP and TP model forward passes, leading to mismatched losses.
-        self.attention_probs_dropout_prob = 0.0
-        self.hidden_act = "silu"
+        "attention_probs_dropout_prob": 0.0,
+        "hidden_act": "silu",
         # Two layers covering all four branches: a KDA layer with a dense MLP, and an MLA layer with a MoE
         # block. Anything less would leave one of the decoder-layer paths untested.
-        self.num_hidden_layers = 2
-        self.layer_types = ["linear_attention", "full_attention"]
-        self.mlp_layer_types = ["dense", "sparse"]
+        "num_hidden_layers": 2,
+        "layer_types": ["linear_attention", "full_attention"],
+        "mlp_layer_types": ["dense", "sparse"],
         # KDA (linear attention) layers
-        self.linear_conv_kernel_dim = 2
-        self.linear_head_dim = 16
-        self.linear_num_heads = 4
+        "linear_conv_kernel_dim": 2,
+        "linear_head_dim": 16,
+        "linear_num_heads": 4,
         # MLA (full attention) layers. The released checkpoints have no query LoRA, so keep `q_lora_rank`
         # unset to exercise the same `q_proj` branch they take.
-        self.q_lora_rank = None
-        self.kv_lora_rank = 16
-        self.qk_nope_head_dim = 32
-        self.qk_rope_head_dim = 16
-        self.v_head_dim = 32
+        "q_lora_rank": None,
+        "kv_lora_rank": 16,
+        "qk_nope_head_dim": 32,
+        "qk_rope_head_dim": 16,
+        "v_head_dim": 32,
         # MoE
-        self.moe_intermediate_size = 16
+        "moe_intermediate_size": 16,
         # Must override the config default (256) with a small value: with 256 experts the MoE layer
         # dominates ~94% of model size, making accelerate unable to split it across GPU/CPU in
         # test_cpu_offload (infer_auto_device_map puts everything on CPU → no dispatch → no hf_device_map).
-        self.num_local_experts = 4
-        self.n_shared_experts = 1
-        self.num_experts_per_tok = 2
-        self.n_group = 1
-        self.topk_group = 1
+        "num_local_experts": 4,
+        "n_shared_experts": 1,
+        "num_experts_per_tok": 2,
+        "n_group": 1,
+        "topk_group": 1,
+    }
 
 
 @require_torch

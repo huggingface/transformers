@@ -40,7 +40,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..nanochat.modeling_nanochat import NanoChatRMSNorm
+from ..llama4.modeling_llama4 import Llama4TextWeightlessRMSNorm
 
 
 logger = logging.get_logger(__name__)
@@ -138,7 +138,7 @@ class HrmTextConfig(LlamaConfig):
         PreTrainedConfig._attn_implementation.__set__(self, value)
 
 
-class HrmTextRMSNorm(NanoChatRMSNorm):
+class HrmTextRMSNorm(Llama4TextWeightlessRMSNorm):
     pass
 
 
@@ -272,7 +272,6 @@ class HrmTextPreTrainedModel(LlamaPreTrainedModel):
             self, attn_implementation, is_init_check, allow_all_kernels
         )
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, HrmTextModel):

@@ -139,8 +139,13 @@ def _pad_extra_bos_eos_tokens(
             torch.tensor(seq_len, device=input_ids.device),
         )
         col = torch.arange(seq_len + 1, device=input_ids.device)
-        src = torch.where(col < first_pad, col, (col - 1).clamp(min=0))
-        modified_input_ids = input_ids.gather(1, src).masked_fill(col == first_pad, eos_token_id)
+        # Select from two (B, T+1) views instead of gathering with `(col - 1).clamp(min=0)`, which
+        # crashes inductor (https://github.com/pytorch/pytorch/issues/200379).
+        unshifted = torch.nn.functional.pad(input_ids, (0, 1), value=pad_token_id)  # col -> input_ids[col]
+        shifted = torch.nn.functional.pad(input_ids, (1, 0), value=pad_token_id)  # col -> input_ids[col - 1]
+        modified_input_ids = torch.where(col < first_pad, unshifted, shifted).masked_fill(
+            col == first_pad, eos_token_id
+        )
 
         attention_mask = (
             torch.nn.functional.pad(attention_mask, (1, 0), value=1) if attention_mask is not None else attention_mask
@@ -764,13 +769,11 @@ class ClvpPreTrainedModel(PreTrainedModel):
     config: ClvpConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
     _can_record_outputs = {
         "hidden_states": [ClvpEncoderLayer, ClvpDecoderLayer],
         "attentions": ClvpSelfAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         super()._init_weights(module)

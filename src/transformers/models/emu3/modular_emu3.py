@@ -705,7 +705,6 @@ class Emu3VQVAE(PreTrainedModel):
         "attentions": Emu3VQVAEAttentionBlock,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, (nn.Conv2d, nn.Conv3d)):
@@ -1078,6 +1077,7 @@ class Emu3Model(Emu3PreTrainedModel):
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     output_modalities = ("image", "text")
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: Emu3Config):
         super().__init__(config)

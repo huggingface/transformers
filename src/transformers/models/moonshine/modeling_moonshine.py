@@ -135,7 +135,6 @@ class MoonshineRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -719,20 +718,6 @@ class MoonshineModel(MoonshinePreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
-
-    def freeze_encoder(self):
-        """
-        Calling this function will disable the gradient computation for the Moonshine encoder so that its parameters will
-        not be updated during training.
-        """
-        self.encoder._freeze_parameters()
-
-    def _mask_input_features(self):
-        """
-        Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://huggingface.co/papers/1904.08779).
-        """
-        raise AttributeError("Not needed for Moonshine")
 
     @can_return_tuple
     @auto_docstring

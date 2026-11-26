@@ -51,12 +51,12 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
     Gemma2MLP,
     Gemma2PreTrainedModel,
-    Gemma2RMSNorm,
     Gemma2RotaryEmbedding,
     eager_attention_forward,
 )
@@ -108,7 +108,6 @@ class T5GemmaConfig(PreTrainedConfig):
     ```"""
 
     model_type = "t5gemma"
-    keys_to_ignore_at_inference = ["cache"]
     sub_configs_defaults = {
         "encoder": T5GemmaModuleConfig,
         "decoder": T5GemmaModuleConfig,
@@ -142,7 +141,7 @@ class T5GemmaConfig(PreTrainedConfig):
                 setattr(self, special_token_key, getattr(self.decoder, special_token_key))
 
 
-class T5GemmaRMSNorm(Gemma2RMSNorm):
+class T5GemmaRMSNorm(GemmaRMSNorm):
     pass
 
 
@@ -402,7 +401,6 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
     # Recording is declared on T5GemmaEncoder/T5GemmaDecoder; None avoids inheriting the gemma2 dict
     _can_record_outputs = None
 
-    @torch.no_grad()
     def _init_weights(self, module):
         # TODO: support initialization for encoders and decoders separately(?)
         PreTrainedModel._init_weights(self, module)

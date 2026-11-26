@@ -67,6 +67,7 @@ from .utils.chat_parsing import parse_response as _template_parse_response
 from .utils.chat_template_utils import (
     _get_control_token_patterns,
     _get_template_literal_text,
+    _normalize_chat_messages,
     mark_control_tokens,
     render_jinja_template,
 )
@@ -94,6 +95,15 @@ def flatten(arr: list):
             else:
                 res.append(sub_arr)
     return res
+
+
+def _is_empty(arr: list) -> bool:
+    """True if arr contains no leaf elements (nested empty lists/tuples)."""
+    if len(arr) == 0:
+        return True
+    if not isinstance(arr[0], (list, tuple)):
+        return False
+    return all(_is_empty(sub_arr) for sub_arr in arr)
 
 
 if is_tokenizers_available() or TYPE_CHECKING:
@@ -693,7 +703,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             def as_tensor(value, dtype=None):
                 if isinstance(value, list) and len(value) > 0 and isinstance(value[0], np.ndarray):
                     return torch.from_numpy(np.array(value))
-                if len(flatten(value)) == 0 and dtype is None:
+                if _is_empty(value) and dtype is None:
                     dtype = torch.int64
                 return torch.tensor(value, dtype=dtype)
 
@@ -705,7 +715,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             import mlx.core as mx
 
             def as_tensor(value, dtype=None):
-                if len(flatten(value)) == 0 and dtype is None:
+                if _is_empty(value) and dtype is None:
                     dtype = mx.int32
                 return mx.array(value, dtype=dtype)
 
@@ -723,7 +733,7 @@ class BatchEncoding(UserDict, Generic[_V]):
                     if len(set(value_lens)) > 1 and dtype is None:
                         # we have a ragged list so handle explicitly
                         value = as_tensor([np.asarray(val) for val in value], dtype=object)
-                if len(flatten(value)) == 0 and dtype is None:
+                if _is_empty(value) and dtype is None:
                     dtype = np.int64
                 return np.asarray(value, dtype=dtype)
 
@@ -2956,6 +2966,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         Returns:
             `list[str]`: The list of decoded sentences.
         """
+        sequences = to_py_obj(sequences)
+        # An empty batch has no sequences to decode, `decode` would read it as a single empty sequence
+        if len(sequences) == 0:
+            return []
+
         # Forward to decode() which now handles batched input natively
         result = self.decode(
             token_ids=sequences,
@@ -2965,6 +2980,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         )
         # Ensure we always return a list for backwards compatibility
         if isinstance(result, str):
+            # See #41872: `batch_decode` expects a batch, single sequences belong to `decode`
+            logger.warning_once(
+                "Passing a single sequence to `batch_decode` is deprecated and will be removed in a future version, "
+                "use `decode` instead."
+            )
             return [result]
         return result
 
@@ -3137,12 +3157,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             conversations = [conversation]
             is_batched = False
 
-        # Normalize: drop the keys whose value is None.
-        # Some APIs (e.g. OpenAI) return `content=None` or `tool_calls=None`, but many chat templates crash or
-        # produce wrong output (e.g. rendering literal "None") on them, while they handle a missing key.
-        conversations = [
-            [{k: v for k, v in msg.items() if v is not None} for msg in conversation] for conversation in conversations
-        ]
+        # Normalize: convert message objects to dicts and drop the keys whose value is None
+        conversations = [_normalize_chat_messages(conversation) for conversation in conversations]
 
         if continue_final_message:
             if add_generation_prompt:
@@ -3194,13 +3210,17 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         input_ids = [out["input_ids"]]
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
-                        for assistant_start_char, assistant_end_char in generation_indices[i]:
-                            start_token = out.char_to_token(i, assistant_start_char)
-                            end_token = out.char_to_token(i, assistant_end_char - 1)
-                            if start_token is None:
-                                # start_token is out of bounds maybe due to truncation.
+                        # Mask every token overlapping a span, so a span cut by left or right truncation keeps
+                        # its remaining tokens (same approach as `ProcessorMixin`). Spans and token offsets are
+                        # both in order, so a single pass over the tokens is enough.
+                        spans = generation_indices[i]
+                        span_idx = 0
+                        for token_id, (token_start, token_end) in enumerate(out.encodings[i].offsets):
+                            while span_idx < len(spans) and token_start >= spans[span_idx][1]:
+                                span_idx += 1
+                            if span_idx == len(spans):
                                 break
-                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids[i])):
+                            if token_end > spans[span_idx][0]:
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
 

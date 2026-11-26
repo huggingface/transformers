@@ -37,6 +37,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -54,7 +55,7 @@ if is_torch_available():
     )
 
 
-class T5Gemma2ModelTester:
+class T5Gemma2ModelTester(ModelTesterConfigMixin):
     config_class = T5Gemma2Config
 
     text_config_class = T5Gemma2TextConfig
@@ -67,34 +68,33 @@ class T5Gemma2ModelTester:
         sequence_classification_class = T5Gemma2ForSequenceClassification
         token_classification_class = T5Gemma2ForTokenClassification
 
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        is_training=True,
-        use_attention_mask=True,
-        use_labels=True,
-        vocab_size=99,
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "is_training": True,
+        "use_attention_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
         # decoder-specific
-        seq_length=7,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        intermediate_size=37,
+        "seq_length": 7,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "intermediate_size": 37,
         # encoder-specific
-        encoder_seq_length=7,
-        encoder_hidden_size=32,
-        encoder_num_hidden_layers=2,
-        encoder_num_attention_heads=4,
-        encoder_num_key_value_heads=2,
-        encoder_intermediate_size=37,
+        "encoder_seq_length": 7,
+        "encoder_hidden_size": 32,
+        "encoder_num_hidden_layers": 2,
+        "encoder_num_attention_heads": 4,
+        "encoder_num_key_value_heads": 2,
+        "encoder_intermediate_size": 37,
         # vision-specific
-        mm_tokens_per_image=2,
-        image_token_index=4,
-        boi_token_index=5,
-        eoi_token_index=6,
-        siglip_config={
+        "mm_tokens_per_image": 2,
+        "image_token_index": 4,
+        "boi_token_index": 5,
+        "eoi_token_index": 6,
+        "siglip_config": {
             "use_labels": True,
             "image_size": 20,
             "patch_size": 5,
@@ -110,67 +110,35 @@ class T5Gemma2ModelTester:
             "initializer_range": 0.02,
         },
         # common
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        layer_types=["full_attention", "sliding_attention"],
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        scope=None,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "layer_types": ["full_attention", "sliding_attention"],
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "scope": None,
         # special ids
-        eos_token_id=1,
-        pad_token_id=0,
-        bos_token_id=2,
-    ):
+        "eos_token_id": 1,
+        "pad_token_id": 0,
+        "bos_token_id": 2,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["num_channels"] = values["siglip_config"]["num_channels"]
+        values["image_size"] = values["siglip_config"]["image_size"]
+        values["head_dim"] = values["hidden_size"] // values["num_attention_heads"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.use_attention_mask = use_attention_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        # decoder
-        self.seq_length = seq_length
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        # encoder
-        self.encoder_seq_length = encoder_seq_length
-        self.encoder_hidden_size = encoder_hidden_size
-        self.encoder_num_hidden_layers = encoder_num_hidden_layers
-        self.encoder_num_attention_heads = encoder_num_attention_heads
-        self.encoder_num_key_value_heads = encoder_num_key_value_heads
-        self.encoder_intermediate_size = encoder_intermediate_size
-        # vision
-        self.mm_tokens_per_image = mm_tokens_per_image
-        self.image_token_index = image_token_index
-        self.boi_token_index = boi_token_index
-        self.eoi_token_index = eoi_token_index
-        self.siglip_config = siglip_config
-        self.num_channels = siglip_config["num_channels"]
-        self.image_size = siglip_config["image_size"]
-        # common
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.layer_types = layer_types
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
-        self.head_dim = self.hidden_size // self.num_attention_heads
-        # special ids
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_encoder_config(self):
         return self.encoder_config_class(
@@ -713,6 +681,8 @@ class T5Gemma2ModelTester:
 
 @require_torch
 class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = T5Gemma2ModelTester
+
     all_model_classes = (
         (
             T5Gemma2Model,
@@ -724,7 +694,6 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         else ()
     )
 
-    _is_stateful = True
     is_encoder_decoder = True
 
     # MP works but offload doesn't work when the SigLIP MultiheadAttention is offloaded

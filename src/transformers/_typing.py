@@ -144,7 +144,6 @@ class GenerativePreTrainedModel(Protocol):
     dtype: torch.dtype
     main_input_name: str
     base_model_prefix: str
-    _is_stateful: bool
     hf_quantizer: Any
     encoder: Any
     hf_device_map: dict[str, Any]

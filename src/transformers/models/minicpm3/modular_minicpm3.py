@@ -258,7 +258,6 @@ class MiniCPM3DecoderLayer(LlamaDecoderLayer):
 
 
 class MiniCPM3PreTrainedModel(LlamaPreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, MiniCPM3ScaledWordEmbedding):

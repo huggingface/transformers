@@ -30,10 +30,10 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3PreTrainedModel,
     DeepseekV3TopkRouter,
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen3.modeling_qwen3 import (
     Qwen3Attention,
     Qwen3Model,
-    Qwen3RMSNorm,
     Qwen3RotaryEmbedding,
     TransformersKwargs,
 )
@@ -63,7 +63,6 @@ class Dots1Config(PreTrainedConfig):
     """
 
     model_type = "dots1"
-    keys_to_ignore_at_inference = ["cache"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -72,9 +71,6 @@ class Dots1Config(PreTrainedConfig):
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -145,7 +141,7 @@ class Dots1Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class Dots1RMSNorm(Qwen3RMSNorm):
+class Dots1RMSNorm(LlamaRMSNorm):
     pass
 
 

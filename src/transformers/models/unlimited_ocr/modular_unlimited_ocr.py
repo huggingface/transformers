@@ -42,7 +42,7 @@ from ...masking_utils import (
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import slice_logits_to_keep
-from ...processing_utils import ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import (
     TensorType,
@@ -239,18 +239,58 @@ class UnlimitedOcrProcessor(DeepseekOcr2Processor):
         )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> TextInput:
-        image_size = kwargs.get("size") or self.image_processor.size
-        tile_size = kwargs.get("tile_size") or self.image_processor.tile_size
+        patches_grid = (
+            image_inputs["patches_grid"][image_idx] if image_inputs["num_local_patches"][image_idx] else None
+        )
+        return self.image_token * self._get_num_image_tokens(patches_grid, **kwargs)
+
+    def _get_num_image_tokens(self, patches_grid, size=None, tile_size=None, **kwargs) -> int:
+        image_size = size or self.image_processor.size
+        tile_size = tile_size or self.image_processor.tile_size
         size = max(image_size["height"], image_size["width"])
 
         num_queries_global = math.ceil(size // self.patch_size / self.downsample_ratio)
         num_queries_local = math.ceil(tile_size // self.patch_size / self.downsample_ratio)
 
-        num_columns, num_rows = image_inputs["patches_grid"][image_idx]
         num_tokens = num_queries_global * (num_queries_global + 1) + 1
-        if image_inputs["num_local_patches"][image_idx] > 0:
+        if patches_grid is not None:
+            num_columns, num_rows = patches_grid
             num_tokens += (num_rows * num_queries_local) * (num_columns * num_queries_local + 1)
-        return self.image_token * num_tokens
+        return num_tokens
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            image_processor = self.image_processor
+            min_patches = images_kwargs.get("min_patches", image_processor.min_patches)
+            max_patches = images_kwargs.get("max_patches", image_processor.max_patches)
+            tile_size = images_kwargs.get("tile_size", image_processor.tile_size)
+            crop_to_patches = images_kwargs.get("crop_to_patches", image_processor.crop_to_patches)
+
+            num_image_tokens = []
+            for height, width in image_sizes:
+                # Images larger than a tile are also cropped into a grid of local patches
+                patches_grid = None
+                if crop_to_patches and max(height, width) > tile_size:
+                    patches_grid = get_optimal_tiled_canvas(
+                        (height, width), (tile_size, tile_size), min_patches, max_patches
+                    )
+                num_image_tokens.append(self._get_num_image_tokens(patches_grid, **images_kwargs))
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, return_detections: bool = False, **kwargs):
         """
@@ -1017,6 +1057,16 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             torch._dynamo.mark_static_address(self.keys)
             torch._dynamo.mark_static_address(self.values)
 
+    @property
+    def is_croppable(self) -> bool:
+        """
+        Whether `crop` can put this layer back as it was.
+        """
+        # We don't know yet, so let's be extra careful
+        if self.prefill_length is None:
+            return False
+        return self.prefill_max_cache_len <= self.prefill_length
+
 
 def create_reference_sliding_window_causal_mask(
     config: PreTrainedConfig,
@@ -1267,14 +1317,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
             **kwargs,
         )
 
-        return UnlimitedOcrModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
-            router_logits=outputs.router_logits,
-        )
+        return UnlimitedOcrModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 # Cannot inherit from XYZForConditionalGeneration as this results in MRO clashes between GenerationMixin
@@ -1438,7 +1481,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 

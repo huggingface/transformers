@@ -32,12 +32,14 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ...processing_utils import (
+    MultiModalData,
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
@@ -62,8 +64,8 @@ from ..ernie4_5.modeling_ernie4_5 import (
     Ernie4_5DecoderLayer,
     Ernie4_5MLP,
     Ernie4_5Model,
-    Ernie4_5RMSNorm,
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     Qwen2_5OmniAttention,
 )
@@ -246,6 +248,33 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         num_tokens = int(image_inputs["image_grid_thw"][image_idx].prod()) // (merge_size * merge_size)
         return self.image_token * num_tokens
 
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
+
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
 @strict
@@ -379,7 +408,7 @@ class PaddleOCRAttention(Qwen2_5OmniAttention):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.use_bias)
 
 
-class PaddleOCRRMSNorm(Ernie4_5RMSNorm):
+class PaddleOCRRMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -394,7 +423,6 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaddleOCRDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -541,8 +569,7 @@ class PaddleOCRVisionMLP(SiglipMLP):
 
 
 class PaddleOCRVisionEncoderLayer(VideoLlama3VisionEncoderLayer):
-    def __init__(self, config: PaddleOCRVisionConfig):
-        super().__init__()
+    pass
 
 
 class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
@@ -748,7 +775,7 @@ class PaddleOCRVLModel(Qwen2VLModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MultimodalBaseModelOutputWithPast:
         if pixel_values is not None and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
@@ -787,7 +814,7 @@ class PaddleOCRVLModel(Qwen2VLModel):
             **kwargs,
         )
 
-        return outputs
+        return MultimodalBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
@@ -812,7 +839,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> tuple | MultimodalCausalLMOutputWithPast:
         r"""
         Example:
 
@@ -850,7 +877,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         >>> print(output_text)
         ```
         """
-        outputs: BaseModelOutputWithPast = self.model(
+        outputs: MultimodalBaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -874,12 +901,13 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return CausalLMOutputWithPast(
+        return MultimodalCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
         )
 
 

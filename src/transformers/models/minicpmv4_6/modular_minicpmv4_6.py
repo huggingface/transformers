@@ -26,9 +26,9 @@ from ...activations import gelu_pytorch_tanh
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
-    BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -528,7 +528,6 @@ class MiniCPMV4_6PreTrainedModel(PreTrainedModel):
         "MiniCPMV4_6VisionEncoderLayer",
         "MiniCPMV4_6ViTWindowAttentionMerger",
     ]
-    _is_stateful = True
 
 
 class MiniCPMV4_6Model(Lfm2VlModel):
@@ -649,7 +648,7 @@ class MiniCPMV4_6Model(Lfm2VlModel):
         downsample_mode: str | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MultimodalBaseModelOutputWithPast:
         r"""
         pixel_values (`torch.Tensor`, *optional*):
             Pixel value patches for images, NaViT-packed.
@@ -711,7 +710,9 @@ class MiniCPMV4_6Model(Lfm2VlModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return output
+        return MultimodalBaseModelOutputWithPast(
+            **output, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 @auto_docstring
@@ -745,7 +746,7 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
         downsample_mode: str | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> tuple | MultimodalCausalLMOutputWithPast:
         r"""
         pixel_values (`torch.Tensor`, *optional*):
             Pixel value patches for images, NaViT-packed.
@@ -783,12 +784,14 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return CausalLMOutputWithPast(
+        return MultimodalCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
     @auto_docstring(custom_intro="Extract image features: vision encoder, insert merger, then MLP merger.")

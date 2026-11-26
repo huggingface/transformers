@@ -28,10 +28,15 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
@@ -43,6 +48,49 @@ from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..auto.modeling_auto import AutoModel
 from .configuration_video_llama_3 import VideoLlama3Config, VideoLlama3VisionConfig
+
+
+logger = logging.get_logger(__name__)
+
+
+@auto_docstring
+@dataclass
+class VideoLlama3ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
+
+    @property
+    def video_hidden_states(self):
+        logger.warning_once(
+            "`video_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.video_outputs.pooler_output
+
+
+@auto_docstring
+@dataclass
+class VideoLlama3CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
+
+    @property
+    def video_hidden_states(self):
+        logger.warning_once(
+            "`video_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.video_outputs.pooler_output
 
 
 class VideoLlama3VisionRotaryEmbedding(nn.Module):
@@ -86,7 +134,6 @@ class VideoLlama3VisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -398,7 +445,6 @@ class VideoLlama3PreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["VideoLlama3VisionEncoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -501,36 +547,6 @@ class VideoLlama3Projector(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.readout(hidden_states)
         return hidden_states
-
-
-@auto_docstring(
-    custom_intro="""
-    Base class for VideoLLaMA3 outputs, with hidden states and attentions.
-    """
-)
-@dataclass
-class VideoLlama3ModelOutputWithPast(ModelOutput):
-    r"""
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.Tensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(num_images_features, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    video_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(num_video_features, hidden_size)`.
-        video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    last_hidden_state: torch.Tensor = None
-    cache: list[torch.Tensor] | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
-    video_hidden_states: torch.Tensor | None = None
 
 
 @auto_docstring
@@ -715,48 +731,8 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         )
 
         return VideoLlama3ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_embeds if mm_encoder_outputs.get("image") is not None else None,
-            video_hidden_states=video_embeds if mm_encoder_outputs.get("video") is not None else None,
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
         )
-
-
-@auto_docstring(
-    custom_intro="""
-    Base class for VideoLLaMA3 causal language model (or autoregressive) outputs.
-    """
-)
-@dataclass
-class VideoLlama3CausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.Tensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(num_images_features, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    video_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(num_video_features, hidden_size)`.
-        video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    cache: list[torch.Tensor] | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
-    video_hidden_states: torch.Tensor | None = None
 
 
 class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, GenerationMixin):
@@ -862,8 +838,8 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-            video_hidden_states=outputs.video_hidden_states,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
 

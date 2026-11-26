@@ -217,7 +217,6 @@ class PocketTTSPreTrainedModel(LlamaPreTrainedModel):
     _no_split_modules = ["PocketTTSDecoderLayer", "PocketTTSFlowHead"]
     input_modalities = ("text", "audio")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, PocketTTSTimestepNorm):
@@ -418,8 +417,8 @@ class PocketTTSForConditionalGeneration(PocketTTSPreTrainedModel, PocketTTSGener
         self.model = PocketTTSModel(config)
         self.flow_head = PocketTTSFlowHead(config.flow_head_config)
         self.eos_head = nn.Linear(config.hidden_size, 1)
-        self.latent_mean = nn.Buffer(torch.zeros(config.latent_dim))
-        self.latent_std = nn.Buffer(torch.ones(config.latent_dim))
+        self.latent_mean = nn.Buffer(torch.zeros(config.latent_dim, dtype=torch.float32))
+        self.latent_std = nn.Buffer(torch.ones(config.latent_dim, dtype=torch.float32))
 
         # training only, ~0.003% of the model weights: ok to always carry
         self.loss_weighting = PocketTTSFlowLossWeighting(config.flow_head_config)

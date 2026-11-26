@@ -87,7 +87,6 @@ class CanaryPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _keys_to_ignore_on_load_unexpected = [r"preprocessor\.featurizer\..*"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, CanaryPositionalEmbedding):
@@ -468,20 +467,6 @@ class CanaryModel(CanaryPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
-
-    def freeze_encoder(self):
-        """
-        Calling this function will disable the gradient computation for the Canary encoder so that its parameters will
-        not be updated during training.
-        """
-        self.encoder._freeze_parameters()
-
-    def _mask_input_features(self):
-        """
-        Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://huggingface.co/papers/1904.08779).
-        """
-        raise AttributeError("Not needed for Canary")
 
     @can_return_tuple
     @auto_docstring

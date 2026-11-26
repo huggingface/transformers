@@ -313,6 +313,31 @@ class Llama4ImageProcessor(TorchvisionBackend):
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Llama4ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
+        """
+        A utility that returns number of image patches (tiles) for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of patches per image, including the global tile when the image is split into tiles.
+        """
+        images_kwargs = images_kwargs or {}
+        size = images_kwargs.get("size", None) or self.size
+        size = SizeDict(**size) if isinstance(size, dict) else size
+        max_patches = images_kwargs.get("max_patches", None) or self.max_patches
+        resize_to_max_canvas = images_kwargs.get("resize_to_max_canvas", self.resize_to_max_canvas)
+
+        possible_resolutions = torch.tensor(find_supported_resolutions(max_num_chunks=max_patches, patch_size=size))
+        target_size = get_best_fit((height, width), possible_resolutions, resize_to_max_canvas=resize_to_max_canvas)
+        num_tiles = int(target_size[0] // size.height) * int(target_size[1] // size.width)
+        return num_tiles + 1 if num_tiles > 1 else 1
+
     # Disable compilation here as conversion to bfloat16 causes differences in the output of the compiled and non-compiled versions
     @torch.compiler.disable
     def rescale_and_normalize(

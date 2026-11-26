@@ -1237,7 +1237,6 @@ class xLSTMPreTrainedModel(PreTrainedModel):
     base_model_prefix = "backbone"
     _no_split_modules = ["xLSTMBlock"]
     supports_gradient_checkpointing = True
-    _is_stateful = True
     _can_record_outputs = {
         "hidden_states": xLSTMBlock,
     }
@@ -1248,7 +1247,6 @@ class xLSTMPreTrainedModel(PreTrainedModel):
                 return name
         return ""
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, nn.Embedding):

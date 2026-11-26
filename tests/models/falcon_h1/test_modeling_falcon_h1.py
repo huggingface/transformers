@@ -29,6 +29,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -40,66 +41,42 @@ if is_torch_available():
     from transformers import AutoTokenizer, FalconH1ForCausalLM, FalconH1Model
 
 
-class FalconH1ModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        intermediate_size=64,
-        hidden_act="silu",
-        attention_dropout=0.0,
-        attn_layer_indices=None,
-        attn_rotary_emb=8,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        initializer_range=0.02,
-        num_labels=3,
-        pad_token_id=0,
-        mamba_n_groups=1,
-        mamba_n_heads=16,
-        mamba_d_state=16,
-        mamba_d_conv=4,
-        mamba_expand=2,
-        mamba_chunk_size=16,
-        scope=None,
-    ):
+class FalconH1ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "intermediate_size": 64,
+        "hidden_act": "silu",
+        "attention_dropout": 0.0,
+        "attn_layer_indices": None,
+        "attn_rotary_emb": 8,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "pad_token_id": 0,
+        "mamba_n_groups": 1,
+        "mamba_n_heads": 16,
+        "mamba_d_state": 16,
+        "mamba_d_conv": 4,
+        "mamba_expand": 2,
+        "mamba_chunk_size": 16,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.attention_dropout = attention_dropout
-        self.attn_layer_indices = attn_layer_indices
-        self.attn_rotary_emb = attn_rotary_emb
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.pad_token_id = pad_token_id
-        self.scope = scope
-        self.mamba_n_groups = mamba_n_groups
-        self.mamba_n_heads = mamba_n_heads
-        self.mamba_d_state = mamba_d_state
-        self.mamba_d_conv = mamba_d_conv
-        self.mamba_expand = mamba_expand
-        self.mamba_chunk_size = mamba_chunk_size
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -335,6 +312,8 @@ class FalconH1ModelTester:
 
 @require_torch
 class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = FalconH1ModelTester
+
     all_model_classes = (FalconH1Model, FalconH1ForCausalLM) if is_torch_available() else ()
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
@@ -553,11 +532,33 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
             3. **"""
         )
 
+        EXPECTED_TEXT_BMG = textwrap.dedent(
+            """\
+            user
+            Tell me about the french revolution.
+            assistant
+            The French Revolution (1789–1799) was a period of radical social and political upheaval in France that fundamentally transformed the nation and had profound effects on the rest of Europe and the world. Here are the key aspects of the revolution:
+
+            ### **Causes**
+            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (the American Revolution and the Seven Years' War), extravagant spending by the monarchy, and inefficient taxation.
+            2. **Social Inequality**: The rigid class system (the Ancien Régime) divided society into the privileged nobility and clergy (First Estate) and the commoners (Third Estate), who bore the brunt of taxation and had few rights.
+            3. **Enlightenment Ideas**: Philosophers like Rousseau, Voltaire, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty.
+            4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to the Third Estate's declaration of itself as the National Assembly, marking the start of the revolution.
+
+            ### **Key Events**
+            1. **Storming of the Bastille (July 14, 1789)**: A symbol of royal tyranny, the Bastille fortress was stormed by revolutionaries, sparking widespread rebellion.
+            2. **Declaration of the Rights of Man and of the Citizen (1789)**: A foundational document proclaiming liberty, equality, and fraternity.
+            3. **Reign of Terror (1793–1794)**: Led by Maximilien Robespierre and the Committee of Public Safety, thousands were executed by guillotine for alleged counter-revolutionary activities.
+            4. **Rise and Fall of Robespierre**: Robespierre's radical rule ended with his execution in July 1794, leading to a more moderate phase known as the Thermidorian Reaction.
+            5. **Execution of Louis XVI (July 1793)**: The king was guillot"""
+        )
+
         expected_texts = Expectations(
             {
                 ("cuda", (8, 0)): EXPECTED_TEXT_A100,
                 ("cuda", (8, 6)): EXPECTED_TEXT_A10,
                 ("xpu", None): EXPECTED_TEXT_XPU,
+                ("xpu", 5): EXPECTED_TEXT_BMG,
             }
         )
         EXPECTED_TEXT = expected_texts.get_expectation()

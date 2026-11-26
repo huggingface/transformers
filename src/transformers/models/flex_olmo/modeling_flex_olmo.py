@@ -43,7 +43,6 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_flex_olmo import FlexOlmoConfig
 
 
-@use_kernel_forward_from_hub("RMSNorm")
 class FlexOlmoRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
@@ -58,7 +57,7 @@ class FlexOlmoRMSNorm(nn.Module):
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (self.weight * hidden_states).to(input_dtype)
+        return (self.weight * hidden_states).to(input_dtype)  # main diff with Llama
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
@@ -100,7 +99,6 @@ class FlexOlmoRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -396,7 +394,6 @@ class FlexOlmoPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["FlexOlmoDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -409,7 +406,6 @@ class FlexOlmoPreTrainedModel(PreTrainedModel):
         "attentions": FlexOlmoAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = self.config.initializer_range
