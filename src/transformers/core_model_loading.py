@@ -1940,12 +1940,10 @@ def convert_and_load_state_dict_in_model(
             if is_dtensor(empty_param):
                 sharding_op = DtensorShardOperation(empty_param)
 
-            # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
-            # directly on the device, as it will completely blow up the memory during the ops memory spike. So defer to "cpu", then
-            # accelerate will take care of putting back on correct device after loading
-            # Note that we only do it with `device_map` but not with `tp_plan`, as tp will perform local sharding before, so memory
-            # spike during conversion ops should be fine
-            # TODO: move commment to the doc of force cpu, the flow is broken.
+            # Very large params (e.g. qwen4_exp ple_embedding ~95 GiB) would blow up memory if sharded
+            # on-device, so defer to "cpu"; accelerate moves them back afterwards. Only for `device_map`,
+            # not `tp_plan`, since tp shards locally first and the conversion spike is small.
+            # TODO: move comment to the force_cpu doc, the flow is broken.
             if sharding_op is None and isinstance(mapping, WeightConverter) and mapping.force_cpu:
                 param_device = "cpu"
 
