@@ -38,6 +38,7 @@ from .core_model_loading import (
     WeightRenaming,
     WeightTransform,
 )
+from .fusion_mapping import get_fusion_weight_transforms
 
 
 if TYPE_CHECKING:
@@ -2886,6 +2887,18 @@ def get_model_conversion_mapping(
         # be reachable so their base transforms are picked up and scoped.
         if not found_via_class and model_type:
             seen_identifiers[model_type].append(module_name)
+
+    # WeightConverter matching stops at the first matching source pattern, so
+    # conflicting converters must fail fast instead of being appended.
+    # TODO: allow compatible fusions mentioned https://github.com/huggingface/transformers/pull/45041#discussion_r3028989716
+    collected_source_patterns = {tuple(transform.source_patterns) for transform in weight_conversions}
+    for fusion_transform in get_fusion_weight_transforms(model):
+        if tuple(fusion_transform.source_patterns) in collected_source_patterns:
+            raise ValueError(
+                f"The fused modules of {type(model).__name__} conflict with its conversion mapping for source "
+                f"patterns {fusion_transform.source_patterns}."
+            )
+        weight_conversions.append(fusion_transform)
 
     if add_legacy:
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))

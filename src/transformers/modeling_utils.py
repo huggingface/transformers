@@ -61,6 +61,7 @@ from .distributed.sharding_utils import _dtensor_from_local_like, _tied_params_a
 from .distributed.tensor_parallel import verify_tp_plan
 from .distributed.utils import is_local_dist_rank_0
 from .dynamic_module_utils import custom_object_save
+from .fusion_mapping import get_fusion_patch_mapping
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled, is_fsdp_enabled
 from .integrations.accelerate import (
@@ -4368,12 +4369,8 @@ class PreTrainedModel(
         if fusion_config is not None:
             config.fusion_config = copy.deepcopy(fusion_config)
 
-        # Register fusion patches
         fusion_config = getattr(config, "fusion_config", None)
-        if fusion_config is not None:
-            from .fusion_mapping import register_fusion_patches
-
-            register_fusion_patches(cls, config, fusion_config)
+        fusion_patch_mapping = get_fusion_patch_mapping(cls, config, fusion_config) if fusion_config else {}
 
         # Kernel patches: single-layer replacement (stateful __init__) then fusions.
         if kernel_config is not None and use_kernels:
@@ -4385,6 +4382,7 @@ class PreTrainedModel(
                 register_kernel_replacements_and_fusions(cls, config, kernel_config)
 
         model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called, allow_all_kernels)
+        model_init_context.append(apply_patches(fusion_patch_mapping))
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         with ContextManagers(model_init_context):

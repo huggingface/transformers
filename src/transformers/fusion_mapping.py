@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Fusion registration helpers.
+"""Fusion helpers.
 
 See `docs/source/en/fusion_mapping.md` for the design overview and extension guide.
 """
@@ -25,9 +25,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 from torch import nn
 
-from .conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
 from .core_model_loading import Conv3dToLinear, WeightConverter, WeightRenaming, WeightTransform
-from .monkey_patching import register_patch_mapping
 from .utils import logging
 
 
@@ -39,9 +37,6 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 _FUSION_DISCOVERY_CACHE: dict[str, dict[type, dict[str, type[nn.Module]]]] = {}
-# Source patterns a given fusion already contributed to a model type's conversion mapping, so that
-# registering it again (e.g. loading the same checkpoint twice) replaces them instead of colliding.
-_REGISTERED_FUSION_SOURCE_PATTERNS: dict[tuple[str, str], set[tuple[str, ...]]] = {}
 
 
 class ModuleFusionSpec:
@@ -66,8 +61,12 @@ class ModuleFusionSpec:
         """Build the runtime replacement class for a compatible module class."""
         raise NotImplementedError
 
-    def make_transforms(self, config: "PretrainedConfig") -> list[WeightTransform]:
-        """Build the weight transforms needed to load and save the fused runtime layout."""
+    def is_fused(self, module: nn.Module) -> bool:
+        """Return whether `module` is an instance of a class built by `make_fused_class`."""
+        raise NotImplementedError
+
+    def make_transforms(self, module: nn.Module) -> list[WeightTransform]:
+        """Build the weight transforms that load and save the fused `module` in the original checkpoint layout."""
         raise NotImplementedError
 
 
@@ -75,6 +74,8 @@ class _FusedPatchEmbeddingMixin:
     def __init__(self, *args, **kwargs):
         # call the original_cls.__init__()
         super().__init__(*args, **kwargs)
+        self.proj_in_channels = self.proj.in_channels
+        self.proj_kernel_size = self.proj.kernel_size
         self.patch_volume = self.proj.in_channels * math.prod(self.proj.kernel_size)
 
         self.linear_proj = nn.Linear(
@@ -116,22 +117,18 @@ class PatchEmbeddingsFusionSpec(ModuleFusionSpec):
         fused_cls.__qualname__ = f"Fused{original_cls.__qualname__}"
         return fused_cls
 
-    def make_transforms(self, config: "PretrainedConfig") -> list[WeightTransform]:
-        vision_config = getattr(config, "vision_config", config)
-        patch_size = vision_config.patch_size
-        if isinstance(patch_size, int):
-            patch_size = (patch_size, patch_size)
-        kernel_size = (vision_config.temporal_patch_size, *tuple(patch_size))
-        in_channels = vision_config.in_channels
+    def is_fused(self, module: nn.Module) -> bool:
+        return isinstance(module, _FusedPatchEmbeddingMixin)
 
+    def make_transforms(self, module: nn.Module) -> list[WeightTransform]:
         return [
             WeightConverter(
                 source_patterns=r"patch_embed\.proj\.weight",
                 target_patterns=r"patch_embed\.linear_proj\.weight",
                 operations=[
                     Conv3dToLinear(
-                        in_channels=in_channels,
-                        kernel_size=kernel_size,
+                        in_channels=module.proj_in_channels,
+                        kernel_size=module.proj_kernel_size,
                     )
                 ],
             ),
@@ -190,62 +187,6 @@ def _discover_fusable_modules(
     return patch_mapping
 
 
-def _register_module_fusion(
-    cls: "type[PreTrainedModel]", config: "PretrainedConfig", fusion_name: str, spec: ModuleFusionSpec
-) -> None:
-    """Register one fusion family for `cls`.
-
-    This function updates the two global registries used by fused loading:
-    - the monkey-patching registry, so compatible module classes are replaced before initialization
-    - the checkpoint conversion mapping, so fused runtime modules still load from the original checkpoint layout
-
-    Notes:
-    - conflicting checkpoint transforms fail fast
-    """
-
-    fusable_classes = _discover_fusable_modules(cls, config, fusion_name=fusion_name, spec=spec)
-    if not fusable_classes:
-        logger.info(spec.get_empty_log(cls.__name__))
-        return
-
-    register_patch_mapping(fusable_classes, overwrite=True)
-
-    if not hasattr(cls, "config_class") or not hasattr(cls.config_class, "model_type"):
-        raise ValueError(f"Model {cls.__name__} has no config class or model type")
-    model_type = cls.config_class.model_type
-    fusion_converters = spec.make_transforms(config)
-    converters = fusion_converters
-
-    existing_converters = get_checkpoint_conversion_mapping(model_type)
-    if existing_converters is not None:
-        # Drop the converters this fusion registered last time, so re-registering it (e.g. loading the same
-        # checkpoint twice) does not conflict with itself.
-        previous_sources = _REGISTERED_FUSION_SOURCE_PATTERNS.get((model_type, fusion_name), set())
-        existing_converters = [
-            existing for existing in existing_converters if tuple(existing.source_patterns) not in previous_sources
-        ]
-
-        # WeightConverter matching stops at the first matching source pattern, so
-        # conflicting converters must fail fast instead of being appended.
-        existing_converter_sources = {tuple(existing.source_patterns): existing for existing in existing_converters}
-        for converter in converters:
-            source_patterns = tuple(converter.source_patterns)
-            existing_converter = existing_converter_sources.get(source_patterns)
-            if existing_converter is not None:
-                raise ValueError(
-                    f"Fusion {fusion_name} for model type {model_type} conflicts with an existing conversion mapping "
-                    f"for source patterns {source_patterns}."
-                )
-
-        # TODO: allow compatible fusions mentioned https://github.com/huggingface/transformers/pull/45041#discussion_r3028989716
-        converters = existing_converters + converters
-
-    _REGISTERED_FUSION_SOURCE_PATTERNS[(model_type, fusion_name)] = {
-        tuple(converter.source_patterns) for converter in fusion_converters
-    }
-    register_checkpoint_conversion_mapping(model_type, converters, overwrite=True)
-
-
 _FUSION_REGISTRY: dict[str, ModuleFusionSpec] = {"patch_embeddings": PatchEmbeddingsFusionSpec()}
 
 
@@ -266,19 +207,28 @@ def _iter_enabled_fusions(fusion_config: Mapping[str, bool | Mapping[str, Any]])
     return enabled_fusions
 
 
-def register_fusion_patches(
-    cls: "type[PreTrainedModel]", config, fusion_config: Mapping[str, bool | Mapping[str, Any]] | None = None
-) -> None:
-    """Register requested runtime fusions for `cls`.
+def get_fusion_patch_mapping(
+    cls: "type[PreTrainedModel]", config: "PretrainedConfig", fusion_config: Mapping[str, bool | Mapping[str, Any]]
+) -> dict[str, type[nn.Module]]:
+    """Return the module classes to replace while one model of class `cls` is initialized with `fusion_config`."""
 
-    This function:
-    - validates `fusion_config` against `_FUSION_REGISTRY`
-    - resolves the enabled fusion families in user order
-    - registers monkey patches and checkpoint transforms before model instantiation
-    """
-
-    if not fusion_config:
-        return
-
+    patch_mapping = {}
     for fusion_name in _iter_enabled_fusions(fusion_config):
-        _register_module_fusion(cls, config, fusion_name, _FUSION_REGISTRY[fusion_name])
+        spec = _FUSION_REGISTRY[fusion_name]
+        fusable_classes = _discover_fusable_modules(cls, config, fusion_name=fusion_name, spec=spec)
+        if not fusable_classes:
+            logger.info(spec.get_empty_log(cls.__name__))
+        patch_mapping.update(fusable_classes)
+    return patch_mapping
+
+
+def get_fusion_weight_transforms(model: nn.Module) -> list[WeightTransform]:
+    """Return the weight transforms that load and save the fused modules of `model` in the original checkpoint layout."""
+
+    transforms = {}
+    for module in model.modules():
+        for spec in _FUSION_REGISTRY.values():
+            if spec.is_fused(module):
+                for transform in spec.make_transforms(module):
+                    transforms.setdefault(tuple(transform.source_patterns), transform)
+    return list(transforms.values())
