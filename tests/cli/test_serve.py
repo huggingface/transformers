@@ -38,7 +38,7 @@ from transformers import DecisionConfig
 from transformers.cli.serve import Serve
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
 from transformers.cli.serving.completion import CompletionHandler
-from transformers.cli.serving.model_manager import METAL_FLASH_ATTN, ModelLoader, ModelManager
+from transformers.cli.serving.model_manager import METAL_FLASH_ATTN, EngineClient, ModelLoader, ModelManager
 from transformers.cli.serving.response import ResponseHandler, compute_usage
 from transformers.cli.serving.server import build_server
 from transformers.cli.serving.systemone import SystemOneHandler
@@ -654,11 +654,11 @@ class TestGetEngine(unittest.TestCase):
         # A client that disconnects mid-load stops receiving the load's events, and the load goes on for the others
         release = threading.Event()
 
-        def start(on_progress):
+        async def load(on_progress):
             on_progress({"status": "loading"})
-            release.wait()
+            await asyncio.to_thread(release.wait)
 
-        engine = MagicMock(model_id="org/model@main", process_running=False, start=start)
+        engine = MagicMock(model_id="org/model@main", process_running=False, load=load)
 
         async def collect(stream):
             return [event async for event in stream]
@@ -683,6 +683,20 @@ class TestGetEngine(unittest.TestCase):
             release.set()
         self.assertEqual(subscribers, 1)
         self.assertEqual(remaining, {})
+
+    def test_loaded_model_stops_when_idle(self):
+        """A model `/load_model` loads stops after `model_timeout` seconds without requests, even if none comes."""
+        process = MagicMock()
+
+        async def load_then_wait():
+            mm = ModelManager(MagicMock(**{"load_config.return_value": (None, None)}), model_timeout=0.1)
+            async for _ in mm.load_model_streaming("org/model"):
+                pass
+            await asyncio.sleep(0.5)
+
+        with patch.object(EngineClient, "start_process", return_value=(process, MagicMock(), [queue.Queue()])):
+            asyncio.run(load_then_wait())
+        process.terminate.assert_called_once()
 
 
 class TestModelLoader(unittest.TestCase):

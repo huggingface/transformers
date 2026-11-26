@@ -24,6 +24,7 @@ import json
 import multiprocessing
 import os
 import queue
+import signal
 import threading
 import time
 import uuid
@@ -196,12 +197,13 @@ def set_torch_seed(seed: int) -> None:
 
 
 def run_until_parent_exits(target: Callable, *args) -> None:
-    """Runs `target(*args)` in a process the server spawned, which exits once its parent does, even one killed without
-    cleanup (`kill -9`), which would leave it running (a model's process holding its GPU memory, an API server its
-    port)."""
+    """Runs `target(*args)` in a process the server spawned, which its parent stops: it leaves Ctrl+C, which reaches
+    every process of the terminal, to its parent, and exits once its parent does, even one killed without cleanup
+    (`kill -9`), which would leave it running (a model's process holding its GPU memory, an API server its port)."""
     parent = multiprocessing.parent_process()
     if parent is None:
         raise RuntimeError("`run_until_parent_exits` is for the target of a process the server spawns.")
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     def wait_and_exit() -> None:
         parent.join()

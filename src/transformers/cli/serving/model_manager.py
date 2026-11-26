@@ -151,6 +151,13 @@ class EngineClient:
             self.requests_queue, self.results_queue = requests, results[0]
             self.managed_process = process
             self._start_reading_results()
+            if self._loop is not None:  # its idle timer starts now, for a model no request comes to
+                self._loop.call_soon_threadsafe(self._schedule_idle_shutdown)
+
+    async def load(self, on_progress: Callable[[dict], None] | None = None) -> None:
+        """`start`, from the event loop, which then runs its idle timer."""
+        self._loop = asyncio.get_running_loop()
+        await asyncio.to_thread(self.start, on_progress)
 
     async def generate_non_streaming(self, inputs: dict, generation_kwargs: dict) -> tuple[str, int, list[int]]:
         """Generates for `inputs`. Returns the text, the prompt's length, and the generated tokens."""
@@ -190,6 +197,7 @@ class EngineClient:
 
         if self._loop is not None and not self._loop.is_closed():  # on the event loop, where their futures belong
             self._loop.call_soon_threadsafe(fail_all_requests)
+            self._loop.call_soon_threadsafe(self._cancel_idle_shutdown)
 
         self._lock.acquire()
         process.terminate()
@@ -207,7 +215,7 @@ class EngineClient:
         """Sends a request to the engine, to call `method(*args)` on its runner, and returns its result. With a
         `streamer`, the request streams: its tokens go to it as they come. Raises the error that failed it."""
         if not self.process_running:
-            await asyncio.to_thread(self.start)
+            await self.load()
 
         self._loop = asyncio.get_running_loop()
         request_id = make_request_id(self.api_server_id, next(self._request_counter))
@@ -223,8 +231,7 @@ class EngineClient:
             self.pending_requests.pop(request_id, None)
             if future.cancelled():
                 self.requests_queue.put(("cancel", request_id))
-            if not self.pending_requests:
-                self._schedule_idle_shutdown()
+            self._schedule_idle_shutdown()
         if isinstance(result, Exception):
             raise result
         return result
@@ -311,7 +318,7 @@ class EngineClient:
 
     def _schedule_idle_shutdown(self) -> None:
         """Stops the model's process if no request comes for `timeout` seconds."""
-        if self.timeout <= 0 or self.managed_process is None or self._loop is None:
+        if self.timeout <= 0 or self.managed_process is None or self._loop is None or self.pending_requests:
             return
 
         def shutdown_if_idle() -> None:
@@ -319,6 +326,7 @@ class EngineClient:
                 logger.info(f"Stopping a model's process after {self.timeout}s without requests")
                 self.shutdown()
 
+        self._cancel_idle_shutdown()
         self._idle_shutdown = self._loop.call_later(self.timeout, shutdown_if_idle)
 
     def _cancel_idle_shutdown(self) -> None:
@@ -558,7 +566,7 @@ class ModelManager:
 
             async def run_load():
                 try:
-                    await asyncio.to_thread(engine.start, on_progress=enqueue)  # returns once the model can generate
+                    await engine.load(on_progress=enqueue)
                     enqueue({"status": "ready", "model": model_id, "cached": False})
                 except Exception as e:
                     logger.error(f"Failed to load {model_id}: {e}", exc_info=True)
