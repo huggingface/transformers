@@ -336,11 +336,9 @@ class PeftAdapterMixin:
                     module.requires_grad_(False)
 
         # A tied adapter weight (e.g. tied trainable tokens) is loaded through one of its keys only.
-        state_dict = self.state_dict(keep_vars=True)
-        loaded_ids = {id(state_dict[k]) for k in state_dict.keys() - loading_info.missing_keys}
-        loading_info.missing_keys = {
-            k for k in loading_info.missing_keys if is_adapter_key(k) and id(state_dict[k]) not in loaded_ids
-        }
+        missing, tensors = loading_info.missing_keys, self.state_dict(keep_vars=True)
+        loaded = {id(t) for k, t in tensors.items() if k not in missing}
+        loading_info.missing_keys = {k for k in missing if is_adapter_key(k) and id(tensors[k]) not in loaded}
 
         log_state_dict_report(
             model=self,
