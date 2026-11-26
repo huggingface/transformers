@@ -631,7 +631,9 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
             )
 
         final_embedding[audio_to_overwrite] = (
-            masked_audio_features.contiguous().reshape(-1, embed_dim).to(target_device)
+            masked_audio_features.contiguous()
+            .reshape(-1, embed_dim)
+            .to(device=final_embedding.device, dtype=final_embedding.dtype)
         )
         final_attention_mask |= audio_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
