@@ -1923,7 +1923,7 @@ The stream ends with exactly one terminal event, `ready` (success) or `error` (f
 
 ## Timeout
 
-`transformers serve` handles requests for any model. Each model loads on demand and stays in GPU memory. Models unload automatically after 300 seconds of inactivity to free GPU memory. Set `--model-timeout` to a different value in seconds, or `-1` to disable unloading. A model given on the command line never unloads. Each model runs in a process of its own, so the server's process stays free to handle HTTP, tokenize prompts and decode tokens while it generates; unloading a model stops its process.
+`transformers serve` handles requests for any model specify with the concerned endpoint. Each model loads on demand and stays in GPU memory. Models unload automatically after 300 seconds of inactivity to free GPU memory. Set `--model-timeout` to a different value in seconds, or `-1` to disable unloading. A model given on the command line with the `--force-model` argument never unloads. Each model runs in a process of its own, so the server's process stays free to handle HTTP, tokenize prompts and decode tokens while it generates; unloading a model stops its process.
 
 If a model's process dies (a crash, or the system killing it for lack of memory), its requests fail, `/health` answers 503, and the server exits with an error, for whatever runs it (a script, systemd, Kubernetes) to start it again.
 
