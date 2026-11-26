@@ -25,6 +25,7 @@ from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
     require_torch_fp16,
+    skip_tpu,
     slow,
     torch_device,
 )
@@ -259,6 +260,7 @@ class LEDModelTester:
 
 
 @require_torch
+@skip_tpu("model aborts in the sliding chunks attention")
 class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (LEDModel, LEDForConditionalGeneration, LEDForQuestionAnswering) if is_torch_available() else ()
@@ -488,6 +490,7 @@ TOLERANCE = 1e-4
 @require_sentencepiece
 @require_tokenizers
 @slow
+@skip_tpu("model aborts in the sliding chunks attention")
 class LEDModelIntegrationTests(unittest.TestCase):
     """All the below results were obtained with the original checkpoints and code
     base from https://github.com/allenai/longformer.

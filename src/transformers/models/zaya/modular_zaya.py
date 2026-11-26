@@ -660,7 +660,6 @@ class ZayaModel(LagunaModel):
 @auto_docstring(checkpoint="Zyphra/ZAYA1-8B")
 class ZayaForCausalLM(AfmoeForCausalLM, ZayaPreTrainedModel):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _is_stateful = True
 
     _tp_plan = AttributeError()
     _pp_plan = AttributeError()

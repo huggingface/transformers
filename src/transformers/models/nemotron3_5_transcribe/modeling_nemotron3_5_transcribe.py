@@ -120,7 +120,6 @@ class Nemotron3_5TranscribePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True
-    _is_stateful = True
     _keys_to_ignore_on_load_unexpected = [
         r"^llm\.mtp\.",
         r"^perception\.preprocessor\.",

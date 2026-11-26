@@ -56,7 +56,6 @@ class SeedOssModelTester(CausalLMModelTester):
 @require_torch
 class SeedOssModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = SeedOssModelTester
-    _is_stateful = True
     model_split_percents = [0.5, 0.6]
 
 

@@ -1092,7 +1092,6 @@ class PreTrainedModel(
     generation_config_class: type[GenerationConfig] = GenerationConfig  # default, used with `GenerationMixin`
     _auto_class = None
     base_model_prefix: str = ""
-    _is_stateful: bool = False
     model_tags: list[str] | None = None
 
     # Input-related properties

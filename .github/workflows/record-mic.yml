@@ -1,0 +1,56 @@
+name: record-mic
+
+# When a PR changes a model's outputs on purpose, its model integration contracts (MIC) go red and
+# its contracts job records the new values for the cases its gate marks blocked. Someone with write
+# access publishes them, for this PR only:
+#
+#   a PR comment whose first line is   record-mic: gptj codegen
+#   or, from a checkout of the branch   make record-mic MODEL="gptj codegen" [PR=<number>]
+#
+# huggingface/transformers-ci .github/workflows/pr-ci_record_mic.yml does the work, the same way
+# self-comment-ci.yml handles run-slow: PR facts from get-pr-info.yml, the merge commit must be
+# older than the request, only the contracts run of that commit is used, and errors are replied
+# on the PR. No job runs the PR's code. The values go live in the fleet when the PR merges.
+
+on:
+  issue_comment:
+    types:
+      - created
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number"
+        required: true
+        type: string
+      models:
+        description: "Model types (e.g. gptj codegen), contract or target names"
+        required: true
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number || inputs.pr }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  record-mic:
+    # The run-slow trigger condition (self-comment-ci.yml), with its own prefix.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event.issue.pull_request && github.event.issue.state == 'open'
+          && contains(fromJSON('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.comment.author_association)
+          && startsWith(github.event.comment.body, 'record-mic:'))
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    uses: huggingface/transformers-ci/.github/workflows/pr-ci_record_mic.yml@main
+    with:
+      pr: ${{ github.event.issue.number || inputs.pr }}
+      request: "${{ github.event.comment.body || format('record-mic: {0}', inputs.models) }}"
+      requested_by: ${{ github.event.comment.user.login || github.actor }}
+      requested_at: ${{ github.event.comment.created_at }}
+    secrets:
+      mic_write_token: ${{ secrets.MIC_RECORD_WRITE_TOKEN }}

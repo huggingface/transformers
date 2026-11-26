@@ -585,7 +585,6 @@ class MiniCPMOcrPreTrainedModel(PreTrainedModel):
         "MiniCPMOcrVisionEncoderLayer",
         "MiniCPMOcrViTWindowAttentionMerger",
     ]
-    _is_stateful = True
 
 
 @auto_docstring(
