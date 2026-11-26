@@ -121,6 +121,7 @@ class SeamlessM4TTokenizer(TokenizersBackend):
         additional_special_tokens=None,
         keep_accents=None,
         vocab_file=None,
+        _spm_precompiled_charsmap: str | None = None,
         **kwargs,
     ):
         self._vocab = vocab or {
@@ -142,16 +143,21 @@ class SeamlessM4TTokenizer(TokenizersBackend):
             )
         )
 
-        self._tokenizer.normalizer = normalizers.Sequence(
+        self._spm_precompiled_charsmap = _spm_precompiled_charsmap
+        list_normalizers = [normalizers.Replace(Regex(r"[\n\r\t]"), " ")]
+        if _spm_precompiled_charsmap is not None:
+            list_normalizers.append(normalizers.Precompiled(_spm_precompiled_charsmap))
+        else:
+            list_normalizers.append(normalizers.NFKC())
+        list_normalizers.extend(
             [
-                normalizers.Replace(Regex(r"[\n\r\t]"), " "),
-                normalizers.NFKC(),
                 normalizers.Strip(left=False, right=True),
                 normalizers.Replace(Regex(r" +▁"), "▁"),
                 normalizers.Replace(Regex(r"^▁+$"), ""),
                 normalizers.Replace(Regex(r" {2,}"), "▁"),
             ]
         )
+        self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="first", split=True)
 
@@ -178,6 +184,7 @@ class SeamlessM4TTokenizer(TokenizersBackend):
             tgt_lang=tgt_lang,
             keep_accents=keep_accents,
             vocab_file=vocab_file,
+            _spm_precompiled_charsmap=_spm_precompiled_charsmap,
             **kwargs,
         )
 

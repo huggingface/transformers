@@ -98,6 +98,7 @@ class BarthezTokenizer(TokenizersBackend):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=True,
+        _spm_precompiled_charsmap: str | None = None,
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
@@ -117,13 +118,20 @@ class BarthezTokenizer(TokenizersBackend):
 
         self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
 
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
+        self._spm_precompiled_charsmap = _spm_precompiled_charsmap
+        if _spm_precompiled_charsmap is not None:
+            list_normalizers = [
+                normalizers.Precompiled(_spm_precompiled_charsmap),
+                normalizers.Strip(left=False, right=True),
+                normalizers.Replace(Regex(r" {2,}"), "▁"),
+            ]
+        else:
+            list_normalizers = [
                 normalizers.Replace(Regex(r"\s{2,}|[\n\r\t]"), " "),
-                normalizers.NFC(),
+                normalizers.NFC(),  # NFC() is a fallback approximation when no charsmap is available.
                 normalizers.Strip(left=False, right=True),
             ]
-        )
+        self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
         prepend_scheme = "always" if add_prefix_space else "never"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
@@ -137,6 +145,7 @@ class BarthezTokenizer(TokenizersBackend):
             pad_token=pad_token,
             mask_token=mask_token,
             add_prefix_space=add_prefix_space,
+            _spm_precompiled_charsmap=_spm_precompiled_charsmap,
             **kwargs,
         )
 

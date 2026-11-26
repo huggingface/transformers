@@ -263,6 +263,7 @@ if TYPE_CHECKING:
     from .kimi_k25 import *
     from .kimi_linear import *
     from .kolibri1 import *
+    from .kolibri1_1 import *
     from .kosmos2 import *
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
@@ -381,6 +382,7 @@ if TYPE_CHECKING:
     from .openai_privacy_filter import *
     from .opt import *
     from .ovis2 import *
+    from .ovis2_5 import *
     from .owlv2 import *
     from .owlvit import *
     from .paddleocr_vl import *
@@ -402,6 +404,7 @@ if TYPE_CHECKING:
     from .phimoe import *
     from .phobert import *
     from .pi0 import *
+    from .pi05 import *
     from .pix2struct import *
     from .pixio import *
     from .pixtral import *

@@ -42,7 +42,7 @@ from ..llama.modeling_llama import (
 )
 from ..mamba2.modeling_mamba2 import (
     Mamba2Mixer,
-    MambaRMSNormGated,
+    Mamba2RMSNormGated,
 )
 from .configuration_bamba import BambaConfig
 
@@ -116,7 +116,7 @@ class BambaAttention(LlamaAttention):
     pass
 
 
-class BambaRMSNormGated(MambaRMSNormGated):
+class BambaRMSNormGated(Mamba2RMSNormGated):
     pass
 
 
