@@ -4,13 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_minicpm5_moe.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2026 The HuggingFace Team. All rights reserved.
-# Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
-#
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -51,10 +45,9 @@ class MiniCPM5MoeConfig(PreTrainedConfig):
     """
 
     model_type = "minicpm5_moe"
-    default_theta = 5000000.0
+
     base_model_tp_plan = {
-        "layers.*.self_attn.query_proj": "colwise",
-        "layers.*.self_attn.gate_proj": "colwise",
+        "layers.*.self_attn.q_gate_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
@@ -77,39 +70,45 @@ class MiniCPM5MoeConfig(PreTrainedConfig):
     }
 
     attribute_map = {"num_local_experts": "n_routed_experts"}
-    hidden_act: str = "silu"
-    initializer_range: float = 0.02
-    rms_norm_eps: float = 1e-6
-    use_cache: bool = True
-    tie_word_embeddings: bool = False
-    rope_parameters: RopeParameters | dict | None = None
-    attention_bias: bool = False
-    attention_dropout: float = 0.0
+
     vocab_size: int = 130560
     hidden_size: int = 2048
     intermediate_size: int = 8192
     num_hidden_layers: int = 28
     num_attention_heads: int = 32
     num_key_value_heads: int | None = 2
-    head_dim: int | None = 128
+    hidden_act: str = "silu"
     max_position_embeddings: int = 524288
-    pad_token_id: int | None = 1
-    bos_token_id: int | None = 0
-    eos_token_id: int | list[int] | None = field(default_factory=lambda: [1, 130073])
-    mlp_layer_types: list[str] | None = None
-    n_routed_experts: int = 160
-    n_shared_experts: int = 1
-    routed_scaling_factor: float = 3.66
-    num_experts_per_tok: int = 16
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
     moe_intermediate_size: int = 512
+    num_experts_per_tok: int = 16
+    output_router_logits: bool = False
+    n_shared_experts: int = 1
+    n_routed_experts: int = 160
+    routed_scaling_factor: float = 3.66
     n_group: int = 1
     topk_group: int = 1
     norm_topk_prob: bool = True
-    output_router_logits: bool = False
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = field(default_factory=lambda: [1, 130073])
+
+    pad_token_id: int | None = 1
+    default_theta = 5000000.0
+    head_dim: int | None = 128
+
+    mlp_layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
+        # BC: for old naming convention
         if self.architectures == ["MiniCPM5MoEForCausalLM"]:
             self.architectures = ["MiniCPM5MoeForCausalLM"]
+
         dense_layers = kwargs.pop("first_k_dense_replace", 1)
         if kwargs.pop("use_gated_attention", True) is False:
             raise ValueError(
@@ -121,6 +120,7 @@ class MiniCPM5MoeConfig(PreTrainedConfig):
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
+
         super().__post_init__(**kwargs)
 
 

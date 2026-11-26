@@ -230,17 +230,11 @@ class Concatenate(ConversionOps):
 
 
 class Interleave(ConversionOps):
-    """Deinterleave two streams along `dim`.
+    """Deinterleaves a tensor along `dim` by splitting in two and transposing. Reshapes param back to its original size."""
 
-    By default each stream contributes one element at a time. With
-    `num_groups_attribute`, each group (e.g. attention head) contains one
-    contiguous block from each stream.
-    """
-
-    def __init__(self, dim: int = 0, inverse: bool = False, num_groups_attribute: str | None = None):
+    def __init__(self, dim: int = 0, inverse: bool = False):
         self.dim = dim
         self.inverse = inverse
-        self.num_groups_attribute = num_groups_attribute
 
     def convert(self, input_dict, source_patterns, target_patterns, **kwargs):
         tensor = next(iter(input_dict.values()))
@@ -248,21 +242,7 @@ class Interleave(ConversionOps):
 
         # Split into two in given dim and transpose to interleave along it
         shape = list(tensor.shape)
-        if self.num_groups_attribute is not None:
-            groups = getattr(kwargs["config"].get_text_config(), self.num_groups_attribute)
-            # Shard-on-read has already sliced the fused tensor to this rank's heads.
-            if not self.inverse and kwargs.get("model") is not None:
-                target = kwargs["model"].get_parameter_or_buffer(kwargs["full_layer_name"])
-                if is_dtensor(target):
-                    local_size = target.to_local().shape[self.dim]
-                    groups, remainder = divmod(groups * local_size, target.shape[self.dim])
-                    if remainder or groups == 0:
-                        raise ValueError("Interleaved projections must be sharded on whole group boundaries")
-            if shape[self.dim] % (2 * groups):
-                raise ValueError(f"Cannot split dimension of size {shape[self.dim]} into {groups} pairs of blocks")
-            block = shape[self.dim] // (2 * groups)
-            shape[self.dim : self.dim + 1] = [2, groups, block] if self.inverse else [groups, 2, block]
-        elif self.inverse:
+        if self.inverse:
             shape[self.dim : self.dim + 1] = [2, shape[self.dim] // 2]
         else:
             shape[self.dim : self.dim + 1] = [shape[self.dim] // 2, 2]
@@ -273,7 +253,7 @@ class Interleave(ConversionOps):
     @property
     def reverse_op(self) -> ConversionOps:
         # can use the same dim and it will inverse it back
-        return Interleave(self.dim, inverse=not self.inverse, num_groups_attribute=self.num_groups_attribute)
+        return Interleave(self.dim, inverse=not self.inverse)
 
 
 class MergeModulelist(ConversionOps):

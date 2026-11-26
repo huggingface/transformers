@@ -4,13 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_minicpm5_moe.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2026 The HuggingFace Team. All rights reserved.
-# Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
-#
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from functools import wraps
 
 import torch
 import torch.nn.functional as F
@@ -33,8 +26,6 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...distributed import DistributedConfig
-from ...distributed.tensor_parallel import get_kv_heads_per_rank
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
@@ -106,16 +97,6 @@ class MiniCPM5MoeExperts(nn.Module):
         return final_hidden_states
 
 
-def _disable_router_autocast(forward):
-    @wraps(forward)
-    def wrapped(self, hidden_states):
-        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            return forward(self, hidden_states)
-
-    return wrapped
-
-
 class MiniCPM5MoeTopkRouter(nn.Module):
     def __init__(self, config: MiniCPM5MoeConfig):
         super().__init__()
@@ -129,10 +110,14 @@ class MiniCPM5MoeTopkRouter(nn.Module):
         self.norm_topk_prob = config.norm_topk_prob
         self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
-    @_disable_router_autocast
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+
+        # Key difference of forcing fp32 in all cases
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias
         group_scores = (
@@ -227,20 +212,29 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def minicpm5_moe_eager_attention_forward(module, query, key, value, attention_mask, scaling, dropout=0.0, **kwargs):
-    key = repeat_kv(key, module.num_key_value_groups)
-    value = repeat_kv(value, module.num_key_value_groups)
-    if query.dtype == torch.float16:
-        # Some unscaled QK scores in the released checkpoint exceed the FP16 range.
-        with torch.autocast(device_type=query.device.type, enabled=False):
-            scores = torch.matmul(query.float(), key.float().transpose(2, 3)) * scaling
-    else:
-        scores = torch.matmul(query, key.transpose(2, 3)) * scaling
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        scores = scores + attention_mask
-    weights = F.softmax(scores, dim=-1, dtype=torch.float32).to(value.dtype)
-    weights = F.dropout(weights, p=dropout, training=module.training)
-    return torch.matmul(weights, value).transpose(1, 2).contiguous(), weights
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
@@ -265,60 +259,68 @@ class MiniCPM5MoeAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.query_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.gate_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        self.q_gate_proj = nn.Linear(
+            config.hidden_size, 2 * config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        # Keep the three projections adjacent so backends can fuse them without repacking the checkpoint.
-        query = self.query_proj(hidden_states)
-        key = self.k_proj(hidden_states)
-        value = self.v_proj(hidden_states)
         input_shape = hidden_states.shape[:-1]
-        head_shape = (*input_shape, -1, self.head_dim)
-        query_states = query.reshape(head_shape).transpose(1, 2)
-        key_states = key.reshape(head_shape).transpose(1, 2)
-        value_states = value.reshape(head_shape).transpose(1, 2)
+        hidden_shape = (*input_shape, -1, self.head_dim)
+        query_gate_hidden_shape = (*input_shape, -1, 2 * self.head_dim)
+
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_gate_states = self.q_gate_proj(hidden_states).view(query_gate_hidden_shape)
+
+        query_states, gate_states = query_gate_states.chunk(chunks=2, dim=-1)
+        query_states = query_states.transpose(1, 2)
+        gate_states = gate_states.reshape(*input_shape, -1)
+
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
         if cache is not None:
             key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
+
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, minicpm5_moe_eager_attention_forward
+            self.config._attn_implementation, eager_attention_forward
         )
-        output, weights = attention_interface(
+
+        attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
             attention_mask,
-            dropout=self.attention_dropout if self.training else 0.0,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
         )
-        output = output.reshape(*input_shape, -1).contiguous()
-        output = output * self.gate_proj(hidden_states).sigmoid()
-        return self.o_proj(output), weights
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output * gate_states.sigmoid()  # key difference
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class MiniCPM5MoeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MiniCPM5MoeConfig, layer_idx: int):
         super().__init__()
-        self.self_attn = MiniCPM5MoeAttention(config=config, layer_idx=layer_idx)
+        self.hidden_size = config.hidden_size
+        self.self_attn = MiniCPM5MoeAttention(config, layer_idx)
+
         self.mlp = MiniCPM5MoeMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else MiniCPM5MoeMLP(config)
-        self.input_layernorm = MiniCPM5MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = MiniCPM5MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.input_layernorm = MiniCPM5MoeRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = MiniCPM5MoeRMSNorm(config.hidden_size, config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -392,7 +394,6 @@ class MiniCPM5MoePreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(MiniCPM5MoeTopkRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
-    _keys_to_ignore_on_load_unexpected = None
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -402,16 +403,6 @@ class MiniCPM5MoePreTrainedModel(PreTrainedModel):
         elif isinstance(module, MiniCPM5MoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-
-    def _resolve_parallel_plans(self, distributed_config: DistributedConfig):
-        tp_plan, ep_plan, fsdp_plan = super()._resolve_parallel_plans(distributed_config)
-        kv_heads = self.config.num_key_value_heads
-        if get_kv_heads_per_rank(tp_plan, kv_heads, distributed_config.tp_size) is None:
-            raise ValueError(
-                f"MiniCPM5Moe requires num_key_value_heads ({kv_heads}) to be divisible by "
-                f"tp_size ({distributed_config.tp_size}) when sharding KV heads."
-            )
-        return tp_plan, ep_plan, fsdp_plan
 
 
 class MiniCPM5MoeRotaryEmbedding(nn.Module):

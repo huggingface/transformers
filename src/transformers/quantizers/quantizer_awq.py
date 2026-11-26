@@ -69,16 +69,6 @@ class AwqQuantizer(HfQuantizer):
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules, add_default_skips=True
         )
 
-        if model.config.model_type == "minicpm5_moe":
-            # Check exclusions against the original fused projection before replacing linears.
-            split_exclusions = []
-            for name, _ in model.named_modules():
-                if name.endswith("self_attn.query_proj"):
-                    attention = name.removesuffix(".query_proj")
-                    if not should_convert_module(f"{attention}.q_proj", self.modules_to_not_convert):
-                        split_exclusions.extend([name, f"{attention}.gate_proj"])
-            self.modules_to_not_convert.extend(split_exclusions)
-
         model = replace_with_awq_linear(
             model,
             quantization_config=self.quantization_config,
@@ -92,23 +82,6 @@ class AwqQuantizer(HfQuantizer):
         from gptqmodel.utils.model import hf_gptqmodel_post_init
 
         hf_gptqmodel_post_init(model, use_act_order=self.quantization_config.desc_act)
-
-    def update_weight_conversions(self, weight_conversions, model):
-        conversions = super().update_weight_conversions(weight_conversions, model)
-        if model.config.model_type == "minicpm5_moe" and self.quantization_config.format == "gemm":
-            from ..core_model_loading import Chunk, Interleave, WeightConverter
-
-            # AWQ GEMM packs eight adjacent output channels per int32. Each query
-            # or gate head spans whole words, so this also splits the packed zeros.
-            for suffix in ("qweight", "qzeros", "scales"):
-                conversions.append(
-                    WeightConverter(
-                        source_patterns=f"self_attn.q_proj.{suffix}",
-                        target_patterns=[f"self_attn.query_proj.{suffix}", f"self_attn.gate_proj.{suffix}"],
-                        operations=[Interleave(dim=1, num_groups_attribute="num_attention_heads"), Chunk(dim=1)],
-                    )
-                )
-        return conversions
 
     def is_serializable(self):
         if self.quantization_config.backend in [AwqBackend.EXLLAMA_V1, AwqBackend.EXLLAMA_V2]:

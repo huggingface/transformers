@@ -26,13 +26,14 @@ MiniCPM5-15B-A2.5B is a decoder-only language model with 15 billion parameters a
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-checkpoint = "openbmb/MiniCPM5-15B-A2.5B"
-tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-model = AutoModelForCausalLM.from_pretrained(checkpoint, dtype="auto", device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("openbmb/MiniCPM5-15B-A2.5B")
+model = AutoModelForCausalLM.from_pretrained("openbmb/MiniCPM5-15B-A2.5B", device_map="auto")
+
 messages = [{"role": "user", "content": "What is 7 + 8? Answer with only the number."}]
 inputs = tokenizer.apply_chat_template(
     messages, tokenize=True, add_generation_prompt=True, enable_thinking=False, return_dict=True, return_tensors="pt"
 ).to(model.device)
+
 outputs = model.generate(**inputs, max_new_tokens=16, do_sample=False)
 print(tokenizer.decode(outputs[0, inputs.input_ids.shape[1]:], skip_special_tokens=True))
 ```
