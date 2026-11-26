@@ -37,6 +37,7 @@ class ExportFormat(StrEnum):
     OPENVINO = "openvino"
     DYNAMO = "dynamo"
     ONNX = "onnx"
+    MLX = "mlx"
 
 
 @dataclass
@@ -266,3 +267,16 @@ class OpenVINOConfig(DynamoConfig):
 
     compress_to_fp16: bool = False
     stateful: bool = True
+
+
+@dataclass
+class MLXConfig(DynamoConfig):
+    """
+    Configuration class for exporting models to an MLX function (`.mlxfn`), which MLX runs on Apple Silicon GPUs and
+    on CPU.
+
+    Inherits all fields from [`DynamoConfig`]. A dynamic export is saved shapeless: MLX recomputes its shapes for new
+    inputs.
+    """
+
+    export_format: ExportFormat = ExportFormat.MLX

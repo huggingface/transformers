@@ -32,6 +32,7 @@ from transformers.exporters.decompose import (
 )
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
+from transformers.exporters.exporter_mlx import MLXConfig, MLXExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter
 from transformers.exporters.multimodal import ExportedMultimodalModel
@@ -44,6 +45,7 @@ from transformers.exporters.utils import (
 )
 from transformers.testing_utils import (
     require_executorch,
+    require_mlx,
     require_onnxruntime,
     require_onnxscript,
     require_openvino,
@@ -1315,6 +1317,77 @@ class ExportTesterMixin:
                         exporter, exported, full_model, full_inputs, atol, rtol, check_exactness, check_device=False
                     )
 
+    # ──────────────────────── MLX tests ──────────────────────────
+
+    @DYNAMIC_EXPORT_PARAMS
+    @slow
+    @require_mlx
+    @pytest.mark.mlx_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_mlx_export(self, dynamic, atol=1e-4, rtol=1e-4):
+        """Export each model class to MLX and verify outputs match eager within tolerance."""
+        self._skip_if_not_exportable()
+
+        exporter = MLXExporter()
+        config = MLXConfig(dynamic=dynamic)
+
+        for model_class in self.all_model_classes:
+            if self._should_skip(model_class, dynamic=dynamic, backend="mlx"):
+                continue
+
+            components, new_inputs, full_model, full_inputs = self._prepare_export_model_and_inputs(
+                model_class, dynamic=dynamic, return_model=True
+            )
+            eager_outputs, eager_types = self._collect_eager_outputs(components)
+            new_eager_outputs, new_eager_types = self._collect_eager_outputs(components, new_inputs)
+            check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic)
+            exported = {}
+
+            for name, (model, inputs) in components.items():
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    exported[name] = exporter.export(model, inputs, config=config)
+                    runtime = exported[name]
+
+                    set_seed(1234)
+                    outputs = runtime(**copy.deepcopy(inputs))
+                    self.assertIs(type(outputs), eager_types[name])
+                    exported_outputs = get_leaf_tensors(outputs)
+                    self.assertTrue(exported_outputs, f"Exported outputs are empty for {name}.")
+                    if check_exactness:
+                        self._check_outputs_close(
+                            exported_outputs,
+                            eager_outputs[name],
+                            atol=atol,
+                            rtol=rtol,
+                            check_device=False,
+                            inputs=inputs,
+                            msg=f"{name} differs from eager on the inputs it was exported with",
+                        )
+
+                    set_seed(1234)
+                    outputs = runtime(**copy.deepcopy(new_inputs[name]))
+                    self.assertIs(type(outputs), new_eager_types[name])
+                    new_exported_outputs = get_leaf_tensors(outputs)
+                    self.assertTrue(new_exported_outputs, f"Exported outputs on new inputs are empty for {name}.")
+                    if check_exactness:
+                        self._check_outputs_close(
+                            new_exported_outputs,
+                            new_eager_outputs[name],
+                            atol=atol,
+                            rtol=rtol,
+                            check_device=False,
+                            inputs=new_inputs[name],
+                            msg=f"{name} differs from eager on new inputs it never saw",
+                        )
+
+            if len(components) > 1:
+                with self.subTest(f"{model_class.__name__}/end to end"):
+                    self._check_multimodal_runtime(
+                        exporter, exported, full_model, full_inputs, atol, rtol, check_exactness, check_device=False
+                    )
+
     # ──────────────────── ExecuTorch tests ───────────────────────
 
     @EXECUTORCH_EXPORT_PARAMS
@@ -1593,6 +1666,54 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     generation_config=generation_config,
                 )
                 self._check_generate(exporter, config, model, inputs, generation_config, dynamic, check_tokens)
+
+    # ──────────────────────── MLX tests ──────────────────────────
+
+    @GENERATE_EXPORT_PARAMS
+    @slow
+    @require_mlx
+    @pytest.mark.mlx_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_mlx_export_generate(self, dynamic, generation_config, atol=1e-4, rtol=1e-4):
+        """Export each generation component to MLX and verify outputs match eager on every call."""
+        self._skip_if_not_exportable()
+        exporter = MLXExporter()
+        config = MLXConfig(dynamic=dynamic)
+
+        for model_class in self.all_generative_model_classes:
+            if self._should_skip(
+                model_class, generate=True, dynamic=dynamic, backend="mlx", generation_config=generation_config
+            ):
+                continue
+
+            components, full_model, full_inputs = self._prepare_export_generate_model_and_inputs(
+                model_class, generation_config=generation_config, multi_token_decode=dynamic
+            )
+            eager_outputs, _ = self._collect_eager_outputs(components)
+            check_exactness = not self._should_skip_exactness(
+                model_class, generate=True, dynamic=dynamic, backend="mlx", generation_config=generation_config
+            )
+
+            for name, (model, inputs) in components.items():
+                if name == "prefill":
+                    continue
+                exported = exporter.export(model, copy.deepcopy(inputs), config=config)
+                for call, call_inputs in self._calls_served(components, name).items():
+                    with self.subTest(f"{model_class.__name__}/{call}"):
+                        set_seed(1234)
+                        exported_outputs = get_leaf_tensors(exported(**copy.deepcopy(call_inputs)))
+                        self.assertEqual(set(exported_outputs), set(eager_outputs[call]))
+                        if check_exactness:
+                            self._check_outputs_close(
+                                exported_outputs, eager_outputs[call], atol=atol, rtol=rtol, check_device=False
+                            )
+
+            with self.subTest(f"{model_class.__name__}/generate"):
+                self._check_generate(
+                    exporter, config, full_model, full_inputs, generation_config, dynamic, check_exactness
+                )
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
