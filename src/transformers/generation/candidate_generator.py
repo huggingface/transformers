@@ -295,9 +295,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         """Update past key values and attention masks for subsequent generation rounds."""
         has_cache = self.assistant_kwargs.get("cache", None) is not None
         if has_cache:
-            target_cache_size = input_ids.shape[-1] - 1 - remove_from_pkv - num_added_tokens
-            current_cache_size = self.assistant_kwargs["cache"].get_seq_length()
-            tokens_to_remove = current_cache_size - target_cache_size
+            tokens_to_remove = remove_from_pkv + num_added_tokens
             if tokens_to_remove >= 0:
                 self.assistant_kwargs["cache"].crop(-tokens_to_remove)
             self.assistant_kwargs = _prepare_attention_mask(
@@ -337,6 +335,11 @@ class AssistedCandidateGenerator(CandidateGenerator):
         candidate_logits = torch.stack(assistant_output.scores, dim=1)
         candidate_ids = assistant_output.sequences
         return candidate_ids, candidate_logits
+
+    @property
+    def num_drafting_tokens(self):
+        """Describe how many new tokens will be drafted by this CandidateGenerator every iteration"""
+        return self.num_assistant_tokens
 
 
 class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
@@ -1153,6 +1156,11 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         # assisted_generation expects logits as well, but we don't have those here, so returning None
         return candidate_input_ids, None
 
+    @property
+    def num_drafting_tokens(self):
+        """Describe how many new tokens will be drafted by this CandidateGenerator every iteration"""
+        return self.num_output_tokens
+
 
 class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
     """
@@ -1358,6 +1366,11 @@ class SinglePositionMultiTokenCandidateGenerator(CandidateGenerator):
         candidate_logits = torch.cat(drafted_logits, dim=1)
         return candidate_ids, candidate_logits
 
+    @property
+    def num_drafting_tokens(self):
+        """Describe how many new tokens will be drafted by this CandidateGenerator every iteration"""
+        return self.num_assistant_tokens
+
 
 class MTPCandidateGenerator(CandidateGenerator):
     requires_model_outputs: bool = True
@@ -1392,7 +1405,7 @@ class MTPCandidateGenerator(CandidateGenerator):
 
         # Create the mtp cache and allow it to keep its past before we crop it
         self.mtp_cache = MtpCache(config=main_model.config.get_mtp_config())
-        self.mtp_cache.activate_past_recording()
+        self.mtp_cache.activate_past_recording(recurrent_states_to_keep=self.num_drafting_tokens)
 
         # Save those to know how to decode mtp tokens
         self.do_sample = generation_config.do_sample
@@ -1490,6 +1503,11 @@ class MTPCandidateGenerator(CandidateGenerator):
         candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
         return candidate_ids, candidate_logits
 
+    @property
+    def num_drafting_tokens(self):
+        """Describe how many new tokens will be drafted by this CandidateGenerator every iteration"""
+        return self.num_mtp_layers
+
 
 class DFlashTokenCandidateGenerator(CandidateGenerator):
     """
@@ -1541,7 +1559,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         # Prepare a cache for the assistant, and activate the past recording
         self.cache = DFlashCache(config=self.assistant_model.config)
-        self.cache.activate_past_recording()
+        self.cache.activate_past_recording(recurrent_states_to_keep=self.num_drafting_tokens)
 
         # Save those to allow logits manipulations
         self.do_sample = generation_config.do_sample
@@ -1675,6 +1693,11 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
 
         return candidate_ids, candidate_logits
+
+    @property
+    def num_drafting_tokens(self):
+        """Describe how many new tokens will be drafted by this CandidateGenerator every iteration"""
+        return self.block_size
 
 
 def _prepare_attention_mask(model_kwargs: dict[str, Any], new_length: int, is_encoder_decoder: bool) -> dict[str, Any]:
