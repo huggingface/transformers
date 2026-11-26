@@ -247,6 +247,8 @@ class HfQuantizer(ABC):
             # using the same dtype we used to load the model. If we don't do that, we might have issues with modules we didn't quantize.
             # or we need to upcast everything to the same dtype
             dtype = model.config.dtype
+        if isinstance(dtype, str):
+            dtype = getattr(torch, dtype)
         model = self._dequantize(model, dtype=dtype)
         self.remove_quantization_config(model)
 
