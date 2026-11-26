@@ -1581,6 +1581,7 @@ def set_param_for_module(
     param_value: torch.Tensor,
     loading_info: LoadStateDictInfo,
     hf_quantizer: HfQuantizer,
+    in_place: Callable | None = None,
 ):
     module_path, _, param_name = target_name.rpartition(".")
     module_obj = model.get_submodule(module_path) if module_path else model
@@ -1601,6 +1602,10 @@ def set_param_for_module(
         # Remove from missing keys (it's either mismatched, or all good)
         loading_info.missing_keys.discard(target_name)
 
+        if in_place is not None:  # the engine's write into its own params: it checks their shape (padded, mismatched)
+            in_place(ref, param_value)
+            return
+
         # For DTensor parameters, compare against the local shard loaded on this rank.
         expected_shape = ref._local_tensor.shape if is_dtensor(ref) else ref.shape
 
@@ -1618,6 +1623,14 @@ def set_param_for_module(
                 param_value = torch.nn.Parameter(
                     dtensor_param, requires_grad=ref.requires_grad and dtensor_param.is_floating_point()
                 )
+            if isinstance(ref, torch.nn.Parameter) and type(ref) is not torch.nn.Parameter:
+                # An engine's own param class (e.g. vLLM's `ModelWeightParameter`, whose attributes drive its
+                # kernels): keep it, and its attributes, instead of downgrading the param to `nn.Parameter`. Only
+                # `nn.Parameter.__new__` runs, as the subclass' may need arguments we don't know, and the loaded
+                # tensor is set as is (no copy)
+                engine_param = torch.nn.Parameter.__new__(type(ref), param_value, ref.requires_grad)
+                engine_param.__dict__.update(ref.__dict__)
+                param_value = engine_param
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
             setattr(module_obj, param_name, param_value)
@@ -1847,7 +1860,7 @@ def convert_and_load_state_dict_in_model(
     ```
 
     """
-    base_model_prefix = model.base_model_prefix
+    base_model_prefix = getattr(model, "base_model_prefix", None)
     device_map = load_config.device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
     dtype = load_config.dtype
@@ -1899,11 +1912,16 @@ def convert_and_load_state_dict_in_model(
             key, renamings, converters, base_model_prefix, meta_model_state_dict
         )
         # FIXME: this should just not happen
-        if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
-            # Key should probably not have been renamed but we might need the `prefix` to be added.
-            renamed_key, source_pattern = rename_source_key(
-                original_key, [], [], base_model_prefix=base_model_prefix, meta_state_dict=meta_model_state_dict
-            )
+        if renamed_key not in meta_model_state_dict:
+            # A converter's target that is not a param: the key renamed only, else as saved (we might need the
+            # `prefix` to be added)
+            for candidate, candidate_renamings in ((key, renamings), (original_key, [])):
+                fallback, _ = rename_source_key(
+                    candidate, candidate_renamings, [], base_model_prefix, meta_model_state_dict
+                )
+                if fallback in meta_model_state_dict:
+                    renamed_key, source_pattern = fallback, None
+                    break
 
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:
@@ -1944,7 +1962,9 @@ def convert_and_load_state_dict_in_model(
             # 4. Handle DTensor sharding or device_map placement
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
-            if is_dtensor(empty_param):
+            if load_config.get_sharding_op is not None:
+                sharding_op = load_config.get_sharding_op(renamed_key, empty_param, mapping, source_pattern)
+            elif is_dtensor(empty_param):
                 sharding_op = DtensorShardOperation(empty_param)
 
             # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
@@ -1982,7 +2002,7 @@ def convert_and_load_state_dict_in_model(
                 realized_value = mapping.convert(
                     first_param_name,
                     model=model,
-                    config=model.config,
+                    config=getattr(model, "config", None),
                     hf_quantizer=hf_quantizer,
                     loading_info=loading_info,
                 )
@@ -2006,6 +2026,7 @@ def convert_and_load_state_dict_in_model(
                             param,
                             loading_info,
                             hf_quantizer,
+                            in_place=load_config.load_in_place,
                         )
 
                 # Cleanup all the tensors that were gathered before next iteration
