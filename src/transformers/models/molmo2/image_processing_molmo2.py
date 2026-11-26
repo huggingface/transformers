@@ -445,8 +445,8 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         pooling_size = images_kwargs["pooling_size"]
         size = images_kwargs["size"]
 
-        base_h = size["height"] if isinstance(size, dict) else size.height
-        base_w = size["width"] if isinstance(size, dict) else size.width
+        base_h = size.height
+        base_w = size.width
         pooling_h, pooling_w = pooling_size
 
         tiling_h, tiling_w, canvas_height, canvas_width = compute_crop_geometry(

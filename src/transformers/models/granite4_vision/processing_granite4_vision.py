@@ -21,7 +21,6 @@
 from fractions import Fraction
 
 from ...image_processing_utils import select_best_resolution
-from ...image_utils import SizeDict
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
 from ...utils.deprecation import deprecate_attr
@@ -145,19 +144,8 @@ class Granite4VisionProcessor(ProcessorMixin):
             )
 
             size = images_kwargs["size"]
-            if isinstance(size, SizeDict):
-                size = (
-                    (size.shortest_edge, size.shortest_edge)
-                    if size.shortest_edge is not None
-                    else (min(size.height, size.width), min(size.height, size.width))
-                )
-            else:
-                size = (
-                    (size["shortest_edge"], size["shortest_edge"])
-                    if "shortest_edge" in size
-                    else (min(size["height"], size["width"]), min(size["height"], size["width"]))
-                )
-            processed_height, processed_width = size
+            processed_size = size.shortest_edge if size.shortest_edge is not None else min(size.height, size.width)
+            processed_height = processed_width = processed_size
 
             batch_num_image_tokens = []
             num_image_patches = [1] * len(image_sizes)  # llava-next doesn't batch pixels as Idefics, thus `1` patch`

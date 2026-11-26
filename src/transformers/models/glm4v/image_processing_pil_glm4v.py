@@ -256,8 +256,8 @@ class Glm4vImageProcessorPil(PilBackend):
             height=height,
             width=width,
             factor=factor,
-            min_pixels=size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge,
-            max_pixels=size["longest_edge"] if isinstance(size, dict) else size.longest_edge,
+            min_pixels=size.shortest_edge,
+            max_pixels=size.longest_edge,
             temporal_factor=self.temporal_patch_size,
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
