@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
 import torch
 
 from ..activations import ACT2FN
@@ -83,8 +85,21 @@ def _causal_conv1d_varlen(
 # [scratch] The mixed steps of linear attention models run uncompiled (the chunked scans read lengths on the host): eager,
 # this gather-heavy convolution was ~18 full-size kernels a layer. Compiled on its own (no host reads, dynamic shapes),
 # it is a couple; inside a compiled step dynamo inlines it
-causal_conv1d_varlen = torch.compile(_causal_conv1d_varlen, dynamic=True)
-causal_conv1d_varlen.__doc__ = _causal_conv1d_varlen.__doc__
+_compiled_causal_conv1d_varlen = torch.compile(_causal_conv1d_varlen, dynamic=True)
+_PROTO_TRITON_CONV = os.environ.get("PROTO_TRITON_CONV", "1") == "1"  # dev knob: 0 for the compiled torch version
+
+
+def causal_conv1d_varlen(hidden_states, conv_states, cu_seqlens, weight, bias=None, activation=None):
+    """[scratch] `_causal_conv1d_varlen` through one Triton kernel on CUDA (Qwen3-Next shapes, 8,192 tokens on an H100:
+    211 us vs 853 compiled from torch), the compiled torch version otherwise."""
+    if _PROTO_TRITON_CONV and hidden_states.is_cuda and activation in (None, "silu"):
+        from ._proto_conv_varlen import conv_varlen
+
+        out, next_states = conv_varlen(
+            hidden_states[0].transpose(0, 1), conv_states, cu_seqlens, weight, bias, activation == "silu"
+        )
+        return out.transpose(0, 1).unsqueeze(0), next_states
+    return _compiled_causal_conv1d_varlen(hidden_states, conv_states, cu_seqlens, weight, bias, activation)
 
 
 @torch.compile(dynamic=True)
