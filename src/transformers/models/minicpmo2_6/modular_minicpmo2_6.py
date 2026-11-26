@@ -50,7 +50,7 @@ from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioAttention, Qwen2AudioEn
 class MiniCPMO2_6AudioConfig(AudioFlamingo3EncoderConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
-        The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+        Maximum number of encoder frames (50 per second, so 1500 for a 30 s window).
     chunk_size (`int`, *optional*, defaults to 50):
         Number of encoder frames (50 per second of audio) per attention chunk. Each frame attends to the frames of its
         own chunk and of all earlier chunks.
