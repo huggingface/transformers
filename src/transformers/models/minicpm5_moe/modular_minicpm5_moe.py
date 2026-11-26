@@ -19,6 +19,7 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import field
+from functools import wraps
 
 import torch
 import torch.nn.functional as F
@@ -148,35 +149,20 @@ class MiniCPM5MoeExperts(DeepseekV3Experts):
     pass
 
 
-class MiniCPM5MoeTopkRouter(DeepseekV3TopkRouter):
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.hidden_dim)
+def _disable_router_autocast(forward):
+    @wraps(forward)
+    def wrapped(self, hidden_states):
         device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
-            router_logits = F.linear(hidden_states.float(), self.weight.float())
-        scores = router_logits.sigmoid()
-        scores_for_choice = scores + self.e_score_correction_bias
-        group_scores = (
-            scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
-            .topk(2, dim=-1)[0]
-            .sum(dim=-1)
-        )
-        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
-        group_mask = torch.zeros_like(group_scores)
-        group_mask.scatter_(1, group_idx, 1)
-        score_mask = (
-            group_mask.unsqueeze(-1)
-            .expand(-1, self.num_group, self.num_experts // self.num_group)
-            .reshape(-1, self.num_experts)
-        )
-        scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = scores.gather(1, topk_indices)
-        if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return router_logits, topk_weights, topk_indices
+            return forward(self, hidden_states)
+
+    return wrapped
+
+
+class MiniCPM5MoeTopkRouter(DeepseekV3TopkRouter):
+    @_disable_router_autocast
+    def forward(self, hidden_states):
+        return super().forward(hidden_states)
 
 
 class MiniCPM5MoeMoE(DeepseekV3MoE):

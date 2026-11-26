@@ -24,6 +24,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
+from functools import wraps
 
 import torch
 import torch.nn.functional as F
@@ -105,6 +106,16 @@ class MiniCPM5MoeExperts(nn.Module):
         return final_hidden_states
 
 
+def _disable_router_autocast(forward):
+    @wraps(forward)
+    def wrapped(self, hidden_states):
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            return forward(self, hidden_states)
+
+    return wrapped
+
+
 class MiniCPM5MoeTopkRouter(nn.Module):
     def __init__(self, config: MiniCPM5MoeConfig):
         super().__init__()
@@ -118,11 +129,10 @@ class MiniCPM5MoeTopkRouter(nn.Module):
         self.norm_topk_prob = config.norm_topk_prob
         self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
+    @_disable_router_autocast
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
-        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            router_logits = F.linear(hidden_states.float(), self.weight.float())
+        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias
         group_scores = (
