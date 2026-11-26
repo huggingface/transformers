@@ -14,6 +14,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_vision_available
 
@@ -66,6 +68,23 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIn("video_metadata", inputs)
         with self.assertRaisesRegex(ValueError, "return_metadata=False"):
             processor(text=text, videos=[video], do_sample_frames=False, return_metadata=False)
+
+    def test_odd_frame_count_preserves_metadata(self):
+        """Padding temporal patches must leave the indices of the sampled frames intact."""
+        processor = self.get_processor()
+        video = np.zeros((3, 56, 84, 3), dtype=np.uint8)
+        inputs = processor(
+            text=f"Video: {self.video_token}",
+            videos=video,
+            video_metadata={"total_num_frames": 12, "fps": 2, "frames_indices": [0, 4, 8]},
+            do_sample_frames=False,
+            return_metadata=True,
+        )
+
+        self.assertEqual(inputs.video_metadata[0].frames_indices, [0, 4, 8])
+        prompt = processor.batch_decode(inputs.input_ids)[0]
+        self.assertIn("<1.0 seconds>", prompt)
+        self.assertIn("<4.0 seconds>", prompt)
 
     def test_model_input_names(self):
         processor = self.get_processor()

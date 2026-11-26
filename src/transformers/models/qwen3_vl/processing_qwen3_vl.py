@@ -173,8 +173,8 @@ class Qwen3VLProcessor(ProcessorMixin):
     def _calculate_timestamps(self, indices: list[int] | np.ndarray, video_fps: float, merge_size: int = 2):
         if not isinstance(indices, list):
             indices = indices.tolist()
-        if len(indices) % merge_size != 0:
-            indices.extend(indices[-1] for _ in range(merge_size - len(indices) % merge_size))
+        if pad := -len(indices) % merge_size:
+            indices = indices + [indices[-1]] * pad
         timestamps = [idx / video_fps for idx in indices]
         # @JJJYmmm frames are merged by self.merge_size, \
         # so we need to average the timestamps between the first/last frame within the temporal patch
