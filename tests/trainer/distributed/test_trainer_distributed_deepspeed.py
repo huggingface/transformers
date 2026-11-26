@@ -1149,6 +1149,8 @@ class TestTrainerDistributedDeepSpeedCommon(DeepSpeedCommandsMixin, TrainerDistr
             "sdpa",
             "--pad_to_multiple_of",
             "4",
+            "--model_dtype",
+            "fp32",
         ]
 
         # Step 1: Run with SP enabled
