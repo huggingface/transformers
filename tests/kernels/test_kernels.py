@@ -638,6 +638,28 @@ class TestKernelUtilities(TestCasePlus):
         exported = torch.export.export(Wrapper(), inputs)
         self.assertTrue(torch.equal(exported.module()(*inputs), torch_result))
 
+    def test_fallback_uses_torch_implementation_on_unsupported_devices(self):
+        """Tests if inputs on a device the original package doesn't support, here CPU inputs with a CUDA-only
+        `causal_conv1d` installed, use the original torch function instead of failing in the package."""
+
+        def causal_conv1d_fn(hidden_states, weight, **kwargs):
+            return hidden_states + weight
+
+        def cuda_only_kernel(hidden_states, weight, **kwargs):
+            if not hidden_states.is_cuda:
+                raise RuntimeError("Expected x.is_cuda() to be true, but got false.")
+            return hidden_states * weight
+
+        package = types.ModuleType("causal_conv1d")
+        package.causal_conv1d_fn = cuda_only_kernel
+        with patch.dict(sys.modules, {"causal_conv1d": package}):
+            decorated = use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")(causal_conv1d_fn)
+
+        inputs = (torch.ones(4), torch.full((4,), 3.0))
+        self.assertTrue(torch.equal(decorated(*inputs), torch.full((4,), 4.0)))
+        with self.assertRaisesRegex(ValueError, "packed sequences"):
+            decorated(*inputs, seq_idx=torch.zeros(1, 4, dtype=torch.int32))
+
     def test_fallback_resolves_function_from_package_root(self):
         """The package-root implementation takes precedence over the nested-module fallback."""
         package = types.ModuleType("optional_backend")
@@ -771,11 +793,12 @@ class TestAttentionKernelRegistration(TestCasePlus):
         passing an expplicit `allow_all_kernels=True`
         """
         from transformers import LlamaConfig, LlamaModel
+        from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
 
         config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, vocab_size=100)
         model = LlamaModel(copy.deepcopy(config))
         untrusted_kernel = "untrusted/flash_attention_2"
-        trusted_kernel = "kernels-community/flash-attn2"
+        trusted_kernel = FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"]
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
@@ -961,7 +984,8 @@ class TestUseKernelsLifecycle(MemoryCleanupTestCase):
 class TestKernelMappingDeviceFiltering(TestCasePlus):
     """Test that kernel mappings correctly filter by current device."""
 
-    def test_multi_device_mapping_filters_correctly(self):
+    @parameterized.expand([("cuda",), ("rocm",)])
+    def test_multi_device_mapping_filters_correctly(self, backend):
         """
         Test that when a kernel_mapping contains multiple devices (cuda, rocm),
         only the current device's kernel is registered.
@@ -990,18 +1014,15 @@ class TestKernelMappingDeviceFiltering(TestCasePlus):
         mock_layer.kernel_layer_name = "RMSNorm"
         mock_model.named_modules.return_value = [("layers.0", mock_layer)]
 
-        # Trigger the mapping creation
-        kernel_config.create_compatible_mapping(mock_model)
+        # PyTorch reports both NVIDIA and AMD GPU tensors as CUDA.
+        with patch("transformers.utils.import_utils.is_rocm_platform", return_value=backend == "rocm"):
+            kernel_config.create_compatible_mapping(mock_model)
 
         # Verify results
         result_mapping = kernel_config.kernel_mapping
 
         self.assertIn("RMSNorm", result_mapping, "RMSNorm should be in mapping")
-        backends = list(result_mapping["RMSNorm"].keys())
-
-        # Assert only CUDA is present, not ROCm
-        self.assertIn("cuda", backends, "CUDA backend should be registered")
-        self.assertNotIn("rocm", backends, "ROCm backend should NOT be registered on CUDA device")
+        self.assertEqual(list(result_mapping["RMSNorm"]), [backend])
 
     def test_single_device_mapping_still_works(self):
         """

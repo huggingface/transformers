@@ -19,11 +19,86 @@
 # limitations under the License.
 import math
 import re
+from functools import lru_cache
 
 from ...image_utils import make_flat_list_of_images
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessorMixin
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
+
+
+@lru_cache(maxsize=100)
+def get_optimal_tiled_canvas(
+    original_image_size: tuple[int, int],
+    target_tile_size: tuple[int, int],
+    min_image_tiles: int,
+    max_image_tiles: int,
+) -> tuple[int, int]:
+    """
+    Given a minimum and maximum number of tiles, find the canvas with the closest aspect ratio to the
+    original image aspect ratio.
+    In case of tie-breaking condition when two canvases have the same aspect ratio difference, we favor the canvas with
+    more tiles, until the area covered by the tiles is more than twice the target area, in order to avoid unnecessarily
+    excessive tiling.
+    """
+    possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles)
+
+    original_height, original_width = original_image_size
+    target_tile_height, target_tile_width = target_tile_size
+    aspect_ratio = original_width / original_height
+    area = original_width * original_height
+
+    # find the grid with the best aspect ratio
+    best_ratio_diff = float("inf")
+    best_grid = (1, 1)
+    for grid in possible_tile_arrangements:
+        grid_aspect_ratio = grid[0] / grid[1]
+        ratio_diff = abs(aspect_ratio - grid_aspect_ratio)
+        if ratio_diff < best_ratio_diff:
+            best_ratio_diff = ratio_diff
+            best_grid = grid
+        elif ratio_diff == best_ratio_diff:
+            # if the aspect ratio difference is the same, we favor the grid with more patches
+            # until the area covered by the patches is more than twice the original image area
+            if area > 0.5 * target_tile_height * target_tile_width * grid[0] * grid[1]:
+                best_grid = grid
+
+    return best_grid
+
+
+@lru_cache(maxsize=10)
+def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> list[tuple[int, int]]:
+    """
+    Computes all allowed aspect ratios for a given minimum and maximum number of input tiles.
+
+    This function calculates all possible arrangements of tiles that can be formed
+    within the constraint of the minimum and maximum number of tiles. Each arrangement is
+    represented by its aspect ratio (width/height) and the corresponding tile configuration.
+
+    Args:
+        min_image_tiles (`int`):
+            The minimum number of tiles allowed.
+        max_image_tiles (`int`):
+            The maximum number of tiles allowed.
+
+    Returns:
+        `list[tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
+        configuration in terms of number of tiles.
+
+    Example:
+        >>> get_all_supported_aspect_ratios(1, 4)
+        [(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (1, 4), (2, 2), (4, 1)]
+
+    """
+    aspect_ratios = []
+    for width in range(1, max_image_tiles + 1):
+        for height in range(1, max_image_tiles + 1):
+            if width * height <= max_image_tiles and width * height >= min_image_tiles:
+                aspect_ratios.append((width, height))
+
+    aspect_ratios = sorted(aspect_ratios, key=lambda x: x[0] * x[1])
+
+    return aspect_ratios
 
 
 @auto_docstring
@@ -69,18 +144,58 @@ class UnlimitedOcrProcessor(ProcessorMixin):
             raise ValueError("You have to specify text.")
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> TextInput:
-        image_size = kwargs.get("size") or self.image_processor.size
-        tile_size = kwargs.get("tile_size") or self.image_processor.tile_size
+        patches_grid = (
+            image_inputs["patches_grid"][image_idx] if image_inputs["num_local_patches"][image_idx] else None
+        )
+        return self.image_token * self._get_num_image_tokens(patches_grid, **kwargs)
+
+    def _get_num_image_tokens(self, patches_grid, size=None, tile_size=None, **kwargs) -> int:
+        image_size = size or self.image_processor.size
+        tile_size = tile_size or self.image_processor.tile_size
         size = max(image_size["height"], image_size["width"])
 
         num_queries_global = math.ceil(size // self.patch_size / self.downsample_ratio)
         num_queries_local = math.ceil(tile_size // self.patch_size / self.downsample_ratio)
 
-        num_columns, num_rows = image_inputs["patches_grid"][image_idx]
         num_tokens = num_queries_global * (num_queries_global + 1) + 1
-        if image_inputs["num_local_patches"][image_idx] > 0:
+        if patches_grid is not None:
+            num_columns, num_rows = patches_grid
             num_tokens += (num_rows * num_queries_local) * (num_columns * num_queries_local + 1)
-        return self.image_token * num_tokens
+        return num_tokens
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            image_processor = self.image_processor
+            min_patches = images_kwargs.get("min_patches", image_processor.min_patches)
+            max_patches = images_kwargs.get("max_patches", image_processor.max_patches)
+            tile_size = images_kwargs.get("tile_size", image_processor.tile_size)
+            crop_to_patches = images_kwargs.get("crop_to_patches", image_processor.crop_to_patches)
+
+            num_image_tokens = []
+            for height, width in image_sizes:
+                # Images larger than a tile are also cropped into a grid of local patches
+                patches_grid = None
+                if crop_to_patches and max(height, width) > tile_size:
+                    patches_grid = get_optimal_tiled_canvas(
+                        (height, width), (tile_size, tile_size), min_patches, max_patches
+                    )
+                num_image_tokens.append(self._get_num_image_tokens(patches_grid, **images_kwargs))
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, return_detections: bool = False, **kwargs):
         """

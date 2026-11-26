@@ -306,6 +306,47 @@ def is_flash_attention_requested(
     return "flash" in checked_attention_implementation
 
 
+def suppress_kernels_logging(func=None, *, layers=None):
+    """Temporarily suppress kernels kernelization logs, optionally for specific layers"""
+    import logging
+
+    def decorate(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            logger = logging.getLogger("kernels.layer.layer")
+
+            # 1. Ignore everything (no specific layers)
+            if layers is None:
+                previous_level = logger.level
+                try:
+                    logger.setLevel(logging.CRITICAL + 1)
+                    return fn(*args, **kwargs)
+                finally:
+                    logger.setLevel(previous_level)
+
+            # 2. Only ignore those layers that are specified
+            class LayerFilter(logging.Filter):
+                def filter(self, record):
+                    return not (
+                        record.levelno == logging.WARNING
+                        and any(
+                            record.getMessage().lstrip().startswith(f"No kernel mapping found for layer `{layer}`.")
+                            for layer in layers
+                        )
+                    )
+
+            log_filter = LayerFilter()
+            logger.addFilter(log_filter)
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                logger.removeFilter(log_filter)
+
+        return wrapper
+
+    return decorate(func) if func is not None else decorate
+
+
 def get_max_seqlen(
     cu_seqlens: torch.Tensor,
     config: PreTrainedConfig,

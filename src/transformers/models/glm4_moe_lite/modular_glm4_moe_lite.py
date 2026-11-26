@@ -28,10 +28,10 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeModel,
     Glm4MoeMoE,
     Glm4MoePreTrainedModel,
-    Glm4MoeRMSNorm,
     Glm4MoeRotaryEmbedding,
     Glm4MoeTopkRouter,
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5")
@@ -63,9 +63,6 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -146,7 +143,7 @@ class Glm4MoeLiteTopkRouter(Glm4MoeTopkRouter):
     pass
 
 
-class Glm4MoeLiteRMSNorm(Glm4MoeRMSNorm):
+class Glm4MoeLiteRMSNorm(LlamaRMSNorm):
     pass
 
 
