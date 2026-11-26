@@ -17,7 +17,6 @@ import math
 import unittest
 
 import numpy as np
-from parameterized import parameterized
 
 from transformers import Apertus1p5Processor, AutoProcessor
 from transformers.testing_utils import require_librosa, require_torchvision, slow
@@ -35,20 +34,6 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_from_pretrained(cls, model_id, **kwargs):
         # small pixel budget so test images stay tiny; grids stay >= 2x2
         return super()._setup_from_pretrained(model_id, size={"min_pixels": 32 * 32, "max_pixels": 64 * 64}, **kwargs)
-
-    @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
-    @unittest.skip("The Apertus 1.5 chat template takes the system message as a string, not as content blocks")
-    def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):
-        pass
-
-    @parameterized.expand([(1, "pt"), (2, "pt")])
-    @unittest.skip("The Apertus 1.5 chat template takes the system message as a string, not as content blocks")
-    def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
-        pass
-
-    @unittest.skip("The Apertus 1.5 chat template requires assistant content and non-empty tool call arguments")
-    def test_apply_chat_template_tool_calls_no_content(self):
-        pass
 
     @staticmethod
     def _image(height, width):

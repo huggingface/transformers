@@ -251,7 +251,7 @@ class Apertus1p5Audio2TextModelTest(ALMModelTest, unittest.TestCase):
     # Gated repository, needs slow guard as we don't allow them on fast ci (cpu)
     @slow
     def test_save_pretrained_matches_hub_checkpoint(self):
-        pass
+        super().test_save_pretrained_matches_hub_checkpoint()
 
 
 @slow
