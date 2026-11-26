@@ -382,7 +382,8 @@ class ImageProcessingMixin(PushToHubMixin):
         """
         image_processor_dict = image_processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
-        image_processor_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
+        valid_keys = cls.valid_kwargs.__annotations__.keys()
+        image_processor_dict.update({k: kwargs.pop(k) for k in list(kwargs) if k in valid_keys})
         image_processor = cls(**image_processor_dict)
 
         # Apply extra kwargs to instance (BC for remote code, e.g. phi4_multimodal)

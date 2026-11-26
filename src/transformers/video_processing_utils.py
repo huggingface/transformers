@@ -447,7 +447,8 @@ class VideoProcessorMixin(BaseImageProcessor):
         """
         video_processor_dict = video_processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
-        video_processor_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
+        valid_keys = cls.valid_kwargs.__annotations__.keys()
+        video_processor_dict.update({k: v for k, v in kwargs.items() if k in valid_keys})
         video_processor = cls(**video_processor_dict)
 
         # Apply extra kwargs to instance (BC for remote code, e.g. phi4_multimodal)
