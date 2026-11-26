@@ -248,6 +248,11 @@ class ModelRunner:
             cu_seq_lens_q = batch_data["cu_seq_lens_q"]
             _proto_bf16_experts.VALID_TOKENS = cu_seq_lens_q[-1:] if self.pad_inputs else None
 
+        # [scratch] sectors that changed allocator since their last use hold another layout's bytes: zeroed first
+        if self.cache.pool.foreign_sectors:
+            with stream_context(compute_stream):
+                self.cache.zero_foreign_sectors()
+
         # Get the appropriate forward function (compiled or not, based on current path)
         forward_fn, use_cuda_graph = self._get_forward_fn(use_block_table=self.inputs_and_outputs.use_block_table)
         if _CB_MTP:

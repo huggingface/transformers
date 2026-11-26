@@ -88,6 +88,11 @@ class CachePool:
         self.num_allocators = num_allocators
         self.num_reserved_sectors = num_reserved_sectors
         self.blocks_per_sector = [0 for _ in range(num_allocators)]
+        # [scratch] The allocator each sector last went to, and the sectors handed since to another one: their bytes are
+        # still the other allocator's data (fp32 recurrent states read as bf16 keys can be NaN), see
+        # `PagedAttentionCache.zero_foreign_sectors`. Kept across resets: the bytes are.
+        self._sector_owner: dict[int, int] = {}
+        self.foreign_sectors: list[int] = []
         self.reset()
 
     def reset(self) -> None:
@@ -105,6 +110,9 @@ class CachePool:
     def allocate_sector(self, index: int) -> None:
         """Allocates a free sector to an allocator (referenced by its index)."""
         sector_id = self.free_sectors.pop()
+        if self._sector_owner.get(sector_id, index) != index:
+            self.foreign_sectors.append(sector_id)
+        self._sector_owner[sector_id] = index
         self._free_blocks[index].add_tree(sector_id)
 
     @property

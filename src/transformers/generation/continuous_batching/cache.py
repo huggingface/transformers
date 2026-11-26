@@ -455,6 +455,18 @@ class PagedAttentionCache:
                 free_blocks[name] -= blocks_needed[name]
         return len(list_blocks_needed)
 
+    def zero_foreign_sectors(self) -> None:
+        """[scratch] Zeroes the sectors the pool handed to an allocator other than their last owner, on the current
+        stream (the step's compute stream, before its forward). A kernel that loads whole pages and masks the slots past
+        a sequence's end (flashinfer's TRT-LLM context kernel) multiplies their values by zero: stale Qwen3-Next linear
+        attention states read as bf16 keys are NaN there, and 0 * NaN is NaN. Old keys of the same allocator are finite."""
+        if not self.pool.foreign_sectors:
+            return
+        sectors = self.cache_tensor.view(-1, self.bytes_per_sector)
+        for sector_id in self.pool.foreign_sectors:
+            sectors[sector_id].zero_()
+        self.pool.foreign_sectors.clear()
+
     def free_blocks(self, request_id: str, no_cache: bool = False) -> None:
         """Signals all cache allocators that a request's cache can be freed. If the `no_cache` flag is passed, the freed
         blocks go straight to the free pool, and cannot be reused later."""
