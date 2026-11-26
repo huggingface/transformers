@@ -1,0 +1,190 @@
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+*This model was published in HF papers on 2025-08-16 and contributed to Hugging Face Transformers on .*
+
+# Ovis2.5
+
+## Overview
+
+[Ovis2.5](https://huggingface.co/papers/2508.11737) is a multimodal model from
+[AIDC-AI](https://github.com/AIDC-AI/Ovis) for image, video, and text understanding. It combines a native-resolution
+vision encoder with a visual tokenizer and a Qwen3 language backbone. Unlike a fixed-resolution tiled encoder, the
+vision encoder keeps variable-resolution visual inputs as a sequence of patches. Ovis2.5 also provides an optional
+thinking prompt format for tasks that benefit from a longer reasoning response.
+
+Transformers-compatible checkpoints are available from the Ovis community:
+
+- [ovis-community/Ovis2.5-2B](https://huggingface.co/ovis-community/Ovis2.5-2B)
+- [ovis-community/ovis-2.5-9B](https://huggingface.co/ovis-community/ovis-2.5-9B)
+
+These checkpoints retain the original weights and include native model, tokenizer, and processor metadata. The
+original repositories still use legacy processor metadata. Weight names are mapped during loading.
+
+## Usage
+
+> [!WARNING]
+> The two-stage `thinking_budget` behavior implemented by the original custom remote code is not part of the native
+> Transformers generation API.
+
+### Image inference
+
+Use [`Ovis2_5Processor.apply_chat_template`] to load the image, format the conversation, and tokenize it in one call.
+
+```python
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
+
+model_id = "ovis-community/Ovis2.5-2B"  # ovis-community/ovis-2.5-9B
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForImageTextToText.from_pretrained(
+    model_id,
+    device_map="auto",
+)
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg",
+            },
+            {"type": "text", "text": "Describe this image."},
+        ],
+    }
+]
+
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+    enable_thinking=False,
+).to(model.device, dtype=model.dtype)
+
+generated_ids = model.generate(**inputs, max_new_tokens=128)
+generated_ids = generated_ids[:, inputs["input_ids"].shape[1] :]
+response = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+print(response)
+```
+
+Multiple images can be supplied by adding more `{"type": "image", ...}` items to the message in the same order in which
+they should appear in the prompt.
+
+### Video inference
+
+The processor uniformly samples eight frames by default. Pass the video URL directly in the conversation and let the
+processor load and sample it using the preprocessing settings saved with the checkpoint.
+
+For batched generation, set `processor.tokenizer.padding_side = "left"` and pass a list of conversations to
+[`Ovis2_5Processor.apply_chat_template`] with `processor_kwargs={"padding": True}`.
+
+```python
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "video",
+                "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+            },
+            {"type": "text", "text": "Describe what happens in this video."},
+        ],
+    }
+]
+
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+    enable_thinking=False,
+).to(model.device, dtype=model.dtype)
+
+generated_ids = model.generate(**inputs, max_new_tokens=256)
+generated_ids = generated_ids[:, inputs["input_ids"].shape[1] :]
+response = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+print(response)
+```
+
+### Thinking mode
+
+Set `enable_thinking=True` when applying the chat template to leave the model's reasoning block open. Set it to `False`
+to request the immediate-answer prompt format.
+
+```python
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+    enable_thinking=True,
+).to(model.device, dtype=model.dtype)
+
+generated_ids = model.generate(**inputs, max_new_tokens=1024)
+```
+
+`enable_thinking` changes the chat template; it is not a generation argument and does not impose a token budget.
+
+## Ovis2_5Config
+
+[[autodoc]] Ovis2_5Config
+
+## Ovis2_5VisionConfig
+
+[[autodoc]] Ovis2_5VisionConfig
+
+## Ovis2_5Processor
+
+[[autodoc]] Ovis2_5Processor
+    - __call__
+
+## Ovis2_5ImageProcessor
+
+[[autodoc]] Ovis2_5ImageProcessor
+    - preprocess
+
+## Ovis2_5ImageProcessorPil
+
+[[autodoc]] Ovis2_5ImageProcessorPil
+    - preprocess
+
+## Ovis2_5VideoProcessor
+
+[[autodoc]] Ovis2_5VideoProcessor
+    - preprocess
+
+## Ovis2_5VisionModel
+
+[[autodoc]] Ovis2_5VisionModel
+    - forward
+
+## Ovis2_5Model
+
+[[autodoc]] Ovis2_5Model
+    - forward
+    - get_image_features
+    - get_video_features
+
+## Ovis2_5ForConditionalGeneration
+
+[[autodoc]] Ovis2_5ForConditionalGeneration
+    - forward
+    - get_image_features
+    - get_video_features
