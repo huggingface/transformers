@@ -210,7 +210,7 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ]
         ]
 
-        # Default `max_fps=2` caps `num_frames=3` for the ~1s tiny_video to a single frame.
+        # Default `max_fps=2` keeps the first and last frames of the 0.37s tiny_video, like the Hub processor.
         out_capped = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -221,7 +221,7 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertIn(self.videos_input_name, out_capped)
         self.assertEqual(out_capped["video_grids"].shape[0], 1)
-        self.assertEqual(int(out_capped["video_grids"][0, 0].item()), 1)
+        self.assertEqual(int(out_capped["video_grids"][0, 0].item()), 2)
 
         # Raising the cap above the video's native fps restores the requested `num_frames`.
         out_uncapped = processor.apply_chat_template(
