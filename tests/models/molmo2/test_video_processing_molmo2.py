@@ -145,6 +145,13 @@ class Molmo2VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         self.assertEqual(outputs["video_token_pooling"].ndim, 2)
         self.assertEqual(outputs["video_token_pooling"].shape[-1], pool_h * pool_w)
 
+    def test_video_token_pooling_is_per_video(self):
+        video_processing = self.fast_video_processing_class(**self.video_processor_dict)
+        video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
+        together = video_processing(video_inputs, return_tensors="np")["video_token_pooling"]
+        alone = video_processing(video_inputs[-1], return_tensors="np")["video_token_pooling"]
+        np.testing.assert_array_equal(together[-len(alone) :], alone)
+
     def test_call_numpy(self):
         for video_processing_class in self.video_processor_list:
             video_processing = video_processing_class(**self.video_processor_dict)

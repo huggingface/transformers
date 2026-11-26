@@ -255,7 +255,6 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         all_crops: list[torch.Tensor] = []
         all_pooled: list[torch.Tensor] = []
         all_grids: list[torch.Tensor] = []
-        patch_offset = 0
 
         for video in videos:
             image_grid, patches, pooling_indices = self._build_video_patches(
@@ -272,13 +271,10 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
                 image_pooling_w=image_pooling_w,
             )
             num_frames, patches_per_frame = patches.shape[:2]
-            frame_offsets = (
-                patch_offset + torch.arange(num_frames, device=pooling_indices.device) * patches_per_frame
-            ).view(-1, 1, 1)
+            frame_offsets = torch.arange(num_frames, device=pooling_indices.device).view(-1, 1, 1) * patches_per_frame
             pooled_indices = torch.where(pooling_indices >= 0, pooling_indices + frame_offsets, pooling_indices)
             all_pooled.append(pooled_indices.reshape(-1, pooling_indices.shape[-1]))
             all_crops.append(patches)
-            patch_offset += num_frames * patches_per_frame
 
             all_grids.append(torch.tensor([num_frames, image_grid[0], image_grid[1]], dtype=torch.int64))
 

@@ -711,6 +711,17 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
         )
 
 
+def offset_token_pooling(
+    token_pooling: torch.Tensor, patches_per_item: torch.Tensor, tokens_per_item: torch.Tensor
+) -> torch.Tensor:
+    """Turn each item's `token_pooling` rows, which index that item's own patches, into indices into the patches of
+    all items."""
+    offsets = (patches_per_item.cumsum(0) - patches_per_item).repeat_interleave(
+        tokens_per_item, output_size=token_pooling.shape[0]
+    )
+    return torch.where(token_pooling >= 0, token_pooling + offsets[:, None], token_pooling)
+
+
 @auto_docstring(
     custom_intro="""
     The Molmo2 model which consists of a vision backbone, a pooling adapter and a language model, without a language
@@ -740,6 +751,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
         pixel_values: torch.Tensor,
         image_token_pooling: torch.Tensor,
         image_grids: torch.Tensor,
+        image_num_crops: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         image_shape = None
@@ -758,9 +770,12 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
         if image_shape is not None:
             image_features = image_features.reshape(*image_shape, -1)
+        split_sizes = image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]
+        image_token_pooling = offset_token_pooling(
+            image_token_pooling, image_num_crops * pixel_values.shape[-2], split_sizes
+        )
         pooled_features = self.multi_modal_projector(image_features, image_token_pooling).last_hidden_state
-        split_sizes = (image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]).tolist()
-        image_outputs.pooler_output = torch.split(pooled_features, split_sizes)
+        image_outputs.pooler_output = torch.split(pooled_features, split_sizes.tolist())
         return image_outputs
 
     def get_placeholder_mask(
@@ -825,7 +840,9 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_token_pooling, image_grids)
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, image_token_pooling, image_grids, image_num_crops
+            )
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
             mm_encoder_outputs["video"] = self.get_video_features(
                 pixel_values_videos, video_token_pooling, video_grids
@@ -889,7 +906,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
         # Video frames only go through the low-res path: `num_frames` frames of `rows x cols` tokens, no high-res crops.
         num_frames, rows, cols = video_grids.unbind(-1)
         image_grids = torch.stack([num_frames * rows, cols, torch.zeros_like(cols), torch.zeros_like(cols)], dim=-1)
-        return self.get_image_features(pixel_values_videos, video_token_pooling, image_grids, **kwargs)
+        return self.get_image_features(pixel_values_videos, video_token_pooling, image_grids, num_frames, **kwargs)
 
 
 @auto_docstring(
@@ -920,9 +937,10 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         pixel_values: torch.Tensor,
         image_token_pooling: torch.Tensor,
         image_grids: torch.Tensor,
+        image_num_crops: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(pixel_values, image_token_pooling, image_grids, **kwargs)
+        return self.model.get_image_features(pixel_values, image_token_pooling, image_grids, image_num_crops, **kwargs)
 
     @auto_docstring
     def get_video_features(

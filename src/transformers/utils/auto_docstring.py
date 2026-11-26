@@ -2090,8 +2090,8 @@ class ModelArgs:
 
     image_token_pooling = {
         "description": """
-    Indices into the flattened image patch sequence gathered by each pooled image token, with `-1` marking padding
-    slots. Can be obtained using [`AutoProcessor`]. See [`ProcessorMixin.__call__`] for details.
+    Indices into each image's own flattened patch sequence gathered by each pooled image token, with `-1` marking
+    padding slots. Can be obtained using [`AutoProcessor`]. See [`ProcessorMixin.__call__`] for details.
     """,
         "shape": "of shape `(num_image_tokens, pool_h * pool_w)`",
     }
@@ -2114,7 +2114,7 @@ class ModelArgs:
 
     video_token_pooling = {
         "description": """
-    Indices into the flattened video frame-patch sequence gathered by each pooled video token, with `-1` marking
+    Indices into each video's own flattened frame-patch sequence gathered by each pooled video token, with `-1` marking
     padding slots. Can be obtained using [`AutoProcessor`]. See [`ProcessorMixin.__call__`] for details.
     """,
         "shape": "of shape `(num_video_tokens, pool_h * pool_w)`",

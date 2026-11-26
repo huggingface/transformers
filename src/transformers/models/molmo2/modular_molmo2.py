@@ -684,17 +684,9 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         patches = reorder_images(patches_grouped, grouped_index)
         pooled = reorder_images(pooled_grouped, grouped_index)
 
-        all_crops: list[torch.Tensor] = []
-        all_pooled: list[torch.Tensor] = []
-        patch_offset = 0
-        for crops, pooled_indices in zip(patches, pooled):
-            all_pooled.append(torch.where(pooled_indices >= 0, pooled_indices + patch_offset, pooled_indices))
-            all_crops.append(crops)
-            patch_offset += crops.shape[0] * crops.shape[1]
-
         data = {
-            "pixel_values": torch.cat(all_crops, dim=0),
-            "image_token_pooling": torch.cat(all_pooled, dim=0),
+            "pixel_values": torch.cat(patches, dim=0),
+            "image_token_pooling": torch.cat(pooled, dim=0),
             "image_grids": torch.stack(grids, dim=0),
             "image_num_crops": torch.tensor([crops.shape[0] for crops in patches], dtype=torch.int64, device=device),
         }
@@ -862,7 +854,6 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         all_crops: list[torch.Tensor] = []
         all_pooled: list[torch.Tensor] = []
         all_grids: list[torch.Tensor] = []
-        patch_offset = 0
 
         for video in videos:
             image_grid, patches, pooling_indices = self._build_video_patches(
@@ -879,13 +870,10 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
                 image_pooling_w=image_pooling_w,
             )
             num_frames, patches_per_frame = patches.shape[:2]
-            frame_offsets = (
-                patch_offset + torch.arange(num_frames, device=pooling_indices.device) * patches_per_frame
-            ).view(-1, 1, 1)
+            frame_offsets = torch.arange(num_frames, device=pooling_indices.device).view(-1, 1, 1) * patches_per_frame
             pooled_indices = torch.where(pooling_indices >= 0, pooling_indices + frame_offsets, pooling_indices)
             all_pooled.append(pooled_indices.reshape(-1, pooling_indices.shape[-1]))
             all_crops.append(patches)
-            patch_offset += num_frames * patches_per_frame
 
             all_grids.append(torch.tensor([num_frames, image_grid[0], image_grid[1]], dtype=torch.int64))
 
@@ -1489,6 +1477,17 @@ class Molmo2TextModel(LlamaModel):
         )
 
 
+def offset_token_pooling(
+    token_pooling: torch.Tensor, patches_per_item: torch.Tensor, tokens_per_item: torch.Tensor
+) -> torch.Tensor:
+    """Turn each item's `token_pooling` rows, which index that item's own patches, into indices into the patches of
+    all items."""
+    offsets = (patches_per_item.cumsum(0) - patches_per_item).repeat_interleave(
+        tokens_per_item, output_size=token_pooling.shape[0]
+    )
+    return torch.where(token_pooling >= 0, token_pooling + offsets[:, None], token_pooling)
+
+
 @auto_docstring(
     custom_intro="""
     The Molmo2 model which consists of a vision backbone, a pooling adapter and a language model, without a language
@@ -1518,6 +1517,7 @@ class Molmo2Model(LlavaModel):
         pixel_values: torch.Tensor,
         image_token_pooling: torch.Tensor,
         image_grids: torch.Tensor,
+        image_num_crops: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         image_shape = None
@@ -1536,9 +1536,12 @@ class Molmo2Model(LlavaModel):
 
         if image_shape is not None:
             image_features = image_features.reshape(*image_shape, -1)
+        split_sizes = image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]
+        image_token_pooling = offset_token_pooling(
+            image_token_pooling, image_num_crops * pixel_values.shape[-2], split_sizes
+        )
         pooled_features = self.multi_modal_projector(image_features, image_token_pooling).last_hidden_state
-        split_sizes = (image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]).tolist()
-        image_outputs.pooler_output = torch.split(pooled_features, split_sizes)
+        image_outputs.pooler_output = torch.split(pooled_features, split_sizes.tolist())
         return image_outputs
 
     @can_return_tuple
@@ -1556,7 +1559,7 @@ class Molmo2Model(LlavaModel):
         # Video frames only go through the low-res path: `num_frames` frames of `rows x cols` tokens, no high-res crops.
         num_frames, rows, cols = video_grids.unbind(-1)
         image_grids = torch.stack([num_frames * rows, cols, torch.zeros_like(cols), torch.zeros_like(cols)], dim=-1)
-        return self.get_image_features(pixel_values_videos, video_token_pooling, image_grids, **kwargs)
+        return self.get_image_features(pixel_values_videos, video_token_pooling, image_grids, num_frames, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -1596,7 +1599,9 @@ class Molmo2Model(LlavaModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_token_pooling, image_grids)
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, image_token_pooling, image_grids, image_num_crops
+            )
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
             mm_encoder_outputs["video"] = self.get_video_features(
                 pixel_values_videos, video_token_pooling, video_grids
@@ -1674,9 +1679,10 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         pixel_values: torch.Tensor,
         image_token_pooling: torch.Tensor,
         image_grids: torch.Tensor,
+        image_num_crops: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(pixel_values, image_token_pooling, image_grids, **kwargs)
+        return self.model.get_image_features(pixel_values, image_token_pooling, image_grids, image_num_crops, **kwargs)
 
     @auto_docstring
     def get_video_features(
