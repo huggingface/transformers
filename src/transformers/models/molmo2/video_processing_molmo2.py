@@ -189,16 +189,18 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
 
         total = metadata.total_num_frames
         if fps is not None:
-            target_num_frames = max(min(int(metadata.duration * fps), total), 1)
-            return torch.arange(0, total, total / target_num_frames).int()
+            target_num_frames = int(metadata.duration * fps)
+        else:
+            # Like the allenai Hub processor's `sample_frames`: every `metadata.fps / max_fps`-th frame plus the last,
+            # or `num_frames` from first to last for a longer video. Unlike it, below `max_fps` frames don't repeat.
+            num_frames = num_frames if num_frames is not None else self.num_frames
+            if total / metadata.fps > (num_frames - 1) / max_fps:
+                return np.linspace(0, total - 1, min(num_frames, total)).astype(int)
+            indices = np.arange(0, total - 1, metadata.fps / max_fps)
+            return np.unique(np.append(indices, total - 1).round().astype(int))
 
-        # Like the allenai Hub processor's `sample_frames`: frames `fps / max_fps` apart and the last one, or
-        # `num_frames` spread over a video too long for that. Unlike it, a video below `max_fps` keeps each frame once.
-        num_frames = num_frames if num_frames is not None else self.num_frames
-        if total / metadata.fps > (num_frames - 1) / max_fps:
-            return np.linspace(0, total - 1, min(num_frames, total)).astype(int)
-        indices = np.arange(0, total - 1, metadata.fps / max_fps)
-        return np.unique(np.append(indices, total - 1).round().astype(int))
+        target_num_frames = max(min(target_num_frames, metadata.total_num_frames), 1)
+        return torch.arange(0, total, total / target_num_frames).int()
 
     def _build_video_patches(
         self,
