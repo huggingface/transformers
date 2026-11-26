@@ -35,6 +35,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
+from ...integrations.hub_processing_kernels import resize_normalize_patchify_images_with_kernel, use_processing_kernel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
@@ -157,22 +158,19 @@ class Qwen2VLImageProcessor(TorchvisionBackend):
         **kwargs,
     ) -> "torch.Tensor":
         """Resize dynamically based on input image aspect ratio."""
-        if not size.shortest_edge or not size.longest_edge:
-            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-
-        height, width = images.shape[-2:]
-        resized_height, resized_width = smart_resize(
-            height,
-            width,
-            factor=factor,
-            min_pixels=size.shortest_edge,
-            max_pixels=size.longest_edge,
-        )
+        resized_height, resized_width = self._resized_size(*images.shape[-2:], size, factor)
         return super().resize(
             image=images,
             size=SizeDict(height=resized_height, width=resized_width),
             resample=resample,
         )
+
+    def _resized_size(self, height, width, size, factor):
+        """Size an image of `height` x `width` pixels is resized to."""
+        # get_number_of_image_patches repeats this rule because vLLM needs a patch count
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
+        return smart_resize(height, width, factor=factor, min_pixels=size.shortest_edge, max_pixels=size.longest_edge)
 
     def patchify(
         self,
@@ -209,6 +207,7 @@ class Qwen2VLImageProcessor(TorchvisionBackend):
         )
         return flatten_patches, grid_h, grid_w
 
+    @use_processing_kernel(resize_normalize_patchify_images_with_kernel)
     def _preprocess(
         self,
         images: list["torch.Tensor"],
