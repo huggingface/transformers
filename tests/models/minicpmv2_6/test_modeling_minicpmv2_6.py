@@ -108,14 +108,15 @@ class MiniCPMV2_6ModelTest(VLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 class MiniCPMV2_6IntegrationTest(unittest.TestCase):
     model_id = "openbmb/MiniCPM-V-4"
+    revision = "refs/pr/6"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
     def test_small_model_vision_generation(self):
-        processor = AutoProcessor.from_pretrained(self.model_id)
+        processor = AutoProcessor.from_pretrained(self.model_id, revision=self.revision)
         model = MiniCPMV2_6ForConditionalGeneration.from_pretrained(
-            self.model_id, dtype=torch.bfloat16, device_map=torch_device
+            self.model_id, revision=self.revision, dtype=torch.bfloat16, device_map=torch_device
         )
         messages = [
             {
