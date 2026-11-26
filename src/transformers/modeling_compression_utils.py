@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import torch
 import torch.nn.functional as F
 
@@ -39,9 +38,8 @@ def build_attention_mask_from_topk(
     # Clamp only so scatter has a legal index
     safe_indices = topk_indices.clamp(0, kv_length - 1)
     selected_counts = torch.zeros(
-        topk_indices.shape[0],  # batch size
-        topk_indices.shape[1],  # q_length
-        kv_length,  # kv_length
+        *topk_indices.shape[:-1],
+        kv_length,
         dtype=torch.int32,
         device=topk_indices.device,
     )
@@ -169,9 +167,8 @@ def select_compression_indices(
 
     # NOTE: On tied scores, it's not deterministic which final selection is made
     # top_scores, groups = scores.masked_fill(invalid, float("-inf")).topk(k, dim=-1)
-    top_scores, groups = scores.masked_fill(invalid, float("-inf")).sort(
-        dim=-1, descending=True, stable=True
-    )
+    # TODO: remove deterministic selection
+    top_scores, groups = scores.masked_fill(invalid, float("-inf")).sort(dim=-1, descending=True, stable=True)
     top_scores, groups = top_scores[..., :k], groups[..., :k]
     groups = groups.masked_fill(top_scores == float("-inf"), -1)
 

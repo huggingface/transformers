@@ -27,10 +27,11 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, DynamicLayer, StaticLayer
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_compression_mask
+from ...modeling_compression_utils import build_attention_mask_from_topk
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
@@ -45,109 +46,12 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
-from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from .configuration_minimax_m3_vl import MiniMaxM3VLConfig, MiniMaxM3VLTextConfig, MiniMaxM3VLVisionConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
-    _layer_type = "minimax_m3_sparse"
-
-    def __init__(self, **kwargs):
-        super().__init__()
-        self.idx_keys: torch.Tensor | None = None
-
-    def update_index(self, idx_k: torch.Tensor) -> torch.Tensor:
-        """Append the new token's `idx_k` to the cache and return the full history."""
-        self.idx_keys = idx_k if self.idx_keys is None else torch.cat([self.idx_keys, idx_k], dim=-2)
-        return self.idx_keys
-
-    def reset(self) -> None:
-        super().reset()
-        # Dropped rather than zeroed, as `update_index` grows them by concatenation, like the main states
-        self.idx_keys = None
-
-    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
-        super().reorder_cache(beam_idx)
-        if self.idx_keys is not None:
-            self.idx_keys = self.idx_keys.index_select(0, beam_idx.to(self.idx_keys.device))
-
-    def batch_repeat_interleave(self, repeats: int) -> None:
-        super().batch_repeat_interleave(repeats)
-        if self.idx_keys is not None:
-            self.idx_keys = self.idx_keys.repeat_interleave(repeats, dim=0)
-
-    def batch_select_indices(self, indices: torch.Tensor) -> None:
-        super().batch_select_indices(indices)
-        if self.idx_keys is not None:
-            self.idx_keys = self.idx_keys[indices, ...]
-
-    def crop(self, tokens_to_remove: int) -> None:
-        super().crop(tokens_to_remove)
-        if tokens_to_remove == 0:
-            return
-        self.idx_keys = self.idx_keys[..., : -abs(tokens_to_remove), :]
-
-
-class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
-    _layer_type = "minimax_m3_sparse"
-
-    def __init__(self, max_cache_len: int, **kwargs):
-        super().__init__(max_cache_len)
-        self.idx_keys: torch.Tensor | None = None
-        # Tensor (not int) so it can be marked as a static address for cudagraphs, like `cumulative_length`.
-        self.idx_cumulative_length = torch.tensor([0], dtype=int)
-
-    def update_index(self, idx_k: torch.Tensor) -> torch.Tensor:
-        """Write the new token's `idx_k` into the static buffer in place and return the whole buffer.
-
-        The buffer's unfilled tail holds zeros, but those slots sit at key positions ahead of every
-        current query, so the indexer's block- and token-level causal masking discards them — the
-        returned `[B, 1, max_cache_len, D]` history is therefore safe to score against directly.
-        """
-        if self.idx_keys is None:
-            self.idx_keys = torch.zeros(
-                (idx_k.shape[0], idx_k.shape[1], self.max_cache_len, idx_k.shape[-1]),
-                dtype=idx_k.dtype,
-                device=idx_k.device,
-            )
-            self.idx_cumulative_length = self.idx_cumulative_length.to(idx_k.device)
-            if not is_torchdynamo_compiling():
-                torch._dynamo.mark_static_address(self.idx_keys)
-                torch._dynamo.mark_static_address(self.idx_cumulative_length)
-
-        kv_len = idx_k.shape[-2]
-        cache_position = torch.arange(kv_len, device=self.idx_keys.device) + self.idx_cumulative_length
-        self.idx_cumulative_length.add_(kv_len)
-        try:
-            self.idx_keys.index_copy_(2, cache_position, idx_k)
-        except NotImplementedError:
-            # Fallback for devices like MPS where index_copy_ might not be supported.
-            self.idx_keys[:, :, cache_position] = idx_k
-        return self.idx_keys
-
-    def reset(self) -> None:
-        super().reset()
-        if self.idx_keys is not None:
-            self.idx_keys.zero_()
-        self.idx_cumulative_length.zero_()
-
-    def crop(self, tokens_to_remove: int) -> None:
-        """
-        Roll the write offset of both the main and the indexer buffers back, see `StaticLayer.crop`.
-        """
-        super().crop(tokens_to_remove)
-        if self.idx_keys is not None:
-            self.idx_cumulative_length.sub_(abs(tokens_to_remove))
-
-    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
-        super().reorder_cache(beam_idx)
-        if self.idx_keys is not None:
-            self.idx_keys = self.idx_keys.index_select(0, beam_idx.to(self.idx_keys.device))
 
 
 class MiniMaxM3VLRMSNorm(nn.Module):
@@ -407,7 +311,7 @@ def rotate_half(x):
 
 class MiniMaxM3VLAttention(nn.Module):
     """
-    M3 attention: per-head Gemma QK-norm + partial RoPE, optionally sparse indexer selection which require position IDs.
+    M3 attention: per-head Gemma QK-norm + partial RoPE, optionally with sparse block selection.
     """
 
     def __init__(self, config: MiniMaxM3VLTextConfig, layer_idx: int):
@@ -426,7 +330,7 @@ class MiniMaxM3VLAttention(nn.Module):
         self.q_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.indexer = (
-            MiniMaxM3VLIndexer(config, layer_idx) if config.layer_types[layer_idx] == "minimax_m3_sparse" else None
+            MiniMaxM3VLIndexer(config, layer_idx) if config.layer_types[layer_idx] == "indexed_attention" else None
         )
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -451,29 +355,28 @@ class MiniMaxM3VLAttention(nn.Module):
         if cache is not None:
             key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
+        block_indices = None
+        if self.indexer is not None:
+            block_indices, topk_indices = self.indexer(hidden_states, position_embeddings, attention_mask, cache)
+            if self.config._attn_implementation in ("eager", "sdpa"):
+                batch, num_heads, q_len, _ = topk_indices.shape
+                attention_mask = build_attention_mask_from_topk(
+                    self.config, topk_indices.flatten(0, 1), query_states, key_states.shape[2]
+                )
+                attention_mask = attention_mask.reshape(batch, num_heads, q_len, -1)
+                attention_mask = attention_mask.repeat_interleave(self.num_key_value_groups, dim=1)
+            else:
+                kwargs["cache_position"] = (
+                    torch.arange(-query_states.shape[2], 0, device=attention_mask.device)
+                    + attention_mask.shape[-1]
+                    - 1
+                    + attention_mask[0, 0]
+                )
+                attention_mask = None
+
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        block_indices = None
-        if self.indexer is not None:
-            position_ids = kwargs.get("position_ids")
-            if position_ids is None:
-                position_ids = torch.arange(
-                    key_states.shape[2] - query_states.shape[2], key_states.shape[2], device=query_states.device
-                )
-            position_ids = (position_ids if position_ids.ndim > 1 else position_ids.unsqueeze(0)).expand(
-                query_states.shape[0], -1
-            )
-            block_indices = self.indexer(hidden_states, position_embeddings, cache, position_ids)
-            if self.config._attn_implementation in ("eager", "sdpa"):
-                attention_mask = self.indexer.build_block_mask(
-                    block_indices,
-                    attention_mask,
-                    key_states.shape[2],
-                    query_states.dtype,
-                    query_states.device,
-                    position_ids,
-                )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -493,47 +396,18 @@ class MiniMaxM3VLAttention(nn.Module):
 class MiniMaxM3VLIndexer(nn.Module):
     r"""Lightning Indexer for MiniMax M3 sparse attention.
 
-    Scores each query against every key with a small `index_n_heads`-head
-    dot-product branch, then max-pools those per-key scores into *blocks* of
-    `index_block_size` keys and keeps, per query, the top-`index_topk_blocks`
-    key blocks plus the `index_local_blocks` blocks immediately preceding the
-    query (always visible). Selection therefore happens at the granularity of a
-    *block of keys* rather than individual keys: the expensive main attention
-    only has to attend the handful of selected key blocks, which is what makes
-    it block-sparse (and cheaper) on long sequences.
+    Scores each query against every key with `index_n_heads` heads, then max-pools the per-key scores into
+    blocks of `index_block_size` keys. The `index_local_blocks` most recent blocks (including the current
+    block) receive priority within the `index_topk_blocks` budget.
 
-    The `index_local_blocks` boosting their score so they always win key slots, the
-    same way the deployment block-sparse kernel (MiniMax `topk_sparse`) does it.
+    Returns per-query, per-head block indices of shape
+    `[B, index_n_heads, S_q, min(index_topk_blocks, num_key_blocks)]`, with valid indices left-packed
+    and -1 for unavailable selections, as expected by the block-sparse attention kernel. For eager and
+    SDPA, also returns the selected physical token indices, excluding padded and future keys.
 
-    `forward` returns the per-query, per-head selected key-block indices
-    `[B, index_n_heads, S_q, index_topk_blocks]` -- one independent block
-    selection per indexer head (`index_n_heads == num_key_value_heads`, so one
-    per KV / GQA group). Valid indices are left-packed and `-1`
-    right-pads the unused slots (future/empty blocks), and the local boost makes
-    selections deduplicated -- the exact contract the block-sparse attention
-    kernel consumes (it counts the valid entries, then reads them sequentially
-    and would double-count a repeated block). The eager/SDPA path instead calls
-    `build_block_mask`, which expands the indices into the dense
-    `[B, num_attention_heads, S_q, S_k]` additive mask the standard attention
-    interface expects (`0` at every allowed (query, key) pair, `-inf` elsewhere).
-
-    Like DeepSeek-V4's indexer this is purely a *selection* branch: it has no
-    value projection and produces no residual output of its own (the upstream
-    checkpoint disables the index-value path on every sparse layer).
-
-    TODO: blocks are anchored to absolute key *slots* (the contiguous reshape in
-    `forward` and `q_block = slot // block_size`), so left-padding shifts the block
-    boundaries and the selection diverges from an unpadded run -- only right-padding
-    is equivalent (same limitation as DeepSeek-V4; see `test_right_padding_does_not_leak`
-    / the skipped `test_left_padding_compatibility`). For *true* left-padding equivalence
-    we'd make blocking content-relative instead of slot-relative:
-      1. derive block ids from `position_ids` (content positions, 0 at each row's first
-         real token) rather than from absolute slots, and
-      2. replace the contiguous `view(..., num_key_blocks, block_size).amax(-1)` key pool
-         with a per-row position-binned pool (e.g. `scatter_reduce` over `key_position //
-         block_size`), so pad never shifts the boundaries, and
-      3. mask padded keys' scores to `-inf` before the pool so a pad key can't win a block
-         a top-k slot.
+    The indexer keys are stored in the shared cache without compression. Blocks are anchored to physical
+    KV slots rather than valid-token ranks, so left-padding shifts the block boundaries and can change
+    the selection compared to an unpadded run.
     """
 
     def __init__(self, config: MiniMaxM3VLTextConfig, layer_idx: int):
@@ -555,10 +429,13 @@ class MiniMaxM3VLIndexer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        cache: Cache | None,
-        position_ids: torch.Tensor,
-    ) -> torch.Tensor:
+        attention_mask: torch.Tensor,
+        cache: Cache | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch, q_len, _ = hidden_states.shape
+        physical_counts = torch.arange(attention_mask.shape[-1], device=attention_mask.device) + attention_mask[:, :1]
+        query_positions = physical_counts[:, -q_len:] - 1
+
         idx_q = self.q_proj(hidden_states).view(batch, q_len, -1, self.head_dim)
         idx_q = self.q_norm(idx_q).transpose(1, 2)  # [B, H_idx, Sq, D]
         idx_k = self.k_proj(hidden_states).view(batch, q_len, 1, self.head_dim)
@@ -567,7 +444,11 @@ class MiniMaxM3VLIndexer(nn.Module):
         idx_q, idx_k = apply_rotary_pos_emb(idx_q, idx_k, cos[..., : self.head_dim], sin[..., : self.head_dim])
 
         if cache is not None:
-            idx_k = cache.layers[self.layer_idx].update_index(idx_k)
+            idx_k = (
+                cache.layers[self.layer_idx]
+                .update_compressed_states(idx_k.squeeze(1), physical_counts, q_len)
+                .unsqueeze(1)
+            )
 
         k_len = idx_k.shape[2]
         num_key_blocks = -(-k_len // self.block_size)  # ceil-div
@@ -575,66 +456,39 @@ class MiniMaxM3VLIndexer(nn.Module):
 
         scores = torch.matmul(idx_q.float(), idx_k.float().transpose(-1, -2))
         k_positions = torch.arange(k_len, device=idx_q.device)
-        token_future = k_positions[None, None, None, :] > position_ids[:, None, :, None]  # [B, 1, S_q, S_k]
+        token_future = k_positions[None, None, None, :] > query_positions[:, None, :, None]
         scores = scores.masked_fill(token_future, float("-inf"))
         if pad:
             scores = F.pad(scores, (0, pad), value=float("-inf"))
         scores = scores.view(batch, self.num_heads, q_len, num_key_blocks, self.block_size)
-        # Max-pool keys within each block
+        # Max-pool scores within each block
         block_scores = scores.amax(dim=-1)  # -> [B, H_idx, S_q, num_key_blocks]
 
-        q_block = position_ids // self.block_size  # [B, S_q]
+        q_block = query_positions // self.block_size  # [B, S_q]
 
         if self.local_blocks > 0:
             local = torch.arange(self.local_blocks, device=idx_q.device)
-            local_idx = (q_block[..., None] - local.view(1, 1, -1)).clamp(min=0)  # [B, S_q, local]
-            local_idx = local_idx.unsqueeze(1).expand(-1, self.num_heads, -1, -1)  # [B, H_idx, S_q, local]
+            local_idx = (q_block[..., None] - local.view(1, 1, -1)).clamp(min=0)
+            local_idx = local_idx.unsqueeze(1).expand(-1, self.num_heads, -1, -1)
             block_scores.scatter_(-1, local_idx, float("inf"))
 
-        # Slots that fall on a future/empty block keep their `-inf`
-        # score, which top-k sorts to the end, so tagging them `-1` yields left-packed block indices
-        # with `-1` right-padding which is the format expect by block-sparse attention kernel.
+        # Future/empty blocks keep their -inf scores, so tagging them -1 yields left-packed block indices
         topk = min(self.topk_blocks, num_key_blocks)
-        topk_scores, topk_indices = block_scores.topk(topk, dim=-1)  # [B, H_idx, S_q, topk]
-        return topk_indices.masked_fill(topk_scores == float("-inf"), -1)
+        topk_scores, topk_indices = block_scores.topk(topk, dim=-1)
+        block_indices = topk_indices.masked_fill(topk_scores == float("-inf"), -1)
 
-    def build_block_mask(
-        self,
-        block_indices: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        key_length: int,
-        dtype: torch.dtype,
-        device: torch.device,
-        position_ids: torch.Tensor,
-    ) -> torch.Tensor:
-        """
-        We build the full 4D attention mask (Batch, query, key, head)
-        """
-        batch, n_idx_heads, q_len, _ = block_indices.shape
-        num_key_blocks = -(-key_length // self.block_size)
+        if self.config._attn_implementation not in ("eager", "sdpa"):
+            return block_indices, None
 
-        # Scatter the kept blocks to `0`; `-1` slots land in a throwaway column we drop afterwards.
-        safe = block_indices.masked_fill(block_indices < 0, num_key_blocks)
-        bias = block_indices.new_full((batch, n_idx_heads, q_len, num_key_blocks + 1), float("-inf"), dtype=dtype)
-        bias.scatter_(-1, safe, 0.0)
-        bias = bias[..., :num_key_blocks]
+        # Expand selected blocks into physical token indices
+        offsets = torch.arange(self.block_size, device=idx_q.device)
+        indices = (block_indices[..., None] * self.block_size + offsets).flatten(-2)
 
-        # Broadcast the per-block keep/drop verdict back onto every key (block granularity). The indexer
-        # head axis carries one selection per KV / GQA group; expand it up to the full query-head count
-        # so each attention head sees its own group's block selection.
-        block_keep = (bias == 0.0).repeat_interleave(self.block_size, dim=-1)[..., :key_length]
-        block_keep = block_keep.repeat_interleave(self.config.num_attention_heads // n_idx_heads, dim=1)
-
-        # Compose block-selection with the existing mask, then emit a single additive float mask.
-        if attention_mask is not None:
-            padding_mask = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
-            keep = block_keep & padding_mask
-        else:
-            k_positions = torch.arange(key_length, device=device)
-            token_future = k_positions[None, None, None, :] > position_ids[:, None, :, None]  # [B, 1, S_q, S_k]
-            keep = block_keep & ~token_future
-        min_dtype = torch.finfo(dtype).min
-        return torch.zeros(keep.shape, dtype=dtype, device=device).masked_fill(~keep, min_dtype)
+        # Exclude padded and future tokens
+        mask_positions = (indices.flatten(1) - attention_mask[:, :1]).clamp(0, attention_mask.shape[-1] - 2)
+        valid = attention_mask.diff(dim=-1).gather(1, mask_positions).view_as(indices) > 0
+        valid = valid & indices.ge(0) & (indices <= query_positions[:, None, :, None])
+        return block_indices, indices.masked_fill(~valid, -1)
 
 
 class MiniMaxM3VLDecoderLayer(GradientCheckpointingLayer):
@@ -759,26 +613,29 @@ class MiniMaxM3VLTextModel(MiniMaxM3VLPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        if isinstance(attention_mask, dict):
-            causal_mask = next(iter(attention_mask.values()))
-        else:
-            causal_mask = create_causal_mask(
-                config=self.config,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                cache=cache,
-                position_ids=position_ids,
-            )
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache": cache,
+                "position_ids": position_ids,
+            }
+            mask_functions = {
+                "full_attention": create_causal_mask,
+                "indexed_attention": create_compression_mask,
+            }
+            causal_mask_mapping = {
+                layer_type: mask_functions[layer_type](**mask_kwargs) for layer_type in set(self.config.layer_types)
+            }
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        # `position_ids` is threaded to every layer so the sparse layers' lightning indexer can anchor
-        # block selection to each query's content position (see `MiniMaxM3VLIndexer`).
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 cache=cache,
                 use_cache=use_cache,

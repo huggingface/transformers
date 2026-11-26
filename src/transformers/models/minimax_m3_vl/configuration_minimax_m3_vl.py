@@ -131,17 +131,13 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
             if legacy in sparse_cfg:
                 setattr(self, flat, sparse_cfg[legacy])
 
-        # `layer_types` is the canonical per-layer attention dispatch: it tells
-        # `DynamicCache(config=...)` which layers want the sparse cache and tells
-        # `MiniMaxM3VLAttention` which layers build a sparse Lightning Indexer.
         if self.layer_types is None and "sparse_attention_freq" in sparse_cfg:
             self.layer_types = [
-                "minimax_m3_sparse" if f else "full_attention" for f in sparse_cfg["sparse_attention_freq"]
+                "indexed_attention" if f else "full_attention" for f in sparse_cfg["sparse_attention_freq"]
             ]
         if self.layer_types is None:
             self.layer_types = ["full_attention"] * self.num_hidden_layers
 
-        # `mlp_layer_types` is the per-layer MLP dispatch read by `MiniMaxM3VLDecoderLayer`:
         if self.mlp_layer_types is None and moe_layer_freq is not None:
             self.mlp_layer_types = ["sparse" if f else "dense" for f in moe_layer_freq]
         if self.mlp_layer_types is None:

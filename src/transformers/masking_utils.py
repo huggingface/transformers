@@ -1551,7 +1551,6 @@ def create_compression_mask(
         if layer_idx is None:
             compressed_layer_types = [
                 "indexed_attention",
-                "minimax_m3_sparse",
                 "compressed_sparse_attention",
                 "heavily_compressed_attention",
             ]
@@ -1595,7 +1594,6 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
         "sliding_attention": create_sliding_window_causal_mask,
         "compression": create_compression_mask,
     },
-    "minimax_m3_sparse": create_causal_mask,
     "indexed_attention": create_compression_mask,
     "linear_attention": create_recurrent_attention_mask,
     "conv": create_recurrent_attention_mask,
