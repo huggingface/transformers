@@ -105,13 +105,7 @@ class OnnxModelRunner(ModelRunner):
                 "Pass either `device` or `providers`: the providers choose the device (`device_id` in the CUDA or "
                 "TensorRT provider's options)."
             )
-        # A CUDA graph replays one shape: a static export's, unless an output's size depends on the data, or an output
-        # is a constant, which ONNX Runtime copies out on every run (a copy the capture refuses).
-        config = metadata.export_config
-        static = not (config.get("dynamic") or config.get("dynamic_shapes")) and all(
-            output.producer() is not None and output.shape is not None and output.shape.is_static()
-            for output in program.graph.outputs
-        )
+        static = _replays_one_shape(program, metadata)
         if providers is None:
             providers = _execution_providers(device, cuda_graph=static)
         elif not static:
@@ -206,6 +200,16 @@ class OnnxModelRunner(ModelRunner):
         """The bound outputs as torch tensors on ORT's memory."""
         outputs = [torch.from_dlpack(value._ortvalue.to_dlpack()) for value in binding.get_outputs()]
         return [output.view(torch.bool) if is_bool else output for output, is_bool in zip(outputs, self.bool_outputs)]
+
+
+def _replays_one_shape(program, metadata) -> bool:
+    """Whether a CUDA graph can replay `program`: a static export, unless an output's size depends on the data, or an
+    output is a constant, which ONNX Runtime copies out on every run (a copy the capture refuses)."""
+    config = metadata.export_config
+    return not (config.get("dynamic") or config.get("dynamic_shapes")) and all(
+        output.producer() is not None and output.shape is not None and output.shape.is_static()
+        for output in program.graph.outputs
+    )
 
 
 def _open_session(source, session_options, providers: list) -> ort.InferenceSession:

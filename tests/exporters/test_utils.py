@@ -25,6 +25,8 @@ DON'T touch:
 - **``ExportedModel`` saving** — the manifest ``save_pretrained`` writes next to the components.
 - **`patch_attributes` restore-on-exception** — the happy path is exercised but the exception
   branch never fires in real exports.
+- **Patches on sizes the model testers never reach** — vision windows of uneven lengths, and the gated delta rule's
+  chunk counts other than the traced one.
 - The **`decompose_prefill_decode` guard** against generators that bypass the top-level
   forward — real generators call ``forward`` many times, so the guard is dead code without a
   targeted test.
@@ -47,13 +49,15 @@ from transformers.exporters.auto import EXPORT_BACKENDS, get_exporter_class
 from transformers.exporters.base import ExportedComponent, ExportedModel, HfExporter
 from transformers.exporters.configs import DynamoConfig, ExecutorchConfig, ExportFormat, OnnxConfig
 from transformers.exporters.metadata import ExportMetadata
-from transformers.testing_utils import require_executorch, require_onnx, require_onnxscript, require_torch
-from transformers.utils.import_utils import (
-    is_onnxruntime_available,
-    is_onnxscript_available,
-    is_openvino_available,
-    is_torch_available,
+from transformers.testing_utils import (
+    require_executorch,
+    require_onnx,
+    require_onnxruntime,
+    require_onnxscript,
+    require_openvino,
+    require_torch,
 )
+from transformers.utils.import_utils import is_torch_available
 
 
 if is_torch_available():
@@ -352,7 +356,7 @@ class ChunkedVisionAttentionPatchTest(unittest.TestCase):
     def test_window_attention_with_uneven_windows(self):
         # Window attention leaves smaller windows at the image's edges when the grid isn't a multiple of the window
         from transformers import Qwen2_5_VLConfig
-        from transformers.exporters import exporter_dynamo  # noqa: F401
+        from transformers.exporters import exporter_dynamo  # noqa: F401  (registers the patches)
         from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionAttention
 
         torch.manual_seed(0)
@@ -361,10 +365,15 @@ class ChunkedVisionAttentionPatchTest(unittest.TestCase):
         attention = Qwen2_5_VLVisionAttention(config).eval()
 
         def inputs(cu_seqlens):
-            length = cu_seqlens[-1]
-            angles = torch.randn(length, 4).repeat(1, 2)
-            return torch.randn(length, 32), torch.tensor(cu_seqlens, dtype=torch.int32), (angles.cos(), angles.sin())
+            angles = torch.randn(cu_seqlens[-1], 4).repeat(1, 2)
+            return (
+                torch.randn(cu_seqlens[-1], 32),
+                torch.tensor(cu_seqlens, dtype=torch.int32),
+                angles.cos(),
+                angles.sin(),
+            )
 
+        # The patched forward takes `**kwargs`, for which `dynamic_shapes` can't be given: exported through named inputs
         class Wrapper(nn.Module):
             def __init__(self):
                 super().__init__()
@@ -373,36 +382,23 @@ class ChunkedVisionAttentionPatchTest(unittest.TestCase):
             def forward(self, hidden_states, cu_seqlens, cos, sin):
                 return self.attention(hidden_states, cu_seqlens=cu_seqlens, position_embeddings=(cos, sin))
 
-        hidden_states, cu_seqlens, (cos, sin) = inputs([0, 4, 8, 10])
+        wrapper = Wrapper()
         auto = {0: torch.export.Dim.AUTO}
         with torch.no_grad(), exporter_utils.apply_patches("dynamo"):
-            program = torch.export.export(
-                Wrapper(), (hidden_states, cu_seqlens, cos, sin), dynamic_shapes=(auto, auto, auto, auto)
-            )
+            program = torch.export.export(wrapper, inputs([0, 4, 8, 10]), dynamic_shapes=(auto,) * 4)
 
-        hidden_states, cu_seqlens, (cos, sin) = inputs([0, 6, 9, 12, 13])
+        new_inputs = inputs([0, 6, 9, 12, 13])
         with torch.no_grad():
-            expected = attention(hidden_states, cu_seqlens=cu_seqlens, position_embeddings=(cos, sin))
-            actual = program.module()(hidden_states, cu_seqlens, cos, sin)
-        torch.testing.assert_close(actual, expected)
+            torch.testing.assert_close(program.module()(*new_inputs), wrapper(*new_inputs))
 
 
 @require_torch
 class GatedDeltaRulePatchTest(unittest.TestCase):
-    def test_dynamic_export_takes_other_chunk_counts(self):
-        # The chunked gated delta rule loops over 64-token chunks: traced on two, the export serves one, two and four
+    """The chunked gated delta rule loops over 64-token chunks: traced on two, an export serves one, two and four."""
+
+    def setUp(self):
         from transformers import Qwen3_5ForCausalLM, Qwen3_5TextConfig
-        from transformers.exporters import DynamoConfig, DynamoExporter
 
-        exporters = [(DynamoExporter, DynamoConfig)]
-        if is_onnxscript_available() and is_onnxruntime_available():
-            from transformers.exporters import OnnxExporter
-
-            exporters.append((OnnxExporter, OnnxConfig))
-        if is_openvino_available():
-            from transformers.exporters import OpenVINOConfig, OpenVINOExporter
-
-            exporters.append((OpenVINOExporter, OpenVINOConfig))
         torch.manual_seed(0)
         config = Qwen3_5TextConfig(
             vocab_size=99,
@@ -419,29 +415,43 @@ class GatedDeltaRulePatchTest(unittest.TestCase):
             linear_num_key_heads=4,
             linear_num_value_heads=8,
         )
-        model = Qwen3_5ForCausalLM(config).eval()
+        self.model = Qwen3_5ForCausalLM(config).eval()
 
+    def _export_and_check_other_chunk_counts(self, exporter, config):
         def prompt(length):
             return {"input_ids": torch.randint(1, 98, (2, length)), "use_cache": False}
 
-        for exporter, config_class in exporters:
-            with self.subTest(exporter.__name__):
-                # Traced on a whole number of chunks, which pads by none
-                exported = exporter().export(model, prompt(128), config_class(dynamic=True))
-                for length in (30, 100, 250):
-                    inputs = prompt(length)
-                    with torch.no_grad():
-                        expected = model(**inputs).logits
-                    torch.testing.assert_close(exported(**inputs).logits.cpu(), expected, atol=1e-4, rtol=1e-4)
-                if exporter.__name__ == "OnnxExporter":
-                    # TensorRT's int8 refuses a non-finite constant, such as a `-inf` mask fill
-                    constants = [
-                        torch.from_numpy(value.const_value.numpy())
-                        for value in exported.program.graph.initializers.values()
-                    ]
-                    self.assertTrue(
-                        all(constant.isfinite().all() for constant in constants if constant.is_floating_point())
-                    )
+        # Traced on a whole number of chunks, which pads by none
+        exported = exporter.export(self.model, prompt(128), config)
+        for length in (30, 100, 250):
+            inputs = prompt(length)
+            with torch.no_grad():
+                expected = self.model(**inputs).logits
+            torch.testing.assert_close(exported(**inputs).logits.cpu(), expected, atol=1e-4, rtol=1e-4)
+        return exported
+
+    def test_dynamo(self):
+        from transformers.exporters import DynamoExporter
+
+        self._export_and_check_other_chunk_counts(DynamoExporter(), DynamoConfig(dynamic=True))
+
+    @require_onnxscript
+    @require_onnxruntime
+    def test_onnx(self):
+        from transformers.exporters import OnnxExporter
+
+        exported = self._export_and_check_other_chunk_counts(OnnxExporter(), OnnxConfig(dynamic=True))
+        # TensorRT's int8 refuses a non-finite constant, such as a `-inf` mask fill
+        constants = [
+            torch.from_numpy(value.const_value.numpy()) for value in exported.program.graph.initializers.values()
+        ]
+        self.assertTrue(all(constant.isfinite().all() for constant in constants if constant.is_floating_point()))
+
+    @require_openvino
+    def test_openvino(self):
+        from transformers.exporters import OpenVINOConfig, OpenVINOExporter
+
+        self._export_and_check_other_chunk_counts(OpenVINOExporter(), OpenVINOConfig(dynamic=True))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

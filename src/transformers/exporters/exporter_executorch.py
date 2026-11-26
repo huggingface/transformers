@@ -340,16 +340,6 @@ def _narrow_split(input, sizes, dim):
     return tuple(pieces)
 
 
-def _has_unbacked_sizes(split_size_or_sections) -> bool:
-    """Whether a `split` sections argument carries a data-dependent size."""
-    from torch.fx.experimental.symbolic_shapes import free_unbacked_symbols
-
-    return isinstance(split_size_or_sections, (list, tuple)) and any(
-        isinstance(size, torch.SymInt) and bool(free_unbacked_symbols(size.node.expr))
-        for size in split_size_or_sections
-    )
-
-
 @register_patch("executorch", "torch.split", "torch.Tensor.split")
 def _patch_unbacked_split(original):
     """Split with data-dependent sizes as a chain of `narrow`s.
@@ -359,8 +349,12 @@ def _patch_unbacked_split(original):
     `torch.split` with backed-symbolic sizes, which stay with the original.
     """
 
+    from torch.fx.experimental.symbolic_shapes import free_unbacked_symbols
+
     def patch(input, split_size_or_sections, dim=0):
-        if _has_unbacked_sizes(split_size_or_sections):
+        if isinstance(split_size_or_sections, (list, tuple)) and any(
+            isinstance(size, torch.SymInt) and free_unbacked_symbols(size.node.expr) for size in split_size_or_sections
+        ):
             return _narrow_split(input, split_size_or_sections, dim)
         return original(input, split_size_or_sections, dim)
 
@@ -672,7 +666,7 @@ def _patch_expand(original):
 
 @register_patch("executorch", "transformers.exporters.exporter_dynamo._scan")
 def _patch_scan(_original):
-    """Run the chunked gated delta rule's `scan` as a Python loop, unrolled for the traced chunk count.
+    """Run `scan` (the chunked gated delta rule's, Mamba's recurrence) as a Python loop, unrolled for the traced length.
 
     With a dynamic batch, the loop's carry reaches `to_executorch`'s replay of the `scan` with its symbolic shape made
     concrete, and the replay refuses it ("did not preserve symbolic metadata across pass replay").

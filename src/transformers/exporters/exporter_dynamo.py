@@ -332,13 +332,14 @@ def _reshaped_vision_attention_forward(
     )
     num_segments = cu_seqlens.shape[0] - 1
     # The reshape-into-batch below needs equal-length segments.
-    segment_lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-    torch_compilable_check(
-        uneven_segments or (segment_lengths == segment_lengths[0]).all(),
-        "Chunked vision attention requires uniform segment lengths during export. "
-        "Ensure all images have the same resolution (use do_resize=True in the processor) "
-        "or pad inputs to a common size.",
-    )
+    if not uneven_segments:
+        segment_lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+        torch_compilable_check(
+            (segment_lengths == segment_lengths[0]).all(),
+            "Chunked vision attention requires uniform segment lengths during export. "
+            "Ensure all images have the same resolution (use do_resize=True in the processor) "
+            "or pad inputs to a common size.",
+        )
 
     if hasattr(self, "qkv"):
         # Grouped-query attention (q_dim != kv_dim, e.g. Exaone4.5) splits asymmetrically;
@@ -587,6 +588,32 @@ def _patch_chunk_gated_delta_rule(_original):
     return patch
 
 
+def _unit_lower_triangular_inverse(matrix):
+    """The inverse of the unit lower triangular matrix holding `matrix`'s strictly lower triangle, its size a power of
+    two, by doubling inverted diagonal blocks: `[[A, 0], [C, B]]` inverts to `[[A^-1, 0], [-B^-1 C A^-1, B^-1]]`."""
+    size = matrix.shape[-1]
+    # Batch dims flattened, and every shape read off a tensor rather than built from a symbolic size
+    flat = matrix.reshape(-1, size, size)
+    # The inverted diagonal blocks, `[batch, size // block, block, block]`
+    blocks = torch.ones_like(flat[:, :, :1]).unsqueeze(-1)
+    block = 1
+    while block < size:
+        pairs = size // (2 * block)
+        inverses = blocks.reshape(-1, pairs, 2, block, block)
+        upper_inverse, lower_inverse = inverses[:, :, 0], inverses[:, :, 1]
+        # Each pair's own `2 * block` square of `matrix` (masking the others out: OV has no `diagonal`), then its
+        # lower-left block
+        grid = flat.reshape(-1, pairs, 2 * block, pairs, 2 * block)
+        own = torch.eye(pairs, dtype=matrix.dtype, device=matrix.device)[:, None, :, None]
+        corner = (grid * own).sum(dim=-2)[..., block:, :block]
+        corner = -lower_inverse @ corner @ upper_inverse
+        top = torch.cat([upper_inverse, torch.zeros_like(upper_inverse)], dim=-1)
+        bottom = torch.cat([corner, lower_inverse], dim=-1)
+        blocks = torch.cat([top, bottom], dim=-2)
+        block *= 2
+    return blocks.reshape_as(matrix)
+
+
 @register_patch(
     "dynamo",
     "transformers.models.falcon_mamba.modeling_falcon_mamba.mamba_selective_scan",
@@ -654,32 +681,6 @@ def _scan(combine_fn, init, xs):
         return [carry, output]
 
     return scan_op(flat_combine_fn, [init], list(xs), additional_inputs=())
-
-
-def _unit_lower_triangular_inverse(matrix):
-    """The inverse of the unit lower triangular matrix holding `matrix`'s strictly lower triangle, its size a power of
-    two, by doubling inverted diagonal blocks: `[[A, 0], [C, B]]` inverts to `[[A^-1, 0], [-B^-1 C A^-1, B^-1]]`."""
-    size = matrix.shape[-1]
-    # Batch dims flattened, and every shape read off a tensor rather than built from a symbolic size
-    flat = matrix.reshape(-1, size, size)
-    # The inverted diagonal blocks, `[batch, size // block, block, block]`
-    blocks = torch.ones_like(flat[:, :, :1]).unsqueeze(-1)
-    block = 1
-    while block < size:
-        pairs = size // (2 * block)
-        inverses = blocks.reshape(-1, pairs, 2, block, block)
-        upper_inverse, lower_inverse = inverses[:, :, 0], inverses[:, :, 1]
-        # Each pair's own `2 * block` square of `matrix` (masking the others out: OV has no `diagonal`), then its
-        # lower-left block
-        grid = flat.reshape(-1, pairs, 2 * block, pairs, 2 * block)
-        own = torch.eye(pairs, dtype=matrix.dtype, device=matrix.device)[:, None, :, None]
-        corner = (grid * own).sum(dim=-2)[..., block:, :block]
-        corner = -lower_inverse @ corner @ upper_inverse
-        top = torch.cat([upper_inverse, torch.zeros_like(upper_inverse)], dim=-1)
-        bottom = torch.cat([corner, lower_inverse], dim=-1)
-        blocks = torch.cat([top, bottom], dim=-2)
-        block *= 2
-    return blocks.reshape_as(matrix)
 
 
 # ── Stage 3: Pytree registration ─────────────────────────────────────────────

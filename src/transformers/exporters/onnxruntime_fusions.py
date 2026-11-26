@@ -901,8 +901,19 @@ def _padded_rotary_caches(tape, constant, caches, total, dtype):
     return padded
 
 
+def _is_causal(model: ir.Model) -> bool:
+    """Whether `model` attends causally only: token types mark blocks attended bidirectionally (PaliGemma's prefix,
+    Gemma3's images), as may a custom 4D mask (the one PaliGemma's language model takes, built from them)."""
+    for value in model.graph.inputs:
+        if value.name == "token_type_ids":
+            return False
+        if value.name == "attention_mask" and value.shape is not None and len(value.shape) == 4:
+            return False
+    return True
+
+
 def _fuse_group_query_attention(
-    model: ir.Model, prefill: bool = True, head_norms: bool = False, rotary: bool = True, causal: bool = True
+    model: ir.Model, prefill: bool = True, head_norms: bool = False, rotary: bool = True
 ) -> None:
     """Turn each fused `MultiHeadAttention` reading a key-value cache's update into ONNX Runtime's
     `GroupQueryAttention`, which updates the cache itself (or, for a prefill, starts it) and reads its key-value heads
@@ -910,9 +921,10 @@ def _fuse_group_query_attention(
     exact whatever the padding. `prefill` sets whether a prefill, starting the cache, is fused too; `head_norms`
     whether per-head query and key norms are folded in too (CUDA only); `rotary` whether the rotary embedding is
     (WebGPU's reads its positions off `seqlens_k`, not `position_ids`). `GroupQueryAttention` masks the future on top
-    of the bias: without `causal` (a model attending bidirectionally within blocks, PaliGemma's prefix), only
-    attentions of one query token, which have no future, are fused."""
+    of the bias: in a model attending bidirectionally within blocks (PaliGemma's prefix), only attentions of one query
+    token, which have no future, are fused."""
     graph = model.graph
+    causal = _is_causal(model)
     # A cache update several attentions read (layers sharing another layer's cache, Gemma 4's): its own layer's,
     # fused once; the others, reading it, stay as they are.
     readers = {}
@@ -1525,17 +1537,6 @@ _STEPS = (
 )
 
 
-def _is_causal(model: ir.Model) -> bool:
-    """Whether `model` attends causally only: token types mark blocks attended bidirectionally (PaliGemma's prefix,
-    Gemma3's images), as may a custom 4D mask (the one PaliGemma's language model takes, built from them)."""
-    for value in model.graph.inputs:
-        if value.name == "token_type_ids":
-            return False
-        if value.name == "attention_mask" and value.shape is not None and len(value.shape) == 4:
-            return False
-    return True
-
-
 def fuse_for_onnxruntime(model: ir.Model, fusions: OrtFusionConfig) -> None:
     """Fuse `model` in place into ONNX Runtime's own ops for the provider it runs on, those `fusions` picks."""
     if fusions.provider == "cuda" and not is_onnxruntime_available("1.28.0"):
@@ -1543,10 +1544,6 @@ def fuse_for_onnxruntime(model: ir.Model, fusions: OrtFusionConfig) -> None:
             "Graphs fused for ONNX Runtime's CUDA provider need onnxruntime>=1.28.0: before it, `GroupQueryAttention` "
             "has no query and key norms and float16 skip norms overflow on large activations."
         )
-    causal = _is_causal(model)
     for step, providers, toggle in _STEPS:
         if (providers is None or fusions.provider in providers) and (toggle is None or getattr(fusions, toggle)):
-            if getattr(step, "func", step) is _fuse_group_query_attention:
-                step(model, causal=causal)
-            else:
-                step(model)
+            step(model)

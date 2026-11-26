@@ -352,6 +352,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     model_tester_class = WhisperModelTester
 
     all_model_classes = (WhisperModel, WhisperForConditionalGeneration) if is_torch_available() else ()
+    # The encoder's input length is the config's
+    export_dynamic_sizes = ("batch_size",)
     pipeline_model_mapping = (
         {
             "audio-classification": WhisperForAudioClassification,
@@ -3195,6 +3197,8 @@ class WhisperEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     model_tester_class = WhisperEncoderModelTester
 
     all_model_classes = (WhisperForAudioClassification,) if is_torch_available() else ()
+    # The encoder's input length is the config's
+    export_dynamic_sizes = ("batch_size",)
     is_encoder_decoder = False
 
     test_missing_keys = False

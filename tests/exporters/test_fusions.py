@@ -86,8 +86,7 @@ ORT_FUSIONS = {
     # DirectML's `GroupQueryAttention` reads neither rotary, the mask, nor packed q/k/v: `MultiHeadAttention` stays.
     "dml": {"MultiHeadAttention": 1, "GroupQueryAttention": 0, "MoE": 0, "RotaryEmbedding": 2, **ORT_UNFUSED},
 }
-# Only CUDA has `MoE`, opted into (`test_cuda_mixture_of_experts_fuses_when_picked`): the router keeps its softmax
-# (microsoft/onnxruntime#33866).
+# Without `MoE` (CUDA only, off by default), the router keeps its softmax (microsoft/onnxruntime#33866).
 ORT_MOE_FUSIONS = {
     "cpu": {**ORT_FUSIONS["cpu"], "Softmax": 1},
     "cuda": {**ORT_FUSIONS["cuda"], "MoE": 0, "Softmax": 1},
@@ -212,7 +211,6 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
 
     @require_torch_gpu
     def test_cuda_decode_matches_plain_export(self):
-        # The CUDA fusions' kernels run on CUDA only.
         model = _ort_model(ort_fusions="cuda")
         inputs = _padded_inputs(model)
         fused, plain = (_export_for_ort(model, fusions, inputs, dynamic=False)["decode"] for fusions in ("cuda", None))
@@ -235,7 +233,7 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
             attentions = _group_query_attentions(program)
             self.assertFalse(any(node.attributes.get_int("do_rotary", 0) for node in attentions), component)
 
-    def test_cuda_mixture_of_experts_fuses_when_picked(self):
+    def test_cuda_mixture_of_experts_fuses_when_enabled(self):
         # Opt-in: ONNX Runtime's CUDA `MoE` runs on Hopper or newer only.
         model = _ort_model("qwen3_moe", "cuda")
         fusions = OrtFusionConfig(provider="cuda", mixture_of_experts=True)

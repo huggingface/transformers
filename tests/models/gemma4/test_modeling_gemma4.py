@@ -551,8 +551,8 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(output.logits, expected.logits)
 
     def test_vision_pooler_compiles_with_dynamic_shapes(self):
-        """The pooler's kernel size, the square root of the patches per soft token, holds under dynamic shapes: there,
-        `int(x ** 0.5)` truncates a symbolic 2.999... to 2 (2520 patches pooled to 280)."""
+        """The pooler's kernel size, the square root of the patches per soft token, is exact under dynamic shapes (2520
+        patches pooled to 280: a kernel of 3)."""
         from transformers.models.gemma4.modeling_gemma4 import Gemma4VisionPooler
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

@@ -160,7 +160,7 @@ class OrtFusionConfig:
 
     def __post_init__(self):
         if self.provider not in ORT_PROVIDERS:
-            raise ValueError(f"`provider` must be 'cpu', 'cuda', 'webgpu' or 'dml', got {self.provider!r}")
+            raise ValueError(f"`provider` must be one of {ORT_PROVIDERS}, got {self.provider!r}")
         if self.mixture_of_experts and self.provider != "cuda":
             raise ValueError("`mixture_of_experts` fuses ONNX Runtime's CUDA `MoE`: it needs `provider='cuda'`.")
 

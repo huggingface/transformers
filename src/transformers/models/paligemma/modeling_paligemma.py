@@ -241,8 +241,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel, MultimodalMixin):
             "position_ids": position_ids,
         }
         if token_type_ids is not None:
-            # Can attend bidirectionally in prefix and only causally in suffix. A step after the prompt has no prefix:
-            # its query positions fall past the given ids, padded with -1.
+            # Can attend bidirectionally in prefix and only causally in suffix (decode steps fall past the prefix)
             mask_kwargs["block_sequence_ids"] = torch.where(token_type_ids == 0, 0, -1)
 
         # PG has no sliding window, only full attn. But PG2 needs sliding mask and full mask
