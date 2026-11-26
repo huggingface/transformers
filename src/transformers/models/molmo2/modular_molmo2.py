@@ -770,6 +770,17 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         if self.size is not None and (self.size.get("height", None) is None or self.size.get("width", None) is None):
             raise ValueError("size must contain 'height' and 'width' keys.")
 
+    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None) -> int:
+        """Return the number of `<im_patch>` tokens of a video: every frame is resized to `size`, regardless of its own
+        size."""
+        if videos_kwargs is None:
+            videos_kwargs = {}
+        size = videos_kwargs.get("size", self.size)
+        patch_size = videos_kwargs.get("patch_size", self.patch_size)
+        pooling_h, pooling_w = videos_kwargs.get("pooling_size", self.pooling_size)
+        patches_per_side = size["height"] // patch_size
+        return num_frames * math.ceil(patches_per_side / pooling_h) * math.ceil(patches_per_side / pooling_w)
+
     def sample_frames(
         self,
         metadata: VideoMetadata,
@@ -1027,13 +1038,15 @@ class Molmo2Processor(ProcessorMixin):
 
         return "".join(low_res_tokens + high_res_tokens)
 
-    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
             image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
 
         Returns:
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
@@ -1051,6 +1064,12 @@ class Molmo2Processor(ProcessorMixin):
                 num_image_tokens.append(resized_h * resized_w + height * width)
                 num_image_patches.append(num_crops)
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = self._merge_kwargs(**kwargs)["videos_kwargs"]
+            vision_data["num_video_tokens"] = [
+                self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
+            ]
 
         return MultiModalData(**vision_data)
 
