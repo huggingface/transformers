@@ -37,6 +37,8 @@ of a series. A quantile head reads non-crossing quantiles for every predicted ti
 This model was contributed by [Abdelaziz03](https://github.com/Abdelaziz03). The original code can be found
 [here](https://github.com/mistralai/timestral).
 
+The checkpoints are released under a Modified MIT license. See the model cards on the Hub for its terms.
+
 <!-- TODO before merging: authors and abstract of the paper, and the Hub ids of the converted checkpoints. -->
 
 ## Usage example
