@@ -1036,7 +1036,6 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
         "hidden_states": Qwen3NextDecoderLayer,
         "attentions": Qwen3NextAttention,
     }
-    _is_stateful = True
     _can_compile_fullgraph = True
 
     def _init_weights(self, module):

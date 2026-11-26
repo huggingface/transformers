@@ -671,7 +671,6 @@ class MambaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "backbone"
     _no_split_modules = ["MambaBlock", "MambaMixer"]
     supports_gradient_checkpointing = True
-    _is_stateful = True
 
     def _init_weights(self, module):
         """Initialize the weights."""

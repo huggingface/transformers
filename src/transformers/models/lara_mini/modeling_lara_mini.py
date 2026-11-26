@@ -972,7 +972,6 @@ class LaraMiniPreTrainedModel(PreTrainedModel):
         "hidden_states": LaraMiniDecoderLayer,
         "attentions": LaraMiniAttention,
     }
-    _is_stateful = True
     _can_compile_fullgraph = True
 
     @torch.no_grad()

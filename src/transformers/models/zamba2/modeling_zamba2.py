@@ -1196,7 +1196,6 @@ class Zamba2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_sdpa = True
-    _is_stateful = True
     _can_record_outputs = {
         "hidden_states": Zamba2MambaDecoderLayer,
         "attentions": Zamba2Attention,

@@ -1131,7 +1131,6 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
         "hidden_states": GraniteMoeHybridDecoderLayer,
         "attentions": GraniteMoeHybridAttention,
     }
-    _is_stateful = True
 
     def _init_weights(self, module):
         super()._init_weights(module)
