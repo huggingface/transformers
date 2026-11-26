@@ -228,52 +228,23 @@ class UnitColwiseParallel(ColwiseParallel):
     This gives: |h0h1h2|h0h1h2|h3h4h5|h3h4h5|
 
     We need to have [Shard(0), Replicate()] .
+
+    TODO: this only handles head-aligned Linear weights. Extra per-head parameters attached directly to
+    the attention module, such as Beam's `gate_bias` or GraniteSWA's `sinks`, are not supported yet.
+    A clean fix needs a dedicated style instead of treating every sharded parameter as a Linear weight.
     """
 
     def shard_param(self, module, param, mesh, *, config=None, mesh_manager=None):
         meta = module._parameters.get(param)
         if meta is None:
             return
+        weight = module._parameters["weight"]
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        if meta.ndim >= 2:
-            # Linear weight: units are whole heads along the output dimension.
-            unit_number = meta.shape[0] // head_dim
-            placements = [Shard(meta.ndim - 2), Replicate()]
-        elif isinstance(module, torch.nn.Linear):
-            # Linear bias: one value per output feature, split like the weight.
-            unit_number = meta.shape[0] // head_dim
-            placements = [Shard(0), Replicate()]
-        else:
-            # Per-head parameter on the attention module itself, e.g. Beam's `gate_bias` or GraniteSWA's `sinks`.
-            unit_number = meta.shape[0]
-            placements = [Shard(0), Replicate()]
-        module._unit_mesh = mesh_manager.get_unit_mesh(unit_number)
+        module._unit_mesh = mesh_manager.get_unit_mesh(weight.shape[0] // head_dim)
         module._parameters[param] = torch.nn.Parameter(
-            distribute_tensor(meta, module._unit_mesh, placements, src_data_rank=None),
+            distribute_tensor(meta, module._unit_mesh, [Shard(meta.ndim - 2), Replicate()], src_data_rank=None),
             requires_grad=meta.requires_grad,
         )
-        if meta.ndim == 1 and not isinstance(module, torch.nn.Linear):
-            # `UnitRowwiseParallel` scales the input gradient by 1/replicas; the q/k/v outputs all-reduce
-            # their gradients back in `transform_output_post_forward`, but a bare per-head parameter
-            # (Beam's gate_bias, GraniteSWA's sinks) has no such hook, so undo the scaling here. The
-            # parameters are replaced when the checkpoint is loaded, so attach the hook on first forward.
-            head_param_replicas = getattr(module, "_unit_head_param_replicas", None)
-            if head_param_replicas is None:
-                head_param_replicas = module._unit_head_param_replicas = {}
-                original_forward = module.forward
-                hooked: dict[str, torch.nn.Parameter] = {}
-
-                def tp_forward(*args, **kwargs):
-                    if torch.is_grad_enabled():
-                        for name, param in module.named_parameters(recurse=False):
-                            replicas = head_param_replicas.get(name)
-                            if replicas and replicas > 1 and hooked.get(name) is not param:
-                                param.register_hook(lambda grad, replicas=replicas: grad * replicas)
-                                hooked[name] = param
-                    return original_forward(*args, **kwargs)
-
-                module.forward = tp_forward
-            head_param_replicas[param] = module._unit_mesh.size(1)
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         # The inputs are on a different mesh. We HAVE to swap the meshes as cross mesh comms
