@@ -104,10 +104,6 @@ class MiniCPM5MoeConfig(Glm4MoeConfig):
             self.architectures = ["MiniCPM5MoeForCausalLM"]
 
         dense_layers = kwargs.pop("first_k_dense_replace", 1)
-        if kwargs.pop("use_gated_attention", True) is False:
-            raise ValueError(
-                "MiniCPM5Moe requires gated attention; checkpoints with use_gated_attention=False are unsupported."
-            )
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["dense" if i < dense_layers else "sparse" for i in range(self.num_hidden_layers)]
         if self.head_dim is None:
@@ -116,6 +112,14 @@ class MiniCPM5MoeConfig(Glm4MoeConfig):
             self.num_key_value_heads = self.num_attention_heads
 
         PreTrainedConfig.__post_init__(self, **kwargs)
+
+    def validate_architecture(self):
+        PreTrainedConfig.validate_architecture(self)
+
+        if getattr(self, "use_gated_attention", True) is False:
+            raise ValueError(
+                "MiniCPM5Moe requires gated attention; checkpoints with `use_gated_attention=False` are unsupported."
+            )
 
 
 class MiniCPM5MoeMLP(DeepseekV3MLP):
