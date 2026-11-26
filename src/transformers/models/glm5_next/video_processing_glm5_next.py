@@ -291,7 +291,6 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
             `int`: Number of video patches per video.
         """
         videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
-        videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
         patch_size = videos_kwargs["patch_size"]
         merge_size = videos_kwargs["merge_size"]
         temporal_patch_size = videos_kwargs["temporal_patch_size"]

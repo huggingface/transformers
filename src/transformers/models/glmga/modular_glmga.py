@@ -393,7 +393,6 @@ class GlmgaVideoProcessor(Glm46VVideoProcessor):
             `int`: Number of video patches per video.
         """
         videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
-        videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
         size = videos_kwargs["size"]
         patch_size = videos_kwargs["patch_size"]
         merge_size = videos_kwargs["merge_size"]

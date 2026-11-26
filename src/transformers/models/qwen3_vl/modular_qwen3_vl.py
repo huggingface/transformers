@@ -1066,7 +1066,6 @@ class Qwen3VLVideoProcessor(Qwen2VLVideoProcessor):
             `int`: Number of video patches per video.
         """
         videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
-        videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
         size = videos_kwargs["size"]
         min_pixels = size["shortest_edge"]
         max_pixels = size["longest_edge"]
