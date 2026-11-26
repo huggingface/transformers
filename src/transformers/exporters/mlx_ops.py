@@ -16,6 +16,7 @@ exporter checks its graphs against `MLX_OPS` and the runner runs them."""
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import itertools
 import math
@@ -132,12 +133,14 @@ def _index(x, indices):
 
 def _index_put(x, indices, values, accumulate=False):
     index = tuple(slice(None) if i is None else i for i in indices)
-    if accumulate:
-        return x.at[index].add(values)
-    # A copy: other nodes may still read `x`, which `__setitem__` would rewrite under them
-    out = mx.array(x)
-    out[index] = values
-    return out
+    # MLX's GPU scatter takes no 64-bit integers (positions, ids): those scatter on the CPU, which shares the memory
+    with mx.stream(mx.cpu) if x.dtype in (mx.int64, mx.uint64) else contextlib.nullcontext():
+        if accumulate:
+            return x.at[index].add(values)
+        # A copy: other nodes may still read `x`, which `__setitem__` would rewrite under them
+        out = mx.array(x)
+        out[index] = values
+        return out
 
 
 def _squeeze(x, dims=None):
@@ -365,6 +368,39 @@ def _vector_norm(x, ord=2, dim=None, keepdim=False, dtype=None):
     return mx.power(mx.sum(mx.power(x, ord), axis=axes, keepdims=keepdim), 1 / ord)
 
 
+def _topk(x, k, dim=-1, largest=True, sorted=True):
+    indices = mx.argsort(-x if largest else x, axis=dim)
+    indices = mx.take(indices, mx.arange(k), axis=dim)
+    return mx.take_along_axis(x, indices, axis=dim), indices.astype(mx.int64)
+
+
+def _sort(x, dim=-1, descending=False, stable=None):
+    indices = mx.argsort(-x if descending else x, axis=dim)
+    return mx.take_along_axis(x, indices, axis=dim), indices.astype(mx.int64)
+
+
+def _histc(x, bins=100, min=0, max=0):
+    # Each value's bin over `[min, max]`, the top edge in the last bin and values outside it in none
+    low, high = (mx.min(x), mx.max(x)) if min == max else (min, max)
+    index = mx.floor((x - low) * bins / (high - low)).astype(mx.int32)
+    index = mx.where(x == high, bins - 1, index)
+    inside = (x >= low) & (x <= high)
+    hits = (index.reshape(-1, 1) == mx.arange(bins)) & inside.reshape(-1, 1)
+    return mx.sum(hits, axis=0).astype(x.dtype)
+
+
+def _grouped_mm(x, weight, offs=None, bias=None, out_dtype=None):
+    """`(S, in) @ weight[expert]` for rows sorted by expert, `offs` their cumulative counts: one `mx.gather_mm`, rows
+    past the last count (dropped by the router) zero."""
+    experts = weight.shape[0]
+    expert = mx.sum(mx.arange(x.shape[0])[:, None] >= offs[None, :], axis=-1)
+    rows = mx.gather_mm(
+        x[:, None, :], weight, rhs_indices=mx.minimum(expert, experts - 1).astype(mx.uint32), sorted_indices=True
+    ).squeeze(1)
+    rows = rows if bias is None else rows + bias[mx.minimum(expert, experts - 1)]
+    return _astype(mx.where((expert < experts)[:, None], rows, 0), out_dtype or x.dtype)
+
+
 def _identity(x, *_, **__):
     return x
 
@@ -387,6 +423,16 @@ if is_mlx_available():
         "operator.getitem": operator.getitem,
         "torch.sym_max": max,
         "torch.sym_min": min,
+        "operator.eq": operator.eq,
+        "operator.ne": operator.ne,
+        "operator.lt": operator.lt,
+        "operator.le": operator.le,
+        "operator.gt": operator.gt,
+        "operator.ge": operator.ge,
+        "torch.sym_ite": lambda condition, true, false: true if condition else false,
+        # A value read on the host (`.item()`): the runner runs such a graph without `mx.compile`
+        "aten._local_scalar_dense.default": lambda x: x.item(),
+        "aten._is_all_true.default": mx.all,
         # Values and views
         "aten._assert_tensor_metadata.default": _ignored,
         "aten._assert_scalar.default": _ignored,
@@ -403,6 +449,12 @@ if is_mlx_available():
         ),
         "aten.full_like.default": lambda x, value, dtype=None, **_: mx.full(x.shape, value, dtype=dtype or x.dtype),
         "aten.zeros_like.default": lambda x, dtype=None, **_: mx.zeros(x.shape, dtype=dtype or x.dtype),
+        # Uninitialized in torch: zeros are one of its possible values
+        "aten.empty_permuted.default": lambda size, physical_layout, dtype=None, **_: mx.zeros(
+            size, dtype=dtype or mx.float32
+        ),
+        "aten.copy.default": lambda x, src, non_blocking=False: mx.broadcast_to(src, x.shape).astype(x.dtype),
+        "aten.repeat.default": mx.tile,
         "aten.ones_like.default": lambda x, dtype=None, **_: mx.ones(x.shape, dtype=dtype or x.dtype),
         "aten.arange.default": _arange,
         "aten.arange.start": _arange,
@@ -449,6 +501,8 @@ if is_mlx_available():
         "aten.pow.Scalar": mx.power,
         "aten.neg.default": mx.negative,
         "aten.abs.default": mx.abs,
+        "aten.relu.default": lambda x: mx.maximum(x, 0),
+        "aten.log1p.default": mx.log1p,
         "aten.exp.default": mx.exp,
         "aten.log.default": mx.log,
         "aten.sqrt.default": mx.sqrt,
@@ -502,6 +556,10 @@ if is_mlx_available():
             mx.int64
         ),
         "aten.linalg_vector_norm.default": _vector_norm,
+        "aten.topk.default": _topk,
+        "aten.sort.default": _sort,
+        "aten.sort.stable": lambda x, stable=None, dim=-1, descending=False: _sort(x, dim, descending),
+        "aten.histc.default": _histc,
         "aten.cumsum.default": lambda x, dim, dtype=None: _astype(mx.cumsum(x, axis=dim), dtype),
         "aten._softmax.default": lambda x, dim, half_to_float=False: mx.softmax(x, axis=dim, precise=True),
         "aten._log_softmax.default": lambda x, dim, half_to_float=False: x - mx.logsumexp(x, axis=dim, keepdims=True),
@@ -514,6 +572,8 @@ if is_mlx_available():
         "aten.layer_norm.default": _layer_norm,
         "aten.rms_norm.default": _rms_norm,
         "aten.linear.default": _linear,
+        "aten._grouped_mm.default": _grouped_mm,
+        "transformers.grouped_mm_fallback.default": _grouped_mm,
         "aten.silu.default": lambda x: x * mx.sigmoid(x),
         # Convolutions and pooling
         "aten.convolution.default": _convolution,
