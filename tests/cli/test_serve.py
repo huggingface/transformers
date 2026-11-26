@@ -562,6 +562,24 @@ class TestBuildGenerationConfig(unittest.TestCase):
             self._make_handler()._build_generation_kwargs(body, GenerationConfig())
         self.assertEqual(ctx.exception.status_code, 422)
 
+    @require_torch
+    def test_unset_settings_keep_generate_defaults(self):
+        """A setting the model's config leaves unset doesn't reach `generate`, which then uses its default
+        (top_k=50)."""
+        import torch
+
+        from transformers import GenerationConfig
+
+        generation_kwargs = self._make_handler()._build_generation_kwargs({"temperature": 0.7}, GenerationConfig())
+        model = MagicMock(device="cpu")
+        results = queue.Queue()
+        runner = GenerateRunner(model, None, lambda ids, tokens, finished: results.put(finished))
+        runner.generate(1, {"input_ids": torch.tensor([[1, 2]])}, generation_kwargs, stream=False)
+        results.get(timeout=10)
+        settings = model.generate.call_args.kwargs
+        self.assertEqual(settings["temperature"], 0.7)
+        self.assertNotIn("top_k", settings)
+
 
 @require_serve
 class TestValidation(unittest.TestCase):

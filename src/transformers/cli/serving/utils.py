@@ -840,7 +840,7 @@ class GenerateRunner:
             }
             kwargs = {
                 **model_inputs,
-                **generation_kwargs,
+                **{name: value for name, value in generation_kwargs.items() if value is not None},
                 "tokenizer": processor,
                 "streamer": streamer,
             }
