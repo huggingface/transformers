@@ -429,8 +429,8 @@ class TimestralModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class TimestralModelIntegrationTests(unittest.TestCase):
     @unittest.skip(
-        reason="The expected values must come from the converted checkpoints once they are on the Hub. "
-        "Until then, `convert_timestral_original_to_hf.py --verify` compares against the original implementation."
+        reason="The converted checkpoints are not on the Hub yet. The expected values come from Timestral-209M "
+        "converted with `convert_timestral_original_to_hf.py`."
     )
     def test_inference(self):
         model = TimestralModelForPrediction.from_pretrained("mistralai/Timestral-209M").to(torch_device)
@@ -442,3 +442,19 @@ class TimestralModelIntegrationTests(unittest.TestCase):
 
         self.assertEqual(outputs.mean_predictions.shape, (1, 1, 64))
         self.assertEqual(outputs.full_predictions.shape, (1, 1, 64, 21))
+        self.assertEqual((model.config.quantiles[2], model.config.quantiles[18]), (0.1, 0.9))
+
+        # The model carries on the sine wave.
+        expected_median_start = torch.tensor(
+            [0.866541, 0.707084, 0.497564, 0.253224, -0.003088, -0.260921, -0.500180, -0.709947]
+        )
+        expected_median_end = torch.tensor([-0.870142, -0.715781, -0.504479, -0.262574])
+        expected_quantile_10 = torch.tensor([0.860088, 0.700435, 0.490915, 0.246941])
+        expected_quantile_90 = torch.tensor([0.873726, 0.714042, 0.504192, 0.259402])
+
+        median = outputs.mean_predictions[0, 0].cpu()
+        quantiles = outputs.full_predictions[0, 0].cpu()
+        torch.testing.assert_close(median[:8], expected_median_start, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(median[-4:], expected_median_end, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(quantiles[:4, 2], expected_quantile_10, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(quantiles[:4, 18], expected_quantile_90, rtol=1e-4, atol=1e-4)

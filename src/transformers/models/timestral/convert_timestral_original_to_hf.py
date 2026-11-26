@@ -146,7 +146,14 @@ def convert_checkpoint(original_config: dict, original_state_dict: dict[str, tor
 
 @torch.no_grad()
 def verify_conversion(model: TimestralModelForPrediction, original_config: dict, original_state_dict: dict):
-    """Compares the converted model with the original implementation on a few inputs."""
+    """
+    Compares the converted model with the original implementation on a few inputs.
+
+    For these inputs the forecasts reach the thousands, after a `sinh`. With float32 weights, two implementations
+    of the same computation then differ by rounding errors of about 1e-5 of the largest value. The comparison is
+    therefore run twice: with float32 weights at a loose tolerance, and with float64 weights, where the two
+    implementations have to agree closely.
+    """
     try:
         from timestral import TimestralConfig as OriginalConfig
         from timestral import TimestralForecaster
@@ -157,10 +164,6 @@ def verify_conversion(model: TimestralModelForPrediction, original_config: dict,
             "`pip install git+https://github.com/mistralai/timestral`."
         ) from error
 
-    original_model = OriginalModel(OriginalConfig.from_dict(original_config))
-    original_model.load_state_dict(original_state_dict, strict=True)
-    forecaster = TimestralForecaster(original_model.eval())
-
     generator = torch.Generator().manual_seed(0)
     patch_length = model.config.patch_length
     context_length = 8 * patch_length + 5
@@ -170,17 +173,24 @@ def verify_conversion(model: TimestralModelForPrediction, original_config: dict,
     targets[0, 0, 5:9] = float("nan")
     past_covariates = torch.randn(2, 1, context_length, generator=generator)
     known_covariates = torch.randn(2, 1, context_length + prediction_length, generator=generator)
-
     cases = {
         "targets only": {},
         "with covariates": {"past_covariates": past_covariates, "known_covariates": known_covariates},
     }
-    for name, covariates in cases.items():
-        expected = forecaster.forecast(targets, prediction_length=prediction_length, **covariates).quantiles
-        outputs = model(past_values=targets, prediction_length=prediction_length, **covariates)
-        max_difference = (outputs.full_predictions - expected).abs().max().item()
-        print(f"{name}: max absolute difference {max_difference:.3e}")
-        torch.testing.assert_close(outputs.full_predictions, expected, rtol=1e-4, atol=1e-4)
+
+    for dtype, rtol, atol in ((torch.float32, 1e-3, 1e-3), (torch.float64, 1e-5, 1e-4)):
+        original_model = OriginalModel(OriginalConfig.from_dict(original_config))
+        original_model.load_state_dict(original_state_dict, strict=True)
+        forecaster = TimestralForecaster(original_model.eval().to(dtype))
+        model.to(dtype)
+        for name, covariates in cases.items():
+            expected = forecaster.forecast(targets, prediction_length=prediction_length, **covariates).quantiles
+            outputs = model(past_values=targets, prediction_length=prediction_length, **covariates)
+            predictions, expected = outputs.full_predictions.double(), expected.double()
+            max_difference = (predictions - expected).abs().max().item()
+            print(f"{name}, {str(dtype).split('.')[-1]} weights: max absolute difference {max_difference:.3e}")
+            torch.testing.assert_close(predictions, expected, rtol=rtol, atol=atol)
+    model.to(torch.float32)
 
 
 def main():
