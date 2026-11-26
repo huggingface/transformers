@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any
 from ..utils.import_utils import is_mlx_available, is_torch_available
 from .configs import ExportFormat, MLXConfig
 from .exporter_dynamo import DynamoExporter
-from .mlx_ops import MLX_OPS, MLXProgram, to_mlx
+from .mlx_ops import MLX_OPS, MLXProgram, to_mlx, to_torch
 from .utils import apply_patches
 
 
@@ -66,6 +66,12 @@ class MLXExporter(DynamoExporter):
     required_packages = ["torch", "mlx"]
     tested_versions = {"torch": "2.13.0", "mlx": "0.32.5"}
 
+    def __init__(self):
+        super().__init__()
+        # The MLX copy of each torch tensor the exports read, by storage: the components of one model (a generation
+        # export's prefill and decode) share their weights instead of each holding a copy
+        self._mlx_arrays: dict[tuple, mx.array] = {}
+
     def export_program(
         self,
         model: PreTrainedModel,
@@ -75,7 +81,7 @@ class MLXExporter(DynamoExporter):
         with apply_patches("mlx"):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
         exported_program = exported_program.run_decompositions(_mlx_decompositions())
-        program, metadata.out_constants = _to_mlx_program(exported_program)
+        program, metadata.out_constants = _to_mlx_program(exported_program, self._mlx_arrays)
         return program, metadata
 
     @classmethod
@@ -125,7 +131,25 @@ def _target_name(target) -> str:
     return f"{'operator' if target.__module__ == '_operator' else target.__module__}.{target.__name__}"
 
 
-def _to_mlx_program(exported_program: ExportedProgram) -> tuple[MLXProgram, list]:
+def _tensor_key(tensor: torch.Tensor) -> tuple:
+    return tensor.data_ptr(), tensor.dtype, tuple(tensor.shape), tensor.stride()
+
+
+def _shared_mlx_array(tensor: torch.Tensor, mlx_arrays: dict[tuple, mx.array]) -> mx.array:
+    """The MLX copy of `tensor`, made once. A CPU tensor then reads it: its data becomes a view of the MLX array, so the
+    model and its export share one copy of the weights."""
+    if (array := mlx_arrays.get(_tensor_key(tensor))) is not None:
+        return array
+    array = to_mlx(tensor)
+    mx.eval(array)
+    mlx_arrays[_tensor_key(tensor)] = array
+    if tensor.device.type == "cpu":
+        tensor.data = to_torch(array)
+        mlx_arrays[_tensor_key(tensor)] = array
+    return array
+
+
+def _to_mlx_program(exported_program: ExportedProgram, mlx_arrays: dict[tuple, mx.array]) -> tuple[MLXProgram, list]:
     """The program's graph and weights, and its non-tensor outputs as `[leaf index, value]`.
 
     The graph returns the mutated inputs' new values (a `StaticCache` write), then the tensor outputs, as the program
@@ -145,7 +169,7 @@ def _to_mlx_program(exported_program: ExportedProgram) -> tuple[MLXProgram, list
     weights, inputs, constants = {}, [], {}
     for spec in signature.input_specs:
         if spec.kind != InputKind.USER_INPUT:
-            weights[spec.arg.name] = to_mlx(state[spec.target])
+            weights[spec.arg.name] = _shared_mlx_array(state[spec.target], mlx_arrays)
         elif isinstance(spec.arg, TensorArgument):
             inputs.append(spec.arg.name)
         else:
