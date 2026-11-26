@@ -24,6 +24,7 @@ from types import ModuleType
 from typing import TYPE_CHECKING
 
 from ..conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
+from ..distributed.parallel_utils import keep_parallel_forwards
 from ..modeling_flash_attention_utils import FLASH_ATTN_KERNEL_VERSIONS
 from ..monkey_patching import register_patch_mapping
 from ..utils import ENV_VARS_TRUE_VALUES, logging
@@ -1142,7 +1143,7 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     # Keep the original forward instead of raising when a kernel can't be loaded (e.g. no compatible build)
     use_fallback = KernelizeFallback.ALL
 
-    with keep_accelerate_hooks(model):
+    with keep_accelerate_hooks(model), keep_parallel_forwards(model):
         if model.kernel_config is not None:
             inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
             with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):

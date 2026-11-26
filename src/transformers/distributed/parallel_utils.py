@@ -36,6 +36,40 @@ class ParallelInterface(GeneralInterface):
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
+def wrapped_forward(module):
+    """The forward a parallel style wraps. It is read from the module at each call, so that a `forward` replaced
+    after the style was installed (see `keep_parallel_forwards`) is the one that runs."""
+    if hasattr(module, "_parallel_forward"):
+        # Another style already wraps this module: this one wraps that style
+        return module.forward
+    module._wrapped_forward = module.forward
+    return lambda *args, **kwargs: module._wrapped_forward(*args, **kwargs)
+
+
+def install_parallel_forward(module, parallel_forward) -> None:
+    """Sets a parallel style's forward on a module, and remembers it for `keep_parallel_forwards`."""
+    module.forward = parallel_forward
+    module._parallel_forward = parallel_forward
+
+
+@contextlib.contextmanager
+def keep_parallel_forwards(model):
+    """
+    Keep the parallel styles on the modules whose `forward` is replaced inside the context.
+
+    A style is installed before the weights are loaded, by replacing `forward`. Kernels replace `forward` again
+    afterwards: the new `forward` becomes the one the style wraps, and the style's forward is put back.
+    """
+    forwards = {module: module.forward for module in model.modules() if hasattr(module, "_parallel_forward")}
+    try:
+        yield
+    finally:
+        for module, forward in forwards.items():
+            if module.forward is not forward:
+                module._wrapped_forward = module.forward
+                module.forward = module._parallel_forward
+
+
 def replace_layer_number_by_wildcard(name: str) -> str:
     """
     Replace the numbers in the `name` by wildcards, only if they are in-between dots (`.`) or if they are between
