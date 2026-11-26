@@ -343,6 +343,28 @@ def _compute_dynamic_ntk_parameters(
     return inv_freq, attention_factor
 
 
+def yarn_get_mscale(scale=1, mscale=1):
+    """`mscale` from the YaRN paper, as given in Eq. 21: `0.1 * mscale * log(scale) + 1`."""
+    if scale <= 1:
+        return 1.0
+    return 0.1 * mscale * math.log(scale) + 1.0
+
+
+def yarn_apply_mscale(rope_parameters, scaling):
+    """Folds YaRN's `mscale_all_dim` into an attention softmax scale.
+
+    YaRN already scales the rotary dims through `attention_factor`, but MLA models (DeepSeek family) also scale the
+    constant applied to `q @ k^T`, i.e. the non-rotary dims too, as in the reference implementation:
+    `softmax_scale = qk_scale * mscale * mscale`.
+    """
+    if rope_parameters.get("rope_type", "default") != "default":
+        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
+        if mscale_all_dim:
+            mscale = yarn_get_mscale(rope_parameters["factor"], mscale_all_dim)
+            scaling = scaling * mscale * mscale
+    return scaling
+
+
 def _compute_yarn_parameters(
     config: "PreTrainedConfig",
     device: Optional["torch.device"] = None,
@@ -427,17 +449,12 @@ def _compute_yarn_parameters(
     if factor is None:
         factor = config.max_position_embeddings / original_max_position_embeddings
 
-    def get_mscale(scale, mscale=1):
-        if scale <= 1:
-            return 1.0
-        return 0.1 * mscale * math.log(scale) + 1.0
-
     # Sets the attention factor as suggested in the paper
     if attention_factor is None:
         if mscale and mscale_all_dim:
-            attention_factor = float(get_mscale(factor, mscale) / get_mscale(factor, mscale_all_dim))
+            attention_factor = float(yarn_get_mscale(factor, mscale) / yarn_get_mscale(factor, mscale_all_dim))
         else:
-            attention_factor = get_mscale(factor)
+            attention_factor = yarn_get_mscale(factor)
 
     # Optional config options
     # beta_fast/beta_slow: as suggested in the paper, default to 32/1 (correspondingly)

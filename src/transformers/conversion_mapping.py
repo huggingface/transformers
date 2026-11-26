@@ -117,6 +117,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen3_5_moe_text": "qwen3_5_text",
     "llava_next_video": "llava_next",
     "llava_onevision": "llava_next",
+    "pi05": "pi0",
     # class-based mappings
     "AriaModel": "LlavaModel",
     "PaliGemmaModel": "LlavaModel",
@@ -223,6 +224,24 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.self_attn\.to_out\.", ".self_attn.o_proj."),
             WeightRenaming(r"\.mlp\.up_proj\.", ".mlp.fc1."),
             WeightRenaming(r"\.mlp\.down_proj\.", ".mlp.fc2."),
+        ],
+        "ovis2_5": [
+            WeightRenaming(r"^llm\.model\.", "model.language_model."),
+            WeightRenaming(r"^llm\.lm_head\.", "lm_head."),
+            WeightRenaming(r"^visual_tokenizer\.vit\.vision_model\.embeddings\.", "model.vision_tower.embeddings."),
+            WeightRenaming(r"^visual_tokenizer\.vit\.vision_model\.encoder\.layers\.", "model.vision_tower.layers."),
+            WeightRenaming(
+                r"^visual_tokenizer\.vit\.vision_model\.post_layernorm\.", "model.vision_tower.post_layernorm."
+            ),
+            WeightRenaming(r"^visual_tokenizer\.head\.0\.", "model.multi_modal_projector.visual_tokenizer.linear."),
+            WeightRenaming(r"^visual_tokenizer\.head\.1\.", "model.multi_modal_projector.visual_tokenizer.norm."),
+            # Preserve the conditional wrapper prefix on reverse conversion while allowing the base model to load too.
+            WeightRenaming(r"^vte\.", "model.vte."),
+            WeightConverter(
+                source_patterns=r"vte\.weight",
+                target_patterns="multi_modal_projector.visual_embeddings_table.weight",
+                operations=[Transpose()],
+            ),
         ],
         "inkling_mm_model": [
             WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
@@ -1272,6 +1291,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 source_patterns=r"action_time_mlp_out", target_patterns="embed_action_time.action_time_mlp_out"
             ),
+            WeightRenaming(source_patterns=r"^time_mlp_(in|out)", target_patterns=r"embed_action_time.time_mlp_\1"),
             WeightRenaming(source_patterns=r"^paligemma_with_expert.paligemma.model", target_patterns="model.vlm"),
             WeightRenaming(source_patterns=r"^paligemma_with_expert.gemma_expert.model", target_patterns="model.dit"),
             # Weight on the hub have only `lm_head` saved, but PI0 doesn't create any lm-head initialized!
@@ -2362,6 +2382,7 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming("post_attn_norm", "post_self_attn_layernorm"),
         WeightRenaming("post_ffn_norm", "post_mlp_layernorm"),
     ]
+    mapping["kolibri1_1"] = mapping["kolibri1"].copy()
 
     mapping["mimo_v2_flash"] = mapping["qwen2_moe"].copy()
     mapping["mimo_v2_flash"] += [

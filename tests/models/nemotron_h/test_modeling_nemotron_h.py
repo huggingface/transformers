@@ -51,6 +51,8 @@ if is_torch_available():
 
 
 class NemotronHModelTester(ModelTesterConfigMixin):
+    causal_lm_class = NemotronHForCausalLM
+
     defaults = {}
 
     small_config_overrides = {

@@ -54,15 +54,14 @@ if is_torch_available():
 
 class GraniteMoeHybridModelTester(BambaModelTester):
     config_class = GraniteMoeHybridConfig
-    if is_torch_available():
-        model_class = GraniteMoeHybridModel
-        for_causal_lm_class = GraniteMoeHybridForCausalLM
+    model_class = GraniteMoeHybridModel
+    causal_lm_class = GraniteMoeHybridForCausalLM
 
     defaults = {**BambaModelTester.defaults, **BambaModelTester.small_config_overrides}
     small_config_overrides = {
         "use_cache": False,
         "shared_intermediate_size": 174,
-        "layer_types": None,
+        "layer_types": ["linear_attention", "full_attention"],
     }
 
     def _update_layer_configs(self):
@@ -150,7 +149,7 @@ class GraniteMoeHybridModelTest(
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
-        expected_num_attentions = self.model_tester.num_hidden_layers - len(self.model_tester.attn_layer_indices)
+        expected_num_attentions = len(self.model_tester.attn_layer_indices)
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
