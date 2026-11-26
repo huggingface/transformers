@@ -35,7 +35,7 @@ if is_serve_available():
     from openai.types.completion_create_params import CompletionCreateParamsBase
 
 
-from .utils import BaseGenerateManager, BaseHandler, _StreamError
+from .utils import BaseGenerateManager, BaseHandler, StopSequenceFilter, _StreamError
 
 
 if TYPE_CHECKING:
@@ -132,6 +132,7 @@ class CompletionHandler(BaseHandler):
         queue, streamer = gen_manager.generate_streaming(model, processor, inputs, gen_config, request_id=request_id)
         input_ids = inputs["input_ids"]
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
+        stop_filter = StopSequenceFilter(gen_config.stop_strings)
 
         async def sse_gen() -> AsyncGenerator[str, None]:
             try:
@@ -148,6 +149,8 @@ class CompletionHandler(BaseHandler):
                     sse_parts: list[str] = []
                     for text in batch:
                         if text is None:
+                            if tail := stop_filter.flush():
+                                sse_parts.append(self._build_chunk_sse(request_id, model_id, text=tail))
                             done = True
                             break
                         if isinstance(text, _StreamError):
@@ -155,7 +158,8 @@ class CompletionHandler(BaseHandler):
                             yield "".join(sse_parts)
                             return
 
-                        sse_parts.append(self._build_chunk_sse(request_id, model_id, text=text))
+                        if text := stop_filter.feed(text):
+                            sse_parts.append(self._build_chunk_sse(request_id, model_id, text=text))
 
                     if sse_parts:
                         yield "".join(sse_parts)
@@ -195,6 +199,7 @@ class CompletionHandler(BaseHandler):
             model, processor, inputs, gen_config, request_id=request_id
         )
 
+        text = StopSequenceFilter(gen_config.stop_strings).apply(text)
         if suffix is not None:
             text = text + suffix
 
