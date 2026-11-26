@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
 from ..utils import get_current_accelerator, is_torch_available, logging
 
 
@@ -234,6 +236,13 @@ def swizzle_mxfp4(w, w_scale, triton_kernels_hub):
         constraints = {"block_k": 64, "num_stages": 2}
         triton_kernels_hub.matmul_ogs_details.opt_flags.update_opt_flags_constraints(constraints)
     # [scratch] Ampere / Ada: the default prefill tiles (128 x 256 x 128) took ~350 ms a layer on an A100
+    # [scratch] Hopper: no split-K, as vLLM constrains it (PROTO_MXFP4_SM90_SPLITK1=0 for the heuristic's choice)
+    elif (
+        w_scale.device.type == "cuda"
+        and torch.cuda.get_device_capability(w_scale.device)[0] == 9
+        and os.environ.get("PROTO_MXFP4_SM90_SPLITK1", "1") == "1"
+    ):
+        triton_kernels_hub.matmul_ogs_details.opt_flags.update_opt_flags_constraints({"split_k": 1})
     elif w_scale.device.type == "cuda" and torch.cuda.get_device_capability(w_scale.device)[0] < 9:
         constraints = {"block_k": 64, "num_stages": 2}
         triton_kernels_hub.matmul_ogs_details.opt_flags.update_opt_flags_constraints(constraints)
