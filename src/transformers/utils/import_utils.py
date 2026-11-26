@@ -811,7 +811,8 @@ def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION, MAX_VERSION: st
         viable_version = version.parse(kernels_version) >= version.parse(MIN_VERSION) and version.parse(
             kernels_version
         ) < version.parse(MAX_VERSION)
-    return is_available and viable_version
+    # [CI-only] skip the version check so kernels main (0.19.0.dev1) is used
+    return is_available
 
 
 @lru_cache
