@@ -83,9 +83,13 @@ def smart_resize(
         h_bar = max(factor, math.floor(height / beta / factor) * factor)
         w_bar = max(factor, math.floor(width / beta / factor) * factor)
     elif h_bar * w_bar < min_pixels:
-        beta = math.sqrt(min_pixels / (height * width))
-        h_bar = math.ceil(height * beta / factor) * factor
-        w_bar = math.ceil(width * beta / factor) * factor
+        # min_pixels is typically read from a processor config, which is often supplied by a
+        # model repository we do not control. Cap the upscale at the source image area: inflating
+        # a 1x1 image to a configured 10**12 pixels costs terabytes for no information.
+        target_pixels = min(min_pixels, height * width)
+        beta = math.sqrt(target_pixels / (height * width))
+        h_bar = max(factor, math.ceil(height * beta / factor) * factor)
+        w_bar = max(factor, math.ceil(width * beta / factor) * factor)
     return h_bar, w_bar
 
 
