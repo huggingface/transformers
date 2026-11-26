@@ -172,10 +172,10 @@ class Apertus1p5ImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of image codes per image.
         """
-        images_kwargs = images_kwargs if images_kwargs is not None else {}
-        spatial_factor = images_kwargs.get("spatial_factor", self.spatial_factor)
-        if images_kwargs.get("do_resize", self.do_resize):
-            size = self._standardize_kwargs(size=images_kwargs.get("size", self.size))["size"]
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        spatial_factor = images_kwargs["spatial_factor"]
+        if images_kwargs["do_resize"]:
+            size = images_kwargs["size"]
             height, width = smart_resize(
                 height, width, factor=spatial_factor, min_pixels=size.min_pixels, max_pixels=size.max_pixels
             )
