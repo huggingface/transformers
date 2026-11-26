@@ -16,6 +16,7 @@ import torch
 
 
 STATS_DIR = os.environ.get("Q3_STATS_DIR", "q3_stats")
+CLOSEST_MIN_RATIO = float(os.environ.get("Q3_CLOSEST_MIN_RATIO", "1e-3"))
 os.makedirs(STATS_DIR, exist_ok=True)
 _rec = {}
 _st = {"phase": None, "ctx": None, "layers": {}, "logits": {}, "mask": None}
@@ -102,9 +103,10 @@ def _cross_path():
         return None
     out = {"rel": {"n": 0, "max_delta": 0.0, "min_gap": float("inf"), "max_ratio": 0.0, "flips": 0},
            "pad": {"n": 0, "max_ratio": 0.0, "flips": 0}}
+    closest = None  # the single (layer, row, position, step) entry with the largest delta/gap among relevant positions
     for layer, calls in cached.items():
         full = torch.cat(calls, dim=1)  # cached: prefill + one position per decode step -> all positions
-        for step_logits in cacheless.get(layer, []):  # cacheless: every step recomputes positions 0..L-1
+        for step_idx, step_logits in enumerate(cacheless.get(layer, [])):  # cacheless: recomputes 0..L-1 each step
             n = min(full.shape[1], step_logits.shape[1])
             a, b = full[:, :n], step_logits[:, :n]
             delta = (a - b).abs().amax(-1)
@@ -128,6 +130,24 @@ def _cross_path():
                     if key == "rel":
                         o["max_delta"] = max(o["max_delta"], delta[sel].max().item())
                         o["min_gap"] = min(o["min_gap"], gap[sel].min().item())
+                        masked = torch.where(sel, ratio, torch.full_like(ratio, -1.0))
+                        idx = int(masked.argmax())
+                        row, pos = divmod(idx, masked.shape[1])
+                        if closest is None or masked[row, pos].item() > closest["ratio"]:
+                            closest = {
+                                "ratio": masked[row, pos].item(), "layer": layer, "row": row, "position": pos,
+                                "cacheless_step": step_idx, "delta": delta[row, pos].item(),
+                                "gap_cached": (sa[row, pos, k - 1] - sa[row, pos, k]).item(),
+                                "gap_cacheless": (sb[row, pos, k - 1] - sb[row, pos, k]).item(),
+                                "flip": bool(flip[row, pos]),
+                            }
+                            for name, t in (("cached", a), ("cacheless", b)):
+                                top = t[row, pos].topk(k + 1)
+                                closest[f"top{k + 1}_{name}"] = [round(v, 9) for v in top.values.tolist()]
+                                closest[f"top{k + 1}_experts_{name}"] = top.indices.tolist()
+    # Only keep the details of near-misses: they are what we want to look at, and it keeps the files small
+    if closest is not None and closest["ratio"] > CLOSEST_MIN_RATIO:
+        out["closest"] = closest
     return out
 
 
