@@ -285,9 +285,9 @@ The example below shows how it differs from [`Pipeline`].
 # ChunkPipeline
 all_model_outputs = []
 for preprocessed in pipeline.preprocess(inputs):
-    model_outputs = pipeline.model_forward(preprocessed)
+    model_outputs = pipeline.forward(preprocessed)
     all_model_outputs.append(model_outputs)
-outputs =pipeline.postprocess(all_model_outputs)
+outputs = pipeline.postprocess(all_model_outputs)
 
 # Pipeline
 preprocessed = pipeline.preprocess(inputs)

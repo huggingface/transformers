@@ -80,7 +80,6 @@ class Gemma3TextModelTester(CausalLMModelTester):
 @require_torch
 class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Gemma3TextModelTester
-    _is_stateful = True
     model_split_percents = [0.5, 0.6]
 
     @unittest.skip("Gemma3 tanh soft-capping amplifies TP numerical noise beyond 80% match threshold")
@@ -200,7 +199,6 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Gemma3Vision2TextModelTester
 
     test_missing_keys = False
-    _is_stateful = True
     model_split_percents = [0.5, 0.6]
     additional_model_inputs = ["token_type_ids"]
 
@@ -739,7 +737,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
                 ("cuda", 7): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
                 ("cuda", 8): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
                 ("rocm", 9): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
-                ("tpu", None): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
+                ("tpu", None): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()

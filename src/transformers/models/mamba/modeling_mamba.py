@@ -371,8 +371,11 @@ def mamba_scan_forward(
     recurrent_state = cache.get_recurrent_state(module.layer_idx, state_idx=0) if cache is not None else None
     A = -torch.exp(module.A_log.float())
     time_proj_bias = module.dt_proj.bias.float() if module.dt_proj.bias is not None else None
+    seq_len = hidden_states.shape[-1]
 
-    if recurrent_state is not None and hidden_states.shape[-1] == 1:
+    # Recurrent form
+    if recurrent_state is not None and seq_len == 1:
+        # Will update the recurrent state in-place
         return mamba_selective_state_update(
             recurrent_state,
             hidden_states[..., 0],
@@ -386,25 +389,82 @@ def mamba_scan_forward(
             dt_softplus=True,
         ).unsqueeze(-1)
 
-    output_final_state = cache is not None
-    scan_result = mamba_selective_scan(
-        hidden_states,
-        time_step,
-        A,
-        B.transpose(1, 2),
-        C.transpose(1, 2),
-        D=module.D.float(),
-        z=gate,
-        delta_bias=time_proj_bias,
-        delta_softplus=True,
-        return_last_state=output_final_state,
-        use_mambapy=module.use_mambapy,
-        use_associative_scan=module.use_associative_scan,
+    # Otherwise, full sequence form
+    num_intermediate_recurrent_states = (
+        cache.get_recurrent_states_to_keep(module.layer_idx) if cache is not None else 0
     )
-    if not output_final_state:
-        return scan_result
-    scan_output, final_state = scan_result
-    cache.update_recurrent_state(final_state, module.layer_idx)
+    # Cannot be more than the number of tokens
+    num_intermediate_recurrent_states = min(num_intermediate_recurrent_states, seq_len)
+    # Since we want the last num_intermediate_recurrent_states, we need to artifically remove them from the chunks, and split the inputs
+    effective_sequence_length = seq_len - num_intermediate_recurrent_states
+    chunked_hidden_states, sequential_hidden_states = torch.tensor_split(
+        hidden_states, [effective_sequence_length], dim=2
+    )
+    chunked_time_step, sequential_time_step = torch.tensor_split(time_step, [effective_sequence_length], dim=2)
+    chunked_B, sequential_B = torch.tensor_split(B, [effective_sequence_length], dim=1)
+    chunked_C, sequential_C = torch.tensor_split(C, [effective_sequence_length], dim=1)
+    chunked_gate, sequential_gate = torch.tensor_split(gate, [effective_sequence_length], dim=2)
+
+    all_outputs = []
+    last_scan_recurrent_state = recurrent_state
+    # First, perform the fast scan computation (if we don't need only sequential). We need this check as `mamba_selective_scan` cannot handle
+    # 0-elements (i.e. empty) tensors correctly
+    if chunked_hidden_states.numel() > 0:
+        # TODO Cyril: since `mamba_selective_scan` does not take the past state, it is WRONG if the cache is not empty. This is a very
+        # long standing issue, maybe only do sequential
+        scan_output = mamba_selective_scan(
+            chunked_hidden_states,
+            chunked_time_step,
+            A,
+            chunked_B.transpose(1, 2),
+            chunked_C.transpose(1, 2),
+            D=module.D.float(),
+            z=chunked_gate,
+            delta_bias=time_proj_bias,
+            delta_softplus=True,
+            return_last_state=cache is not None,
+            use_mambapy=module.use_mambapy,
+            use_associative_scan=module.use_associative_scan,
+        )
+        # The number of outputs varies depending on the flag
+        if cache is not None:
+            scan_output, last_scan_recurrent_state = scan_output
+        # Collect it
+        all_outputs.append(scan_output)
+
+    # If we need to return intermediate recurrent state, we now do it sequentially after the chunked part
+    intermediate_recurrent_states = []
+    last_recurrent_state = (
+        last_scan_recurrent_state if last_scan_recurrent_state is not None else A.new_zeros(B.shape[0], *A.shape)
+    )
+    for i in range(num_intermediate_recurrent_states):
+        local_output = mamba_selective_state_update(
+            last_recurrent_state,
+            sequential_hidden_states[..., i],
+            sequential_time_step[..., i],
+            A,
+            sequential_B[:, i],
+            sequential_C[:, i],
+            module.D,
+            z=sequential_gate[..., i],
+            dt_bias=time_proj_bias,
+            dt_softplus=True,
+        ).unsqueeze(-1)
+        # Combine them
+        all_outputs.append(local_output)
+        # Note that we need to copy here to store it, since it's updated in-place
+        intermediate_recurrent_states.append(last_recurrent_state.clone())
+
+    # Cat all outputs
+    scan_output = torch.cat(all_outputs, dim=2)
+
+    # In case we needed intermediate states, we return them, otherwise the last one is the chunked one
+    last_recurrent_state = (
+        intermediate_recurrent_states if len(intermediate_recurrent_states) > 0 else last_scan_recurrent_state
+    )
+    if cache is not None:
+        cache.update_recurrent_state(last_recurrent_state, module.layer_idx)
+
     return scan_output
 
 
@@ -611,7 +671,6 @@ class MambaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "backbone"
     _no_split_modules = ["MambaBlock", "MambaMixer"]
     supports_gradient_checkpointing = True
-    _is_stateful = True
 
     def _init_weights(self, module):
         """Initialize the weights."""

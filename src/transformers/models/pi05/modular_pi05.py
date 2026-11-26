@@ -13,6 +13,8 @@
 # limitations under the License.
 """PI0.5 model: PaliGemma + action expert conditioned on the timestep through adaptive RMS norms."""
 
+from collections.abc import Callable
+
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -23,11 +25,18 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
-from ..gemma.modeling_gemma import GemmaAttention, GemmaDecoderLayer, GemmaModel
+from ..gemma.modeling_gemma import (
+    GemmaAttention,
+    GemmaDecoderLayer,
+    GemmaModel,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+)
 from ..pi0.configuration_pi0 import PI0Config
 from ..pi0.modeling_pi0 import (
     PI0ActionTimeEmbedding,
@@ -199,7 +208,50 @@ class PI05AdaptiveRMSNorm(nn.Module):
 
 
 class PI05Attention(GemmaAttention):
-    pass
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if cache is not None:
+            # the VLM layer that filled this cache layer can be on another GPU than this expert layer (which has no cache itself)
+            cache_device = cache.layers[self.layer_idx].keys.device
+            key_states, value_states = cache.update(
+                key_states.to(cache_device), value_states.to(cache_device), self.layer_idx, kwargs=kwargs
+            )
+            key_states, value_states = key_states.to(query_states.device), value_states.to(query_states.device)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class PI05DecoderLayer(GemmaDecoderLayer):
@@ -391,7 +443,9 @@ class PI05ForConditionalGeneration(PI0ForConditionalGeneration):
 
         loss = None
         if actions is not None:
-            loss = F.mse_loss(target_velocity, predicted_velocity, reduction=self.config.loss_reduction)
+            loss = F.mse_loss(
+                target_velocity.to(predicted_velocity.device), predicted_velocity, reduction=self.config.loss_reduction
+            )
 
         return CausalLMOutputWithPast(
             loss=loss,

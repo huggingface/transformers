@@ -175,6 +175,7 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
     """
 
     _layer_type = "heavily_compressed_attention"
+    is_croppable = False
 
     def __init__(self, config: "DeepseekV4Config", **kwargs):
         super().__init__(sliding_window=config.sliding_window)
@@ -1261,12 +1262,6 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
         "self_attn.compressor.indexer.scorer.weights_proj",
     ]
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
-    # ``_is_stateful`` opts out of generation modes that need to roll the cache
-    # back across drafts (assisted generation, prompt lookup, contrastive search).
-    # The compressor's running-window state isn't rewindable, so `generate`
-    # raises a clear error early instead of failing deep in the compressor with
-    # a missing-method `AttributeError`.
-    _is_stateful = True
 
     def _init_weights(self, module):
         super()._init_weights(module)

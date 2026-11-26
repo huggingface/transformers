@@ -362,7 +362,6 @@ class FalconH1PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["FalconH1DecoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _is_stateful = True
     _can_compile_fullgraph = False  # StaticCache has no entry for ``"hybrid"`` layers (KV + SSM state).
 
     _can_record_outputs = {
