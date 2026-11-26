@@ -832,6 +832,29 @@ def _triton_varlen(q, k_cache, v_cache, block_table, seqused, cu_seqlens_q, max_
     return out
 
 
+# [scratch] FA2 prompt steps on Blackwell (layers without sinks, window or softcap) through flashinfer's TRT-LLM context
+# kernel, vLLM's Blackwell prefill: FA2 has no Blackwell kernels and FA4 no paged head_dim 256 (Qwen3-Next). An 8,192-token
+# prompt + 40 decode tokens at Qwen3-Next's shapes (16 / 2 heads, head_dim 256, 256-token pages): 0.55 vs 1.81 ms (B300).
+# The kernel loads whole pages and masks the slots past a sequence's end by multiplying them by zero: they must hold no
+# NaN (`PagedAttentionCache.zero_foreign_sectors`). Qwen3-Next B300 long prompts 1,070 -> 1,148 tok/s
+_PROTO_TRTLLM_CONTEXT = os.environ.get("PROTO_TRTLLM_CONTEXT", "1") == "1"
+
+
+@torch.compiler.disable
+def _trtllm_context(q, k_cache, v_cache, block_table, seqused, cu_seqlens_q, max_seqlen_q, softmax_scale):
+    """A step with prompts on the paged cache (NHD pages): `q` [tokens, heads, head_dim], the rows past
+    `cu_seqlens_q[-1]` get no output. Returns [tokens, heads, head_dim]."""
+    import flashinfer
+
+    if q.device not in _TRTLLM_WORKSPACE:  # zeroed once, outside any graph capture, shared with the decode kernel
+        _TRTLLM_WORKSPACE[q.device] = torch.zeros(128 * 1024 * 1024, dtype=torch.uint8, device=q.device)
+    return flashinfer.prefill.trtllm_batch_context_with_kv_cache(
+        q.contiguous(), (k_cache, v_cache), _TRTLLM_WORKSPACE[q.device], block_table, seqused, max_seqlen_q,
+        block_table.size(1) * k_cache.size(1), softmax_scale, 1.0, block_table.size(0), cu_seqlens_q.to(torch.int32),
+        F.pad(seqused.cumsum(0, dtype=torch.int32), (1, 0)), kv_layout="NHD", enable_pdl=False,
+    )  # fmt: skip
+
+
 # [scratch] debug: attention sinks through the log-sum-exp rescale on Hopper too (see `_flash_attention_forward`)
 _PROTO_SINKS_BY_LSE = os.environ.get("PROTO_SINKS_BY_LSE") == "1"
 
@@ -996,6 +1019,17 @@ def _flash_attention_forward(
                         q, k_cache, v_cache, block_table, seqused, cu_seq_lens_q, max_length_q, scale, window,
                         keywords.get("softcap") or 0.0, sinks,
                     )  # fmt: skip
+                    return out.view(batch_size, -1, *out.shape[-2:])
+                if (
+                    _PROTO_TRTLLM_CONTEXT
+                    and sinks is None
+                    and keywords.get("sliding_window") is None
+                    and keywords.get("softcap") is None
+                    and torch.cuda.get_device_capability(q.device)[0] == 10
+                    and (q.device in _TRTLLM_WORKSPACE or not torch.cuda.is_current_stream_capturing())
+                ):
+                    scale = keywords.get("softmax_scale") or q.size(-1) ** -0.5
+                    out = _trtllm_context(q, k_cache, v_cache, block_table, seqused, cu_seq_lens_q, max_length_q, scale)
                     return out.view(batch_size, -1, *out.shape[-2:])
                 cu_seqlens_k = F.pad(seqused.cumsum(0, dtype=torch.int32), (1, 0))
                 max_seqlen_k = block_table.size(1) * k_cache.size(1)
