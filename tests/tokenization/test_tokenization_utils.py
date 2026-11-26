@@ -366,8 +366,13 @@ class TokenizerUtilsTest(unittest.TestCase):
         [
             # `TemplateProcessing` post-processor that adds BOS only
             ("hf-internal-testing/llama-tokenizer",),
-            # `Sequence` (`ByteLevel` + `TemplateProcessing`) post-processor that adds BOS only. Its tokenizer_config.json
-            # also sets `add_eos_token: true`, which is ignored: when tokenizer.json exists, it decides what is added
+            ("unsloth/gemma-2-2b",),
+            ("unsloth/gemma-3-1b-it",),
+            ("mistralai/Mistral-7B-v0.3",),
+            # `Sequence` (`ByteLevel` + `TemplateProcessing`) post-processor that adds BOS only
+            ("unsloth/Llama-3.2-1B",),
+            # Same, and its tokenizer_config.json also sets `add_eos_token: true`, which is ignored: when tokenizer.json
+            # exists, it decides what is added
             ("hf-internal-testing/tiny-random-Idefics3ForConditionalGeneration",),
         ]
     )
