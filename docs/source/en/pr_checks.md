@@ -181,6 +181,8 @@ The new values apply to your PR only until it merges. From the merge commit on, 
 
 When recording isn't possible, a maintainer who reviewed the change as intended can add the `mic-intended-change` label instead. Blocked cases then only warn, and the baselines have to be updated separately or `main` turns red after the merge.
 
+A PR labeled `New model` never blocks on contracts: its red cases are warnings.
+
 ### Documentation build
 
 A `build_pr_documentation` job builds and generates a preview of the documentation. A bot posts a preview link in your PR, and the check must pass before merging. Most failures are a missing entry in the `toctree`. To build the documentation locally, see the [README.md](https://github.com/huggingface/transformers/tree/main/docs) in the docs folder.
