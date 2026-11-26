@@ -319,7 +319,7 @@ class DynamicCompressedLayer(DynamicLayer):
     also anything needed to compress the groups afterwards, e.g. qwen4's RoPE cos/sin, glm 5 next's gates, etc.
 
     Each stream can have compressed states, and the remaining tail. On subsequent updates, the tail can become
-    new groups and we create a new (empty) tail.
+    new groups and we store the new tail.
 
     Example with group_size=4:
         Tokens:      A B C D E F
@@ -339,58 +339,6 @@ class DynamicCompressedLayer(DynamicLayer):
         self.compressed_states = {}
         self.compression_tails = {}
 
-    def prepare_compression_groups(
-        self,
-        states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        group_size: int = 1,
-        overlap_groups: int = 0,
-        name: str = "indexer",
-    ) -> torch.Tensor:
-        """
-        Combine unfinished history with incoming valid tokens.
-
-        Example with group_size=4:
-            Previous tail: [E, F, 0, 0]
-            Incoming:      [G, H, I]
-            Candidate:     [E, F, G, H]
-            Next tail:     [I, 0, 0, 0]
-        """
-        batch_size, seq_length, dim = states.shape
-        device = states.device
-
-        counts = attention_mask[:, -(seq_length + 1) :]
-        history_length = (1 + overlap_groups) * group_size
-
-        past_groups = counts[:, :1] // group_size
-        new_groups = counts[:, -1:] // group_size - past_groups
-        num_candidates = (seq_length + group_size - 1) // group_size
-
-        tail = self.compression_tails.get(name)
-
-        if tail is None:
-            window = states.new_zeros(batch_size, history_length + num_candidates * group_size, dim)
-        else:
-            window = torch.nn.functional.pad(tail, (0, 0, 0, num_candidates * group_size))
-
-        # Append valid tokens without overwriting retained history
-        slots = (counts[:, 1:] - 1 - (past_groups - overlap_groups) * group_size).clamp_min(0)
-        valid = counts.diff(dim=1) > 0
-
-        window.scatter_add_(
-            1,
-            slots[..., None].expand_as(states),
-            states.masked_fill(~valid[..., None], 0),
-        )
-
-        # Ordinary and overlapping compression differ only in window width
-        groups = window.unfold(1, history_length, group_size).transpose(-1, -2)
-
-        batch_indices = torch.arange(batch_size, device=device)
-        self.compression_tails[name] = groups[batch_indices, new_groups.squeeze(1)]
-
-        return groups[:, :-1]
-
     def update_compressed_states(
         self,
         states: torch.Tensor,
@@ -398,17 +346,24 @@ class DynamicCompressedLayer(DynamicLayer):
         query_length: int,
         group_size: int = 1,
         name: str = "indexer",
+        tail: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
-        Store compressed candidates after the previously completed groups.
+        Store compressed candidates after the previously completed groups and retain the new tail.
 
-        Example:
-            Previous keys: [ABCD, EF00]
-            New keys:      [EFGH]
-            Updated keys:  [ABCD, EFGH]
+        Example with group_size=4:
+            Previous states: [pool(ABCD), pool(EF00)]
+            New candidates:  [pool(EFGH)]
+            Updated states:  [pool(ABCD), pool(EFGH), 0]
+            New tail:        [I, 0, 0, 0]
 
-        Note that an already completed group would never be overwritten.
+        Note that incomplete groups can be overwritten, but completed groups are never overwritten.
+        If no tail is provided, the previous tail is left unchanged.
         """
+
+        if tail is not None:
+            self.compression_tails[name] = tail
+
         compressed = self.compressed_states.get(name)
 
         if compressed is None:
@@ -431,65 +386,6 @@ class DynamicCompressedLayer(DynamicLayer):
         self.compressed_states[name] = compressed
 
         return compressed
-
-    def select_indices(
-        self,
-        scores: torch.Tensor,
-        attention_mask: torch.Tensor,
-        budget: int,
-        group_size: int = 1,
-        include_tail: bool = False,
-        return_groups: bool = False,
-    ) -> torch.Tensor:
-        """
-        Select complete causal groups.
-
-        By default, the budget counts tokens and selected groups are expanded
-        into physical KV indices. With `return_groups=True`, the budget counts
-        compressed entries instead (see dsv4 for example).
-
-        Example with group_size=2 and five visible tokens:
-            Selected group: 1
-            Token indices:  [2, 3]
-            With tail:      [2, 3, 4]
-
-        Note that the tail is not included in the budget.
-        Finally, to keep consistent shapes, we pad with -1 (which will be filtered).
-        """
-        counts = attention_mask[:, -(scores.shape[-2] + 1) :]
-        query_counts = counts[:, 1:].masked_fill(counts.diff(dim=1) == 0, 0)
-        complete_groups = query_counts[..., None] // group_size
-
-        group_ids = torch.arange(scores.shape[-1], device=scores.device)
-        visible = group_ids < complete_groups
-
-        k = min(budget if return_groups else budget // group_size, scores.shape[-1])
-
-        # NOTE: On tied scores, it's not deterministic which final selection is made
-        top_scores, groups = scores.masked_fill(~visible, float("-inf")).topk(k, dim=-1)
-        groups = groups.masked_fill(top_scores == float("-inf"), -1)
-
-        if return_groups:
-            return groups
-
-        # Expand selected groups while preserving invalid selections
-        offsets = torch.arange(group_size, device=scores.device)
-        indices = (groups[..., None] * group_size + offsets).clamp_min(-1).flatten(-2)
-
-        # Keeps uniform shapes to be tensor friendly
-        if indices.shape[-1] < budget:
-            indices = torch.nn.functional.pad(indices, (0, budget - indices.shape[-1]), value=-1)
-
-        if include_tail:
-            tail = complete_groups * group_size + offsets[:-1]
-            tail = tail.masked_fill(tail >= query_counts[..., None], -1)
-            indices = torch.cat((indices, tail), dim=-1)
-
-        # Conversion selected groups (and tail) to the actual selected tokens
-        return (
-            torch.searchsorted(attention_mask, indices.flatten(1), right=True, out_int32=True).reshape_as(indices)
-            - 1  # -1 for the boundary
-        )
 
     def reset(self):
         super().reset()
@@ -795,7 +691,7 @@ class StaticCompressedLayer(StaticLayer):
     also anything needed to compress the groups afterwards, e.g. qwen4's RoPE cos/sin, glm 5 next's gates, etc.
 
     Each stream can have compressed states, and the remaining tail. On subsequent updates, the tail can become
-    new groups and we create a new tail.
+    new groups and we store the new tail.
 
     Unlike the dynamic cache, compressed states and tails are allocated once and updated in-place to preserve
     their storage addresses.
@@ -817,62 +713,6 @@ class StaticCompressedLayer(StaticLayer):
         self.compressed_states = {}
         self.compression_tails = {}
 
-    def prepare_compression_groups(
-        self,
-        states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        group_size: int = 1,
-        overlap_groups: int = 0,
-        name: str = "indexer",
-    ) -> torch.Tensor:
-        """
-        Combine unfinished history with incoming valid tokens.
-
-        Example with group_size=4:
-            Previous tail: [E, F, 0, 0]
-            Incoming:      [G, H, I]
-            Candidate:     [E, F, G, H]
-            Next tail:     [I, 0, 0, 0]
-        """
-        batch_size, seq_length, dim = states.shape
-        device = states.device
-
-        counts = attention_mask[:, -(seq_length + 1) :]
-        history_length = (1 + overlap_groups) * group_size
-
-        past_groups = counts[:, :1] // group_size
-        new_groups = counts[:, -1:] // group_size - past_groups
-        num_candidates = (seq_length + group_size - 1) // group_size
-
-        tail = self.compression_tails.get(name)
-
-        if tail is None:
-            tail = states.new_zeros(batch_size, history_length, dim)
-            self.compression_tails[name] = tail
-
-            if not is_torchdynamo_compiling():
-                torch._dynamo.mark_static_address(tail)
-
-        window = torch.nn.functional.pad(tail, (0, 0, 0, num_candidates * group_size))
-
-        # Append valid tokens without overwriting retained history
-        slots = (counts[:, 1:] - 1 - (past_groups - overlap_groups) * group_size).clamp_min(0)
-        valid = counts.diff(dim=1) > 0
-
-        window.scatter_add_(
-            1,
-            slots[..., None].expand_as(states),
-            states.masked_fill(~valid[..., None], 0),
-        )
-
-        # Ordinary and overlapping compression differ only in window width
-        groups = window.unfold(1, history_length, group_size).transpose(-1, -2)
-
-        batch_indices = torch.arange(batch_size, device=device)
-        tail.copy_(groups[batch_indices, new_groups.squeeze(1)])
-
-        return groups[:, :-1]
-
     def update_compressed_states(
         self,
         states: torch.Tensor,
@@ -880,17 +720,30 @@ class StaticCompressedLayer(StaticLayer):
         query_length: int,
         group_size: int = 1,
         name: str = "indexer",
+        tail: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
-        Store compressed candidates after the previously completed groups.
+        Store compressed candidates after the previously completed groups and retain the new tail.
 
-        Example:
-            Previous keys: [ABCD, EF00, 0, ...]
-            New keys:      [EFGH]
-            Updated keys:  [ABCD, EFGH, 0, ...]
+        Example with max_cache_len=16 and group_size=4:
+            Previous states: [pool(ABCD), pool(EF00), 0, 0]
+            New candidates:  [pool(EFGH)]
+            Updated states:  [pool(ABCD), pool(EFGH), 0, 0]
+            New tail:        [I, 0, 0, 0]
 
-        Note that a completed group is never overwritten.
+        Both compressed states and tails are updated in-place once initialized to preserve static addresses.
+        If no tail is provided, the previous tail is left unchanged.
         """
+
+        if tail is not None:
+            if name not in self.compression_tails:
+                self.compression_tails[name] = tail
+
+                if not is_torchdynamo_compiling():
+                    torch._dynamo.mark_static_address(tail)
+            else:
+                self.compression_tails[name].copy_(tail)
+
         compressed = self.compressed_states.get(name)
 
         if compressed is None:
@@ -912,66 +765,6 @@ class StaticCompressedLayer(StaticLayer):
         compressed[batch_indices, group_indices] = states
 
         return compressed
-
-    def select_indices(
-        self,
-        scores: torch.Tensor,
-        attention_mask: torch.Tensor,
-        budget: int,
-        group_size: int = 1,
-        include_tail: bool = False,
-        return_groups: bool = False,
-    ) -> torch.Tensor:
-        """
-        Select complete causal groups.
-
-        By default, the budget counts tokens and selected groups are expanded
-        into physical KV indices. With `return_groups=True`, the budget counts
-        compressed entries instead (see dsv4 for example).
-
-        Example with group_size=2 and five visible tokens:
-            Selected group: 1
-            Token indices:  [2, 3]
-            With tail:      [2, 3, 4]
-
-        Note that the tail is not included in the budget.
-        Finally, to keep consistent shapes, we pad with -1 (which will be filtered).
-        """
-        counts = attention_mask[:, -(scores.shape[-2] + 1) :]
-        query_counts = counts[:, 1:].masked_fill(counts.diff(dim=1) == 0, 0)
-        complete_groups = query_counts[..., None] // group_size
-
-        group_ids = torch.arange(scores.shape[-1], device=scores.device)
-        visible = group_ids < complete_groups
-
-        k = min(budget if return_groups else budget // group_size, scores.shape[-1])
-
-        # NOTE: On tied scores, it's not deterministic which final selection is made
-        top_scores, groups = scores.masked_fill(~visible, float("-inf")).topk(k, dim=-1)
-        groups = groups.masked_fill(top_scores == float("-inf"), -1)
-
-        if return_groups:
-            return groups
-
-        # Expand selected groups while preserving invalid selections
-        offsets = torch.arange(group_size, device=scores.device)
-        indices = (groups[..., None] * group_size + offsets).clamp_min(-1).flatten(-2)
-
-        # Keeps uniform shapes to be tensor friendly
-        if indices.shape[-1] < budget:
-            indices = torch.nn.functional.pad(indices, (0, budget - indices.shape[-1]), value=-1)
-
-        if include_tail:
-            tail = complete_groups * group_size + offsets[:-1]
-            tail = tail.masked_fill(tail >= query_counts[..., None], -1)
-            indices = torch.cat((indices, tail), dim=-1)
-
-        # Conversion selected groups (and tail) to the actual selected tokens
-        return (
-            torch.searchsorted(attention_mask, indices.flatten(1), right=True, out_int32=True).reshape_as(indices)
-            - 1  # boundary
-            + attention_mask[0, 0]  # negative prefix
-        )
 
     def reset(self):
         super().reset()

@@ -29,7 +29,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, DynamicCompressedLayer
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import (
     use_experts_implementation,
@@ -39,6 +39,11 @@ from ...integrations import (
 )
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_compression_mask, create_recurrent_attention_mask
+from ...modeling_compression_utils import (
+    build_attention_mask_from_topk,
+    prepare_compression_groups,
+    select_compression_indices,
+)
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -712,10 +717,12 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         attention_mask: torch.Tensor,
         cache: Cache | None = None,
     ) -> torch.Tensor:
-        layer = DynamicCompressedLayer() if cache is None else cache.layers[self.layer_idx]
         batch_size, seq_length, _ = hidden_states.shape
         hidden_shape = (batch_size, seq_length, -1, self.index_head_dim)
         group_size = self.compress_ratio
+
+        cache_layer = cache.layers[self.layer_idx] if cache is not None else None
+        tail = cache_layer.compression_tails.get("indexer") if cache_layer is not None else None
 
         cos, sin = position_embeddings
         qk = self.index_qk_proj(hidden_states)
@@ -731,10 +738,10 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         rope_dim = cos.shape[-1]
         states = torch.cat((k, cos.expand(batch_size, -1, -1), sin.expand(batch_size, -1, -1)), dim=-1)
 
-        # Get pools (keys, cos, and sin) of size compress_ratio
-        groups = layer.prepare_compression_groups(states, attention_mask, group_size=group_size)
+        # Get pools and tails (of keys, cos, and sin) of size compress_ratio
+        groups, tail = prepare_compression_groups(states, attention_mask, group_size=group_size, tail=tail)
 
-        # Compress pools by norm -> mean -> (grouped) rope
+        # Compress pools by mean -> norm -> (grouped) rope
         keys, cos_groups, sin_groups = groups.split([self.index_head_dim, rope_dim, rope_dim], dim=-1)
 
         k = self.k_layernorm(keys.float().mean(dim=2).to(k.dtype))
@@ -742,15 +749,14 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
             k.unsqueeze(2), cos=cos_groups[:, :, 0], sin=sin_groups[:, :, 0], unsqueeze_dim=2
         ).squeeze(2)
 
-        if cache is not None:
-            k = layer.update_compressed_states(k, attention_mask, seq_length, group_size=group_size)
+        if cache_layer is not None:
+            k = cache_layer.update_compressed_states(k, attention_mask, seq_length, group_size=group_size, tail=tail)
 
         # Score groups of tokens
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
         scores = scores.relu().sum(dim=-2) / math.sqrt(self.index_head_dim)
 
-        # Remap selected group mapping to actual tokens
-        return layer.select_indices(
+        return select_compression_indices(
             scores,
             attention_mask,
             self.token_budget,
@@ -859,16 +865,12 @@ class Qwen4ExpTextAttention(nn.Module):
             cache=cache,
         )
 
-        sparse_indices = None
-        if self.config._attn_implementation in ("eager", "sdpa"):
-            attention_mask = self.build_attention_mask_from_topk(
-                topk_indices=topk_indices,
-                query_states=query_states,
-                kv_length=key_states.shape[-2],
-            )
-        else:
-            sparse_indices = topk_indices
-            attention_mask = None
+        attention_mask = build_attention_mask_from_topk(
+            self.config,
+            topk_indices=topk_indices,
+            query_states=query_states,
+            kv_length=key_states.shape[-2],
+        )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -882,7 +884,7 @@ class Qwen4ExpTextAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            indices=sparse_indices,
+            indices=topk_indices,
             **kwargs,
         )
 
@@ -890,33 +892,6 @@ class Qwen4ExpTextAttention(nn.Module):
         attn_output = attn_output * torch.sigmoid(gate)
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-
-    def build_attention_mask_from_topk(
-        self,
-        topk_indices: torch.Tensor,
-        query_states: torch.Tensor,
-        kv_length: int,
-    ) -> torch.Tensor:
-        """Build a sparse causal mask from selected physical token indices."""
-        valid = (topk_indices >= 0) & (topk_indices < kv_length)
-        safe_indices = topk_indices.clamp(0, kv_length - 1)
-
-        selected = torch.zeros(
-            (*topk_indices.shape[:2], kv_length),
-            dtype=torch.int32,
-            device=topk_indices.device,
-        )
-        selected.scatter_add_(-1, safe_indices.long(), valid.int())
-        mask = selected.ne(0).unsqueeze(1)
-
-        if self.config._attn_implementation == "sdpa":
-            return mask
-
-        return torch.where(
-            mask,
-            torch.zeros((), dtype=query_states.dtype, device=query_states.device),
-            torch.finfo(query_states.dtype).min,
-        )
 
 
 class Qwen4ExpTextMLP(nn.Module):

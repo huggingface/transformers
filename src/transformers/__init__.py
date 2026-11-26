@@ -433,6 +433,7 @@ else:
     _import_structure["integrations.hub_kernels"] = ["kernelize"]
     _import_structure["masking_utils"] = ["AttentionMaskInterface"]
     _import_structure["model_debugging_utils"] = ["model_addition_debugger_context"]
+    _import_structure["modeling_compression_utils"] = []
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []

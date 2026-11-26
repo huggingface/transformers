@@ -27,10 +27,15 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, DynamicCompressedLayer
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_compression_mask
+from ...modeling_compression_utils import (
+    build_attention_mask_from_topk,
+    prepare_compression_groups,
+    select_compression_indices,
+)
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -175,7 +180,6 @@ class DeepseekV32Indexer(nn.Module):
         attention_mask: torch.Tensor,
         cache: Cache | None = None,
     ) -> torch.Tensor:
-        layer = DynamicCompressedLayer() if cache is None else cache.layers[self.layer_idx]
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
 
@@ -190,12 +194,13 @@ class DeepseekV32Indexer(nn.Module):
         q = torch.cat([q_rot, q_pass], dim=-1)
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)
 
-        # Get pools (here it's each token as groups of size 1)
-        k = layer.prepare_compression_groups(k, attention_mask).squeeze(2)
+        # Get only the pools, as group size = 1 == raw token already
+        groups, _ = prepare_compression_groups(k, attention_mask)
+        k = groups.squeeze(2)
 
         # No compression, as each token is taken raw
         if cache is not None:
-            k = layer.update_compressed_states(k, attention_mask, seq_len)
+            k = cache.layers[self.layer_idx].update_compressed_states(k, attention_mask, seq_len)
 
         # Score each token
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
@@ -205,8 +210,7 @@ class DeepseekV32Indexer(nn.Module):
         weights = weights * self.n_heads**-0.5
         scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-        # Remap selected group mapping to actual tokens
-        return layer.select_indices(scores, attention_mask, self.index_topk)
+        return select_compression_indices(scores, attention_mask, self.index_topk)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -409,17 +413,12 @@ class DeepseekV32Attention(nn.Module):
             cache=cache,
         )
 
-        sparse_indices = None
-        if self.config._attn_implementation in ("eager", "sdpa"):
-            attention_mask = self.build_attention_mask_from_topk(
-                topk_indices=topk_indices,
-                query_states=query_states,
-                kv_length=key_states.shape[2],
-            )
-        else:
-            # Sparse kernels consume physical token indices directly.
-            sparse_indices = topk_indices
-            attention_mask = None
+        attention_mask = build_attention_mask_from_topk(
+            self.config,
+            topk_indices=topk_indices,
+            query_states=query_states,
+            kv_length=key_states.shape[2],
+        )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -432,42 +431,13 @@ class DeepseekV32Attention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            indices=sparse_indices,
+            indices=topk_indices,
             **kwargs,
         )
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-
-    def build_attention_mask_from_topk(
-        self,
-        topk_indices: torch.Tensor,
-        query_states: torch.Tensor,
-        kv_length: int,
-    ) -> torch.Tensor:
-        """Build the sparse attention mask from selected physical token indices."""
-        valid = (topk_indices >= 0) & (topk_indices < kv_length)
-        safe_indices = topk_indices.clamp(0, kv_length - 1)
-
-        # Count only valid selections; -1 is padding, not a cache position.
-        selected = torch.zeros(
-            (*topk_indices.shape[:2], kv_length),
-            dtype=torch.int32,
-            device=topk_indices.device,
-        )
-        selected.scatter_add_(-1, safe_indices.long(), valid.int())
-        mask = selected.ne(0).unsqueeze(1)
-
-        if self.config._attn_implementation == "sdpa":
-            return mask
-
-        # Eager attention expects an additive mask rather than a boolean one.
-        return torch.where(
-            mask,
-            torch.zeros((), dtype=query_states.dtype, device=query_states.device),
-            torch.finfo(query_states.dtype).min,
-        )
 
 
 class DeepseekV32MLP(nn.Module):

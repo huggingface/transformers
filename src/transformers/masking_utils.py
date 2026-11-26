@@ -1545,7 +1545,7 @@ def create_compression_mask(
     batch_size, query_length = inputs_embeds.shape[:2]
     device = inputs_embeds.device
 
-    past_length = 0
+    q_offset = 0
     kv_length = query_length
     if cache is not None:
         if layer_idx is None:
@@ -1561,18 +1561,17 @@ def create_compression_mask(
                 if layer_type in compressed_layer_types
             )
 
-        past_length = cache.get_seq_length(layer_idx)
-        past_length = past_length.to(device) if isinstance(past_length, torch.Tensor) else past_length
-        kv_length = past_length + query_length
+        q_offset = cache.get_query_offset(layer_idx)
+        q_offset = q_offset.to(device) if isinstance(q_offset, torch.Tensor) else q_offset
+        kv_length, kv_offset = cache.get_mask_sizes(query_length, layer_idx)
+
+        # Compression requires the full history even for SWA
+        kv_length += kv_offset
 
         if layer_idx < len(cache.layers):
-            layer = cache.layers[layer_idx]
+            kv_length = getattr(cache.layers[layer_idx], "max_compression_len", kv_length)
 
-            # Static cache case
-            if layer.is_compileable:
-                kv_length = getattr(layer, "max_compression_len", layer.get_max_length())
-
-    positions = torch.arange(-kv_length, 1, device=device) + past_length + query_length
+    positions = torch.arange(-kv_length, 1, device=device) + q_offset + query_length
 
     if attention_mask is None:
         return positions.expand(batch_size, -1).contiguous()
