@@ -602,6 +602,70 @@ def _merge_typed_dict(preprocessor_typed_dict: type, modality_typed_dict: type) 
     )
 
 
+def _tool_result_id(obj) -> str:
+    """The id chat templates match tool results with: `tool_call_id`, else `id`, as text."""
+    if not isinstance(obj, dict):
+        return ""
+    for key in ("tool_call_id", "id"):
+        if obj.get(key):
+            return str(obj[key])
+    return ""
+
+
+def _split_tool_results(message: dict) -> list[dict]:
+    """
+    Split an aggregated tool message (`content=[{"id": ..., "output": [...]}, ...]`) into one message per result,
+    holding the typed content parts of its `output` for multimodal input extraction.
+    """
+    content = message.get("content")
+    if not (isinstance(content, list) and content and isinstance(content[0], dict) and "output" in content[0]):
+        return [message]
+    results = []
+    for entry in content:
+        result = {key: entry[key] for key in ("tool_call_id", "id") if key in entry} if isinstance(entry, dict) else {}
+        output = entry.get("output") if isinstance(entry, dict) else None
+        has_parts = isinstance(output, (list, tuple)) and not (
+            output and isinstance(output[0], dict) and output[0].get("type") == "tool_reference"
+        )
+        result["content"] = [part for part in output if isinstance(part, dict) and "type" in part] if has_parts else []
+        results.append(result)
+    return results
+
+
+def _tool_results_in_template_order(conversation: list[dict]) -> list[dict]:
+    """
+    Lay out each block of consecutive tool messages in call order: one message per result, sorted by the
+    `tool_calls` of the preceding assistant message when every result matches a unique call (all ids present
+    and unique), else in message order.
+    """
+    laid_out, start = [], 0
+    while start < len(conversation):
+        if conversation[start].get("role") != "tool":
+            laid_out.append(conversation[start])
+            start += 1
+            continue
+        end = start
+        while end < len(conversation) and conversation[end].get("role") == "tool":
+            end += 1
+        results = [result for message in conversation[start:end] for result in _split_tool_results(message)]
+        previous = conversation[start - 1] if start > 0 else {}
+        tool_calls = (previous.get("tool_calls") if previous.get("role") == "assistant" else None) or []
+        call_ids = [_tool_result_id(call) for call in tool_calls]
+        result_ids = [_tool_result_id(result) for result in results]
+        if (
+            call_ids
+            and all(call_ids)
+            and all(result_ids)
+            and len(set(call_ids)) == len(call_ids)
+            and len(set(result_ids)) == len(result_ids)
+            and set(result_ids) <= set(call_ids)
+        ):
+            results.sort(key=lambda result: call_ids.index(_tool_result_id(result)))
+        laid_out.extend(results)
+        start = end
+    return laid_out
+
+
 class ProcessorMixin(PushToHubMixin):
     """
     This is a mixin used to provide saving/loading functionality for all processor classes.
@@ -1101,8 +1165,7 @@ class ProcessorMixin(PushToHubMixin):
         tokenizer_attributes = set()
         for attribute in self.__class__.get_attributes():
             if attribute in self.__dict__:
-                modality = _get_modality_for_attribute(attribute)
-                if modality == "tokenizer":
+                if _get_modality_for_attribute(attribute) == "tokenizer":
                     tokenizer_attributes.add(attribute)
 
         dict_to_copy = {k: v for k, v in self.__dict__.items() if k not in tokenizer_attributes}
@@ -1222,12 +1285,10 @@ class ProcessorMixin(PushToHubMixin):
         for attribute_name in self.get_attributes():
             attribute = getattr(self, attribute_name)
 
-            modality = _get_modality_for_attribute(attribute_name)
-            is_primary = attribute_name == modality
-            if modality == "tokenizer":
+            if (modality := _get_modality_for_attribute(attribute_name)) == "tokenizer":
                 attribute._set_processor_class(self.__class__.__name__)
                 # Save the tokenizer in its own vocab file. The other attributes are saved as part of `processor_config.json`
-                if is_primary:
+                if attribute_name == modality:
                     attribute.save_pretrained(save_directory)
                 else:
                     # if a model has multiple tokenizers, save the additional tokenizers in their own folders.
@@ -1295,7 +1356,7 @@ class ProcessorMixin(PushToHubMixin):
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
-        processor of type [`~processing_utils.ProcessingMixin`] using `from_args_and_dict`.
+        processor of type [`~processing_utils.ProcessingMixin`] using `from_dict`.
 
         Parameters:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -1555,6 +1616,12 @@ class ProcessorMixin(PushToHubMixin):
             [`~processing_utils.ProcessingMixin`]: The processor object instantiated from those
             parameters.
         """
+
+        logger.warning_once(
+            "`ProcessorMixin.from_args_and_dict` is deprecated and will be removed in future versions. "
+            "Call `ProcessorMixin.from_dict` instead with keyword-only arguments!"
+        )
+
         processor_dict = processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
@@ -1584,6 +1651,52 @@ class ProcessorMixin(PushToHubMixin):
 
         # instantiate processor with used (and valid) kwargs only
         processor = cls(*args, **valid_kwargs)
+
+        logger.info(f"Processor {processor}")
+        if return_unused_kwargs:
+            return processor, unused_kwargs
+        else:
+            return processor
+
+    @classmethod
+    def from_dict(cls, processor_dict: dict[str, Any], **kwargs):
+        """
+        Instantiates a type of [`~processing_utils.ProcessingMixin`] from a Python dictionary of parameters.
+
+        Args:
+            processor_dict (`dict[str, Any]`):
+                Dictionary that will be used to instantiate the processor object. Such a dictionary can be
+                retrieved from a pretrained checkpoint by leveraging the
+                [`~processing_utils.ProcessingMixin.to_dict`] method.
+            kwargs (`dict[str, Any]`):
+                Additional parameters from which to initialize the processor object.
+
+        Returns:
+            [`~processing_utils.ProcessingMixin`]: The processor object instantiated from those
+            parameters.
+        """
+        processor_dict = processor_dict.copy()
+        return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+
+        # We have to pop up some unused (but specific) kwargs and then validate that it doesn't contain unused kwargs
+        # If we don't pop, some specific kwargs will raise a warning or error
+        for unused_kwarg in ["auto_map", "processor_class"]:
+            processor_dict.pop(unused_kwarg, None)
+
+        # override processor_dict with given kwargs
+        processor_dict.update(kwargs)
+
+        # check if there is an overlap between args and processor_dict
+        accepted_args_and_kwargs = cls.__init__.__code__.co_varnames[: cls.__init__.__code__.co_argcount][1:]
+        accepted_args_and_kwargs += tuple(cls.get_attributes())
+
+        # validate both processor_dict and given kwargs
+        unused_kwargs, valid_kwargs = cls.validate_init_kwargs(
+            processor_config=processor_dict, valid_kwargs=accepted_args_and_kwargs
+        )
+
+        # instantiate processor with used (and valid) kwargs only
+        processor = cls(**valid_kwargs)
 
         logger.info(f"Processor {processor}")
         if return_unused_kwargs:
@@ -1851,10 +1964,14 @@ class ProcessorMixin(PushToHubMixin):
         if token is not None:
             kwargs["token"] = token
 
+        original_kwargs = kwargs.copy()
+
         # Get processor_dict first so we can use it to instantiate non-tokenizer sub-processors
-        processor_dict, instantiation_kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, processor_dict, **kwargs)
-        return cls.from_args_and_dict(args, processor_dict, **instantiation_kwargs)
+        processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
+        processor_dict, kwargs = cls._resolve_subprocessors(
+            pretrained_model_name_or_path, processor_dict, **original_kwargs
+        )
+        return cls.from_dict(processor_dict, **kwargs)
 
     @classmethod
     def get_attributes(cls):
@@ -1909,10 +2026,12 @@ class ProcessorMixin(PushToHubMixin):
     def _load_tokenizer_from_pretrained(
         cls, sub_processor_type, pretrained_model_name_or_path, subfolder="", **kwargs
     ):
+        """
+        Load a tokenizer attribute from given `model_id`. If processor has custom tokenizer,
+        try loading it from subfolder with fallback to `model_id` root.
+        """
         auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
-        is_primary = sub_processor_type == "tokenizer"
-
-        if is_primary:
+        if sub_processor_type == "tokenizer":
             # Primary tokenizer: load from root
             tokenizer = auto_processor_class.from_pretrained(
                 pretrained_model_name_or_path, subfolder=subfolder, **kwargs
@@ -1937,7 +2056,7 @@ class ProcessorMixin(PushToHubMixin):
         return tokenizer
 
     @classmethod
-    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict=None, **kwargs):
+    def _resolve_subprocessors(cls, pretrained_model_name_or_path, processor_dict, **kwargs):
         """
         Identify and instantiate the subcomponents of Processor classes, such as image processors, tokenizers,
         and feature extractors. This method inspects the processor's `__init__` signature to identify parameters
@@ -1947,44 +2066,38 @@ class ProcessorMixin(PushToHubMixin):
         For tokenizers: Uses the appropriate Auto class (AutoTokenizer) to load via `.from_pretrained()`.
         Additional tokenizers (e.g., "decoder_tokenizer") are loaded from subfolders.
 
-        For other sub-processors (image_processor, feature_extractor, etc.): Primary ones are loaded via
-        Auto class. Additional ones are instantiated from the config stored in processor_config.json
-        (passed as processor_dict).
+        For other sub-processors (image_processor, feature_extractor, etc.): If the processor_config.json is
+        nested and has `subprocessor_dict`, we resolve from it. Otherwise fallback to downloading and init with
+        Auto class.
 
         Args:
             pretrained_model_name_or_path: Path or model id to load from.
-            processor_dict: Optional dict containing processor config (from processor_config.json).
-                Required when loading additional non-tokenizer sub-processors.
+            processor_dict: Dict containing nested processor config (from `processor_config.json`).
         """
-        args = []
-        processor_dict = processor_dict if processor_dict is not None else {}
         # Remove subfolder from kwargs to avoid duplicate keyword arguments
-        subfolder = kwargs.pop("subfolder", "")
+        keys_to_remove = set({"return_unused_kwargs"})
+        processor_sig = list(inspect.signature(cls.__init__).parameters)
 
-        # get args from processor init signature
+        # get attributes from processor init signature
         sub_processors = cls.get_attributes()
         for sub_processor_type in sub_processors:
-            modality = _get_modality_for_attribute(sub_processor_type)
-            is_primary = sub_processor_type == modality
+            # user-provided and already loaded sub-processor, skip loading it again!
+            if (attribute := kwargs.pop(sub_processor_type, None)) is not None:
+                processor_dict[sub_processor_type] = attribute
+                continue
 
-            if (
-                "tokenizer" in sub_processor_type
-            ):  # This is only necessary for the checkpoint in test_processing_mistral3.py which has no config.json and
-                # the tokenizer_config.json references LlamaTokenizerFast. TODO: update the config on the hub.
-                if "PixtralProcessor" in cls.__name__:
-                    from .tokenization_utils_tokenizers import TokenizersBackend
-
-                    tokenizer = TokenizersBackend.from_pretrained(
-                        pretrained_model_name_or_path, subfolder=subfolder, **kwargs
-                    )
-                else:
-                    tokenizer = cls._load_tokenizer_from_pretrained(
-                        sub_processor_type, pretrained_model_name_or_path, subfolder=subfolder, **kwargs
-                    )
-                args.append(tokenizer)
-            elif is_primary:
-                # Primary non-tokenizer sub-processor: load via Auto class
-                auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type]
+            if "tokenizer" in sub_processor_type:
+                tokenizer = cls._load_tokenizer_from_pretrained(
+                    sub_processor_type, pretrained_model_name_or_path, **kwargs
+                )
+                processor_dict[sub_processor_type] = tokenizer
+            elif (
+                isinstance(sub_processor_config := processor_dict.get(sub_processor_type), dict)
+                or sub_processor_config is None
+            ):
+                # Load with `Auto` class for non-tokenizer sub-processors
+                modality = _get_modality_for_attribute(sub_processor_type)
+                auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[modality]
                 # For backward compatibility, check if sub-processor class name is hardcoded as an attribute of the processor class.
                 if hasattr(cls, sub_processor_type + "_class"):
                     sub_processor_class_name = getattr(cls, sub_processor_type + "_class")
@@ -1993,39 +2106,18 @@ class ProcessorMixin(PushToHubMixin):
                         f"which is deprecated. Register the correct mapping in `{auto_processor_class.__name__}` instead.",
                     )
                     auto_processor_class = cls.get_possibly_dynamic_module(sub_processor_class_name)
-                sub_processor = auto_processor_class.from_pretrained(
-                    pretrained_model_name_or_path, subfolder=subfolder, **kwargs
-                )
-                args.append(sub_processor)
 
-            elif sub_processor_type in processor_dict:
-                # Additional non-tokenizer sub-processor: instantiate from config in processor_dict
-                sub_processor_config = processor_dict[sub_processor_type]
-                if isinstance(sub_processor_config, dict):
-                    # Determine the class to instantiate
-                    # Image processors have 'image_processor_type', feature extractors have 'feature_extractor_type'
-                    type_key = f"{modality}_type"
-                    class_name = sub_processor_config.get(type_key)
-                    if class_name is None:
-                        raise ValueError(
-                            f"Cannot instantiate {sub_processor_type}: missing '{type_key}' in config. "
-                            f"Config keys: {list(sub_processor_config.keys())}"
-                        )
-                    processor_class = cls.get_possibly_dynamic_module(class_name)
-                    sub_processor = processor_class(**sub_processor_config)
-                    args.append(sub_processor)
-                else:
-                    raise ValueError(
-                        f"Expected dict for {sub_processor_type} in processor_config.json, "
-                        f"got {type(sub_processor_config)}"
-                    )
-            else:
-                raise ValueError(
-                    f"Cannot find config for {sub_processor_type} in processor_config.json. "
-                    f"Available keys: {list(processor_dict.keys())}"
+                sub_processor, unused_kwargs = auto_processor_class.from_pretrained(
+                    pretrained_model_name_or_path,
+                    processor_config=sub_processor_config,
+                    **{**kwargs, "return_unused_kwargs": True},
                 )
+                keys_to_remove.update({k for k in kwargs if k not in unused_kwargs and k not in processor_sig})
+                processor_dict[sub_processor_type] = sub_processor
 
-        return args
+        for k in keys_to_remove:
+            kwargs.pop(k, None)
+        return processor_dict, kwargs
 
     @staticmethod
     def get_possibly_dynamic_module(module_name):
@@ -2109,6 +2201,9 @@ class ProcessorMixin(PushToHubMixin):
         including URL/path or already decoded inputs. Images and video are returned
         in nested format while audio is flattened into a single list for all batches.
         """
+        if getattr(self, "reorder_tool_results_in_template_order", False):
+            conversations = [_tool_results_in_template_order(conversation) for conversation in conversations]
+
         batch_images, batch_videos, batch_audios = [], [], []
         for conversation in conversations:
             images, videos = [], []
@@ -2820,6 +2915,9 @@ class OmniModalProcessorMixin(ProcessorMixin):
         If `load_audio_from_video=True`, then each video is linked to audio within
         a batch via `audio_from_video_indices`
         """
+        if getattr(self, "reorder_tool_results_in_template_order", False):
+            conversations = [_tool_results_in_template_order(conversation) for conversation in conversations]
+
         batch_images, batch_videos = [], []
         batch_audios, batch_audio_from_video_indices = [], []
         video_idx = 0

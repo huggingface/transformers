@@ -37,7 +37,21 @@ class Glm5NextProcessor(ProcessorMixin):
     }
     videos_kwargs = {"return_metadata": True}
 
-    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        video_processor=None,
+        chat_template=None,
+        reorder_tool_results_in_template_order: bool = True,
+        **kwargs,
+    ):
+        r"""
+        reorder_tool_results_in_template_order (`bool`, *optional*, defaults to `True`):
+            Whether to reorder consecutive tool messages and expand aggregated `{"id": ..., "output": [...]}`
+            results to match the preceding assistant's `tool_calls` order when extracting multimodal inputs from
+            conversations.
+        """
         self.image_token = "<|image|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
         self.image_token_id = (
@@ -53,6 +67,7 @@ class Glm5NextProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
         self.video_start_id = tokenizer.convert_tokens_to_ids("<|begin_of_video|>")
         self.video_end_id = tokenizer.convert_tokens_to_ids("<|end_of_video|>")
+        self.reorder_tool_results_in_template_order = reorder_tool_results_in_template_order
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2

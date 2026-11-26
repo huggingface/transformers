@@ -1042,13 +1042,13 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         """
         return self.patch_embedding
 
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling | tuple[torch.Tensor, ...]:
         r"""
@@ -1080,7 +1080,6 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # num_concurrent_media and num_chunks are both currently 1
         batch_size_times_num_tiles, num_channels, height, width = pixel_values.shape
@@ -1115,6 +1114,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             freqs_ci=freqs_ci,
+            return_dict=True,
         )
 
         hidden_state = output.last_hidden_state
@@ -1128,13 +1128,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
 
         hidden_states = output.hidden_states if output_hidden_states else None
 
-        if output_attentions:
-            attentions = output[2]
-        else:
-            attentions = None
-
-        if not return_dict:
-            return tuple(v for v in [hidden_state, hidden_states, attentions] if v is not None)
+        attentions = output.attentions if output_attentions else None
 
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_state,
@@ -1182,7 +1176,11 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        return self.vision_model(pixel_values, **kwargs)
+        image_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
+        # `pooler_output` holds the projected features, one entry per image tile, as in the other VLMs.
+        # Generation expands it for beam search and `num_return_sequences`.
+        image_outputs.pooler_output = self.multi_modal_projector(image_outputs.last_hidden_state)
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -1263,11 +1261,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
-            )
-
         if pixel_values is not None and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
@@ -1279,9 +1272,8 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             mm_encoder_outputs["image"] = self.get_image_features(pixel_values=pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].last_hidden_state
-            vision_flat = image_features.view(-1, image_features.size(-1))
-            projected_vision_flat = self.multi_modal_projector(vision_flat).to(
+            image_features = mm_encoder_outputs["image"].pooler_output
+            projected_vision_flat = image_features.reshape(-1, image_features.size(-1)).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
             special_image_mask = self.get_placeholder_mask(

@@ -54,7 +54,7 @@ RUN python3 -m pip install --no-cache-dir "torchcodec==0.13.0"
 # to the (ROCm, Ubuntu, Python, torch) ABI of the base image above; bumping
 # the base image generally requires a matching wheel from AMD.
 RUN python3 -m pip install --no-cache-dir \
-    https://rocm.frameworks.amd.com/whl-multi-arch/vllm/flash-attn/flash_attn-2.8.3-cp314-cp314-linux_x86_64.whl
+    https://rocm.frameworks.amd.com/whl-multi-arch/vllm/flash-attn/flash_attn-2.8.3%2Brocm10.1.0-cp314-cp314-linux_x86_64.whl
 
 RUN python3 -m pip install --no-cache-dir einops blobfile num2words
 

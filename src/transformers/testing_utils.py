@@ -1058,6 +1058,15 @@ def require_torch_tpu(test_case):
     return unittest.skipUnless(is_torch_tpu_available(), "test requires PyTorch TPU")(test_case)
 
 
+def skip_tpu(reason):
+    """
+    Decorator skipping a test function or class when the test device is a TPU, with `reason` as the skip message.
+
+    The test is left untouched on any other device.
+    """
+    return unittest.skipIf(torch_device == "tpu", reason)
+
+
 def require_torch_npu(test_case):
     """
     Decorator marking a test that requires NPU (in PyTorch).
