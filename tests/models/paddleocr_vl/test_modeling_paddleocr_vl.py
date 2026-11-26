@@ -24,6 +24,7 @@ from transformers import (
     AutoProcessor,
     PaddleOCRVLConfig,
     PaddleOCRVLForConditionalGeneration,
+    PaddleOCRVLModel,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -36,6 +37,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -50,16 +52,16 @@ if is_torch_available():
     import torch
 
 
-class PaddleOCRVLVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        seq_length=13,
-        num_channels=3,
-        image_height=28,
-        image_width=28,
-        text_config={
+class PaddleOCRVLVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 7,
+        "seq_length": 13,
+        "num_channels": 3,
+        "image_height": 28,
+        "image_width": 28,
+        "text_config": {
             "pad_token_id": 0,
             "bos_token_id": 1,
             "eos_token_id": 2,
@@ -80,11 +82,11 @@ class PaddleOCRVLVisionText2TextModelTester:
             "rope_theta": 500000,
             "tie_word_embeddings": False,
         },
-        vision_start_token_id=101305,
-        vision_end_token_id=101306,
-        image_token_id=100295,
-        is_training=True,
-        vision_config={
+        "vision_start_token_id": 101305,
+        "vision_end_token_id": 101306,
+        "image_token_id": 100295,
+        "is_training": True,
+        "vision_config": {
             "hidden_act": "gelu_pytorch_tanh",
             "hidden_size": 144,
             "intermediate_size": 32,
@@ -96,27 +98,26 @@ class PaddleOCRVLVisionText2TextModelTester:
             "patch_size": 14,
             "spatial_merge_size": 2,
         },
-    ):
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["bos_token_id"] = values["text_config"]["bos_token_id"]
+        values["eos_token_id"] = values["text_config"]["eos_token_id"]
+        values["pad_token_id"] = values["text_config"]["pad_token_id"]
+        values["num_hidden_layers"] = values["text_config"]["num_hidden_layers"]
+        values["num_attention_heads"] = values["text_config"]["num_attention_heads"]
+        values["hidden_size"] = values["text_config"]["hidden_size"]
+        values["vocab_size"] = values["text_config"]["vocab_size"]
+        values["num_image_tokens"] = 1
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.hidden_size = text_config["hidden_size"]
-        self.vision_start_token_id = vision_start_token_id
-        self.vision_end_token_id = vision_end_token_id
-        self.image_token_id = image_token_id
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_height = image_height
-        self.image_width = image_width
-        self.is_training = is_training
-        self.vocab_size = text_config["vocab_size"]
-        self.num_image_tokens = 1
-        self.seq_length = seq_length + self.num_image_tokens
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return PaddleOCRVLConfig(
@@ -172,7 +173,9 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     Model tester for `PaddleOCRVLForConditionalGeneration`.
     """
 
-    all_model_classes = (PaddleOCRVLForConditionalGeneration,) if is_torch_available() else ()
+    model_tester_class = PaddleOCRVLVisionText2TextModelTester
+
+    all_model_classes = (PaddleOCRVLForConditionalGeneration, PaddleOCRVLModel) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": PaddleOCRVLForConditionalGeneration}
     _is_composite = True
 
@@ -200,6 +203,9 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     )
     def test_disk_offload_safetensors(self):
         pass
+
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=True):
+        super().test_reverse_loading_mapping(check_keys_were_modified, skip_base_model=True)
 
     def test_mismatching_num_image_tokens(self):
         """

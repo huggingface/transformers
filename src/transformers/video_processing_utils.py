@@ -36,7 +36,7 @@ from .utils import (
     auto_docstring,
     copy_func,
     is_torch_available,
-    is_torchcodec_available,
+    is_torchcodec_usable,
     is_torchvision_v2_available,
     is_vision_available,
     logging,
@@ -447,7 +447,8 @@ class VideoProcessorMixin(BaseImageProcessor):
         """
         video_processor_dict = video_processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
-        video_processor_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
+        valid_keys = cls.valid_kwargs.__annotations__.keys()
+        video_processor_dict.update({k: v for k, v in kwargs.items() if k in valid_keys})
         video_processor = cls(**video_processor_dict)
 
         # Apply extra kwargs to instance (BC for remote code, e.g. phi4_multimodal)
@@ -564,15 +565,15 @@ class VideoProcessorMixin(BaseImageProcessor):
         returned.
         """
         backend = "torchcodec"
-        if not is_torchcodec_available():
+        if not is_torchcodec_usable(decode="video"):
             # `torchvision` is only a valid fallback while it still ships the (now removed) video decoding API.
             if not is_torchvision_video_decoding_available():
                 raise ImportError(
-                    "`torchcodec` is not installed and cannot be used to decode the video by default. "
+                    "`torchcodec` is not installed or can't be loaded, so it cannot decode the video by default. "
                     f"{TORCHVISION_VIDEO_DECODING_ERROR}"
                 )
             warnings.warn(
-                "`torchcodec` is not installed and cannot be used to decode the video by default. "
+                "`torchcodec` is not installed or can't be loaded, so it cannot decode the video by default. "
                 "Falling back to `torchvision`. Note that `torchvision` decoding is deprecated and will be removed in future versions. "
             )
             backend = "torchvision"

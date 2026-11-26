@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -93,7 +93,6 @@ class PPFormulaNetTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "pp_formulanet_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
         "hidden_size": "d_model",
@@ -130,8 +129,8 @@ class PPFormulaNetTextConfig(PreTrainedConfig):
 class PPFormulaNetConfig(PreTrainedConfig):
     model_type = "pp_formulanet"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=PPFormulaNetTextConfig),
-        "vision_config": SubConfigSpec(config_class=PPFormulaNetVisionConfig),
+        "text_config": PPFormulaNetTextConfig,
+        "vision_config": PPFormulaNetVisionConfig,
     }
 
     text_config: dict | PPFormulaNetTextConfig | None = None

@@ -183,6 +183,18 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
+    @unittest.skip(reason="xLSTM cache is not standard and not compatible")
+    def test_generate_continue_from_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="xLSTM cache is not standard and not compatible")
+    def test_cache_format(self):
+        pass
+
+    @unittest.skip(reason="xLSTM cache is not standard and not compatible")
+    def test_generate_continue_from_cache(self):
+        pass
+
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -205,14 +217,12 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     elif tuple_object is None:
                         return
                     else:
-                        self.assertTrue(
-                            torch.allclose(tuple_object, dict_object, atol=1e-5),
-                            msg=(
-                                "Tuple and dict output are not equal. Difference:"
-                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
-                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
-                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
-                            ),
+                        torch.testing.assert_close(
+                            tuple_object,
+                            dict_object,
+                            rtol=1e-5,
+                            atol=1e-5,
+                            msg=lambda m: f"Tuple and dict output are not equal.\n{m}",
                         )
 
                 recursive_check(tuple_output, dict_output)

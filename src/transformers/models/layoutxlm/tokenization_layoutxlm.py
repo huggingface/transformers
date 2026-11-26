@@ -221,6 +221,7 @@ class LayoutXLMTokenizer(TokenizersBackend):
         pad_token_label=-100,
         only_label_first_subword=True,
         add_prefix_space=True,
+        _spm_precompiled_charsmap: str | None = None,
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
@@ -240,12 +241,13 @@ class LayoutXLMTokenizer(TokenizersBackend):
                 self._vocab.append((str(mask_token), 0.0))
 
         self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.Strip(left=False, right=True),
-                normalizers.Replace(Regex(" {2,}"), "▁"),
-            ]
-        )
+        self._spm_precompiled_charsmap = _spm_precompiled_charsmap
+        list_normalizers = []
+        if _spm_precompiled_charsmap is not None:
+            list_normalizers.append(normalizers.Precompiled(_spm_precompiled_charsmap))
+        list_normalizers.append(normalizers.Strip(left=False, right=True))
+        list_normalizers.append(normalizers.Replace(Regex(" {2,}"), "▁"))
+        self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
 
         prepend_scheme = _get_prepend_scheme(add_prefix_space, self)
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
@@ -273,6 +275,7 @@ class LayoutXLMTokenizer(TokenizersBackend):
             pad_token_box=pad_token_box,
             pad_token_label=pad_token_label,
             only_label_first_subword=only_label_first_subword,
+            _spm_precompiled_charsmap=_spm_precompiled_charsmap,
             **kwargs,
         )
 
@@ -707,14 +710,16 @@ class LayoutXLMTokenizer(TokenizersBackend):
                 else:
                     original_index = batch_index
                 labels_example = []
-                for id, offset, word_id in zip(
-                    sanitized_tokens["input_ids"][batch_index],
+                previous_word_id = None
+                for offset, word_id in zip(
                     sanitized_tokens["offset_mapping"][batch_index],
                     sanitized_encodings[batch_index].word_ids,
                 ):
                     if word_id is not None:
                         if self.only_label_first_subword:
-                            if offset[0] == 0:
+                            # A word cut by an overflow window boundary continues at the start of the next window,
+                            # so a new word id alone doesn't mean it's the word's first token
+                            if word_id != previous_word_id and offset[0] == 0:
                                 # Use the real label id for the first token of the word, and padding ids for the remaining tokens
                                 labels_example.append(word_labels[original_index][word_id])
                             else:
@@ -723,6 +728,7 @@ class LayoutXLMTokenizer(TokenizersBackend):
                             labels_example.append(word_labels[original_index][word_id])
                     else:
                         labels_example.append(self.pad_token_label)
+                    previous_word_id = word_id
                 labels.append(labels_example)
 
             sanitized_tokens["labels"] = labels

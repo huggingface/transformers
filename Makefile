@@ -1,7 +1,7 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test benchmark codex claude clean-ai
+.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test run-mic record-mic codex claude clean-ai
 
 
 # Checker lists. The two CI jobs (CircleCI runs `make check-code-quality` and
@@ -66,9 +66,25 @@ fix-repo:
 test:
 	python -m pytest -p random_order -n auto --dist=loadfile -s -v --random-order-bucket=module ./tests/
 
-# Run benchmark
-benchmark:
-	python3 benchmark/benchmark.py --config-dir benchmark/config --config-name generation --commit=diff backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
+# Run pinned MIC fixtures against this checkout (MODEL=bert, ALL=1, BASE=origin/main, FLEET=prototypes|control, JOBS=4).
+# Opt-in checker (network + model runtimes), deliberately not in any CI checker list above.
+run-mic: export MODEL := $(MODEL)
+run-mic: export ALL := $(ALL)
+run-mic: export BASE := $(BASE)
+run-mic: export FLEET := $(FLEET)
+run-mic: export JOBS := $(JOBS)
+run-mic:
+	@python utils/checkers.py mic
+
+# Publish the MIC expected values this PR's contracts job recorded for the cases its gate marks blocked,
+# for this PR only (MODEL="gptj codegen", PR=<number>, default: the PR of the current branch). Needs
+# write access; same as commenting `record-mic: <models>` on the PR. The values are posted on the PR
+# and go live when it merges.
+record-mic:
+	@test -n "$(MODEL)" || { echo 'usage: make record-mic MODEL="<model> ..." [PR=<number>]'; exit 1; }
+	@pr="$(PR)"; test -n "$$pr" || pr=$$(gh pr view --repo huggingface/transformers --json number --jq .number) || exit 1; \
+	gh workflow run record-mic.yml --repo huggingface/transformers -f pr="$$pr" -f models="$(MODEL)" && \
+	echo "record-mic requested for #$$pr ($(MODEL)); the result is posted on the PR"
 
 codex:
 	mkdir -p .agents

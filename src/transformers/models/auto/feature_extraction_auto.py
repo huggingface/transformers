@@ -44,6 +44,7 @@ logger = logging.get_logger(__name__)
 
 MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
+        ("apertus1p5", "WavTokenizerFeatureExtractor"),
         ("audioflamingo3", "WhisperFeatureExtractor"),
         ("canary", "ParakeetFeatureExtractor"),
         ("csm", "EncodecFeatureExtractor"),
@@ -63,9 +64,11 @@ MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("moonshine", "Wav2Vec2FeatureExtractor"),
         ("moshi", "EncodecFeatureExtractor"),
         ("musicgen", "EncodecFeatureExtractor"),
+        ("nemo_speechlm", "NemotronAsrStreamingFeatureExtractor"),
         ("nemotron3_5_asr", "NemotronAsrStreamingFeatureExtractor"),
         ("nemotron3_diarization", "NemotronAsrStreamingFeatureExtractor"),
         ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingFeatureExtractor"),
+        ("omniasr_ctc", "OmniASRFeatureExtractor"),
         ("parakeet_ctc", "ParakeetFeatureExtractor"),
         ("parakeet_encoder", "ParakeetFeatureExtractor"),
         ("parakeet_rnnt", "ParakeetFeatureExtractor"),
@@ -244,7 +247,19 @@ class AutoFeatureExtractor:
 
     @classmethod
     @replace_list_option_in_docstrings(FEATURE_EXTRACTOR_MAPPING_NAMES)
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path,
+        config: PreTrainedConfig | str | os.PathLike | None = None,
+        cache_dir: str | os.PathLike | None = None,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: str | bool | None = None,
+        revision: str | None = None,
+        proxies: dict[str, str] | None = None,
+        subfolder: str = "",
+        **kwargs,
+    ):
         r"""
         Instantiate one of the feature extractor classes of the library from a pretrained model vocabulary.
 
@@ -265,34 +280,42 @@ class AutoFeatureExtractor:
                   `./my_model_directory/`.
                 - a path to a saved feature extractor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
+            config ([`PreTrainedConfig`] or `str` or `os.PathLike`, *optional*):
+                The model configuration used to infer the feature extractor class through its `model_type`. If not
+                provided, the configuration is loaded from `pretrained_model_name_or_path` when possible.
             cache_dir (`str` or `os.PathLike`, *optional*):
-                Path to a directory in which a downloaded pretrained model feature extractor should be cached if the
-                standard cache should not be used.
+                Path to a directory in which a downloaded pretrained feature extractor should be cached if the standard
+                cache should not be used.
             force_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to force to (re-)download the feature extractor files and override the cached versions
+                Whether or not to force the (re-)download of the feature extractor files, overriding the cached versions
                 if they exist.
+            local_files_only (`bool`, *optional*, defaults to `False`):
+                If `True`, only look for files in the local cache or directory and never try to download them.
             proxies (`dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            token (`str` or *bool*, *optional*):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.,
+                `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+            token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the feature extractor files are located inside a subfolder of the model repo on huggingface.co,
+                you can specify the folder name here.
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
-                If `False`, then this function returns just the final feature extractor object. If `True`, then this
-                functions returns a `Tuple(feature_extractor, unused_kwargs)` where *unused_kwargs* is a dictionary
-                consisting of the key/value pairs whose keys are not feature extractor attributes: i.e., the part of
-                `kwargs` which has not been used to update `feature_extractor` and is otherwise ignored.
+                If `False`, then this function returns just the final image processor object. If `True`, then this
+                functions returns a `Tuple(image_processor, unused_kwargs)` where *unused_kwargs* is a dictionary
+                consisting of the key/value pairs whose keys are not image processor attributes: i.e., the part of
+                `kwargs` which has not been used to update `image_processor` and is otherwise ignored.
             trust_remote_code (`bool`, *optional*, defaults to `False`):
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
                 execute code present on the Hub on your local machine.
             kwargs (`dict[str, Any]`, *optional*):
-                The values in kwargs of any keys which are feature extractor attributes will be used to override the
-                loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
+                The values in kwargs of any keys which are image processor attributes will be used to override the
+                loaded values. Behavior concerning key/value pairs whose keys are *not* image processor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.
 
         <Tip>
@@ -312,20 +335,35 @@ class AutoFeatureExtractor:
         >>> # If feature extractor files are in a directory (e.g. feature extractor was saved using *save_pretrained('./test/saved_model/')*)
         >>> # feature_extractor = AutoFeatureExtractor.from_pretrained("./test/saved_model/")
         ```"""
-        config = kwargs.pop("config", None)
+        config_dict = kwargs.pop("processor_config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
-        kwargs["_from_auto"] = True
 
-        # Resolve the revision once, so that all the files below come from the same repository state.
-        kwargs["revision"] = resolve_revision(
+        hub_kwargs = {
+            "cache_dir": cache_dir,
+            "force_download": force_download,
+            "local_files_only": local_files_only,
+            "proxies": proxies,
+            "subfolder": subfolder,
+            "_from_auto": True,
+        }
+        code_revision = kwargs.pop("code_revision", None)
+        kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
+        if token is not None:
+            hub_kwargs["token"] = token
+
+        # Resolve the revision once, so that all the files below come from the same repository state
+        hub_kwargs["revision"] = resolve_revision(
             pretrained_model_name_or_path,
-            kwargs.get("revision"),
-            token=kwargs.get("token"),
-            local_files_only=kwargs.get("local_files_only", False),
-            cache_dir=kwargs.get("cache_dir"),
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
         )
 
-        config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
+        if config_dict is None:
+            config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
+                pretrained_model_name_or_path, **hub_kwargs
+            )
         feature_extractor_class = config_dict.get("feature_extractor_type", None)
         feature_extractor_auto_map = None
         if "AutoFeatureExtractor" in config_dict.get("auto_map", {}):
@@ -335,7 +373,10 @@ class AutoFeatureExtractor:
         if feature_extractor_class is None and feature_extractor_auto_map is None:
             if not isinstance(config, PreTrainedConfig):
                 config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    pretrained_model_name_or_path,
+                    trust_remote_code=trust_remote_code,
+                    code_revision=code_revision,
+                    **hub_kwargs,
                 )
             # It could be in `config.feature_extractor_type``
             feature_extractor_class = getattr(config, "feature_extractor_type", None)
@@ -361,17 +402,17 @@ class AutoFeatureExtractor:
 
         if has_remote_code and trust_remote_code and not explicit_local_code:
             feature_extractor_class = get_class_from_dynamic_module(
-                feature_extractor_auto_map, pretrained_model_name_or_path, **kwargs
+                feature_extractor_auto_map, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs
             )
-            _ = kwargs.pop("code_revision", None)
+            _ = hub_kwargs.pop("code_revision", None)
             feature_extractor_class.register_for_auto_class()
-            return feature_extractor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            return feature_extractor_class.from_dict(config_dict, **kwargs)
         elif feature_extractor_class is not None:
-            return feature_extractor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            return feature_extractor_class.from_dict(config_dict, **kwargs)
         # Last try: we use the FEATURE_EXTRACTOR_MAPPING.
         elif type(config) in FEATURE_EXTRACTOR_MAPPING:
             feature_extractor_class = FEATURE_EXTRACTOR_MAPPING[type(config)]
-            return feature_extractor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            return feature_extractor_class.from_dict(config_dict, **kwargs)
 
         raise ValueError(
             f"Unrecognized feature extractor in {pretrained_model_name_or_path}. Should have a "

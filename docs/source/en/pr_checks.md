@@ -81,7 +81,7 @@ The repository consistency check is similar to `make check-repo`, except it stop
 
 ## Reviewer assignment
 
-When a pull request is marked ready for review, the `Assign PR Reviewers` workflow requests up to two reviewers, ranked by how many lines the pull request changes in the files they own. A draft pull request gets no reviewers until it leaves draft. The workflow itself lives in [huggingface/transformers-ci](https://github.com/huggingface/transformers-ci) and this repository calls it; what stays here is the ownership data it reads.
+`.github/scripts/codeowners_for_review_action` records who reviews which files.
 
 Ownership is resolved per file, most specific first.
 
@@ -94,11 +94,7 @@ Ownership is resolved per file, most specific first.
 
 A new model needs no entry anywhere: adding its documentation page to `_toctree.yml`, which the documentation table of contents check already requires, places it in a modality, and the modality table covers it from there.
 
-A review can only be requested from a repository collaborator. The workflow requests each reviewer in a separate call and skips anyone it cannot ask, so an entry naming someone who has left costs one reviewer instead of all of them, and every skip is reported as a warning on the workflow run.
-
-A pull request cannot re-route its own review. `.github/scripts/codeowners_for_review_action` is read from the base branch, never from the pull request's head, and the PR CI security gate blocks a pull request that is not from a collaborator from touching anything outside `src/`, `tests/`, `docs/` and `utils/` — which is why that file lives where it does. The `# Reviewers:` tag is read from the head, since a new model arrives with it, so every login it names still goes through the collaborator check before anyone is asked.
-
-`make check-repository-consistency` runs `utils/check_reviewers.py`, which fails when a model reaches nobody but the catch-all, when a rule matches no file any more, or when the modality table disagrees with the table of contents. It shares its resolver with the assignment workflow, so the two cannot disagree. That resolver is not a dependency of `transformers`; it is listed in `utils/checkers-requirements.txt`, which the checker runner installs on its first run in an environment. If the install cannot happen — offline, say — the check reports it and passes rather than blocking you.
+`make check-repository-consistency` runs `utils/check_reviewers.py`, which fails when a model reaches nobody but the catch-all, when a rule matches no file any more, or when the modality table disagrees with the table of contents. Its resolver is not a dependency of `transformers`; it is listed in `utils/checkers-requirements.txt`, which the checker runner installs on its first run in an environment. If the install cannot happen — offline, say — the check reports it and passes rather than blocking you.
  Paths outside `src/transformers/models` that have no owner are reported as a note; list them with:
 
 ```bash
@@ -163,6 +159,29 @@ Run slow tests locally with the command below.
 ```bash
 RUN_SLOW=1 python -m pytest tests/models/my_model/ -v
 ```
+
+### Model integration contracts
+
+Model integration contracts (MICs) run the documented usage code of published models on small fixtures and compare the outputs with reviewed expected values, the baselines. The `fast-integration / transformers` job runs the contracts your changes select (see [Run Model Integration Contracts locally](./testing#run-model-integration-contracts-locally)), and its summary lists every red case.
+
+A red case is **blocked** when it is green on the PR's base and red on the PR, so the PR caused it. Any other red case is a warning that isn't yours to fix: `main` is already red, a setup error (a missing baseline, fixture drift), or a known failure that now passes. The job doesn't fail the PR yet, but reviewers treat a blocked case as a failure.
+
+For a blocked case, decide whether the new output is a regression or an intended change.
+
+- **Regression**: fix it in your PR. Reproduce it locally with `make run-mic MODEL=<model>`.
+- **Intended change** (a bug fix, a new default, a different but correct kernel): update the baselines for your PR. Push your final changes and let the contracts job finish, because the new values come from the PR's latest contracts run. Then someone with write access to the repository comments on the PR, with the models to update on the first line:
+
+  ```text
+  record-mic: gptj codegen
+  ```
+
+  or runs `make record-mic MODEL="gptj codegen"` from a checkout of the branch (add `PR=<number>` when the branch has no PR). Models can be named by model type (`gptj`), contract or target. A bot replies on the PR with the values to review, and the PR's next contracts run uses them.
+
+The new values apply to your PR only until it merges. From the merge commit on, every run uses them: later PRs, `main`, and reruns of later commits. A run of an older commit keeps the old values, so your change doesn't turn it red. Nothing needs updating after the merge. `make run-mic` is the exception: it checks against the fleet pinned in `tests/contracts.lock` and doesn't apply recorded values, so the re-recorded cases stay red locally until that pin is updated.
+
+When recording isn't possible, a maintainer who reviewed the change as intended can add the `mic-intended-change` label instead. Blocked cases then only warn, and the baselines have to be updated separately or `main` turns red after the merge.
+
+A PR labeled `New model` never blocks on contracts: its red cases are warnings.
 
 ### Documentation build
 

@@ -44,7 +44,7 @@ from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...utils.generic import can_return_tuple
 from ...utils.output_capturing import capture_outputs
 from ...utils.type_validators import positive_int
-from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
+from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from ..laguna.modeling_laguna import LagunaRotaryEmbedding
 from ..lfm2_vl.image_processing_lfm2_vl import convert_image_to_patches
@@ -249,7 +249,7 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         return -(-height // patch_size) * (-(-width // patch_size))
 
 
-class NeoMMERMSNorm(Gemma4RMSNorm):
+class NeoMMERMSNorm(Gemma3nRMSNorm):
     pass
 
 
@@ -468,7 +468,6 @@ class NeoMMEPreTrainedModel(MuseGlimmerPreTrainedModel):
         backbone = getattr(self, self.base_model_prefix, self)
         backbone.embed_tokens.word_embeddings = value
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         # `apply` visits children before parents, so the NeoMME-specific parent initialization below runs last.
         PreTrainedModel._init_weights(self, module)
@@ -697,18 +696,18 @@ class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
 @dataclass
 class NeoMMEForRetrievalOutput(BaseModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
         Retrieval loss. This value is always `None`.
-    embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, embedding_dim)`, *optional*):
+    embeddings (`torch.Tensor` of shape `(batch_size, sequence_length, embedding_dim)`, *optional*):
         Normalized token embeddings for late-interaction retrieval. Padding rows are zeroed. Score them with MeanMaxSim.
-    dense_embeddings (`torch.FloatTensor` of shape `(batch_size, hidden_size)` or `(batch_size, dense_dim)`, *optional*):
+    dense_embeddings (`torch.Tensor` of shape `(batch_size, hidden_size)` or `(batch_size, dense_dim)`, *optional*):
         A normalized mean-pooled embedding for each input. When `dense_dim` is set, the last dimension is `dense_dim`.
         Score them with cosine similarity.
     """
 
-    loss: torch.FloatTensor | None = None
-    embeddings: torch.FloatTensor | None = None
-    dense_embeddings: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    embeddings: torch.Tensor | None = None
+    dense_embeddings: torch.Tensor | None = None
 
 
 class NeoMMEMultiVectorHead(nn.Module):

@@ -20,6 +20,7 @@ from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoConfig, AutoModel
+from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..sam2_video.configuration_sam2_video import Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
 from ..sam2_video.modeling_sam2_video import (
     Sam2VideoAttention,
@@ -27,7 +28,6 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoImageSegmentationOutput,
     Sam2VideoInferenceCache,
     Sam2VideoInferenceSession,
-    Sam2VideoLayerNorm,
     Sam2VideoMaskDecoder,
     Sam2VideoMaskDownSampler,
     Sam2VideoMaskDownSamplerLayer,
@@ -201,8 +201,8 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
             model_type="sam3_vision_model",
             init_kwargs={"backbone_feature_sizes": [[288, 288], [144, 144], [72, 72]]},
         ),
-        "prompt_encoder_config": SubConfigSpec(config_class=Sam3TrackerVideoPromptEncoderConfig),
-        "mask_decoder_config": SubConfigSpec(config_class=Sam3TrackerVideoMaskDecoderConfig),
+        "prompt_encoder_config": Sam3TrackerVideoPromptEncoderConfig,
+        "mask_decoder_config": Sam3TrackerVideoMaskDecoderConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -304,7 +304,7 @@ class Sam3TrackerVideoInferenceSession(Sam2VideoInferenceSession):
     pass
 
 
-class Sam3TrackerVideoLayerNorm(Sam2VideoLayerNorm):
+class Sam3TrackerVideoLayerNorm(ConvNextLayerNorm):
     pass
 
 
@@ -337,8 +337,7 @@ class Sam3TrackerVideoPreTrainedModel(Sam2VideoPreTrainedModel):
 
 
 class Sam3TrackerVideoVisionRotaryEmbedding(Sam2VideoVisionRotaryEmbedding):
-    def __init__(self, config: Sam3TrackerVideoConfig, device=None):
-        super().__init__(config, device=device)
+    pass
 
 
 class Sam3TrackerVideoRoPEAttention(Sam2VideoRoPEAttention):
@@ -463,11 +462,11 @@ class Sam3TrackerVideoModel(Sam2VideoModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Sam3TrackerVideoVisionEncoderOutput:
         r"""
-        pixel_values (`torch.FloatTensor`):
+        pixel_values (`torch.Tensor`):
             Input pixel values of shape `(batch_size, num_channels, height, width)`.
         """
         vision_outputs: Sam3TrackerVideoVisionEncoderOutput = self.vision_encoder(

@@ -32,6 +32,7 @@ from transformers.testing_utils import (
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -66,22 +67,22 @@ class Qwen3_5TextModelTester(CausalLMModelTester):
         causal_lm_class = Qwen3_5ForCausalLM
         sequence_classification_class = Qwen3_5TextForSequenceClassification
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
-        self.hidden_act = "silu"
-        self.layer_types = ["full_attention", "linear_attention"]
-        self.rope_parameters = {
+    small_config_overrides = {
+        "hidden_act": "silu",
+        "layer_types": ["full_attention", "linear_attention"],
+        "rope_parameters": {
             "rope_type": "default",
-            "rope_theta": 10_000,
+            "rope_theta": 10000,
             "mrope_section": [2, 1, 1],
             "mrope_interleaved": True,
-        }
-        self.head_dim = 32
-        self.linear_conv_kernel_dim = 2
-        self.linear_key_head_dim = 16
-        self.linear_value_head_dim = 16
-        self.linear_num_key_heads = 4
-        self.linear_num_value_heads = 8
+        },
+        "head_dim": 32,
+        "linear_conv_kernel_dim": 2,
+        "linear_key_head_dim": 16,
+        "linear_value_head_dim": 16,
+        "linear_num_key_heads": 4,
+        "linear_num_value_heads": 8,
+    }
 
 
 @require_torch
@@ -228,8 +229,8 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
         # Reference: prefill, then forward the next token alone with the populated cache.
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         # Under test: prefill, then forward [next_token, *distractors] in one call. The first
@@ -238,23 +239,23 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
         multi_input = torch.cat([next_token, distractors], dim=1)
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
-            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache=cache_multi, use_cache=True)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         torch.testing.assert_close(under_test_first, ref_first, rtol=1e-4, atol=1e-4)
 
 
-class Qwen3_5VisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        num_channels=3,
-        ignore_index=-100,
-        image_size=16,
-        text_config={
+class Qwen3_5VisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 7,
+        "num_channels": 3,
+        "ignore_index": -100,
+        "image_size": 16,
+        "text_config": {
             "bos_token_id": 0,
             "eos_token_id": 1,
             "pad_token_id": 2,
@@ -282,7 +283,7 @@ class Qwen3_5VisionText2TextModelTester:
             "linear_num_key_heads": 4,
             "linear_num_value_heads": 8,
         },
-        vision_config={
+        "vision_config": {
             "depth": 2,
             "in_chans": 3,
             "hidden_act": "gelu_pytorch_tanh",
@@ -295,46 +296,39 @@ class Qwen3_5VisionText2TextModelTester:
             "temporal_patch_size": 2,
             "num_position_embeddings": 16,
         },
-        image_token_id=3,
-        video_token_id=4,
-        vision_start_token_id=5,
-        vision_end_token_id=6,
-        tie_word_embeddings=True,
-        is_training=True,
-    ):
+        "image_token_id": 3,
+        "video_token_id": 4,
+        "vision_start_token_id": 5,
+        "vision_end_token_id": 6,
+        "tie_word_embeddings": True,
+        "is_training": True,
+        "num_image_tokens": 32,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["vocab_size"] = values["text_config"]["vocab_size"]
+        values["bos_token_id"] = values["text_config"]["bos_token_id"]
+        values["eos_token_id"] = values["text_config"]["eos_token_id"]
+        values["pad_token_id"] = values["text_config"]["pad_token_id"]
+        values["head_dim"] = values["text_config"]["head_dim"]
+        values["hidden_size"] = values["text_config"]["hidden_size"]
+        values["intermediate_size"] = values["text_config"]["intermediate_size"]
+        values["num_hidden_layers"] = values["text_config"]["num_hidden_layers"]
+        values["num_attention_heads"] = values["text_config"]["num_attention_heads"]
+        values["num_key_value_heads"] = values["text_config"]["num_key_value_heads"]
+        values["rope_parameters"] = values["text_config"]["rope_parameters"]
+        values["hidden_act"] = values["text_config"]["hidden_act"]
+        values["max_position_embeddings"] = values["text_config"]["max_position_embeddings"]
+        values["model_type"] = values["text_config"]["model_type"]
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.ignore_index = ignore_index
-        self.is_training = is_training
-
-        self.vision_config = vision_config
-        self.text_config = text_config
-
-        self.vocab_size = text_config["vocab_size"]
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.head_dim = text_config["head_dim"]
-        self.hidden_size = text_config["hidden_size"]
-        self.intermediate_size = text_config["intermediate_size"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.num_key_value_heads = text_config["num_key_value_heads"]
-        self.rope_parameters = text_config["rope_parameters"]
-        self.hidden_act = text_config["hidden_act"]
-        self.max_position_embeddings = text_config["max_position_embeddings"]
-        self.model_type = text_config["model_type"]
-
-        self.vision_start_token_id = vision_start_token_id
-        self.vision_end_token_id = vision_end_token_id
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.num_image_tokens = 32
-        self.seq_length = seq_length + self.num_image_tokens
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return Qwen3_5Config(
@@ -391,6 +385,8 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     """
     Model tester for `Qwen3_5ForConditionalGeneration`.
     """
+
+    model_tester_class = Qwen3_5VisionText2TextModelTester
 
     all_model_classes = (
         (

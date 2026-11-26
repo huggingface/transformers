@@ -26,7 +26,7 @@ from transformers import (
     Phi4MultimodalConfig,
     Phi4MultimodalFeatureExtractor,
     Phi4MultimodalForCausalLM,
-    Phi4MultimodalImageProcessorFast,
+    Phi4MultimodalImageProcessor,
     Phi4MultimodalProcessor,
     Phi4MultimodalVisionConfig,
 )
@@ -178,7 +178,7 @@ def convert_and_save_processor(input_dir: str, output_dir: str):
 
     converted_processor = Phi4MultimodalProcessor(
         tokenizer=original_processor.tokenizer,
-        image_processor=Phi4MultimodalImageProcessorFast(),
+        image_processor=Phi4MultimodalImageProcessor(),
         audio_processor=Phi4MultimodalFeatureExtractor(),
         chat_template=CHAT_TEMPLATE,
     )

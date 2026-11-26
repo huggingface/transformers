@@ -32,7 +32,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ..auto import AutoModel
 from ..llama.modeling_llama import eager_attention_forward, rotate_half
-from ..nanochat.modeling_nanochat import NanoChatRMSNorm
+from ..llama4.modeling_llama4 import Llama4TextWeightlessRMSNorm
 from ..phi3.modeling_phi3 import Phi3MLP
 from .configuration_esmfold2 import EsmFold2AtomEncoderConfig, EsmFold2Config, EsmFold2DiffusionModuleConfig
 from .generation_esmfold2 import EsmFold2FoldingMixin
@@ -102,7 +102,7 @@ class EsmFold2LayerNorm(nn.LayerNorm):
         )
 
 
-class EsmFold2RMSNorm(NanoChatRMSNorm):
+class EsmFold2RMSNorm(Llama4TextWeightlessRMSNorm):
     """Weightless RMSNorm that computes in fp32 and returns its input dtype."""
 
 
@@ -116,7 +116,7 @@ class EsmFold2Transition(nn.Module):
 
     def __init__(self, hidden_size: int, intermediate_size: int, chunk_size: int | None) -> None:
         super().__init__()
-        self.norm = EsmFold2LayerNorm(hidden_size)
+        self.norm = EsmFold2LayerNorm(hidden_size, dtype=torch.float32)
         self.mlp = EsmFold2SwiGLU(hidden_size, intermediate_size)
         # A falsy chunk size means one chunk spanning the whole axis, i.e. unchunked.
         self.chunk_size = chunk_size
@@ -499,7 +499,7 @@ class EsmFold2AtomDecoder(nn.Module):
             [EsmFold2AtomLayer(config, atom_config) for _ in range(atom_config.num_hidden_layers)]
         )
 
-        self.norm = EsmFold2LayerNorm(atom_config.hidden_size)
+        self.norm = EsmFold2LayerNorm(atom_config.hidden_size, dtype=torch.float32)
         self.output_linear = nn.Linear(atom_config.hidden_size, 3, bias=False)  # (x, y, z) coordinates
 
     def forward(
@@ -671,7 +671,7 @@ class EsmFold2DiffusionConditioning(nn.Module):
 
         self.single_input_norm = EsmFold2LayerNorm(config.single_inputs_size)
         self.single_proj = nn.Linear(config.single_inputs_size, diffusion_config.hidden_size, bias=False)
-        self.fourier = EsmFold2FourierEmbedding(diffusion_config.fourier_dim)
+        self.fourier = EsmFold2FourierEmbedding(diffusion_config.fourier_dim).to(dtype=torch.float32)
         self.noise_norm = EsmFold2LayerNorm(diffusion_config.fourier_dim)
         self.noise_proj = nn.Linear(diffusion_config.fourier_dim, diffusion_config.hidden_size, bias=False)
         self.single_transition_0 = EsmFold2Transition(
@@ -996,8 +996,8 @@ class EsmFold2TriangleMultiplicativeUpdate(nn.Module):
         super().__init__()
         self.dim = config.pairwise_hidden_size
         self.flow = "outgoing" if outgoing else "incoming"
-        self.norm_start = EsmFold2LayerNorm(self.dim)
-        self.norm_mix = EsmFold2LayerNorm(self.dim)
+        self.norm_start = EsmFold2LayerNorm(self.dim).to(dtype=torch.float32)
+        self.norm_mix = EsmFold2LayerNorm(self.dim).to(dtype=torch.float32)
         self.proj_bundle = nn.Linear(self.dim, 4 * self.dim, bias=False)
         self.proj_emit = nn.Linear(self.dim, self.dim, bias=False)
         self.proj_gate = nn.Linear(self.dim, self.dim, bias=False)
@@ -1080,7 +1080,7 @@ class EsmFold2OuterProductMean(nn.Module):
         # Its own chunk size, off by default: chunking this einsum is not always bit-exact in bf16.
         self.chunk_size: int | None = msa_config.outer_product_chunk_size
 
-        self.norm = EsmFold2LayerNorm(self.hidden_size)
+        self.norm = EsmFold2LayerNorm(self.hidden_size, dtype=torch.float32)
         self.input_proj = nn.Linear(self.hidden_size, 2 * self.outer_hidden_size, bias=False)
         self.output_proj = nn.Linear(self.outer_hidden_size**2, config.pairwise_hidden_size, bias=True)
 
@@ -1112,7 +1112,7 @@ class EsmFold2MSAPairWeightedAveraging(nn.Module):
         self.num_attention_heads = config.msa_encoder.num_attention_heads
         self.head_dim = config.msa_encoder.head_dim
         inner_dim = self.num_attention_heads * self.head_dim
-        self.norm_single = EsmFold2LayerNorm(config.msa_encoder.hidden_size)
+        self.norm_single = EsmFold2LayerNorm(config.msa_encoder.hidden_size).to(dtype=torch.float32)
         self.bias_norm = EsmFold2LayerNorm(config.pairwise_hidden_size)
         self.bias_proj = nn.Linear(config.pairwise_hidden_size, self.num_attention_heads, bias=False)
         self.v_proj = nn.Linear(config.msa_encoder.hidden_size, inner_dim, bias=False)
@@ -1158,37 +1158,37 @@ class EsmFold2MSAPairWeightedAveraging(nn.Module):
 @dataclass
 class EsmFold2Output(ModelOutput):
     r"""
-    distogram_logits (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, distogram_bins)`):
+    distogram_logits (`torch.Tensor` of shape `(batch_size, num_tokens, num_tokens, distogram_bins)`):
         Predicted distance-distribution logits over residue pairs (RNG-independent; no diffusion sampling).
-    sample_atom_coords (`torch.FloatTensor` of shape `(num_diffusion_samples, num_atoms, 3)`):
+    sample_atom_coords (`torch.Tensor` of shape `(num_diffusion_samples, num_atoms, 3)`):
         Predicted all-atom Cartesian coordinates for each diffusion sample.
-    plddt_logits (`torch.FloatTensor` of shape `(num_diffusion_samples, num_atoms, num_plddt_bins)`):
+    plddt_logits (`torch.Tensor` of shape `(num_diffusion_samples, num_atoms, num_plddt_bins)`):
         Per-atom pLDDT bin logits.
-    plddt (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens)`):
+    plddt (`torch.Tensor` of shape `(num_diffusion_samples, num_tokens)`):
         Per-residue predicted lDDT confidence.
-    plddt_per_atom (`torch.FloatTensor` of shape `(num_diffusion_samples, num_atoms)`):
+    plddt_per_atom (`torch.Tensor` of shape `(num_diffusion_samples, num_atoms)`):
         Per-atom predicted lDDT confidence.
-    plddt_ca (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens)`):
+    plddt_ca (`torch.Tensor` of shape `(num_diffusion_samples, num_tokens)`):
         Predicted lDDT at the representative (Cα) atom of each token.
-    complex_plddt (`torch.FloatTensor` of shape `(num_diffusion_samples,)`):
+    complex_plddt (`torch.Tensor` of shape `(num_diffusion_samples,)`):
         Mean pLDDT over all atoms of the complex.
-    complex_iplddt (`torch.FloatTensor` of shape `(num_diffusion_samples,)`):
+    complex_iplddt (`torch.Tensor` of shape `(num_diffusion_samples,)`):
         Interface-weighted complex pLDDT.
-    pae_logits (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens, num_tokens, num_pae_bins)`):
+    pae_logits (`torch.Tensor` of shape `(num_diffusion_samples, num_tokens, num_tokens, num_pae_bins)`):
         Predicted-aligned-error bin logits.
-    pae (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens, num_tokens)`):
+    pae (`torch.Tensor` of shape `(num_diffusion_samples, num_tokens, num_tokens)`):
         Expected predicted aligned error (Å) for each residue pair.
-    pde_logits (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens, num_tokens, num_pde_bins)`):
+    pde_logits (`torch.Tensor` of shape `(num_diffusion_samples, num_tokens, num_tokens, num_pde_bins)`):
         Predicted-distance-error bin logits.
-    pde (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens, num_tokens)`):
+    pde (`torch.Tensor` of shape `(num_diffusion_samples, num_tokens, num_tokens)`):
         Expected predicted distance error (Å) for each residue pair.
-    resolved_logits (`torch.FloatTensor` of shape `(num_diffusion_samples, num_atoms, 2)`):
+    resolved_logits (`torch.Tensor` of shape `(num_diffusion_samples, num_atoms, 2)`):
         Per-atom resolved/unresolved logits.
-    ptm (`torch.FloatTensor` of shape `(num_diffusion_samples,)`):
+    ptm (`torch.Tensor` of shape `(num_diffusion_samples,)`):
         Predicted TM-score for each sample.
-    iptm (`torch.FloatTensor` of shape `(num_diffusion_samples,)`):
+    iptm (`torch.Tensor` of shape `(num_diffusion_samples,)`):
         Predicted interface TM-score for each sample.
-    pair_chains_iptm (`torch.FloatTensor` of shape `(num_diffusion_samples, num_chains, num_chains)`):
+    pair_chains_iptm (`torch.Tensor` of shape `(num_diffusion_samples, num_chains, num_chains)`):
         Predicted interface TM-score for each ordered chain pair.
     """
 
@@ -1220,15 +1220,15 @@ class EsmFold2Output(ModelOutput):
 @dataclass
 class EsmFold2TrunkOutput(ModelOutput):
     r"""
-    distogram_logits (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, distogram_bins)`):
+    distogram_logits (`torch.Tensor` of shape `(batch_size, num_tokens, num_tokens, distogram_bins)`):
         Predicted distance-distribution logits over residue pairs.
-    pair_states (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
+    pair_states (`torch.Tensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
         The trunk's final pair representation, in fp32.
-    single_inputs (`torch.FloatTensor` of shape `(batch_size, num_tokens, single_inputs_size)`):
+    single_inputs (`torch.Tensor` of shape `(batch_size, num_tokens, single_inputs_size)`):
         Concatenated single-input features built by the inputs embedder.
-    relative_position_encoding (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
+    relative_position_encoding (`torch.Tensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
         Relative-position pair encoding.
-    token_bonds_encoding (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
+    token_bonds_encoding (`torch.Tensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
         Embedded inter-token covalent-bond feature.
     atom_inputs ([`EsmFold2AtomInputs`]):
         The featurized reference-conformer atom inputs, reused by the diffusion atom stack.
@@ -1311,6 +1311,7 @@ class EsmFold2ConfidenceHead(nn.Module):
                 config.confidence_head.min_dist,
                 config.confidence_head.max_dist,
                 config.confidence_head.distogram_bins - 1,
+                dtype=torch.float32,
             )
         )
         self.dist_bin_pairwise_embed = nn.Embedding(config.confidence_head.distogram_bins, config.pairwise_hidden_size)
@@ -1778,7 +1779,7 @@ class EsmFold2InputEmbedder(nn.Module):
 
 @auto_docstring
 class EsmFold2PreTrainedModel(PreTrainedModel):
-    config_class = EsmFold2Config
+    config: EsmFold2Config
     base_model_prefix = "esmfold2"
     main_input_name = "token_index"
     _no_split_modules = [
@@ -1851,10 +1852,11 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         self.structure_head = EsmFold2DiffusionModule(config)
         self.distogram_head = nn.Linear(
             config.pairwise_hidden_size, config.structure_head.num_distogram_bins, bias=True
-        )
+        ).to(dtype=torch.float32)
         self.confidence_head = EsmFold2ConfidenceHead(config)
 
-        self.msa_encoder = EsmFold2MSAEncoder(config)
+        # Checkpoints trained without MSA conditioning (e.g. `biohub/ESMFold2-Fast`) ship no MSA-encoder weights.
+        self.msa_encoder = EsmFold2MSAEncoder(config) if config.msa_encoder.enabled else None
 
         self.post_init()
 
@@ -2047,7 +2049,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         single_inputs: Tensor,
     ) -> dict | None:
         """Assemble the transposed/padded one-hot MSA tensors the MSA encoder consumes."""
-        if msa is None:
+        if msa is None or self.msa_encoder is None:
             return None
         batch_size, msa_depth, num_tokens = msa.shape
         msa_one_hot = F.one_hot(msa.permute(0, 2, 1), num_classes=self.config.num_res_types).float()

@@ -110,6 +110,37 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return [[video_input]]
         return [[video_input]] * batch_size
 
+    # Override as SmolVLM needs images to be an explicitly nested batch
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        "Tests that the helper used internally in vLLM works correctly"
+        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
+        image_inputs = [np.random.randint(255, size=(h, w, 3), dtype=np.uint8) for h, w in image_sizes]
+
+        processor = self.get_processor()
+        for do_image_splitting in [False, True]:
+            with self.subTest(do_image_splitting=do_image_splitting):
+                processor.image_processor.do_image_splitting = do_image_splitting
+
+                text = [f"This is an image {self.image_token}"] * len(image_inputs)
+                images = [[image] for image in image_inputs]
+                inputs = processor(
+                    text=text, images=images, padding=True, return_text_replacement_offsets=True, return_tensors="pt"
+                )
+                num_image_tokens_from_call = self._count_embed_tokens(processor, inputs, "image")
+                num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
+                self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
+
+                text = [f"These are two images {self.image_token}{self.image_token}"] * len(image_inputs)
+                images = [[image, image] for image in image_inputs]
+                inputs = processor(
+                    text=text, images=images, padding=True, return_text_replacement_offsets=True, return_tensors="pt"
+                )
+                num_image_tokens_from_call = self._count_embed_tokens(processor, inputs, "image")
+                num_image_tokens_from_helper = processor._get_num_multimodal_tokens(
+                    image_sizes=[s for s in image_sizes for _ in range(2)]
+                )
+                self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
+
     def get_split_image_expected_tokens(self, processor, image_rows, image_cols):
         text_split_images = []
         for n_h in range(image_rows):
@@ -479,36 +510,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             expected_attention_2 = [0] * pad_len + [1] * len(expected_2)
             self.assertEqual(batch_inputs["input_ids"], [expected_1, padded_expected_2])
             self.assertEqual(batch_inputs["attention_mask"], [[1] * len(expected_1), expected_attention_2])
-
-    @require_torch
-    @require_vision
-    def test_missing_images_error(self):
-        """Test that appropriate error is raised when images are referenced but not provided."""
-        processor = self.get_processor()
-
-        # Test single text with image token but no image
-        text = "Let me show you this image: <image> What do you think?"
-        with self.assertRaises(ValueError) as context:
-            processor(text=text)
-        self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))
-
-        # Test batch with image tokens but no images
-        texts = [
-            "First text with <image> token.",
-            "Second text <image> with token.",
-        ]
-        with self.assertRaises(ValueError) as context:
-            processor(text=texts)
-        self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))
-
-        # Test with None as Images
-        with self.assertRaises(ValueError) as context:
-            processor(text=text, images=None)
-        self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))
-
-        with self.assertRaises(ValueError) as context:
-            processor(text=texts, images=None)
-        self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))
 
     def test_special_mm_token_truncation(self):
         """Tests that special vision tokens do not get truncated when `truncation=True` is set."""

@@ -47,12 +47,28 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "microsoft/kosmos-2.5"
     tiny_model_id = "hf-internal-testing/tiny-processor-kosmos2_5"
 
+    def prepare_text_inputs(self, batch_size: int | None = None, modalities: str | list | None = None):
+        # dont add special tokens in input text!
+        if batch_size is None:
+            return "lower newer"
+
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
+
+        if batch_size == 1:
+            return ["lower newer"]
+        return ["lower newer", "upper older longer string"] + ["lower newer"] * (batch_size - 2)
+
     @staticmethod
     def prepare_processor_dict():
         return {"num_image_tokens": 5}
 
     @unittest.skip("Kosmos2_5Processor removes 'rows' and 'cols' from the output")
     def test_subprocessor_defaults_1_images(self):
+        pass
+
+    @unittest.skip("Kosmos2_5Processor requires images and can't be called with text only")
+    def test_processor_single_text_same_as_batched(self):
         pass
 
     def test_image_procesor_load_save_reload(self):

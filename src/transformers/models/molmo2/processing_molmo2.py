@@ -22,27 +22,17 @@ from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
 
 
-class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
-    """Molmo2 processor kwargs"""
-
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": True,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
-
-
 @auto_docstring
 class Molmo2Processor(ProcessorMixin):
-    valid_processor_kwargs = Molmo2ProcessorKwargs
+    videos_kwargs = {"return_metadata": True}
+    return_mm_token_type_ids = True
 
     @property
     def model_input_names(self):
@@ -106,7 +96,7 @@ class Molmo2Processor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos: VideoInput | None = None,
-        **kwargs: Unpack[Molmo2ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         # TODO(molbap): remove once the allenai chat templates emit `bos_token`
         # (hub PRs allenai/Molmo2-8B#11, allenai/Molmo2-4B#4, allenai/Molmo2-O-7B#2)
@@ -183,13 +173,14 @@ class Molmo2Processor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)["images_kwargs"]
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             num_image_tokens, num_image_patches = [], []
             for image_size in image_sizes:
                 image_grid, num_crops = self.image_processor.get_image_grid_and_crops(*image_size, images_kwargs)
-                image_string = self.replace_image_token({"image_grids": [image_grid]}, image_idx=0)
-                num_image_tokens.append(len(self.tokenizer.tokenize(image_string)))
+                # `<im_patch>` tokens of the low-res view followed by those of the high-res view
+                resized_h, resized_w, height, width = image_grid
+                num_image_tokens.append(resized_h * resized_w + height * width)
                 num_image_patches.append(num_crops)
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
@@ -213,5 +204,7 @@ class Molmo2Processor(ProcessorMixin):
         timestamps = [frame_idx / fps for frame_idx in frames_indices]
         return self.get_video_string(video_grid, timestamps)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Molmo2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Molmo2Processor"]

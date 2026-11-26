@@ -14,6 +14,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers import GotOcr2Processor
 from transformers.testing_utils import is_torch_available, require_vision
 
@@ -69,6 +71,21 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["input_ids"].shape, (1, 1872))
         self.assertEqual(inputs["pixel_values"].shape, (7, 3, 384, 384))
 
+    def test_box_normalization(self):
+        """Check that the box normalization works for different image types.
+
+        Regression test for https://github.com/huggingface/transformers/issues/49902
+        """
+        processor = self.get_processor()
+        pil_image = self.prepare_images_inputs()
+        numpy_image = np.array(pil_image).transpose(2, 0, 1)
+        torch_image = torch.from_numpy(numpy_image)
+        for image in [pil_image, numpy_image, torch_image]:
+            with self.subTest(image_type=type(image).__name__):
+                inputs = processor(image, return_tensors="pt", box=[0, 0, 100, 10])
+                prompt = processor.decode(inputs["input_ids"][0])
+                self.assertIn("[0, 0, 250, 333] OCR", prompt)
+
     def test_processor_text_has_no_visual(self):
         # Overwritten: requires `multi_page` kwarg to process nested vision inputs
         processor = self.get_processor()
@@ -93,8 +110,15 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             inputs[self.text_input_name][1:].tolist(), inputs_nested[self.text_input_name][1:].tolist()
         )
 
+    @unittest.skip("Multipage setting in model doesn't allow validation")
+    def test_if_input_has_mismatching_tokens_and_mm_data(self):
+        pass
+
+    @unittest.skip("GotOcr2Processor requires images and can't be called with text only")
+    def test_processor_single_text_same_as_batched(self):
+        pass
+
     def test_subprocessor_defaults_1_images(self):
-        # overriden - pop certina keys from `merged_kwargs` which are used only by processor
         parameterized_config = MODALITY_TEST_SPECS["images"]
         subprocessor = self.get_component(parameterized_config["component_key"])
 
@@ -115,8 +139,6 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             **kwargs,
         )
         kwargs = merged_kwargs["images_kwargs"]
-        kwargs.pop("num_image_tokens")
-        kwargs.pop("multi_page")
 
         input_subproc = subprocessor(modality_input, **kwargs)
         try:

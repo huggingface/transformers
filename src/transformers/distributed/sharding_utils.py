@@ -27,9 +27,10 @@ if is_torch_available():
     import torch
 
 if is_torch_distributed_available():
+    import torch.distributed as dist
     from torch.distributed.tensor import DTensor
     from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
-    from torch.distributed.tensor.placement_types import Shard
+    from torch.distributed.tensor.placement_types import Shard, _StridedShard
 
     def _local_shard_size_and_offset(size_on_dim: int, num_chunks: int, rank: int) -> tuple[int, int]:
         """Local shard size and offset for this rank, torch renamed this API across 2.6 to 2.10+."""
@@ -136,16 +137,17 @@ class DtensorShardOperation:
 
             # prepare the slices to fetch on disk for each tensor dimension.
             intervals_by_dim = [[(0, size)] for size in source_shape]
+            has_strided_shard = False
             for dim_idx, planned_ops in enumerate(planned_ops_by_dim):
                 intervals = intervals_by_dim[dim_idx]
                 for placement, rank, world_size in planned_ops:
-                    if placement.is_shard():
-                        intervals = self._compute_contiguous_slice(intervals, rank, world_size)
-                    else:
+                    if isinstance(placement, _StridedShard):
+                        has_strided_shard = True
                         intervals = self._compute_strided_slice(intervals, rank, world_size, placement.split_factor)
+                    else:
+                        intervals = self._compute_contiguous_slice(intervals, rank, world_size)
                 intervals_by_dim[dim_idx] = intervals
 
-            has_strided_shard = any(not placement.is_shard() for _, placement in dim_placements)
             # finally fetch from the disk only the slices
             # finally fetch from the disk only the slices
             if has_strided_shard:
@@ -337,3 +339,23 @@ def _dtensor_from_local_like(local_tensor: torch.Tensor, ref: DTensor) -> DTenso
         shape=ref.shape,
         stride=tuple(ref.stride()),
     )
+
+
+def _tied_params_are_equal(source: torch.Tensor, target: torch.Tensor) -> bool:
+    """`torch.equal`, but two DTensors sharded alike agree across ranks with a SUM all-reduce: DTensor's own `equal`
+    uses a MIN all-reduce, which some backends (e.g. TPU) cannot lower."""
+    if source.shape != target.shape:
+        return False
+    if (
+        not is_torch_distributed_available()
+        or not isinstance(source, DTensor)
+        or not isinstance(target, DTensor)
+        or source.device_mesh != target.device_mesh
+        or source.placements != target.placements
+    ):
+        return torch.equal(source, target)
+    local_source = source.to_local()
+    mismatches = torch.tensor(int(not torch.equal(local_source, target.to_local())), device=local_source.device)
+    for mesh_dim in range(source.device_mesh.ndim):
+        dist.all_reduce(mismatches, group=source.device_mesh.get_group(mesh_dim))
+    return mismatches.item() == 0

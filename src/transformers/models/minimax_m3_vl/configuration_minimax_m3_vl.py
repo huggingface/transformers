@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -53,15 +53,11 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
     """
 
     model_type = "minimax_m3_vl_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise_gather_output",
         "layers.*.self_attn.k_proj": "colwise_gather_output",
         "layers.*.self_attn.v_proj": "colwise_gather_output",
         "layers.*.self_attn.o_proj": "rowwise_split_input",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -187,8 +183,8 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
 class MiniMaxM3VLConfig(PreTrainedConfig):
     model_type = "minimax_m3_vl"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=MiniMaxM3VLTextConfig),
-        "vision_config": SubConfigSpec(config_class=MiniMaxM3VLVisionConfig),
+        "text_config": MiniMaxM3VLTextConfig,
+        "vision_config": MiniMaxM3VLVisionConfig,
     }
 
     attribute_map = {

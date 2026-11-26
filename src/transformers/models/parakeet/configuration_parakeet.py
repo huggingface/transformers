@@ -14,7 +14,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -57,7 +57,6 @@ class ParakeetEncoderConfig(PreTrainedConfig):
     """
 
     model_type = "parakeet_encoder"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     hidden_size: int = 1024
     num_hidden_layers: int = 24
@@ -115,7 +114,7 @@ class ParakeetCTCConfig(PreTrainedConfig):
 
     model_type = "parakeet_ctc"
     sub_configs_defaults = {
-        "encoder_config": SubConfigSpec(config_class=ParakeetEncoderConfig),
+        "encoder_config": ParakeetEncoderConfig,
     }
 
     vocab_size: int = 1025
@@ -160,7 +159,7 @@ class ParakeetRNNTConfig(PreTrainedConfig):
     """
 
     model_type = "parakeet_rnnt"
-    sub_configs_defaults = {"encoder_config": SubConfigSpec(config_class=ParakeetEncoderConfig)}
+    sub_configs_defaults = {"encoder_config": ParakeetEncoderConfig}
 
     vocab_size: int = 8193
     decoder_hidden_size: int = 640

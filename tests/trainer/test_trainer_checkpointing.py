@@ -275,6 +275,8 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
             kwargs = {
                 "output_dir": tmpdir,
                 "fp16": True,
+                # The resumed and uninterrupted runs must produce identical logs.
+                "full_determinism": True,
                 "max_steps": training_steps,
                 "per_device_train_batch_size": 1,
                 "learning_rate": 1e-5,
@@ -622,6 +624,30 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
         state1 = dataclasses.asdict(trainer.state)
         self.assertEqual(parameters, parameters1)
         self.check_trainer_state_are_the_same(state, state1)
+
+    @require_peft
+    def test_peft_root_adapter_restored_with_adapter_subfolders(self):
+        from peft import LoraConfig, get_peft_model
+
+        # PEFT saves the "default" adapter at the checkpoint root and other adapters in subfolders,
+        # so resuming must restore both (see #50204)
+        MODEL_ID = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        peft_config = LoraConfig(r=4, lora_alpha=16, task_type="CAUSAL_LM", init_lora_weights=False)
+
+        def get_model(seed):
+            torch.manual_seed(seed)
+            peft_model = get_peft_model(AutoModelForCausalLM.from_pretrained(MODEL_ID), peft_config)
+            peft_model.add_adapter("ref", peft_config)
+            return peft_model
+
+        trained_model = get_model(0)
+        checkpoint = self.get_auto_remove_tmp_dir()
+        trained_model.save_pretrained(checkpoint)
+        model = get_model(1)
+        trainer = Trainer(model, TrainingArguments(checkpoint, use_cpu=True))
+        trainer._load_from_checkpoint(checkpoint)
+        for (name, expected), (_, actual) in zip(trained_model.named_parameters(), model.named_parameters()):
+            torch.testing.assert_close(actual, expected, msg=f"{name} was not restored")
 
 
 # ---------------------------------------------------------------------------
@@ -1545,6 +1571,24 @@ class TrainerSavingTest(TestCasePlus, TrainerIntegrationCommon):
             tokenizer(test_sentence, padding="max_length").input_ids,
             reloaded_tokenizer(test_sentence, padding="max_length").input_ids,
         )
+
+    def test_model_card_hf_jobs(self):
+        config = RegressionModelConfig(a=1.5, b=2.5)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = Trainer(model=RegressionPreTrainedModel(config), args=TrainingArguments(output_dir=tmp_dir))
+            readme = Path(tmp_dir) / "README.md"
+
+            with patch.dict(os.environ):
+                os.environ.pop("HF_JOB_ID", None)
+                trainer.create_model_card()
+            self.assertNotIn("hf_jobs", readme.read_text())
+            self.assertNotIn("Hugging Face Jobs", readme.read_text())
+
+            with patch.dict(os.environ, {"HF_JOB_ID": "job-id", "HF_JOB_FLAVOR": "a10g-small"}):
+                trainer.create_model_card(tags="custom")
+            card = ModelCard.load(readme)
+            self.assertEqual(card.data.tags, ["custom", "generated_from_trainer", "hf_jobs"])
+            self.assertIn("on `a10g-small` hardware", card.text)
 
     @require_vision
     @require_torchvision

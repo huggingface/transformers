@@ -95,6 +95,11 @@ class CohereCompassImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class CohereCompassImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    # Pillow >= 13 can reverse bicubic resize passes, increasing isolated pixel differences.
+    backend_equivalence_atol = 0.5
+    # PIL and torchvision resize small, upscaled random images differently: the mean diff can reach ~5e-3
+    backend_equivalence_mean_atol = 1e-2
+
     image_processor_tester_class = CohereCompassImageProcessingTester
 
     def test_image_processor_to_json_string(self):
@@ -269,10 +274,12 @@ class CohereCompassImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
         reference_backend = backend_names[0]
         reference_encoding = encodings[reference_backend]
         for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(reference_encoding.pixel_values, encodings[backend_name].pixel_values)
-            self.assertEqual(reference_encoding.image_grid_thw.dtype, encodings[backend_name].image_grid_thw.dtype)
-            self._assert_tensors_equivalence(
-                reference_encoding.image_grid_thw.float(), encodings[backend_name].image_grid_thw.float()
+            self._assert_encodings_equivalence(
+                reference_encoding,
+                encodings[backend_name],
+                reference_backend,
+                backend_name,
+                atol=self.backend_equivalence_atol,
             )
 
     @require_vision
@@ -294,10 +301,12 @@ class CohereCompassImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
         reference_backend = backend_names[0]
         reference_encoding = encodings[reference_backend]
         for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(reference_encoding.pixel_values, encodings[backend_name].pixel_values)
-            self.assertEqual(reference_encoding.image_grid_thw.dtype, encodings[backend_name].image_grid_thw.dtype)
-            self._assert_tensors_equivalence(
-                reference_encoding.image_grid_thw.float(), encodings[backend_name].image_grid_thw.float()
+            self._assert_encodings_equivalence(
+                reference_encoding,
+                encodings[backend_name],
+                reference_backend,
+                backend_name,
+                atol=self.backend_equivalence_atol,
             )
 
     def test_get_num_patches_without_images(self):

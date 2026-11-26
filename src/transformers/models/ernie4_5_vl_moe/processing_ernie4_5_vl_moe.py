@@ -20,23 +20,18 @@ import numpy as np
 from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, resolve_revision
+from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoInput
-
-
-class Ernie4_5_VLMoeProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_token_type_ids": False,
-            "return_mm_token_type_ids": True,
-        },
-    }
+from ..auto.video_processing_auto import AutoVideoProcessor
 
 
 @auto_docstring
 class Ernie4_5_VLMoeProcessor(ProcessorMixin):
-    valid_processor_kwargs = Ernie4_5_VLMoeProcessorKwargs
+    text_kwargs = {
+        "return_token_type_ids": False,
+    }
+    return_mm_token_type_ids = True
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token
@@ -73,7 +68,7 @@ class Ernie4_5_VLMoeProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | list[TextInput] | None = None,
         videos: VideoInput | None = None,
-        **kwargs: Unpack[Ernie4_5_VLMoeProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         model_inputs = super().__call__(images=images, text=text, videos=videos, **kwargs)
         model_inputs["moe_mm_token_type_ids"] = self.create_moe_mm_token_type_ids(model_inputs["input_ids"])
@@ -144,10 +139,10 @@ class Ernie4_5_VLMoeProcessor(ProcessorMixin):
             input modalities, along with other useful data.
         """
 
+        merged_kwargs = self._merge_kwargs(**kwargs)
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = Ernie4_5_VLMoeProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = merged_kwargs["images_kwargs"]
             merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
             num_image_patches = [
@@ -158,8 +153,7 @@ class Ernie4_5_VLMoeProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = Ernie4_5_VLMoeProcessorKwargs._defaults.get("videos_kwargs", {})
-            videos_kwargs.update(kwargs)
+            videos_kwargs = merged_kwargs["videos_kwargs"]
             merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
             temporal_merge_size = (
                 videos_kwargs.get("temporal_patch_size", None) or self.video_processor.temporal_patch_size
@@ -175,5 +169,48 @@ class Ernie4_5_VLMoeProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str | os.PathLike,
+        cache_dir: str | os.PathLike | None = None,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: str | bool | None = None,
+        revision: str = "main",
+        **kwargs,
+    ):
+        kwargs["cache_dir"] = cache_dir
+        kwargs["force_download"] = force_download
+        kwargs["local_files_only"] = local_files_only
+        # Resolve the revision once, so the processor config and all its sub-processors come from the same repo state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
+
+        if token is not None:
+            kwargs["token"] = token
+
+        original_kwargs = kwargs.copy()
+
+        # Get processor_dict first so we can use it to instantiate non-tokenizer sub-processors
+        processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
+        if "video_processor" not in original_kwargs:
+            # `VideoProcessor.from_dict()`` doesn't work for this model
+            # so load it `from_pretrained` unless user passes their own video-processor
+            processor_dict["video_processor"] = AutoVideoProcessor.from_pretrained(
+                pretrained_model_name_or_path, **original_kwargs
+            )
+        processor_dict, kwargs = cls._resolve_subprocessors(
+            pretrained_model_name_or_path, processor_dict, **original_kwargs
+        )
+        return cls.from_dict(processor_dict, **kwargs)
+
+
+__getattr__ = deprecate_attr(__name__, rename={"Ernie4_5_VLMoeProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Ernie4_5_VLMoeProcessor"]

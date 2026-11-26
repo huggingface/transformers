@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 import unittest
 import warnings
 
@@ -20,7 +21,7 @@ from parameterized import parameterized
 
 from transformers import __version__, is_torch_available
 from transformers.testing_utils import require_torch_accelerator, torch_device
-from transformers.utils.deprecation import deprecate_kwarg
+from transformers.utils.deprecation import deprecate_attr, deprecate_kwarg
 
 
 if is_torch_available():
@@ -58,6 +59,21 @@ class DeprecationDecoratorTester(unittest.TestCase):
             value, other_value = dummy_function(deprecated_name="old_value", new_name="new_value")
             self.assertEqual(value, "new_value")
             self.assertIsNone(other_value)
+
+    def test_expose_in_signature(self):
+        @deprecate_kwarg("deprecated_name", new_name="new_name", version=INFINITE_VERSION, expose_in_signature=True)
+        def dummy_function(new_name, other_name=None, **kwargs):
+            return new_name
+
+        parameters = inspect.signature(dummy_function).parameters
+        self.assertEqual(list(parameters), ["new_name", "other_name", "deprecated_name", "kwargs"])
+
+        # Callers filtering kwargs with the signature (e.g. remote code) must still pass the deprecated name
+        candidate_kwargs = {"deprecated_name": "old_value", "unrelated_name": "value"}
+        filtered_kwargs = {k: v for k, v in candidate_kwargs.items() if k in parameters}
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self.assertEqual(dummy_function(**filtered_kwargs), "old_value")
 
     def test_rename_multiple_kwargs(self):
         with warnings.catch_warnings():
@@ -195,3 +211,36 @@ class DeprecationDecoratorTester(unittest.TestCase):
         # Check that we can correctly call the compiled function with both names, without raising errors
         out = compiled_function(new_factor=2, deprecated_factor=10)
         self.assertEqual(out.item(), 2)
+
+
+class DeprecateAttrTester(unittest.TestCase):
+    def test_remove(self):
+        class Replacement:
+            pass
+
+        module_getattr = deprecate_attr("dummy_module", remove={"OldName": (Replacement, INFINITE_VERSION)})
+        with self.assertWarns(FutureWarning) as context:
+            self.assertIs(module_getattr("OldName"), Replacement)
+        self.assertNotIn("instead", str(context.warning))
+
+    def test_rename(self):
+        class Replacement:
+            pass
+
+        module_getattr = deprecate_attr("dummy_module", rename={"OldName": (Replacement, INFINITE_VERSION)})
+        with self.assertWarns(FutureWarning) as context:
+            self.assertIs(module_getattr("OldName"), Replacement)
+        self.assertIn("Use `Replacement` instead.", str(context.warning))
+
+    def test_unknown_name(self):
+        module_getattr = deprecate_attr("dummy_module", rename={"OldName": (int, INFINITE_VERSION)})
+        with self.assertRaises(AttributeError):
+            module_getattr("UnknownName")
+
+    def test_name_in_remove_and_rename(self):
+        with self.assertRaises(ValueError):
+            deprecate_attr(
+                "dummy_module",
+                remove={"OldName": (int, INFINITE_VERSION)},
+                rename={"OldName": (int, INFINITE_VERSION)},
+            )

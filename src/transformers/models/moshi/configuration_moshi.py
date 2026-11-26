@@ -51,7 +51,6 @@ class MoshiDepthConfig(PreTrainedConfig):
     ```"""
 
     model_type = "moshi_depth"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 32000
     hidden_size: int = 1024
@@ -127,10 +126,9 @@ class MoshiConfig(PreTrainedConfig):
     ```"""
 
     model_type = "moshi"
-    keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs_defaults = {
         "audio_encoder_config": SubConfigSpec(config_class=AutoConfig, model_type="mimi"),
-        "depth_decoder_config": SubConfigSpec(config_class=MoshiDepthConfig),
+        "depth_decoder_config": MoshiDepthConfig,
     }
 
     vocab_size: int = 32000

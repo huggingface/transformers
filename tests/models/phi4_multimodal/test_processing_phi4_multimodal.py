@@ -34,8 +34,6 @@ class Phi4MultimodalProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "microsoft/Phi-4-multimodal-instruct"
     # revision "refs/pr/70" (main branch adds auto_map requiring trust_remote_code).
     tiny_model_id = "hf-internal-testing/tiny-processor-phi4_multimodal"
-    checkpoint_path = "microsoft/Phi-4-multimodal-instruct"
-    revision = "refs/pr/70"
     text_input_name = "input_ids"
     images_input_name = "image_pixel_values"
     audio_input_name = "audio_input_features"
@@ -54,13 +52,6 @@ class Phi4MultimodalProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     videos_text_kwargs_max_length = 167
     videos_text_kwargs_override_max_length = 162
     videos_unstructured_max_length = 176
-
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-        cls.image_token_id = processor.image_token_id
-        cls.audio_token = processor.audio_token
-        cls.audio_token_id = processor.audio_token_id
 
     # override: audio_attention_mask is returned conditionally, and not expected in the input names in this case
     def test_model_input_names(self):

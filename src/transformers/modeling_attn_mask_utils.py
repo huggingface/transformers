@@ -212,7 +212,7 @@ class AttentionMaskConverter:
 
     @staticmethod
     def _unmask_unattended(
-        expanded_mask: torch.FloatTensor,
+        expanded_mask: torch.Tensor,
         min_dtype: float,
     ):
         # fmt: off
@@ -288,16 +288,9 @@ class AttentionMaskConverter:
         ignore_causal_mask = False
 
         if attention_mask is None:
-            # TODO: When tracing with TorchDynamo with fullgraph=True, the model is recompiled depending on the input
-            # shape, thus SDPA's `is_causal` argument is rightfully updated
-            # (see https://gist.github.com/fxmarty/1313f39037fc1c112508989628c57363). However, when using
-            # `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
-            # hard-coded. If a user exports a model with q_len > 1, the exported model will hard-code `is_causal=True`
-            # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108).
-            # Thus, we only set `ignore_causal_mask = True` if the model is set to training.
-            #
-            # Besides, jit.trace can not handle the `q_len > 1` condition for `is_causal`
-            # ("TypeError: scaled_dot_product_attention(): argument 'is_causal' must be bool, not Tensor").
+            # When exporting (`torch.export`, `torch.onnx.dynamo_export`), `is_causal` is hard-coded from the example
+            # input, which is wrong for q_len > 1 (https://github.com/pytorch/pytorch/issues/108108), and jit.trace
+            # cannot handle the `q_len > 1` condition at all. So while tracing, only ignore the mask when training.
             if (
                 (is_training or not is_tracing_)
                 and (query_length == 1 or key_value_length == query_length)

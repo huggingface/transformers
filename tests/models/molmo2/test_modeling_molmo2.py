@@ -15,7 +15,6 @@
 
 import copy
 import unittest
-from unittest.mock import patch
 
 from parameterized import parameterized
 
@@ -59,32 +58,35 @@ if is_vision_available():
 class Molmo2VisionText2TextModelTester(VLMModelTester):
     base_model_class = Molmo2Model
     config_class = Molmo2Config
-    text_config_class = Molmo2TextConfig
-    vision_config_class = Molmo2VisionConfig
+
     conditional_generation_class = Molmo2ForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_size", 378)
-        kwargs.setdefault("patch_size", 14)
-        kwargs.setdefault("num_image_tokens", 32)
-        kwargs.setdefault("seq_length", 7 + kwargs["num_image_tokens"])
-        kwargs.setdefault("hidden_size", 32)
-        kwargs.setdefault("intermediate_size", 37)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 8)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("max_position_embeddings", 512)
-        kwargs.setdefault("bos_token_id", 0)
-        kwargs.setdefault("eos_token_id", 1)
-        kwargs.setdefault("pad_token_id", 2)
-        kwargs.setdefault("image_start_token_id", 3)
-        kwargs.setdefault("image_end_token_id", 4)
-        kwargs.setdefault("image_patch_id", 5)
+    small_config_overrides = {
+        "image_size": 378,
+        "patch_size": 14,
+        "num_image_tokens": 32,
+        "hidden_size": 32,
+        "intermediate_size": 37,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 8,
+        "num_hidden_layers": 2,
+        "hidden_act": "silu",
+        "max_position_embeddings": 512,
+        "bos_token_id": 0,
+        "eos_token_id": 1,
+        "pad_token_id": 2,
+        "image_start_token_id": 3,
+        "image_end_token_id": 4,
+        "image_patch_id": 5,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
         # Alias so base helpers (special-token clearing, mismatch tests) protect image patch tokens.
-        kwargs.setdefault("image_token_id", kwargs["image_patch_id"])
-        super().__init__(parent, **kwargs)
+        kwargs.setdefault("image_token_id", kwargs.get("image_patch_id", cls.small_config_overrides["image_patch_id"]))
+        # seq_length defaults to 7 + num_image_tokens (VLMModelTester).
+        return super().get_small_config_defaults(**kwargs)
 
     def create_pixel_values(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
@@ -210,25 +212,6 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     )
     def test_sdpa_can_dispatch_on_flash(self):
         pass
-
-    def flash_attn_from_config(self, attn_implementation: str, test_fwd_in_train: bool = True):
-        super().flash_attn_from_config(attn_implementation, test_fwd_in_train=False)
-
-    def flash_attn_inference_equivalence(
-        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
-    ):
-        # The common test keeps one sample with `[:1]`, which cannot slice the flat `image_token_pooling`,
-        # so the check runs on text-only inputs.
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"].clone()
-        input_ids[input_ids == config.image_patch_id] = self.model_tester.pad_token_id
-        text_inputs = {"input_ids": input_ids, "attention_mask": inputs_dict["attention_mask"]}
-        with patch.object(
-            self.model_tester,
-            "prepare_config_and_inputs_for_common",
-            side_effect=lambda: (copy.deepcopy(config), copy.deepcopy(text_inputs)),
-        ):
-            super().flash_attn_inference_equivalence(attn_implementation, padding_side, atol=atol, rtol=rtol)
 
     @unittest.skip(
         reason="Multimodal special tokens live in the extra-vocab rows beyond `vocab_size`; standard resize is ill-defined"
@@ -407,6 +390,7 @@ class Molmo2_4BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", (8, 0)): [-10.407500, -5.903657, -10.977587, -10.325406, -16.847645, -14.505170, -11.184648, -9.696571, -11.637183, -9.205433],
                 ("cuda", (8, 6)): [-10.407710, -5.903650, -10.977592, -10.325156, -16.847317, -14.505305, -11.184698, -9.697040, -11.636929, -9.205041],
+                ("xpu", 5): [-10.407711, -5.903655, -10.977608, -10.325190, -16.847345, -14.505308, -11.184708, -9.697016, -11.636967, -9.205076],
             }
         )  # fmt: skip
         torch.testing.assert_close(
@@ -437,6 +421,7 @@ class Molmo2_4BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", (8, 0)): "In this captivating image, a large, chubby cat",
                 ("cuda", (8, 6)): "In this captivating image, a large, chubby cat",
+                ("xpu", 5): "In this captivating image, a large, chubby cat",
             }
         )  # fmt: skip
         self.assertEqual(generated_text.strip(), expected_texts.get_expectation())
@@ -521,6 +506,7 @@ class Molmo2_O7BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", (8, 0)): [-13.0625, -5.9375, -11.75, -11.0, -12.6875, -16.25, -10.375, -12.3125, -12.6875, -10.625],
                 ("cuda", (8, 6)): [-13.0625, -5.875, -11.6875, -11.0, -12.6875, -16.25, -10.3125, -12.25, -12.6875, -10.625],
+                ("xpu", 5): [-13.0625, -5.9375, -11.75, -11.0625, -12.75, -16.25, -10.375, -12.3125, -12.6875, -10.6875],
             }
         )  # fmt: skip
         torch.testing.assert_close(
@@ -551,6 +537,7 @@ class Molmo2_O7BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", (8, 0)): "In this captivating image, a small, chubby cat",
                 ("cuda", (8, 6)): "In this captivating image, a small, chubby cat",
+                ("xpu", 5): "In this captivating image, a small, chubby cat",
             }
         )  # fmt: skip
         self.assertEqual(generated_text.strip(), expected_texts.get_expectation())
@@ -635,6 +622,7 @@ class Molmo2_8BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", (8, 0)): [-15.875, -7.875, -15.5625, -15.0, -16.5, -18.25, -14.4375, -15.8125, -15.4375, -12.4375],
                 ("cuda", (8, 6)): [-15.875, -7.875, -15.625, -15.0, -16.5, -18.25, -14.5, -15.75, -15.4375, -12.5],
+                ("xpu", 5): [-15.875, -7.875, -15.5625, -15.0, -16.5, -18.25, -14.5, -15.75, -15.4375, -12.4375],
             }
         )  # fmt: skip
         torch.testing.assert_close(
@@ -665,6 +653,7 @@ class Molmo2_8BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", (8, 0)): "In this captivating image, a snow leopard is captured",
                 ("cuda", (8, 6)): "In this captivating image, a snow leopard is captured",
+                ("xpu", 5): "In this captivating image, a snow leopard is captured",
             }
         )  # fmt: skip
         self.assertEqual(generated_text.strip(), expected_texts.get_expectation())
@@ -708,6 +697,7 @@ class Molmo2_8BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 0)): "Penguins appear in the video.",
+                ("xpu", 5): "Penguins appear in the video.",
             }
         )  # fmt: skip
         self.assertEqual(generated_text.strip(), expected_texts.get_expectation())

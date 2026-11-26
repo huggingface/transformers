@@ -18,8 +18,10 @@ from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
 from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_kwarg
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma2.configuration_gemma2 import Gemma2Config
-from ..gemma2.modeling_gemma2 import Gemma2Attention, Gemma2DecoderLayer, Gemma2ForCausalLM, Gemma2MLP, Gemma2RMSNorm
+from ..gemma2.modeling_gemma2 import Gemma2Attention, Gemma2DecoderLayer, Gemma2ForCausalLM, Gemma2MLP
 
 
 @auto_docstring(checkpoint="google/vaultgemma-1b")
@@ -46,7 +48,7 @@ class VaultGemmaConfig(Gemma2Config):
     use_bidirectional_attention = AttributeError()
 
 
-class VaultGemmaRMSNorm(Gemma2RMSNorm):
+class VaultGemmaRMSNorm(GemmaRMSNorm):
     pass
 
 
@@ -68,15 +70,16 @@ class VaultGemmaDecoderLayer(Gemma2DecoderLayer):
         del self.post_attention_layernorm
         del self.post_feedforward_layernorm
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
@@ -85,7 +88,7 @@ class VaultGemmaDecoderLayer(Gemma2DecoderLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         hidden_states = residual + hidden_states

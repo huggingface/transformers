@@ -74,7 +74,7 @@ model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
 
 To load fine-tuned checkpoints of the `VisionEncoderDecoderModel` class, [`VisionEncoderDecoderModel`] provides the `from_pretrained(...)` method just like any other model architecture in Transformers.
 
-To perform inference, one uses the [`generate`] method, which allows to autoregressively generate text. This method supports various forms of decoding, such as greedy, beam search and multinomial sampling.
+To perform inference, one uses the [`generate`] method, which allows autoregressively generating text. This method supports various forms of decoding, such as greedy, beam search and multinomial sampling.
 
 ```python
 import requests

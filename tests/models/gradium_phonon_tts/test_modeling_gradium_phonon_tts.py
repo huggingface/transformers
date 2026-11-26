@@ -38,16 +38,31 @@ if is_torch_available():
 
 
 class GradiumPhononTTSModelTester(pocket_tts.PocketTTSModelTester):
-    def __init__(self, parent, audio_prompt_dim=12, **kwargs):
+    defaults = {
+        **pocket_tts.PocketTTSModelTester.defaults,
+        **pocket_tts.PocketTTSModelTester.small_config_overrides,
+    }
+    small_config_overrides = {
+        # the voice is made of speaker-codec latents, wider than the audio latents
+        "audio_prompt_dim": 12,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        vocab_size = values["vocab_size"]
+        # no voice BOS: the vocabulary ends with the voice and latent placeholders and the first audio position
+        values["audio_prompt_token_id"] = vocab_size - 3
+        values["audio_latent_token_id"] = vocab_size - 2
+        values["audio_bos_token_id"] = vocab_size - 1
+        values["voice_prefix_ids"] = []
+        # the parent derives `audio_prompt_dim` from `latent_dim`: restore ours (or the caller's)
+        values["audio_prompt_dim"] = kwargs.get("audio_prompt_dim", cls.small_config_overrides["audio_prompt_dim"])
+        return values
+
+    def __init__(self, parent, **kwargs):
         super().__init__(parent, **kwargs)
         self.model_class = GradiumPhononTTSForConditionalGeneration if is_torch_available() else None
-        # no voice BOS: the vocabulary ends with the voice and latent placeholders and the first audio position
-        self.audio_prompt_token_id = self.vocab_size - 3
-        self.audio_latent_token_id = self.vocab_size - 2
-        self.audio_bos_token_id = self.vocab_size - 1
-        self.voice_prefix_ids = []
-        # the voice is made of speaker-codec latents, wider than the audio latents
-        self.audio_prompt_dim = audio_prompt_dim
 
     def get_config(self):
         return GradiumPhononTTSConfig(
@@ -80,6 +95,8 @@ class GradiumPhononTTSModelTester(pocket_tts.PocketTTSModelTester):
 
 @require_torch
 class GradiumPhononTTSModelTest(pocket_tts.PocketTTSModelTest):
+    model_tester_class = GradiumPhononTTSModelTester
+
     all_model_classes = (
         (GradiumPhononTTSModel, GradiumPhononTTSForConditionalGeneration) if is_torch_available() else ()
     )
@@ -145,15 +162,11 @@ class GradiumPhononTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     VOICES_REVISION = "da6c9ec0d47be8df5c87c730a3aa97187f3229c3"
 
     checkpoint_name = "gradium/phonon-31m-en"
-    # the commit that adds the transformers files (https://huggingface.co/gradium/phonon-31m-en/discussions/1)
-    revision = "69d132d26aefb4956d97d07719701e50bb036dbc"
     bucket = "hf-internal-testing/phonon-integration-tests"
 
     def setUp(self):
         super().setUp()
-        self.processor = AutoProcessor.from_pretrained(
-            self.checkpoint_name, revision=self.revision, device_map=torch_device
-        )
+        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name, device_map=torch_device)
 
     def _load_voice(self, voice):
         from huggingface_hub import hf_hub_download
@@ -177,7 +190,7 @@ class GradiumPhononTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def _generate(self, cases):
         # the runtime computes in float32 and its reference is greedy (temperature 0)
         model = AutoModelForTextToWaveform.from_pretrained(
-            self.checkpoint_name, revision=self.revision, device_map=torch_device, dtype=torch.float32
+            self.checkpoint_name, device_map=torch_device, dtype=torch.float32
         )
         # an empty `audio` item marks the voice, given as precomputed latents
         conversations = [

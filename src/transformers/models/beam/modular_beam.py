@@ -26,11 +26,13 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GenericForTokenClassification
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
@@ -73,19 +75,15 @@ class BeamConfig(Qwen3MoeConfig):
     attribute_map = AttributeError()
 
     base_model_tp_plan = {
-        # trf-ignore: TRF035
-        # TODO: the attn gate bias needs to be local -> new colwise local style  # noqa: NC001
-        # "layers.*.self_attn.q_proj": "colwise",
-        # "layers.*.self_attn.k_proj": "colwise",
-        # "layers.*.self_attn.v_proj": "colwise",
-        # "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
-        # "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        # "layers.*.self_attn.gate_proj": "colwise",
-        # "layers.*.self_attn.gate_bias": "colwise",
-        # "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.gate_proj": "colwise",
+        "layers.*.self_attn.gate_bias": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn": "local_params",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -182,13 +180,14 @@ class BeamAttention(Qwen3MoeAttention):
         # One gate bias per head, broadcast over `head_dim`.
         self.gate_bias = nn.Parameter(torch.zeros(config.num_attention_heads))
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
         attention_mask: torch.Tensor | None,
         attention_scaling: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -205,8 +204,8 @@ class BeamAttention(Qwen3MoeAttention):
         if attention_scaling is not None:
             query_states = (query_states.float() * attention_scaling).to(query_states.dtype)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -306,6 +305,7 @@ class BeamDecoderLayer(DeepseekV32DecoderLayer):
         self.attn_residual_add_idx = 2 * (layer_idx + 1)
         self.mlp_residual_add_idx = self.attn_residual_add_idx + 1
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -313,7 +313,7 @@ class BeamDecoderLayer(DeepseekV32DecoderLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         attention_scaling: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -325,7 +325,7 @@ class BeamDecoderLayer(DeepseekV32DecoderLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             attention_scaling=attention_scaling,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
@@ -350,7 +350,6 @@ class BeamPreTrainedModel(DeepseekV3PreTrainedModel):
     # DeepseekV3 uses this to drop its MTP layer, which Beam does not have.
     _keys_to_ignore_on_load_unexpected = AttributeError()
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, BeamTopKRouter):
@@ -372,27 +371,28 @@ class BeamPreTrainedModel(DeepseekV3PreTrainedModel):
 
 
 class BeamModel(Qwen3MoeModel):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -401,7 +401,7 @@ class BeamModel(Qwen3MoeModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             mask_creation_functions = {
@@ -429,7 +429,7 @@ class BeamModel(Qwen3MoeModel):
                 hidden_states,
                 attention_mask=causal_mask_mapping[layer_type],
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings[layer_type],
                 attention_scaling=attention_scalings[layer_type],
@@ -437,17 +437,18 @@ class BeamModel(Qwen3MoeModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
+        return MoeModelOutputWithPast(last_hidden_state=hidden_states, cache=cache)
 
 
 class BeamForCausalLM(DeepseekV3ForCausalLM):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -463,15 +464,15 @@ class BeamForCausalLM(DeepseekV3ForCausalLM):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         if self.config.final_logit_softcapping is not None:
             # Softcap in float32, as bf16 tanh quantizes badly near saturation.
             logits = logits.float() / self.config.final_logit_softcapping
@@ -485,16 +486,21 @@ class BeamForCausalLM(DeepseekV3ForCausalLM):
         return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
 
 
+class BeamForTokenClassification(GenericForTokenClassification, BeamPreTrainedModel):
+    pass
+
+
 __all__ = [
     "BeamConfig",
     "BeamForCausalLM",
+    "BeamForTokenClassification",
     "BeamModel",
     "BeamPreTrainedModel",
 ]

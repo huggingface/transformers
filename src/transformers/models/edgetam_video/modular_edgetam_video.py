@@ -31,6 +31,7 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoConfig
+from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..sam2.modeling_sam2 import eager_attention_forward, window_partition
 from ..sam2_video.configuration_sam2_video import (
     Sam2VideoMaskDecoderConfig,
@@ -41,7 +42,6 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoFeedForward,
     Sam2VideoImageSegmentationOutput,
     Sam2VideoInferenceSession,
-    Sam2VideoLayerNorm,
     Sam2VideoMemoryAttention,
     Sam2VideoMemoryEncoder,
     Sam2VideoMemoryFuserCXBlock,
@@ -203,9 +203,9 @@ class EdgeTamVideoConfig(PreTrainedConfig):
     model_type = "edgetam_video"
     default_rope_type = "axial"
     sub_configs_defaults = {
-        "mask_decoder_config": SubConfigSpec(config_class=EdgeTamVideoMaskDecoderConfig),
+        "mask_decoder_config": EdgeTamVideoMaskDecoderConfig,
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="sam2_vision_model"),
-        "prompt_encoder_config": SubConfigSpec(config_class=EdgeTamVideoPromptEncoderConfig),
+        "prompt_encoder_config": EdgeTamVideoPromptEncoderConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -294,7 +294,7 @@ class EdgeTamVideoConfig(PreTrainedConfig):
         self.rope_parameters["rope_theta"] = value
 
 
-class EdgeTamVideoLayerNorm(Sam2VideoLayerNorm):
+class EdgeTamVideoLayerNorm(ConvNextLayerNorm):
     pass
 
 
@@ -688,13 +688,13 @@ class EdgeTamVideoMemoryAttention(Sam2VideoMemoryAttention):
     ):
         """
         Args:
-            current_vision_features (`torch.FloatTensor`):
+            current_vision_features (`torch.Tensor`):
                 The current vision features used for self-attention.
-            memory (`torch.FloatTensor`):
+            memory (`torch.Tensor`):
                 The memory features used for cross-attention.
-            current_vision_position_embeddings (`torch.FloatTensor`, *optional*):
+            current_vision_position_embeddings (`torch.Tensor`, *optional*):
                 The position embeddings for the current vision features.
-            memory_posision_embeddings (`torch.FloatTensor`, *optional*):
+            memory_posision_embeddings (`torch.Tensor`, *optional*):
                 The position embeddings for the memory features.
             num_object_pointer_tokens (`int`, *optional*, defaults to 0):
                 The number of object pointer tokens.

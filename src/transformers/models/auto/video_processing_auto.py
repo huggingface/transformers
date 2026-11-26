@@ -57,9 +57,11 @@ else:
     MISSING_VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
             ("cosmos3_omni", {"torchvision": "Qwen3VLVideoProcessor"}),
+            ("dots3_note", {"torchvision": "Qwen3VLVideoProcessor"}),
             ("exaone4_5", {"torchvision": "Qwen2VLVideoProcessor"}),
             ("hyperclovax_vision_v2", {"torchvision": "Qwen2VLVideoProcessor"}),
             ("instructblip", {"torchvision": "InstructBlipVideoVideoProcessor"}),
+            ("lfm3_vl", {"torchvision": "Qwen3VLVideoProcessor"}),
             ("minicpmv4_7", {"torchvision": "MiniCPMV4_6VideoProcessor"}),
             ("muse_spark", {"torchvision": "MuseGlimmerVideoProcessor"}),
             ("pe_audio_video", {"torchvision": "PeVideoVideoProcessor"}),
@@ -277,13 +279,27 @@ class AutoVideoProcessor:
 
     @classmethod
     @replace_list_option_in_docstrings(VIDEO_PROCESSOR_MAPPING_NAMES)
-    def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path,
+        *inputs,
+        config: PreTrainedConfig | str | os.PathLike | None = None,
+        cache_dir: str | os.PathLike | None = None,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: str | bool | None = None,
+        revision: str | None = None,
+        proxies: dict[str, str] | None = None,
+        subfolder: str = "",
+        **kwargs,
+    ):
         r"""
-        Instantiate one of the video processor classes of the library from a pretrained model vocabulary.
+        Instantiate one of the video processor classes of the library from a pretrained model's video processor
+        configuration.
 
         The video processor class to instantiate is selected based on the `model_type` property of the config object
-        (either passed as an argument or loaded from `pretrained_model_name_or_path` if possible), or when it's
-        missing, by falling back to using pattern matching on `pretrained_model_name_or_path`:
+        (either passed as an argument or loaded from `pretrained_model_name_or_path` if possible). When `model_type`
+        is missing, it falls back to pattern matching on `pretrained_model_name_or_path`:
 
         List options
 
@@ -291,42 +307,49 @@ class AutoVideoProcessor:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
                 This can be either:
 
-                - a string, the *model id* of a pretrained video_processor hosted inside a model repo on
+                - a string, the *model id* of a pretrained video processor hosted inside a model repo on
                   huggingface.co.
                 - a path to a *directory* containing a video processor file saved using the
                   [`~video_processing_utils.BaseVideoProcessor.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
                 - a path to a saved video processor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
+            config ([`PreTrainedConfig`] or `str` or `os.PathLike`, *optional*):
+                The model configuration used to infer the video processor class through its `model_type`. If not
+                provided, the configuration is loaded from `pretrained_model_name_or_path` when possible.
             cache_dir (`str` or `os.PathLike`, *optional*):
-                Path to a directory in which a downloaded pretrained model video processor should be cached if the
-                standard cache should not be used.
+                Path to a directory in which a downloaded pretrained video processor should be cached if the standard
+                cache should not be used.
             force_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to force to (re-)download the video processor files and override the cached versions if
-                they exist.
+                Whether or not to force the (re-)download of the video processor files, overriding the cached versions
+                if they exist.
+            local_files_only (`bool`, *optional*, defaults to `False`):
+                If `True`, only look for files in the local cache or directory and never try to download them.
             proxies (`dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            token (`str` or *bool*, *optional*):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.,
+                `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+            token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the video processor files are located inside a subfolder of the model repo on huggingface.co,
+                you can specify the folder name here.
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
-                If `False`, then this function returns just the final video processor object. If `True`, then this
-                functions returns a `Tuple(video_processor, unused_kwargs)` where *unused_kwargs* is a dictionary
-                consisting of the key/value pairs whose keys are not video processor attributes: i.e., the part of
-                `kwargs` which has not been used to update `video_processor` and is otherwise ignored.
+                If `False`, only the final video processor object is returned. If `True`, returns a
+                `tuple(video_processor, unused_kwargs)` where *unused_kwargs* is a dictionary of the key/value pairs
+                in `kwargs` whose keys are not video processor attributes, i.e. the part of `kwargs` that was not used
+                to update `video_processor`.
             trust_remote_code (`bool`, *optional*, defaults to `False`):
-                Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
-                should only be set to `True` for repositories you trust and in which you have read the code, as it will
-                execute code present on the Hub on your local machine.
+                Whether or not to allow for custom video processors defined on the Hub in their own files. This option
+                should only be set to `True` for repositories you trust and in which you have read the code, as it
+                will execute code present on the Hub on your local machine.
             kwargs (`dict[str, Any]`, *optional*):
-                The values in kwargs of any keys which are video processor attributes will be used to override the
-                loaded values. Behavior concerning key/value pairs whose keys are *not* video processor attributes is
-                controlled by the `return_unused_kwargs` keyword parameter.
+                Any key of `kwargs` that is a video processor attribute overrides the loaded value. Key/value pairs
+                whose keys are *not* video processor attributes are handled according to `return_unused_kwargs`.
 
         <Tip>
 
@@ -345,21 +368,34 @@ class AutoVideoProcessor:
         >>> # If video processor files are in a directory (e.g. video processor was saved using *save_pretrained('./test/saved_model/')*)
         >>> # video_processor = AutoVideoProcessor.from_pretrained("./test/saved_model/")
         ```"""
-        config = kwargs.pop("config", None)
+        config_dict = kwargs.pop("processor_config", None)
         backend = kwargs.pop("backend", "torchvision")
         trust_remote_code = kwargs.pop("trust_remote_code", None)
-        kwargs["_from_auto"] = True
 
-        # Resolve the revision once, so that all the files below come from the same repository state.
-        kwargs["revision"] = resolve_revision(
+        hub_kwargs = {
+            "cache_dir": cache_dir,
+            "force_download": force_download,
+            "local_files_only": local_files_only,
+            "proxies": proxies,
+            "subfolder": subfolder,
+            "_from_auto": True,
+        }
+        code_revision = kwargs.pop("code_revision", None)
+        kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
+        if token is not None:
+            hub_kwargs["token"] = token
+
+        # Resolve the revision once, so that all the files below come from the same repository state
+        hub_kwargs["revision"] = resolve_revision(
             pretrained_model_name_or_path,
-            kwargs.get("revision"),
-            token=kwargs.get("token"),
-            local_files_only=kwargs.get("local_files_only", False),
-            cache_dir=kwargs.get("cache_dir"),
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
         )
 
-        config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
+        if config_dict is None:
+            config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **hub_kwargs)
         video_processor_class = config_dict.get("video_processor_type", None)
         video_processor_auto_map = None
         if "AutoVideoProcessor" in config_dict.get("auto_map", {}):
@@ -385,7 +421,10 @@ class AutoVideoProcessor:
             try:
                 if not isinstance(config, PreTrainedConfig):
                     config = AutoConfig.from_pretrained(
-                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                        pretrained_model_name_or_path,
+                        trust_remote_code=trust_remote_code,
+                        code_revision=code_revision,
+                        **hub_kwargs,
                     )
 
                 # It could be in `config.video_processor_type``
@@ -401,6 +440,12 @@ class AutoVideoProcessor:
         resolved_video_processor_class = video_processor_class
         if video_processor_class is not None:
             video_processor_class = _load_backend_class(video_processor_class, backend)
+
+        if video_processor_class is not None and video_processor_class.__name__ == "Ernie4_5_VLMoeVideoProcessor":
+            # Ernie needs to add its own fields in the resolved dict, so call it again
+            config_dict, _ = video_processor_class.get_video_processor_dict(
+                pretrained_model_name_or_path, **hub_kwargs
+            )
 
         has_remote_code = video_processor_auto_map is not None
         has_local_code = video_processor_class is not None or type(config) in VIDEO_PROCESSOR_MAPPING
@@ -425,12 +470,14 @@ class AutoVideoProcessor:
             )
 
         if has_remote_code and trust_remote_code and not explicit_local_code:
-            video_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
-            _ = kwargs.pop("code_revision", None)
+            video_processor_class = get_class_from_dynamic_module(
+                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs
+            )
+            _ = hub_kwargs.pop("code_revision", None)
             video_processor_class.register_for_auto_class()
-            return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return video_processor_class.from_dict(config_dict, *inputs, **kwargs)
         elif video_processor_class is not None:
-            return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return video_processor_class.from_dict(config_dict, *inputs, **kwargs)
         # Last try: we use the VIDEO_PROCESSOR_MAPPING.
         elif type(config) in VIDEO_PROCESSOR_MAPPING:
             video_processor_mapping = VIDEO_PROCESSOR_MAPPING[type(config)]
@@ -438,7 +485,7 @@ class AutoVideoProcessor:
                 video_processor_mapping.get(backend) if video_processor_mapping is not None else video_processor_class
             )
             if video_processor_class is not None:
-                return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                return video_processor_class.from_dict(config_dict, *inputs, **kwargs)
 
             if backend == "torchvision" and not is_torchvision_available():
                 raise ValueError(

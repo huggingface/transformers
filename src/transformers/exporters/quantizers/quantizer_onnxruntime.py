@@ -23,8 +23,8 @@ from typing import Any
 
 from ...utils.import_utils import is_onnx_available, is_onnxruntime_available, is_onnxscript_available
 from ..configs import ExportFormat
+from ..utils import onnx_feed
 from .base import CalibrationSet, ExportQuantizer, QuantizationConfigMixin
-from .utils import onnx_feed
 
 
 if is_onnx_available():
@@ -99,7 +99,7 @@ class OnnxRuntimeQuantizer(ExportQuantizer):
     supported_formats = (ExportFormat.ONNX,)
 
     required_packages = ("onnx", "onnx_ir", "onnxruntime")
-    tested_versions = {"onnx": "1.23.0", "onnx_ir": "1.0.0", "onnxruntime": "1.23.2"}
+    tested_versions = {"onnx": "1.23.0", "onnx_ir": "1.0.0", "onnxruntime": "1.29.0"}
     min_versions = {"onnxruntime": "1.21.0"}
 
     def __init__(
@@ -143,7 +143,21 @@ class OnnxRuntimeQuantizer(ExportQuantizer):
             # Load the weights into memory before the temporary directory goes away
             quantized = onnx_ir.load(quantized_path)
             onnx_ir.external_data.load_to_model(quantized)
+            _load_external_tensor_attributes(quantized)
             return quantized
+
+
+def _load_external_tensor_attributes(model: onnx_ir.Model) -> None:
+    """Load the external tensors node attributes hold (the quantized graph's `Constant` values) into memory:
+    `onnx_ir.external_data.load_to_model` loads only the initializers, and a saved model would keep pointing at the
+    file it was loaded from."""
+    for graph in model.graphs():
+        for node in graph:
+            for name, attribute in node.attributes.items():
+                tensor = attribute.value
+                if attribute.type == onnx_ir.AttributeType.TENSOR and isinstance(tensor, onnx_ir.ExternalTensor):
+                    loaded = onnx_ir.Tensor(tensor.numpy(), dtype=tensor.dtype, name=tensor.name)
+                    node.attributes[name] = onnx_ir.AttrTensor(name, loaded)
 
 
 class _FeedReader:

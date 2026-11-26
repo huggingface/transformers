@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -119,7 +119,7 @@ class HunYuanVLTextConfig(PreTrainedConfig):
     """
 
     model_type = "hunyuan_vl_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
 
     vocab_size: int = 290943
     hidden_size: int = 4096
@@ -259,10 +259,9 @@ class HunYuanVLConfig(PreTrainedConfig):
 
     model_type = "hunyuan_vl"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=HunYuanVLVisionConfig),
-        "text_config": SubConfigSpec(config_class=HunYuanVLTextConfig),
+        "vision_config": HunYuanVLVisionConfig,
+        "text_config": HunYuanVLTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 Installa 🤗 Transformers per qualsiasi libreria di deep learning con cui stai lavorando, imposta la tua cache, e opzionalmente configura 🤗 Transformers per l'esecuzione offline.
 
-🤗 Transformers è testato su Python 3.10+ e PyTorch 2.4+. Segui le istruzioni di installazione seguenti per la libreria di deep learning che stai utilizzando:
+🤗 Transformers è testato su Python 3.11+ e PyTorch 2.4+. Segui le istruzioni di installazione seguenti per la libreria di deep learning che stai utilizzando:
 
 * [PyTorch](https://pytorch.org/get-started/locally/) istruzioni di installazione.
 
@@ -97,7 +97,7 @@ cd transformers
 pip install -e .
 ```
 
-Questi comandi collegheranno la cartella in cui è stato clonato il repository e i path delle librerie Python. Python guarderà ora all'interno della cartella clonata, oltre ai normali path delle librerie. Per esempio, se i tuoi pacchetti Python sono installati tipicamente in `~/anaconda3/envs/main/lib/python3.10/site-packages/`, Python cercherà anche nella cartella clonata: `~/transformers/`.
+Questi comandi collegheranno la cartella in cui è stato clonato il repository e i path delle librerie Python. Python guarderà ora all'interno della cartella clonata, oltre ai normali path delle librerie. Per esempio, se i tuoi pacchetti Python sono installati tipicamente in `~/anaconda3/envs/main/lib/python3.11/site-packages/`, Python cercherà anche nella cartella clonata: `~/transformers/`.
 
 <Tip warning={true}>
 

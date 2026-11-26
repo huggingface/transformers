@@ -22,7 +22,7 @@ from typing import Any
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -49,7 +49,6 @@ class T5GemmaModuleConfig(PreTrainedConfig):
     ```"""
 
     model_type = "t5_gemma_module"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -127,10 +126,9 @@ class T5GemmaConfig(PreTrainedConfig):
     ```"""
 
     model_type = "t5gemma"
-    keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs_defaults = {
-        "encoder": SubConfigSpec(config_class=T5GemmaModuleConfig),
-        "decoder": SubConfigSpec(config_class=T5GemmaModuleConfig),
+        "encoder": T5GemmaModuleConfig,
+        "decoder": T5GemmaModuleConfig,
     }
 
     encoder: T5GemmaModuleConfig | dict[Any, Any] | None = None
