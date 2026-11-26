@@ -32,6 +32,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -42,83 +43,60 @@ if is_torch_available():
     import torch
 
 
-class Florence2VisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        num_channels=3,
-        image_size=8,
-        seq_length=13,
-        encoder_seq_length=18,
-        is_training=True,
-        vocab_size=99,
-        max_position_embeddings=64,
-        encoder_layers=1,
-        encoder_ffn_dim=16,
-        decoder_layers=1,
-        decoder_ffn_dim=16,
-        num_attention_heads=1,
-        d_model=16,
-        activation_function="gelu",
-        dropout=0.1,
-        eos_token_id=2,
-        bos_token_id=0,
-        pad_token_id=1,
-        image_token_id=4,
-        depths=[1],
-        patch_size=[7],
-        patch_stride=[4],
-        patch_padding=[3],
-        patch_prenorm=[False],
-        embed_dim=[16],
-        num_heads=[1],
-        num_groups=[1],
-        window_size=12,
-        drop_path_rate=0.1,
-        projection_dim=16,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
-        self.num_hidden_layers = decoder_layers
-        self.hidden_size = d_model
+class Florence2VisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
+    small_config_overrides = {
+        "batch_size": 13,
+        "num_channels": 3,
+        "image_size": 8,
+        "seq_length": 13,
+        "encoder_seq_length": 18,
+        "is_training": True,
         # Language model configs
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.encoder_layers = encoder_layers
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.decoder_layers = decoder_layers
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.num_attention_heads = num_attention_heads
-        self.d_model = d_model
-        self.activation_function = activation_function
-        self.dropout = dropout
-        self.eos_token_id = eos_token_id
-        self.bos_token_id = bos_token_id
-        self.pad_token_id = pad_token_id
-        self.image_token_id = image_token_id
-
+        "vocab_size": 99,
+        "max_position_embeddings": 64,
+        "encoder_layers": 1,
+        "encoder_ffn_dim": 16,
+        "decoder_layers": 1,
+        "decoder_ffn_dim": 16,
+        "num_attention_heads": 1,
+        "d_model": 16,
+        "activation_function": "gelu",
+        "dropout": 0.1,
+        "eos_token_id": 2,
+        "bos_token_id": 0,
+        "pad_token_id": 1,
+        "image_token_id": 4,
         # Vision model configs
-        self.drop_path_rate = drop_path_rate
-        self.patch_size = patch_size
-        self.depths = depths
-        self.patch_stride = patch_stride
-        self.patch_padding = patch_padding
-        self.patch_prenorm = patch_prenorm
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.num_groups = num_groups
-        self.window_size = window_size
-        self.projection_dim = projection_dim
+        "depths": [1],
+        "patch_size": [7],
+        "patch_stride": [4],
+        "patch_padding": [3],
+        "patch_prenorm": [False],
+        "embed_dim": [16],
+        "num_heads": [1],
+        "num_groups": [1],
+        "window_size": 12,
+        "drop_path_rate": 0.1,
+        "projection_dim": 16,
+    }
 
-        self.num_channels = 3
-        self.num_image_tokens = 5
-        self.seq_length = seq_length + self.num_image_tokens
-        self.encoder_seq_length = encoder_seq_length
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["num_hidden_layers"] = values["decoder_layers"]
+        values["hidden_size"] = values["d_model"]
+        values["num_channels"] = 3
+        values["num_image_tokens"] = 5
+        # `seq_length` is the text length; the tester's sequence also holds the image tokens
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        return values
 
     def get_config(self):
         text_config = {
@@ -224,6 +202,8 @@ class Florence2ForConditionalGenerationModelTest(
     """
     Model tester for `Florence2ForConditionalGeneration`.
     """
+
+    model_tester_class = Florence2VisionText2TextModelTester
 
     all_model_classes = (Florence2Model, Florence2ForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (

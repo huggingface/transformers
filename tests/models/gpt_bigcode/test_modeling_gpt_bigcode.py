@@ -20,6 +20,7 @@ from transformers import GPTBigCodeConfig, is_torch_available
 from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -39,61 +40,49 @@ if is_torch_available():
     from transformers.models.gpt_bigcode.modeling_gpt_bigcode import GPTBigCodeAttention
 
 
-class GPTBigCodeModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=14,
-        seq_length=7,
-        is_training=True,
-        use_token_type_ids=True,
-        use_input_mask=True,
-        use_labels=True,
-        use_mc_token_ids=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="relu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        multi_query=True,
-        scope=None,
-    ):
+class GPTBigCodeModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 14,
+        "seq_length": 7,
+        "is_training": True,
+        "use_token_type_ids": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "use_mc_token_ids": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "relu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "multi_query": True,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_token_type_ids = use_token_type_ids
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.use_mc_token_ids = use_mc_token_ids
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = None
-        self.bos_token_id = vocab_size - 1
-        self.eos_token_id = vocab_size - 2
-        self.pad_token_id = vocab_size - 3
-        self.multi_query = multi_query
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # `scope` was always reset to None, whatever the caller passed
+        values["scope"] = None
+        values["bos_token_id"] = values["vocab_size"] - 1
+        values["eos_token_id"] = values["vocab_size"] - 2
+        values["pad_token_id"] = values["vocab_size"] - 3
+        return values
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -373,6 +362,8 @@ class GPTBigCodeModelTester:
 
 @require_torch
 class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = GPTBigCodeModelTester
+
     # TODO: Update the tests to use valid pretrained models.
     all_model_classes = (
         (
@@ -397,8 +388,6 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     )
     test_missing_keys = False
 
-    multi_query = True
-
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -406,7 +395,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = GPTBigCodeModelTester(self, multi_query=self.multi_query)
+        self.model_tester = self.model_tester_class(self)
         self.config_tester = ConfigTester(self, config_class=GPTBigCodeConfig, n_embd=37)
 
     def tearDown(self):
@@ -478,10 +467,38 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         self.model_tester.create_and_check_gpt_bigcode_weight_initialization(*config_and_inputs)
 
 
+class GPTBigCodeMHAModelTester(GPTBigCodeModelTester):
+    small_config_overrides = {
+        "batch_size": 14,
+        "seq_length": 7,
+        "is_training": True,
+        "use_token_type_ids": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "use_mc_token_ids": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "relu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "multi_query": False,
+        "scope": None,
+    }
+
+
 @require_torch
 class GPTBigCodeMHAModelTest(GPTBigCodeModelTest):
     # `parameterized_class` breaks with mixins, so we use inheritance instead
-    multi_query = False
+    model_tester_class = GPTBigCodeMHAModelTester
 
 
 @slow

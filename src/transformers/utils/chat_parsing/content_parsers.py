@@ -75,8 +75,8 @@ def _json(text: str, args: dict) -> Any:
         # The first alternative swallows whole quoted strings (escapes included) and puts them back untouched,
         # so that key-like text inside a string value is never rewritten. Only the second one is a bare key.
         working = re.sub(
-            r'"(?:\\.|[^"\\])*"|(?<=[{,])(\w+):',
-            lambda m: m.group(0) if m.group(1) is None else f'"{m.group(1)}":',
+            r'"(?:\\.|[^"\\])*"|(?<=[{,])(\s*)(\w+)(\s*):',
+            lambda m: m.group(0) if m.group(2) is None else f'{m.group(1)}"{m.group(2)}"{m.group(3)}:',
             working,
         )
 
@@ -312,6 +312,12 @@ CONTENT_PARSERS = {
 # flagged `dirty=True` while the parsed value is delivered in `region_close`.
 STREAMABLE_PARSERS = frozenset({"text", "int", "float", "bool"})
 
+# Structured parsers whose syntax already distinguishes quoted strings from typed
+# literals (numbers, booleans, null/None, lists, dicts). Schema-driven string
+# coercion in `ResponseParser` leaves parameters allowing `string` untouched,
+# while still coercing quoted strings for non-string parameter schemas.
+TYPED_STRUCTURED_PARSERS = frozenset({"json", "python-call-list"})
+
 
 def parse_content(text: str, name: str, args: dict) -> Any:
     return CONTENT_PARSERS[name](text, args)
@@ -401,6 +407,7 @@ def process_field(body: str, field, captures: dict) -> Any:
 __all__ = [
     "CONTENT_PARSERS",
     "STREAMABLE_PARSERS",
+    "TYPED_STRUCTURED_PARSERS",
     "parse_content",
     "process_field",
     "validate_transform_strings",

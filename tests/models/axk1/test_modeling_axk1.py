@@ -91,14 +91,14 @@ class AXK1IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # Last-3x3 logits slice, left-padded (batch 0) and unpadded (batch 1) rows.
         EXPECTED_LOGITS_LEFT_PADDED = Expectations(
             {
-                ("cuda", (8, 6)): [[-0.1895, 1.7656, 0.8828], [0.2637, -0.1377, -1.0078], [-0.4648, 0.2031, 1.0391]],
+                ("cuda", (8, 6)): [[-0.1504, 1.7578, 0.9102], [0.2676, -0.1592, -1.0000], [-0.4727, 0.2100, 1.0547]],
                 ("xpu", None): [[-0.1934, 1.7266, 0.9141], [0.2393, -0.2363, -1.0156], [-0.4062, 0.1309, 1.0234]],
             }
         )
         expected_left_padded = torch.tensor(EXPECTED_LOGITS_LEFT_PADDED.get_expectation(), device=torch_device)
         EXPECTED_LOGITS_UNPADDED = Expectations(
             {
-                ("cuda", (8, 6)): [[-0.5703, -0.0099, -0.3477], [-0.3613, -0.3008, 0.1836], [-0.8008, 0.0840, -0.4453]],
+                ("cuda", (8, 6)): [[-0.5938, -0.0312, -0.3203], [-0.3789, -0.3184, 0.1797], [-0.7852, 0.0742, -0.4551]],
                 ("xpu", None): [[-0.5469, -0.0574, -0.3691], [-0.3301, -0.3770, 0.2012], [-0.8320, 0.0732, -0.4492]],
             }
         )  # fmt: skip

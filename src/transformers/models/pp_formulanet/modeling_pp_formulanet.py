@@ -706,7 +706,7 @@ class PPFormulaNetDecoderLayer(GradientCheckpointingLayer):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache", expose_in_signature=True)
     def forward(
         self,
         hidden_states: torch.Tensor,

@@ -1508,6 +1508,20 @@ class ResponseEventStreamTest(unittest.TestCase):
             {"text": "note,warning: hot", "nested": {"n": 1}},
         )
 
+    def test_unquoted_keys_allows_whitespace_around_keys(self):
+        """A Javascript-style object literal usually has a space after each comma, and may be spread over
+        several lines. `unquoted_keys` must quote those keys too, not only keys glued to `{` or `,`."""
+        args = {"unquoted_keys": True}
+        expected = {"city": "London", "days": 3, "filter": {"tags": ["a, b: c"], "strict": True}}
+        texts = [
+            '{city: "London", days: 3, filter: {tags: ["a, b: c"], strict: true}}',
+            '{ city : "London" , days : 3 , filter : { tags : ["a, b: c"] , strict : true } }',
+            '{\n  city: "London",\n  days: 3,\n  filter: {\n    tags: ["a, b: c"],\n    strict: true\n  }\n}',
+        ]
+        for text in texts:
+            with self.subTest(text=text):
+                self.assertEqual(parse_content(text, "json", args), expected)
+
 
 class PrefixAndTruncationTest(unittest.TestCase):
     def test_prefix_lands_inside_explicit_region(self):
@@ -2092,6 +2106,69 @@ class ToolArgCoercionTest(unittest.TestCase):
         with_tools = parse_response(model_out, cohere_template, prefix="", tools=_SET_ALARM_TOOLS)
         self.assertEqual(without, with_tools)
         self.assertEqual(_first_tool_args(with_tools), {"hour": 7, "enabled": True})
+
+    def test_tools_typed_parsers_preserve_string_schemas_and_coerce_non_string(self):
+        tools = _set_alarm_tools(
+            hour={"type": "integer"},
+            msg={"anyOf": [{"type": "string"}, {"type": "null"}]},
+            alt={"type": "string", "nullable": True},
+            code={"anyOf": [{"type": "string"}, {"type": "integer"}]},
+            flag={"anyOf": [{"type": "string"}, {"type": "boolean"}]},
+            items={"anyOf": [{"type": "string"}, {"type": "array"}]},
+            obj={"anyOf": [{"type": "string"}, {"type": "object"}]},
+        )
+        expected = {
+            "hour": 7,
+            "msg": "null",
+            "alt": "None",
+            "code": "0123",
+            "flag": "true",
+            "items": "[1, 2]",
+            "obj": "{}",
+        }
+        smollm_out = (
+            '<tool_call>{"name": "set_alarm", "arguments": '
+            '{"hour": "7", "msg": "null", "alt": "None", "code": "0123", '
+            '"flag": "true", "items": "[1, 2]", "obj": "{}"}}</tool_call>'
+        )
+        json_args = _first_tool_args(parse_response(smollm_out, smollm_template, prefix="", tools=tools))
+        self.assertEqual(json_args, expected)
+        self.assertIs(type(json_args["hour"]), int)
+
+        stream = ResponseParser(smollm_template, prefix="", tools=tools)
+        events = stream.feed(smollm_out[:25]) + stream.feed(smollm_out[25:])
+        _, tail_events = stream.finalize()
+        closes = [e for e in events + tail_events if e["type"] == "region_close" and e["field"] == "tool_calls"]
+        self.assertEqual(len(closes), 1)
+        self.assertEqual(closes[0]["value"]["function"]["arguments"], expected)
+
+        gemma_out = (
+            '<|tool_call>call:set_alarm{hour:<|"|>7<|"|>, msg:<|"|>null<|"|>, alt:<|"|>None<|"|>, '
+            'code:<|"|>0123<|"|>, flag:<|"|>true<|"|>, items:<|"|>[1, 2]<|"|>, obj:<|"|>{}<|"|>}<tool_call|>'
+        )
+        gemma_args = _first_tool_args(parse_response(gemma_out, gemma4_template, prefix="", tools=tools))
+        self.assertEqual(gemma_args, expected)
+        self.assertIs(type(gemma_args["hour"]), int)
+
+        lfm2_out = (
+            '<|tool_call_start|>[set_alarm(hour="7", msg="null", alt="None", code="0123", '
+            'flag="true", items="[1, 2]", obj="{}"), '
+            "set_alarm(hour=7, msg=None, alt=None, code=123, flag=True, items=[1, 2], obj={})]"
+            "<|tool_call_end|>"
+        )
+        lfm2_parsed = parse_response(lfm2_out, lfm2_template, prefix="", tools=tools)
+        str_args = lfm2_parsed["tool_calls"][0]["function"]["arguments"]
+        typed_args = lfm2_parsed["tool_calls"][1]["function"]["arguments"]
+        self.assertEqual(str_args, expected)
+        self.assertIs(type(str_args["hour"]), int)
+        for key in ("msg", "alt", "code", "flag", "items", "obj"):
+            self.assertIsInstance(str_args[key], str)
+        self.assertEqual(
+            typed_args,
+            {"hour": 7, "msg": None, "alt": None, "code": 123, "flag": True, "items": [1, 2], "obj": {}},
+        )
+        self.assertIs(type(typed_args["code"]), int)
+        self.assertIs(type(typed_args["flag"]), bool)
 
 
 if __name__ == "__main__":

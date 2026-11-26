@@ -146,13 +146,15 @@ class PagedAttentionCache:
         # If the KV heads are TP'ed, each KV head is dispatched to a different GPU, so the effective number of KV heads
         # per GPU is simply divided by the TP size. We need to solve this before we can construct the cache allocators.
         num_key_value_heads = find_num_key_value_heads(config)
+        kv_tp_size = 1
         if distributed_helper.tp_size > 1 and distributed_helper.are_kv_heads_tp_ed():
             if num_key_value_heads % distributed_helper.tp_size != 0:
                 raise ValueError(
-                    f"Number of key value heads {num_key_value_heads} must be divisible by tensor parallel size"
+                    f"Number of key value heads {num_key_value_heads} must be divisible by tensor parallel size "
                     f"{distributed_helper.tp_size}."
                 )
-            num_key_value_heads //= distributed_helper.tp_size
+            kv_tp_size = distributed_helper.tp_size
+            num_key_value_heads //= kv_tp_size
 
         # Construct the necessary cache allocator for each attention type
         ca_kwargs = {
@@ -194,6 +196,7 @@ class PagedAttentionCache:
             attn_types=list(self.cache_allocators.keys()),
             model_supports_logits_to_keep=model_supports_logits_to_keep,
             do_sample=do_sample,
+            kv_tp_size=kv_tp_size,
         ).infer_max_batch_tokens_and_num_sectors()
 
         # For TP, align max_batch_tokens and num_blocks to the minimal value across the TP group
@@ -556,9 +559,11 @@ class PagedAttentionMemoryHandler:
         attn_types: list[str],
         model_supports_logits_to_keep: bool = False,
         do_sample: bool = False,
+        kv_tp_size: int = 1,
     ) -> None:
         """Initialize the memory handler with the model configuration, the continuous batching configuration, the data
-        type of the activation and the cache, and the sector geometry computed by the PagedAttentionCache."""
+        type of the activation and the cache, the sector geometry computed by the PagedAttentionCache, and the tensor
+        parallel size the attention heads are sharded over (1 when they are not)."""
         self.config = config
         self.cb_config = cb_config
         self.cache_dtype = dtype
@@ -572,15 +577,18 @@ class PagedAttentionMemoryHandler:
         self.trash_bytes = 2 * bytes_per_sector  # the two trash sectors at the start of the cache tensor
         self.num_groups = len(attn_types)
 
-        # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=len(set(attn_types))`
+        # Under tensor parallelism each rank holds 1 / tp_size of the heads, in the cache and in the activations.
+        # TODO: Add `q_tp_size` for Q heads only. Current code is ok because if KV heads use TP, so do Q heads.
+        self.num_attention_heads = self.config.num_attention_heads // kv_tp_size
+        self.num_key_value_heads = find_num_key_value_heads(self.config) // kv_tp_size
         # Flash reads GQA heads natively, but eager/sdpa repeat KV heads to num_attention_heads while V is in VRAM
-        num_key_value_heads = find_num_key_value_heads(self.config)
         if is_flash_attention_requested(self.config):
             self.num_attention_masks = 0
-            self.kv_heads_at_peak = 2 * num_key_value_heads
+            self.kv_heads_at_peak = 2 * self.num_key_value_heads
         else:
+            # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=len(set(attn_types))`
             self.num_attention_masks = 2 if SLIDING_ATTENTION in attn_types else 1
-            self.kv_heads_at_peak = 2 * self.config.num_attention_heads + num_key_value_heads  # repeated KV + V
+            self.kv_heads_at_peak = 2 * self.num_attention_heads + self.num_key_value_heads  # repeated KV + V
 
         if cb_config.max_blocks_per_request is None:
             self.max_blocks_per_request = cb_config.fallback_max_blocks_per_request
@@ -609,8 +617,8 @@ class PagedAttentionMemoryHandler:
             lm_head_peak = self.config.hidden_size * a + self.config.vocab_size * torch.float32.itemsize
         attention_peak = a * (
             self.config.hidden_size  # hidden states, shape [M, hidden_size]
-            + self.config.num_attention_heads * head_dim  # query projection, shape [M, num_heads * head_dim]
-            + 2 * find_num_key_value_heads(self.config) * head_dim  # new K and V states
+            + self.num_attention_heads * head_dim  # query projection, shape [M, num_heads * head_dim]
+            + 2 * self.num_key_value_heads * head_dim  # new K and V states
             + self.kv_heads_at_peak * head_dim  # their copy in the K and V read back from the cache # TODO: optimize
         )
         io_bytes = self.io_multiplier * (
