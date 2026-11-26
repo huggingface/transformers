@@ -16,10 +16,11 @@ it saves the graph."""
 
 from __future__ import annotations
 
+import sys
 from typing import TYPE_CHECKING
 
 from ..utils.import_utils import is_torch_available
-from .mlx_ops import rms_norm, rope, swiglu
+from .mlx_ops import rms_norm, rope, slice_write, swiglu
 
 
 if is_torch_available():
@@ -35,11 +36,50 @@ def fuse_for_mlx(graph: Graph) -> None:
     # Checks the runner ignores, which would keep the nodes a fusion replaces alive
     for node in [node for node in graph.nodes if node.target == aten._assert_tensor_metadata.default]:
         graph.erase_node(node)
+    _drop_full_slices(graph)
+    _fuse_cache_writes(graph)
     _fuse_rms_norm(graph)
     _fuse_swiglu(graph)
     _fuse_rope(graph)
     _drop_repeat_kv(graph)
     graph.eliminate_dead_code()
+
+
+def _drop_full_slices(graph: Graph) -> None:
+    """`x[..., 0:end]` over all of an axis (`end` past its size) as `x`: a no-op the other fusions would not see past."""
+    aten = torch.ops.aten
+    for node in [node for node in graph.nodes if node.target == aten.slice.Tensor]:
+        x, dim, start, end, step = (list(node.args) + [0, None, None, 1][len(node.args) - 1 :])[:5]
+        if start not in (None, 0) or step != 1:
+            continue
+        if end is None or (isinstance(end, int) and end >= sys.maxsize):
+            node.replace_all_uses_with(x)
+
+
+def _fuse_cache_writes(graph: Graph) -> None:
+    """`x[:, :, arange(0, n) + start] = values` (a static cache write at consecutive positions) as one
+    `mx.slice_update`, rather than a copy of `x` and a scatter."""
+    aten = torch.ops.aten
+    for write in [node for node in graph.nodes if node.target == aten.index_put.default]:
+        x, indices, values = write.args[:3]
+        if (write.args[3:] or [False])[0] or not isinstance(values, torch.fx.Node):
+            continue
+        axes = [axis for axis, index in enumerate(indices) if index is not None]
+        if len(axes) != 1:
+            continue
+        positions = indices[axes[0]]
+        if positions.target != aten.add.Tensor:
+            continue
+        steps = next((a for a in positions.args if getattr(a, "target", None) == aten.arange.start_step), None)
+        start = next((a for a in positions.args if a is not steps), None)
+        if steps is None or steps.args[0] != 0 or (steps.args[2:] or [1])[0] != 1:
+            continue
+        if not isinstance(start, torch.fx.Node) or start.meta["val"].numel() != 1:
+            continue
+        with graph.inserting_before(write):
+            fused = graph.call_function(slice_write, (x, values, start, axes[0]))
+        fused.meta = dict(write.meta)
+        write.replace_all_uses_with(fused)
 
 
 def _source(node: Node) -> Node:

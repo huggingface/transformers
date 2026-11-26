@@ -231,6 +231,12 @@ def _rms_norm(x, normalized_shape, weight=None, eps=None):
     return out if weight is None else out * weight
 
 
+def slice_write(x, values, start, axis):
+    """`x` with `values` written from `start` on `axis`: `mx.slice_update`, which `mlx_fusions` writes in place of an
+    `index_put` at consecutive positions (a static cache write)."""
+    return mx.slice_update(x, values, start.reshape(1).astype(mx.int32), (axis,))
+
+
 def rope(x, positions, inv_freq, scaling):
     """`mx.fast.rope`, which `mlx_fusions` writes in place of a rotary embedding's ops. Each token is its own row,
     rotated at its own position (an offset per row): exact for any positions, padded or packed ones included."""
@@ -520,6 +526,7 @@ if is_mlx_available():
         "transformers.exporters.mlx_ops.rms_norm": rms_norm,
         "transformers.exporters.mlx_ops.swiglu": swiglu,
         "transformers.exporters.mlx_ops.rope": rope,
+        "transformers.exporters.mlx_ops.slice_write": slice_write,
     }
 
 
