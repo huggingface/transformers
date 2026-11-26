@@ -89,9 +89,7 @@ class MiniCPM5MoeConfig(Glm4MoeConfig):
 
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | list[int] | None = field(
-        default_factory=lambda: [1, 130073]
-    )
+    eos_token_id: int | list[int] | None = field(default_factory=lambda: [1, 130073])
 
     mlp_layer_types: list[str] | None = None
     n_routed_experts: int = 160

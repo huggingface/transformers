@@ -309,6 +309,11 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "computation stays symbolic under dynamic so ORT can't pre-validate it. The other "
             "three Reformer-local-attn ONNX variants pass."
         ),
+        "MiniCPM5MoeForCausalLM": (
+            "ONNX Runtime rejects the exported `com.microsoft.GroupQueryAttention` "
+            "node with `InvalidGraph` under static-shape generation, "
+            "with both dynamic and static KV caches."
+        ),
     },
     # ONNX, dynamic-shape only.
     "onnx.dynamic": {

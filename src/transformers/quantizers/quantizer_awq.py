@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING
 from packaging import version
 
 from .base import HfQuantizer
-from .quantizers_utils import should_convert_module
 
 
 if TYPE_CHECKING:
