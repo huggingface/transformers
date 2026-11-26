@@ -46,17 +46,17 @@ class Phi3VVisionText2TextModelTester(VLMModelTester):
     config_class = Phi3VConfig
     conditional_generation_class = Phi3VForConditionalGeneration
 
-    # One 16x32 image: a global crop and 1x2 crops of 16x16, padded to 4 crops.
+    # One 16x32 image per sample: a global crop and 1x2 crops of 16x16.
     # Each crop has 4x4 patches, merged to 2x2 tokens: 1 * 2 * (2 * 2 + 1) + 1 + 2 * (2 + 1) = 17 tokens
-    small_config_overrides = {"image_size": 16, "num_crops": 4, "num_image_tokens": 17}
+    small_config_overrides = {"image_size": 16, "num_image_tokens": 17}
 
     def create_pixel_values(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
-        return floats_tensor([batch_size, self.num_crops, self.num_channels, self.image_size, self.image_size])
+        return floats_tensor([3 * batch_size, self.num_channels, self.image_size, self.image_size])
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
-        return {"image_sizes": torch.tensor([[self.image_size, 2 * self.image_size]] * batch_size)}
+        return {"image_sizes": torch.tensor([[1, 2]] * batch_size)}
 
 
 @require_torch
@@ -78,7 +78,8 @@ class Phi3VForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase):
 
     def test_longrope_generation_crossing_boundary(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        inputs = {key: value[:1] for key, value in inputs.items()}
+        # The first sample, whose image is a global crop and 1x2 crops
+        inputs = {key: value[: 3 if key == "pixel_values" else 1] for key, value in inputs.items()}
         prompt_length = inputs["input_ids"].shape[1]
         text_config = config.text_config
         half_head_dim = text_config.hidden_size // text_config.num_attention_heads // 2

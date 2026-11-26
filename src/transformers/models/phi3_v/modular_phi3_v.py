@@ -16,7 +16,6 @@ import math
 from dataclasses import fields
 
 import torch
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
 from torchvision.transforms.v2 import functional as tvF
@@ -27,6 +26,7 @@ from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import GenerationMixin
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -147,33 +147,30 @@ class Phi3VModel(LlavaNextModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_crops, channels, height, width)`)
-            The global image followed by the crops of each image, padded to the largest number of crops.
+        pixel_values (`torch.Tensor` of shape `(num_crops, channels, height, width)`)
+            The global image followed by the crops of each image, for all images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
-            Size (height, width) of each image after resizing and padding to a multiple of the crop size.
+            Number of rows and columns of crops of each image.
         vision_feature_layer (`int`, *optional*):
             The index of the layer to select the vision feature.
         vision_feature_select_strategy (`str`, *optional*):
             The feature selection strategy used to select the vision feature from the vision backbone.
             `"default"` removes the CLS token.
         """
-        crop_size = self.config.vision_config.image_size
-        grids = [(height // crop_size, width // crop_size) for height, width in image_sizes.tolist()]
-        num_crops = [rows * cols + 1 for rows, cols in grids]
-        pixel_values = torch.cat([pixels[:num] for pixels, num in zip(pixel_values, num_crops)])
-
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         image_features = image_outputs.hidden_states[vision_feature_layer]
         if vision_feature_select_strategy == "default":
             image_features = image_features[:, 1:]
 
-        # Merge each 2x2 block of patches into one token: (crops, side, side, 4 * hidden_size)
-        side = crop_size // self.config.vision_config.patch_size // 2
+        # Merge each 2x2 block of patches into one token and project: (crops, side, side, text hidden size)
+        side = self.config.vision_config.image_size // self.config.vision_config.patch_size // 2
         image_features = image_features.view(-1, side, 2, side, 2, image_features.shape[-1])
-        image_features = image_features.permute(0, 1, 3, 2, 4, 5).flatten(3)
-        newline = self.image_newline[0].to(image_features)
-        separator = self.image_separator[0].to(image_features)
+        image_features = self.multi_modal_projector(image_features.permute(0, 1, 3, 2, 4, 5).flatten(3))
+        newline = self.multi_modal_projector(self.image_newline[0].to(image_features))
+        separator = self.multi_modal_projector(self.image_separator[0].to(image_features))
 
+        grids = image_sizes.tolist()
+        num_crops = [rows * cols + 1 for rows, cols in grids]
         packed_features = []
         for features, (rows, cols) in zip(torch.split(image_features, num_crops), grids):
             sub_image = (
@@ -181,8 +178,7 @@ class Phi3VModel(LlavaNextModel):
             )
             sub_image = torch.cat([sub_image, newline.expand(rows * side, -1, -1)], dim=1)
             global_image = torch.cat([features[0], newline.expand(side, -1, -1)], dim=1)
-            image_tokens = torch.cat([sub_image.flatten(0, 1), separator, global_image.flatten(0, 1)])
-            packed_features.append(self.multi_modal_projector(image_tokens))
+            packed_features.append(torch.cat([sub_image.flatten(0, 1), separator, global_image.flatten(0, 1)]))
         image_outputs.pooler_output = packed_features
 
         return image_outputs
@@ -196,10 +192,10 @@ class Phi3VModel(LlavaNextModel):
 class Phi3VForConditionalGeneration(LlavaNextForConditionalGeneration):
     def get_image_features(self, **super_kwargs):
         r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_crops, channels, height, width)`)
-            The global image followed by the crops of each image, padded to the largest number of crops.
+        pixel_values (`torch.Tensor` of shape `(num_crops, channels, height, width)`)
+            The global image followed by the crops of each image, for all images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
-            Size (height, width) of each image after resizing and padding to a multiple of the crop size.
+            Number of rows and columns of crops of each image.
         vision_feature_layer (`int`, *optional*):
             The index of the layer to select the vision feature.
         vision_feature_select_strategy (`str`, *optional*):
@@ -264,6 +260,11 @@ class Phi3VImageProcessor(TorchvisionBackend):
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Phi3VImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
+    def _validate_preprocess_kwargs(self, **kwargs):
+        if kwargs["size"].height != kwargs["size"].width:
+            raise ValueError(f"Phi-3-vision crops are square, but got size {kwargs['size']}.")
+        super()._validate_preprocess_kwargs(**kwargs)
+
     def get_resized_size(self, height: int, width: int, num_crops: int, crop_size: int) -> tuple[int, int]:
         """Largest size with the same aspect ratio whose long side is a multiple of `crop_size` that fits `num_crops`."""
         long_side, short_side = max(height, width), min(height, width)
@@ -286,36 +287,38 @@ class Phi3VImageProcessor(TorchvisionBackend):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         num_crops: int,
+        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         crop_size = size.height
-        processed_images = []
-        image_sizes = []
-        for image in images:
-            height, width = self.get_resized_size(*image.shape[-2:], num_crops, crop_size)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        image_sizes_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            height, width = self.get_resized_size(*stacked_images.shape[-2:], num_crops, crop_size)
             # Bilinear as in the original processor; `resample` is used for the global image
-            image = tvF.resize(image, [height, width], interpolation=tvF.InterpolationMode.BILINEAR)
+            stacked_images = tvF.resize(stacked_images, [height, width], interpolation=tvF.InterpolationMode.BILINEAR)
             # Pad the short side with white to a multiple of the crop size, centered
-            pad_height = math.ceil(height / crop_size) * crop_size - height
-            pad_width = math.ceil(width / crop_size) * crop_size - width
+            rows, cols = math.ceil(height / crop_size), math.ceil(width / crop_size)
+            pad_height, pad_width = rows * crop_size - height, cols * crop_size - width
             padding = [pad_width // 2, pad_height // 2, pad_width - pad_width // 2, pad_height - pad_height // 2]
-            image = tvF.pad(image, padding, fill=255)
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
+            stacked_images = tvF.pad(stacked_images, padding, fill=255)
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
 
-            global_image = self.resize(image, size, resample=resample, antialias=False)
-            height, width = image.shape[-2:]
-            crops = image.view(-1, height // crop_size, crop_size, width // crop_size, crop_size)
-            crops = crops.permute(1, 3, 0, 2, 4).flatten(0, 1)
-            processed_images.append(torch.cat([global_image[None], crops]))
-            image_sizes.append([height, width])
+            global_images = self.resize(stacked_images, size, resample=resample, antialias=False)
+            crops = stacked_images.unflatten(-1, (cols, crop_size)).unflatten(-3, (rows, crop_size))
+            crops = crops.permute(0, 2, 4, 1, 3, 5).flatten(1, 2)
+            processed_images_grouped[shape] = torch.cat([global_images[:, None], crops], dim=1)
+            image_sizes_grouped[shape] = torch.tensor([[rows, cols]] * len(stacked_images))
 
-        max_crops = max(len(crops) for crops in processed_images)
-        pixel_values = torch.stack(
-            [F.pad(crops, (0, 0, 0, 0, 0, 0, 0, max_crops - len(crops))) for crops in processed_images]
-        )
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        image_sizes = reorder_images(image_sizes_grouped, grouped_images_index)
         return BatchFeature(
-            data={"pixel_values": pixel_values, "image_sizes": image_sizes}, tensor_type=return_tensors
+            data={"pixel_values": torch.cat(processed_images), "image_sizes": torch.stack(image_sizes)},
+            tensor_type=return_tensors,
         )
 
 
@@ -326,15 +329,14 @@ class Phi3VProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
-    def _get_num_image_tokens(self, height: int, width: int) -> int:
-        crop_size = self.image_processor.size["height"]
-        rows, cols = math.ceil(height / crop_size), math.ceil(width / crop_size)
+    def _get_num_image_tokens(self, rows: int, cols: int, crop_size: int) -> int:
         side = crop_size // 28  # 14x14 patches, merged 2x2
         # Each row of crops and of the global image ends with a newline, and a separator precedes the global image
         return rows * side * (cols * side + 1) + 1 + side * (side + 1)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
-        num_image_tokens = self._get_num_image_tokens(*image_inputs["image_sizes"][image_idx])
+        rows, cols = image_inputs["image_sizes"][image_idx].tolist()
+        num_image_tokens = self._get_num_image_tokens(rows, cols, image_inputs["pixel_values"].shape[-1])
         # The original processor tokenized the text after each image separately, starting it with BOS
         return self.image_token * num_image_tokens + self.tokenizer.bos_token
 
@@ -354,12 +356,14 @@ class Phi3VProcessor(ProcessorMixin):
         if image_sizes is not None:
             images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
             num_crops = images_kwargs.get("num_crops", self.image_processor.num_crops)
-            crop_size = self.image_processor.size["height"]
-            num_image_tokens = [
-                self._get_num_image_tokens(*self.image_processor.get_resized_size(*image_size, num_crops, crop_size))
-                for image_size in image_sizes
-            ]
-            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": [1] * len(image_sizes)})
+            crop_size = images_kwargs.get("size", self.image_processor.size)["height"]
+            num_image_tokens, num_image_patches = [], []
+            for image_size in image_sizes:
+                height, width = self.image_processor.get_resized_size(*image_size, num_crops, crop_size)
+                rows, cols = math.ceil(height / crop_size), math.ceil(width / crop_size)
+                num_image_tokens.append(self._get_num_image_tokens(rows, cols, crop_size))
+                num_image_patches.append(rows * cols + 1)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
         return MultiModalData(**vision_data)
 
 

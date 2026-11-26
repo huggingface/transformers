@@ -14,15 +14,20 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers import AutoTokenizer
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
     from transformers import Phi3VProcessor
+
+if is_torch_available():
+    import torch
 
 
 @require_vision
@@ -58,3 +63,19 @@ class Phi3VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(num_image_tokens, 313)
         start = input_ids.index(processor.image_token_id)
         self.assertEqual(input_ids[start + num_image_tokens], processor.tokenizer.bos_token_id)
+
+    # Overwritten: the common test expects one row of `pixel_values` per image, but the crops of all images are packed
+    @parameterized.expand([1, 2])
+    def test_apply_chat_template_image(self, batch_size):
+        processor = self.get_processor()
+        image = self.prepare_images_inputs()
+        content = [{"type": "image", "image": image}, {"type": "text", "text": "What is shown?"}]
+        messages = [[{"role": "user", "content": content}]] * batch_size
+
+        inputs = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        )
+        prompts = processor.apply_chat_template(messages, add_generation_prompt=True)
+        expected = processor(text=prompts, images=[image] * batch_size, return_tensors="pt")
+        for key in ("input_ids", "pixel_values", "image_sizes"):
+            torch.testing.assert_close(inputs[key], expected[key])

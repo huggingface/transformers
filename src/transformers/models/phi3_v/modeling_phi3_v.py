@@ -134,33 +134,30 @@ class Phi3VModel(Phi3VPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_crops, channels, height, width)`)
-            The global image followed by the crops of each image, padded to the largest number of crops.
+        pixel_values (`torch.Tensor` of shape `(num_crops, channels, height, width)`)
+            The global image followed by the crops of each image, for all images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
-            Size (height, width) of each image after resizing and padding to a multiple of the crop size.
+            Number of rows and columns of crops of each image.
         vision_feature_layer (`int`, *optional*):
             The index of the layer to select the vision feature.
         vision_feature_select_strategy (`str`, *optional*):
             The feature selection strategy used to select the vision feature from the vision backbone.
             `"default"` removes the CLS token.
         """
-        crop_size = self.config.vision_config.image_size
-        grids = [(height // crop_size, width // crop_size) for height, width in image_sizes.tolist()]
-        num_crops = [rows * cols + 1 for rows, cols in grids]
-        pixel_values = torch.cat([pixels[:num] for pixels, num in zip(pixel_values, num_crops)])
-
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         image_features = image_outputs.hidden_states[vision_feature_layer]
         if vision_feature_select_strategy == "default":
             image_features = image_features[:, 1:]
 
-        # Merge each 2x2 block of patches into one token: (crops, side, side, 4 * hidden_size)
-        side = crop_size // self.config.vision_config.patch_size // 2
+        # Merge each 2x2 block of patches into one token and project: (crops, side, side, text hidden size)
+        side = self.config.vision_config.image_size // self.config.vision_config.patch_size // 2
         image_features = image_features.view(-1, side, 2, side, 2, image_features.shape[-1])
-        image_features = image_features.permute(0, 1, 3, 2, 4, 5).flatten(3)
-        newline = self.image_newline[0].to(image_features)
-        separator = self.image_separator[0].to(image_features)
+        image_features = self.multi_modal_projector(image_features.permute(0, 1, 3, 2, 4, 5).flatten(3))
+        newline = self.multi_modal_projector(self.image_newline[0].to(image_features))
+        separator = self.multi_modal_projector(self.image_separator[0].to(image_features))
 
+        grids = image_sizes.tolist()
+        num_crops = [rows * cols + 1 for rows, cols in grids]
         packed_features = []
         for features, (rows, cols) in zip(torch.split(image_features, num_crops), grids):
             sub_image = (
@@ -168,8 +165,7 @@ class Phi3VModel(Phi3VPreTrainedModel):
             )
             sub_image = torch.cat([sub_image, newline.expand(rows * side, -1, -1)], dim=1)
             global_image = torch.cat([features[0], newline.expand(side, -1, -1)], dim=1)
-            image_tokens = torch.cat([sub_image.flatten(0, 1), separator, global_image.flatten(0, 1)])
-            packed_features.append(self.multi_modal_projector(image_tokens))
+            packed_features.append(torch.cat([sub_image.flatten(0, 1), separator, global_image.flatten(0, 1)]))
         image_outputs.pooler_output = packed_features
 
         return image_outputs
@@ -304,10 +300,10 @@ class Phi3VForConditionalGeneration(Phi3VPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_crops, channels, height, width)`)
-            The global image followed by the crops of each image, padded to the largest number of crops.
+        pixel_values (`torch.Tensor` of shape `(num_crops, channels, height, width)`)
+            The global image followed by the crops of each image, for all images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
-            Size (height, width) of each image after resizing and padding to a multiple of the crop size.
+            Number of rows and columns of crops of each image.
         vision_feature_layer (`int`, *optional*):
             The index of the layer to select the vision feature.
         vision_feature_select_strategy (`str`, *optional*):

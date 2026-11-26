@@ -31,15 +31,14 @@ class Phi3VProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
-    def _get_num_image_tokens(self, height: int, width: int) -> int:
-        crop_size = self.image_processor.size["height"]
-        rows, cols = math.ceil(height / crop_size), math.ceil(width / crop_size)
+    def _get_num_image_tokens(self, rows: int, cols: int, crop_size: int) -> int:
         side = crop_size // 28  # 14x14 patches, merged 2x2
         # Each row of crops and of the global image ends with a newline, and a separator precedes the global image
         return rows * side * (cols * side + 1) + 1 + side * (side + 1)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
-        num_image_tokens = self._get_num_image_tokens(*image_inputs["image_sizes"][image_idx])
+        rows, cols = image_inputs["image_sizes"][image_idx].tolist()
+        num_image_tokens = self._get_num_image_tokens(rows, cols, image_inputs["pixel_values"].shape[-1])
         # The original processor tokenized the text after each image separately, starting it with BOS
         return self.image_token * num_image_tokens + self.tokenizer.bos_token
 
@@ -59,12 +58,14 @@ class Phi3VProcessor(ProcessorMixin):
         if image_sizes is not None:
             images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
             num_crops = images_kwargs.get("num_crops", self.image_processor.num_crops)
-            crop_size = self.image_processor.size["height"]
-            num_image_tokens = [
-                self._get_num_image_tokens(*self.image_processor.get_resized_size(*image_size, num_crops, crop_size))
-                for image_size in image_sizes
-            ]
-            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": [1] * len(image_sizes)})
+            crop_size = images_kwargs.get("size", self.image_processor.size)["height"]
+            num_image_tokens, num_image_patches = [], []
+            for image_size in image_sizes:
+                height, width = self.image_processor.get_resized_size(*image_size, num_crops, crop_size)
+                rows, cols = math.ceil(height / crop_size), math.ceil(width / crop_size)
+                num_image_tokens.append(self._get_num_image_tokens(rows, cols, crop_size))
+                num_image_patches.append(rows * cols + 1)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
         return MultiModalData(**vision_data)
 
 
