@@ -27,6 +27,7 @@ from ..conversion_mapping import get_checkpoint_conversion_mapping, register_che
 from ..modeling_flash_attention_utils import FLASH_ATTN_KERNEL_VERSIONS
 from ..monkey_patching import register_patch_mapping
 from ..utils import ENV_VARS_TRUE_VALUES, logging
+from ..utils.generic import suppress_kernels_logging
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
@@ -1149,6 +1150,8 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
+# Runtimes managing their own state (e.g. vLLM) replace these layers with `kernelize`, they have no kernel on the Hub
+@suppress_kernels_logging(layers={"causal_conv1d_forward", "mamba_scan_forward", "mamba2_scan_forward"})
 def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
     if not is_kernels_available():

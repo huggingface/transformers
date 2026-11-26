@@ -142,6 +142,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "MaskFormerDetrDecoder": "DetrModel",
     "Qwen2_5_VLModel": "Qwen2VLModel",
     "Qwen2_5_VLForConditionalGeneration": "Qwen2VLForConditionalGeneration",
+    "LlavaOnevision15ForConditionalGeneration": "Qwen2VLForConditionalGeneration",
     "qwen2_5_omni_thinker": "Qwen2_5OmniThinkerForConditionalGeneration",
     "Qwen3OmniMoeThinkerModel": "Qwen2_5OmniThinkerModel",
     "Qwen3OmniMoeThinkerForConditionalGeneration": "Qwen2_5OmniThinkerForConditionalGeneration",
@@ -224,6 +225,37 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.self_attn\.to_out\.", ".self_attn.o_proj."),
             WeightRenaming(r"\.mlp\.up_proj\.", ".mlp.fc1."),
             WeightRenaming(r"\.mlp\.down_proj\.", ".mlp.fc2."),
+        ],
+        "LlavaOnevision15Model": [
+            WeightRenaming(r"^model\.(?!language_model\.|visual\.)", "language_model."),
+        ],
+        "llava_onevision1_5_vision": [
+            PrefixChange(prefix_to_remove="visual"),
+            WeightRenaming(r"^class_embedding", r"cls_embeddings\.class_embedding"),
+            WeightRenaming(r"^class_pos_emb", r"cls_embeddings\.class_pos_emb"),
+            WeightRenaming(r"merger\.fc1\.", "merger.linear_fc1."),
+            WeightRenaming(r"merger\.fc2\.", "merger.linear_fc2."),
+            WeightRenaming(r"merger\.mlp\.0\.", "merger.linear_fc1."),
+            WeightRenaming(r"merger\.mlp\.2\.", "merger.linear_fc2."),
+            WeightRenaming(r"merger\.ln_q\.", "merger.norm."),
+        ],
+        "ovis2_5": [
+            WeightRenaming(r"^llm\.model\.", "model.language_model."),
+            WeightRenaming(r"^llm\.lm_head\.", "lm_head."),
+            WeightRenaming(r"^visual_tokenizer\.vit\.vision_model\.embeddings\.", "model.vision_tower.embeddings."),
+            WeightRenaming(r"^visual_tokenizer\.vit\.vision_model\.encoder\.layers\.", "model.vision_tower.layers."),
+            WeightRenaming(
+                r"^visual_tokenizer\.vit\.vision_model\.post_layernorm\.", "model.vision_tower.post_layernorm."
+            ),
+            WeightRenaming(r"^visual_tokenizer\.head\.0\.", "model.multi_modal_projector.visual_tokenizer.linear."),
+            WeightRenaming(r"^visual_tokenizer\.head\.1\.", "model.multi_modal_projector.visual_tokenizer.norm."),
+            # Preserve the conditional wrapper prefix on reverse conversion while allowing the base model to load too.
+            WeightRenaming(r"^vte\.", "model.vte."),
+            WeightConverter(
+                source_patterns=r"vte\.weight",
+                target_patterns="multi_modal_projector.visual_embeddings_table.weight",
+                operations=[Transpose()],
+            ),
         ],
         "inkling_mm_model": [
             WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
@@ -2424,6 +2456,12 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(source_patterns=r"\.input_proj\.", target_patterns=r".eh_proj."),
         WeightRenaming(source_patterns=r"^chain_norm\.", target_patterns=r"shared_post_norm."),
         WeightRenaming(source_patterns=r"layers\.(\d+)\.transformer_block\.", target_patterns=r"layers.\1.mtp_block."),
+        # Ernie 4.5 MoE checkpoint layout: each part of MTP layer `k` is stored as `mtp_{part}.{k}`, and the
+        # base model's final `norm` (renamed below) is the post-norm of the MTP layer
+        WeightRenaming(source_patterns=r"^mtp_block\.(\d+)\.", target_patterns=r"layers.\1.mtp_block."),
+        WeightRenaming(source_patterns=r"^mtp_emb_norm\.(\d+)\.", target_patterns=r"layers.\1.enorm."),
+        WeightRenaming(source_patterns=r"^mtp_hidden_norm\.(\d+)\.", target_patterns=r"layers.\1.hnorm."),
+        WeightRenaming(source_patterns=r"^mtp_linear_proj\.(\d+)\.", target_patterns=r"layers.\1.eh_proj."),
         # Mellum checkpoint layout: single MTP layer with `fc`, `pre_fc_norm_*` and `norm` stored one level up.
         WeightRenaming(
             source_patterns=r"^layers\.(\d+)\.(?!(?:mtp_block|enorm|hnorm|eh_proj|post_norm)\.)",

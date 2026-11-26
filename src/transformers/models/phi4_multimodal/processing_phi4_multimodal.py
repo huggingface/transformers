@@ -16,7 +16,7 @@
 Processor class for Phi4Multimodal
 """
 
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_attr
 
@@ -46,6 +46,32 @@ class Phi4MultimodalProcessor(ProcessorMixin):
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         audio_embed_sizes = audio_inputs["audio_embed_sizes"][audio_idx]
         return self.audio_token * audio_embed_sizes
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            num_image_tokens = [
+                self.image_processor.get_number_of_image_tokens(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            # Each image's crops are stacked into a single row of `image_pixel_values`
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     @property
     def unused_input_names(self) -> list[str]:

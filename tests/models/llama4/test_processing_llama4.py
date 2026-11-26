@@ -23,6 +23,7 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class Llama4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Llama4Processor
+    num_image_tokens_images_kwargs = {"max_patches": 4, "size": {"height": 56, "width": 56}}
     # Tiny processor created with make_tiny_processor.py from "meta-llama/Llama-4-Scout-17B-16E-Instruct"
     tiny_model_id = "hf-internal-testing/tiny-processor-llama4"
 
