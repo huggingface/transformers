@@ -41,7 +41,7 @@ jobs:
       HF_XET_CACHE: /tmp/hf_xet_cache
       HF_METRICS_CACHE: /tmp/hf_metrics_cache
       TEST_ID: tests/models/qwen3_vl_moe/test_modeling_qwen3_vl_moe.py::Qwen3VLMoeModelTest::test_cached_decode_matches_cacheless
-      FLAKE_RUNS: 2500
+      FLAKE_RUNS: 12500
       NUM_WORKERS: 8
     defaults:
       run:
