@@ -27,6 +27,10 @@ The native Transformers architecture is exposed as `BailingHybridForCausalLM` an
 
 Ling 3.1 Flash is distributed in block-wise FP8. Native FP8 execution requires a compatible `kernels` installation.
 
+The checkpoint's `expert_swiglu_limit_list` and `share_expert_swiglu_limit_list` control per-layer clipping in routed
+and shared experts. Positive limits clip the gate after SiLU and bound the up projection symmetrically; zero or
+omitted limits disable clipping.
+
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 

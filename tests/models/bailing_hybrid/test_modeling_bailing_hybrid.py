@@ -20,7 +20,6 @@ from unittest import mock
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
-    cleanup,
     require_kernels,
     require_torch,
     require_torch_accelerator_memory,
@@ -29,6 +28,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -38,7 +38,7 @@ if is_torch_available():
 
     from transformers import BailingHybridConfig, BailingHybridForCausalLM, BailingHybridModel, FineGrainedFP8Config
     from transformers.generation.utils import ALL_CACHE_NAMES
-    from transformers.integrations.finegrained_fp8 import FP8Linear
+    from transformers.integrations.finegrained_fp8 import FP8Experts, FP8Linear
     from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
 
@@ -180,6 +180,32 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
             outputs = lora_model(**self._prepare_for_class(inputs_dict, BailingHybridForCausalLM))
         self.assertEqual(outputs.logits.shape[:2], inputs_dict["input_ids"].shape)
 
+    def test_swiglu_clipping(self):
+        config = self.model_tester.get_config()
+        config.mlp_layer_types = ["sparse"] * config.num_hidden_layers
+        config.expert_swiglu_limit_list = [0, 1.5]
+        config.share_expert_swiglu_limit_list = [2.5, 0]
+        with torch.device("meta"):
+            model = BailingHybridForCausalLM(config)
+
+        gate_up = torch.tensor([[4.0, -4.0, 4.0, -4.0]], device=torch_device)
+        expected = torch.tensor([[15.71222, 0.287779], [2.25, 0.107917]], device=torch_device)
+        for i, layer in enumerate(model.model.layers):
+            torch.testing.assert_close(layer.mlp.experts._apply_gate(gate_up), expected[i : i + 1])
+            shared = layer.mlp.shared_experts.to_empty(device=torch_device)
+            nn.init.constant_(shared.gate_proj.weight, 4 / config.hidden_size)
+            nn.init.constant_(shared.up_proj.weight, 4 / config.hidden_size)
+            nn.init.constant_(shared.down_proj.weight, 1 / shared.intermediate_size)
+            with torch.no_grad():
+                output = shared(torch.ones(1, config.hidden_size, device=torch_device))
+            torch.testing.assert_close(output, torch.full_like(output, [6.25, 15.71222][i]))
+
+        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config())
+        quantizer._process_model_before_weight_loading(model)
+        for i, layer in enumerate(model.model.layers):
+            self.assertIsInstance(layer.mlp.experts, FP8Experts)
+            torch.testing.assert_close(layer.mlp.experts._apply_gate(gate_up), expected[i : i + 1])
+
     def test_fp8_mixed_precision_modules(self):
         config = self.model_tester.get_config()
         config.q_lora_rank = 12
@@ -294,11 +320,8 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 @require_kernels
 @require_torch_accelerator_memory(memory=600)
-class BailingHybridIntegrationTest(unittest.TestCase):
+class BailingHybridIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "inclusionAI/Ling-3.1-flash"
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     def test_ling_3_1_flash_generation(self):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)

@@ -146,7 +146,7 @@ class BailingHybridRotaryEmbedding(nn.Module):
 class BailingHybridExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
-    def __init__(self, config):
+    def __init__(self, config, layer_idx):
         super().__init__()
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
@@ -154,36 +154,37 @@ class BailingHybridExperts(nn.Module):
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
+        self.limit = (config.swiglu_limits[layer_idx] if config.swiglu_limits else None) or float("inf")
+        self.limit_after_act = config.limit_after_act
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        top_k_index: torch.Tensor,
-        top_k_weights: torch.Tensor,
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
+        final = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
-            expert_mask = expert_mask.permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-
-        for expert_idx in expert_hit:
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
+            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in hit:
             expert_idx = expert_idx[0]
             if expert_idx == self.num_experts:
                 continue
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+            top_k_pos, token_idx = torch.where(mask[expert_idx])
+            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
+            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
+            final.index_add_(0, token_idx, current.to(final.dtype))
+        return final
 
-        return final_hidden_states
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        gate = self.act_fn(gate).clamp(max=self.limit)
+        up = up.clamp(min=-self.limit, max=self.limit)
+        return gate * up
 
 
 class BailingHybridMLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
+    """Ling's shared experts use the same post-activation clipping as Step3p7."""
+
+    def __init__(self, config, intermediate_size=None, layer_idx=None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -192,10 +193,15 @@ class BailingHybridMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
+        # Zero or a missing per-layer limit disables clipping.
+        self.limit = (
+            config.swiglu_limits_shared[layer_idx] if layer_idx is not None and config.swiglu_limits_shared else None
+        ) or float("inf")
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+    def forward(self, x) -> torch.Tensor:
+        gate = self.act_fn(self.gate_proj(x)).clamp(max=self.limit)
+        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
+        return self.down_proj(gate * up)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -863,13 +869,13 @@ class BailingHybridMoE(nn.Module):
     A mixed expert module containing shared experts.
     """
 
-    def __init__(self, config: BailingHybridConfig):
+    def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__()
         self.config = config
-        self.experts = BailingHybridExperts(config)
+        self.experts = BailingHybridExperts(config, layer_idx)
         self.gate = BailingHybridTopkRouter(config)
         self.shared_experts = BailingHybridMLP(
-            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+            config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts, layer_idx=layer_idx
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -892,9 +898,10 @@ class BailingHybridDecoderLayer(GradientCheckpointingLayer):
             if config.layer_types[layer_idx] == "full_attention"
             else BailingHybridDeltaAttention(config, layer_idx)
         )
-
         self.mlp = (
-            BailingHybridMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else BailingHybridMLP(config)
+            BailingHybridMoE(config, layer_idx)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else BailingHybridMLP(config)
         )
 
         self.input_layernorm = BailingHybridRMSNorm(config.hidden_size, config.rms_norm_eps)
