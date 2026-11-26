@@ -262,6 +262,59 @@ def causal_conv1d_fn(
     return out.to(hidden_states.dtype)
 
 
+@use_kernel_forward_from_hub("causal_conv1d_forward")
+def causal_conv1d_forward(
+    conv1d: nn.Conv1d,
+    hidden_states: torch.Tensor,
+    cache: Cache | None,
+    layer_idx: int,
+    activation: str | None = None,
+    state_idx: int = 0,
+    **kwargs,
+) -> torch.Tensor:
+    """
+    Causal depthwise convolution of a linear attention layer, reading and updating its conv state in `cache`.
+    Layers list it in `use_kernelized_func`, so that `kernelize` can replace it, e.g. with a runtime that manages
+    the conv state itself.
+
+    Args:
+        conv1d (`nn.Conv1d`):
+            The depthwise convolution, whose weights and kernel size are used.
+        hidden_states (`torch.Tensor` of shape `(batch_size, channels, seq_len)`):
+            The input to the convolution.
+        cache (`Cache`, *optional*):
+            The cache holding the conv state, updated in place.
+        layer_idx (`int`):
+            The index of the layer in `cache`.
+        activation (`str`, *optional*):
+            The activation applied to the output of the convolution.
+        state_idx (`int`, *optional*, defaults to 0):
+            Which of the layer's conv states to use.
+        kwargs:
+            Passed to the convolution kernel.
+
+    Returns:
+        `torch.Tensor` of shape `(batch_size, channels, seq_len)`: The output of the convolution.
+    """
+    seq_len = hidden_states.shape[-1]
+    conv_state = cache.get_conv_state(layer_idx, state_idx=state_idx) if cache is not None else None
+    weight = conv1d.weight.squeeze(1)
+
+    # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
+    if conv_state is not None and seq_len == 1 and not cache.is_recording_past(layer_idx):
+        return causal_conv1d_update(hidden_states, conv_state, weight, conv1d.bias, activation=activation)
+
+    if cache is not None:
+        hidden_states = cache.update_conv_state(
+            hidden_states, layer_idx, state_idx=state_idx, conv_kernel_size=conv1d.kernel_size[0]
+        )
+    hidden_states = causal_conv1d_fn(hidden_states, weight, conv1d.bias, activation=activation, **kwargs)
+    # Drop the previous states prepended by the cache
+    if cache is not None:
+        hidden_states = hidden_states[:, :, -seq_len:]
+    return hidden_states
+
+
 @use_kernel_func_from_hub_with_fallback("selective_state_update", "mamba_ssm")
 def mamba_selective_state_update(
     state: torch.Tensor,
@@ -416,7 +469,152 @@ def mamba_selective_scan(
     return scan_output
 
 
-@use_kernelized_func([mamba_selective_scan, mamba_selective_state_update, causal_conv1d_fn, causal_conv1d_update])
+@use_kernel_forward_from_hub("mamba_scan_forward")
+def mamba_scan_forward(
+    module: nn.Module,
+    hidden_states: torch.Tensor,
+    time_step: torch.Tensor,
+    B: torch.Tensor,
+    C: torch.Tensor,
+    gate: torch.Tensor,
+    cache: Cache | None,
+    **kwargs,
+) -> torch.Tensor:
+    """
+    Selective scan of a Jamba layer, reading and updating its recurrent state in `cache`. Layers list it in
+    `use_kernelized_func`, so that `kernelize` can replace it, e.g. with a runtime that manages the recurrent state
+    itself.
+
+    Args:
+        module (`nn.Module`):
+            The mixer, from which `A_log`, `D`, `dt_proj.bias`, `layer_idx` and the scan options are read.
+        hidden_states (`torch.Tensor` of shape `(batch_size, intermediate_size, seq_len)`):
+            The input to the scan.
+        time_step (`torch.Tensor` of shape `(batch_size, intermediate_size, seq_len)`):
+            The time step, before `dt_proj.bias` and softplus.
+        B (`torch.Tensor` of shape `(batch_size, seq_len, ssm_state_size)`):
+            The input projection of the state space model.
+        C (`torch.Tensor` of shape `(batch_size, seq_len, ssm_state_size)`):
+            The output projection of the state space model.
+        gate (`torch.Tensor` of shape `(batch_size, intermediate_size, seq_len)`):
+            The gate applied to the output of the scan.
+        cache (`Cache`, *optional*):
+            The cache holding the recurrent state, updated in place.
+
+    Returns:
+        `torch.Tensor` of shape `(batch_size, intermediate_size, seq_len)`: The gated output of the scan, including
+        the `D` skip connection.
+    """
+    recurrent_state = cache.get_recurrent_state(module.layer_idx, state_idx=0) if cache is not None else None
+    A = -torch.exp(module.A_log.float())
+    time_proj_bias = module.dt_proj.bias.float() if module.dt_proj.bias is not None else None
+    seq_len = hidden_states.shape[-1]
+
+    # Recurrent form
+    if recurrent_state is not None and seq_len == 1:
+        # Will update the recurrent state in-place
+        return mamba_selective_state_update(
+            recurrent_state,
+            hidden_states[..., 0],
+            time_step[..., 0],
+            A,
+            B[:, 0],
+            C[:, 0],
+            module.D,
+            z=gate[..., 0],
+            dt_bias=time_proj_bias,
+            dt_softplus=True,
+        ).unsqueeze(-1)
+
+    # Otherwise, full sequence form
+    num_intermediate_recurrent_states = (
+        cache.get_recurrent_states_to_keep(module.layer_idx) if cache is not None else 0
+    )
+    # Cannot be more than the number of tokens
+    num_intermediate_recurrent_states = min(num_intermediate_recurrent_states, seq_len)
+    # Since we want the last num_intermediate_recurrent_states, we need to artifically remove them from the chunks, and split the inputs
+    effective_sequence_length = seq_len - num_intermediate_recurrent_states
+    chunked_hidden_states, sequential_hidden_states = torch.tensor_split(
+        hidden_states, [effective_sequence_length], dim=2
+    )
+    chunked_time_step, sequential_time_step = torch.tensor_split(time_step, [effective_sequence_length], dim=2)
+    chunked_B, sequential_B = torch.tensor_split(B, [effective_sequence_length], dim=1)
+    chunked_C, sequential_C = torch.tensor_split(C, [effective_sequence_length], dim=1)
+    chunked_gate, sequential_gate = torch.tensor_split(gate, [effective_sequence_length], dim=2)
+
+    all_outputs = []
+    last_scan_recurrent_state = recurrent_state
+    # First, perform the fast scan computation (if we don't need only sequential). We need this check as `jamba_selective_scan` cannot handle
+    # 0-elements (i.e. empty) tensors correctly
+    if chunked_hidden_states.numel() > 0:
+        # TODO Cyril: since `jamba_selective_scan` does not take the past state, it is WRONG if the cache is not empty. This is a very
+        # long standing issue, maybe only do sequential
+        scan_output = mamba_selective_scan(
+            chunked_hidden_states,
+            chunked_time_step,
+            A,
+            chunked_B.transpose(1, 2),
+            chunked_C.transpose(1, 2),
+            D=module.D.float(),
+            z=chunked_gate,
+            delta_bias=time_proj_bias,
+            delta_softplus=True,
+            return_last_state=cache is not None,
+            use_mambapy=module.use_mambapy,
+            use_associative_scan=module.use_associative_scan,
+        )
+        # The number of outputs varies depending on the flag
+        if cache is not None:
+            scan_output, last_scan_recurrent_state = scan_output
+        # Collect it
+        all_outputs.append(scan_output)
+
+    # If we need to return intermediate recurrent state, we now do it sequentially after the chunked part
+    intermediate_recurrent_states = []
+    last_recurrent_state = (
+        last_scan_recurrent_state if last_scan_recurrent_state is not None else A.new_zeros(B.shape[0], *A.shape)
+    )
+    for i in range(num_intermediate_recurrent_states):
+        local_output = mamba_selective_state_update(
+            last_recurrent_state,
+            sequential_hidden_states[..., i],
+            sequential_time_step[..., i],
+            A,
+            sequential_B[:, i],
+            sequential_C[:, i],
+            module.D,
+            z=sequential_gate[..., i],
+            dt_bias=time_proj_bias,
+            dt_softplus=True,
+        ).unsqueeze(-1)
+        # Combine them
+        all_outputs.append(local_output)
+        # Note that we need to copy here to store it, since it's updated in-place
+        intermediate_recurrent_states.append(last_recurrent_state.clone())
+
+    # Cat all outputs
+    scan_output = torch.cat(all_outputs, dim=2)
+
+    # In case we needed intermediate states, we return them, otherwise the last one is the chunked one
+    last_recurrent_state = (
+        intermediate_recurrent_states if len(intermediate_recurrent_states) > 0 else last_scan_recurrent_state
+    )
+    if cache is not None:
+        cache.update_recurrent_state(last_recurrent_state, module.layer_idx)
+
+    return scan_output
+
+
+@use_kernelized_func(
+    [
+        mamba_selective_scan,
+        mamba_selective_state_update,
+        mamba_scan_forward,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
+)
 class JambaMambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
@@ -486,52 +684,24 @@ class JambaMambaMixer(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
-        seq_len = hidden_states.shape[1]
         dtype = hidden_states.dtype
-        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
-        if cache is not None:
-            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
-            recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
-        else:
-            conv_state, recurrent_state = None, None
-
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
         # Key difference to falcon mamba: mamba inner fn applies its dt norm at a different time
         # leading to incompatible implementations
-        A = -torch.exp(self.A_log.float())
-
         hidden_states_B_C, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
-        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
-            hidden_states_B_C = causal_conv1d_update(
-                hidden_states_B_C,
-                conv_state,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                activation=self.activation,
-            )
-        else:
-            if cache is not None:
-                hidden_states_B_C = cache.update_conv_state(
-                    hidden_states_B_C,
-                    self.layer_idx,
-                    conv_kernel_size=self.conv_kernel_size,
-                )
-
-            hidden_states_B_C = causal_conv1d_fn(
-                hidden_states_B_C,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                activation=self.activation,
-                **kwargs,
-            )
-
-            if cache is not None:
-                hidden_states_B_C = hidden_states_B_C[:, :, -seq_len:]
+        hidden_states_B_C = causal_conv1d_forward(
+            self.conv1d,
+            hidden_states_B_C,
+            cache,
+            self.layer_idx,
+            activation=self.activation,
+            **kwargs,
+        )
 
         # 3. SSM transformation
         hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C.transpose(1, 2), attention_mask)
@@ -552,46 +722,9 @@ class JambaMambaMixer(nn.Module):
             time_step = (self.dt_proj(time_step) - self.dt_proj.bias).transpose(1, 2)
         else:
             time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
-        time_proj_bias = self.dt_proj.bias.float() if self.dt_proj.bias is not None else None
-
-        # Recurrent form
-        if recurrent_state is not None and seq_len == 1:
-            scan_output = mamba_selective_state_update(
-                recurrent_state,
-                hidden_states_B_C.transpose(1, 2)[..., 0],
-                time_step[..., 0],
-                A,
-                B[:, 0],
-                C[:, 0],
-                self.D,
-                z=gate[..., 0],
-                dt_bias=time_proj_bias,
-                dt_softplus=True,
-            ).unsqueeze(-1)
-
-        # Full sequence form
-        else:
-            output_final_state = cache is not None
-            scan_result = mamba_selective_scan(
-                hidden_states_B_C.transpose(1, 2),
-                time_step,
-                A,
-                B.transpose(1, 2),
-                C.transpose(1, 2),
-                D=self.D.float(),
-                z=gate,
-                delta_bias=time_proj_bias,
-                delta_softplus=True,
-                return_last_state=output_final_state,
-                use_mambapy=self.use_mambapy,
-                use_associative_scan=self.use_associative_scan,
-            )
-
-            if output_final_state:
-                scan_output, final_state = scan_result
-                cache.update_recurrent_state(final_state, self.layer_idx)
-            else:
-                scan_output = scan_result
+        scan_output = mamba_scan_forward(
+            self, hidden_states_B_C.transpose(1, 2), time_step, B, C, gate, cache, **kwargs
+        )
 
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2).to(dtype))

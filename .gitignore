@@ -180,7 +180,3 @@ mlinter-findings.json
 # Cursor IDE files
 .cursor/
 test-results/
-
-# AI agent local setup artifacts
-/.agents/skills
-/.claude/skills

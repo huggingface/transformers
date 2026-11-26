@@ -124,3 +124,7 @@ class PI05ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("PI0.5 doesn't need vLLM integration")
     def test_get_num_multimodal_tokens_matches_processor_call(self):
         pass
+
+    @unittest.skip("PI05Processor requires images and can't be called with text only")
+    def test_processor_single_text_same_as_batched(self):
+        pass
