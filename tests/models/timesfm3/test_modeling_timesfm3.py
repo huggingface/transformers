@@ -539,7 +539,10 @@ class TimesFm3ModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 @slow
 class TimesFm3ModelIntegrationTests(unittest.TestCase):
-    @unittest.skip(reason="The converted checkpoint is not on the Hub yet.")
+    @unittest.skip(
+        reason="The converted checkpoint is not on the Hub yet. The expected values come from "
+        "`google/timesfm-3.0-pytorch` converted with `convert_timesfm3_original_to_hf.py`."
+    )
     def test_inference(self):
         model = TimesFm3ModelForPrediction.from_pretrained("google/timesfm-3.0-pytorch").to(torch_device)
         steps = torch.arange(512, dtype=torch.float32, device=torch_device)
@@ -550,3 +553,19 @@ class TimesFm3ModelIntegrationTests(unittest.TestCase):
 
         self.assertEqual(outputs.mean_predictions.shape, (1, 1, 64))
         self.assertEqual(outputs.full_predictions.shape, (1, 1, 64, 9))
+        self.assertEqual((model.config.quantiles[0], model.config.quantiles[8]), (0.1, 0.9))
+
+        # The model carries on the sine wave.
+        expected_median_start = torch.tensor(
+            [0.864650, 0.703734, 0.498623, 0.258608, 0.001887, -0.256365, -0.496276, -0.704066]
+        )
+        expected_median_end = torch.tensor([-0.865357, -0.708215, -0.503280, -0.262230])
+        expected_quantile_10 = torch.tensor([0.861019, 0.700785, 0.495857, 0.252802])
+        expected_quantile_90 = torch.tensor([0.868762, 0.708234, 0.501612, 0.260958])
+
+        median = outputs.mean_predictions[0, 0].cpu()
+        quantiles = outputs.full_predictions[0, 0].cpu()
+        torch.testing.assert_close(median[:8], expected_median_start, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(median[-4:], expected_median_end, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(quantiles[:4, 0], expected_quantile_10, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(quantiles[:4, 8], expected_quantile_90, rtol=1e-4, atol=1e-4)
