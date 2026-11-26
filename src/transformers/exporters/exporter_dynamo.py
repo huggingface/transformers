@@ -57,9 +57,11 @@ from .utils import apply_patches, import_dotted_path, patch_attributes, prepare_
 
 if is_torch_available():
     import torch
+    from torch._subclasses.fake_tensor import is_fake
     from torch.export import ExportedProgram
+    from torch.fx.experimental.symbolic_shapes import statically_known_true
 
-    from ..cache_utils import Cache, DynamicLayer
+    from ..cache_utils import Cache, DynamicLayer, StaticLayer
     from ..modeling_utils import PreTrainedModel
 
 
@@ -229,14 +231,19 @@ def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
     "transformers.cache_utils.DynamicSlidingWindowLayer.update",
     "transformers.cache_utils.DynamicSlidingWindowLayer.get_mask_sizes",
     "transformers.cache_utils.DynamicSlidingWindowLayer.get_seq_length",
+    "transformers.cache_utils.StaticSlidingWindowLayer.update",
+    "transformers.cache_utils.StaticSlidingWindowLayer.get_mask_sizes",
+    "transformers.cache_utils.StaticSlidingWindowLayer.get_seq_length",
 )
 def _patch_sliding_window_layer(original):
-    """Trace sliding-window cache layers as a full `DynamicLayer`; the sliding mask still applies the window.
+    """Trace sliding-window cache layers as full ones (`DynamicLayer`, `StaticLayer`); the sliding mask still applies
+    the window.
 
     A trace bakes in the sliding layer's Python token counter and its cut to the window, so the exported decode breaks
     past the window. Temporary: it goes once huggingface/transformers#49542 keeps sliding-window decode on one graph.
     """
-    return getattr(DynamicLayer, original.__name__)
+    full_layer = StaticLayer if original.__qualname__.startswith("StaticSlidingWindowLayer") else DynamicLayer
+    return getattr(full_layer, original.__name__)
 
 
 @register_patch("dynamo", "transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeTop2Router._cast_classifier")
@@ -693,6 +700,36 @@ def _maybe_sym_constant(sym: Any) -> Any:
     return node.maybe_as_int()
 
 
+# A cache layer's ints that are sizes of its tensors, as `(tensor attribute, axis)`. Saved as that size rather than as
+# a number, they don't pin an export to the capacity, batch or past length it was traced with: the export reads them
+# from the tensors it gets. A value that isn't that size (a sliding window past its length) stays a number.
+_CACHE_SIZE_FIELDS = {"max_cache_len": ("keys", -2), "batch_size": ("keys", 0), "cumulative_length": ("keys", -2)}
+
+
+def _size_field(obj: Any, field: str, value: Any) -> dict | None:
+    """The context of `obj.<field>` if it is the size of one of `obj`'s tensors (`_CACHE_SIZE_FIELDS`)."""
+    tensor_name, axis = _CACHE_SIZE_FIELDS.get(field, (None, None))
+    tensor = getattr(obj, tensor_name, None) if tensor_name else None
+    if not isinstance(value, (int, torch.SymInt)) or isinstance(value, bool) or not isinstance(tensor, torch.Tensor):
+        return None
+    if tensor.dim() == 0 or not statically_known_true(value == tensor.shape[axis]):
+        return None
+    return {"_t": "dim", "of": tensor_name, "axis": axis}
+
+
+# A cache layer's int counters that mirror one of its tensor counters: `StaticSlidingWindowLayer`'s, when its window is
+# larger than the cache (`_is_croppable`) so never fills. Saved as that tensor's value: a sliding layer traces as a full
+# one (`_patch_sliding_window_layer`), which never reads the int
+_CACHE_MIRROR_FIELDS = {"cumulative_length_int": "cumulative_length"}
+
+
+def _mirror_field(obj: Any, field: str, value: Any) -> dict | None:
+    """The context of `obj.<field>` if it mirrors one of `obj`'s tensor counters (`_CACHE_MIRROR_FIELDS`)."""
+    if field not in _CACHE_MIRROR_FIELDS or not getattr(obj, "_is_croppable", False):
+        return None
+    return {"_t": "mirror", "of": _CACHE_MIRROR_FIELDS[field]}
+
+
 def _flatten_to_context(obj: Any, tensors: list) -> Any:
     """Single-pass: recursively build a JSON-native context while collecting tensors into `tensors`."""
     # --- Pure Python / JSON-native (exact type check — subclasses fall through to stateful objects) ---
@@ -761,7 +798,10 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
         # skipped until the binding is refactored away (e.g. into a `Cache` subclass).
         raise TypeError("Cannot flatten a bound method for pytree context")
     if hasattr(obj, "__dict__"):
-        state = {k: _flatten_to_context(v, tensors) for k, v in vars(obj).items()}
+        state = {
+            k: _size_field(obj, k, v) or _mirror_field(obj, k, v) or _flatten_to_context(v, tensors)
+            for k, v in vars(obj).items()
+        }
         return {"_t": "obj", "p": _class_to_path(cls), "s": state}
 
     raise TypeError(f"Cannot flatten {type(obj).__name__} for pytree context")
@@ -813,8 +853,20 @@ def _unflatten_from_context(ctx: Any, tensors: list) -> Any:
     if t == "obj":
         cls = _path_to_class(ctx["p"])
         instance = cls.__new__(cls)
+        derived = {k: v for k, v in ctx["s"].items() if isinstance(v, dict) and v.get("_t") in ("dim", "mirror")}
+        # In the saved order (a placeholder until the tensor it's read from is set): the order is part of the spec
         for k, v in ctx["s"].items():
-            instance.__dict__[k] = _unflatten_from_context(v, tensors)
+            instance.__dict__[k] = None if k in derived else _unflatten_from_context(v, tensors)
+        for k, v in derived.items():
+            source = instance.__dict__[v["of"]]
+            # Some unflatten placeholder leaves only to describe the structure (ExecuTorch's emitter)
+            if not isinstance(source, torch.Tensor):
+                continue
+            if v["_t"] == "dim":
+                instance.__dict__[k] = source.shape[v["axis"]]
+            else:
+                # Traced, the value can't be read; the window never fills, which is all the int decides there
+                instance.__dict__[k] = 0 if is_fake(source) else int(source)
         return instance
 
     raise TypeError(f"Unknown tag {t!r} in pytree context")

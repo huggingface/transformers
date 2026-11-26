@@ -568,11 +568,11 @@ def _freeze_batchless_states(
     pairs: dict[str, str],
     sample_inputs: MutableMapping[str, Any],
 ) -> None:
-    """Replace batch-less round-tripped tensors with baked constants (in place, updating ``pairs``).
+    """Take batch-less round-tripped tensors out of ``pairs`` (in place): state needs a batch dim to reorder beams on.
 
-    A round-tripped tensor without a batch dim (e.g. Cohere2's scalar ``_sliding_window_tensor``)
-    is config-derived, not per-sequence state — there is nothing to reorder between beams and
-    nothing to reset between prompts, so it becomes a graph constant instead of an OV variable.
+    One the graph passes through unchanged (e.g. Cohere2's scalar ``_sliding_window_tensor``) is config-derived, not
+    per-sequence state: it becomes a graph constant. One the graph updates (a `StaticCache` layer's `cumulative_length`)
+    stays a plain input and output, so the caller gets it advanced: baked, it would stay at its traced value.
     """
     sample_leaves = get_leaf_tensors(sample_inputs)
     changed = False
@@ -580,15 +580,15 @@ def _freeze_batchless_states(
         port = ov_model.input(input_name)
         if port.get_partial_shape().rank.get_length() > _STATE_BATCH_DIM:
             continue
-        sample = sample_leaves.get(input_name.partition(".")[2])
-        if sample is None:
-            continue
         parameter = port.get_node()
+        result_source = ov_model.output(pairs.pop(input_name)).get_node().input_value(0).get_node()
+        sample = sample_leaves.get(input_name.partition(".")[2])
+        if result_source.get_friendly_name() != parameter.get_friendly_name() or sample is None:
+            continue
         constant = ov_ops.constant(sample.cpu().numpy())
         for consumer in port.get_target_inputs():
             consumer.replace_source_output(constant.output(0))
         ov_model.remove_parameter(parameter)
-        del pairs[input_name]
         changed = True
     if changed:
         ov_model.validate_nodes_and_infer_types()
