@@ -291,6 +291,7 @@ if TYPE_CHECKING:
     from .llava_next_video import *
     from .llava_onevision import *
     from .llava_onevision1_5 import *
+    from .llava_onevision2 import *
     from .longcat_flash import *
     from .longformer import *
     from .longt5 import *

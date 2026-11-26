@@ -993,6 +993,10 @@ def _build_checkpoint_conversion_mapping():
         "VibeVoiceAsrModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
+        "llava_onevision2_vision": [
+            WeightRenaming(r"merger\.mlp\.0\.", "merger.fc1."),
+            WeightRenaming(r"merger\.mlp\.2\.", "merger.fc2."),
+        ],
         "llava_next": [
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),

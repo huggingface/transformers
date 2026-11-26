@@ -1497,6 +1497,8 @@
         title: LLaVA-Onevision
       - local: model_doc/llava_onevision1_5
         title: LLaVA-OneVision-1.5
+      - local: model_doc/llava_onevision2
+        title: LLaVA-OneVision-2
       - local: model_doc/lxmert
         title: LXMERT
       - local: model_doc/matcha
