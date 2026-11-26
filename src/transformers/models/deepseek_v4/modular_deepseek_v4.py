@@ -152,6 +152,7 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
     """
 
     _layer_type = "heavily_compressed_attention"
+    is_croppable = False
 
     def __init__(self, config: "DeepseekV4Config", **kwargs):
         super().__init__(sliding_window=config.sliding_window)
