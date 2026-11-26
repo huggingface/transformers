@@ -36,6 +36,7 @@ from transformers import (
     BaseVideoProcessor,
     BertTokenizer,
     CLIPImageProcessor,
+    CLIPProcessor,
     FeatureExtractionMixin,
     ImageProcessingMixin,
     LlamaTokenizer,
@@ -72,6 +73,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig  # noqa E402
 from test_module.custom_feature_extraction import CustomFeatureExtractor  # noqa E402
+from test_module.custom_image_processing import CustomImageProcessor  # noqa E402
 from test_module.custom_processing import CustomProcessor  # noqa E402
 from test_module.custom_tokenization import CustomTokenizer  # noqa E402
 
@@ -496,6 +498,14 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
                 del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
             REGISTERED_TOKENIZER_CLASSES.pop("NewTokenizer", None)
+
+    def test_from_pretrained_processor_with_dynamic_image_processor(self):
+        CustomImageProcessor.register_for_auto_class()
+        tokenizer = BertTokenizer(get_tests_dir("fixtures/vocab.txt"))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            CLIPProcessor(CustomImageProcessor(), tokenizer).save_pretrained(tmp_dir)
+            processor = AutoProcessor.from_pretrained(tmp_dir, trust_remote_code=True)
+        self.assertEqual(processor.image_processor.__class__.__name__, "CustomImageProcessor")
 
     def test_auto_processor_creates_tokenizer(self):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-bert")

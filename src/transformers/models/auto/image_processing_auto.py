@@ -736,7 +736,7 @@ class AutoImageProcessor:
 
         if has_remote_code and trust_remote_code and not explicit_local_code:
             image_processor_class = get_class_from_dynamic_module(
-                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
+                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs
             )
             image_processor_class.register_for_auto_class()
             return image_processor_class.from_dict(config_dict, *inputs, **kwargs)
