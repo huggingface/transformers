@@ -23,7 +23,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -31,6 +31,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..apertus.modeling_apertus import ApertusAttention
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3DecoderLayer
@@ -71,7 +72,6 @@ class HYV3Config(PreTrainedConfig):
 
     model_type = "hy_v3"
     default_theta = 11_158_840.0
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_local_experts": "num_experts",
     }
@@ -82,9 +82,6 @@ class HYV3Config(PreTrainedConfig):
         "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -98,10 +95,9 @@ class HYV3Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 120832
@@ -164,6 +160,7 @@ class HYV3TopKRouter(MixtralTopKRouter):
     def __init__(self, config: HYV3Config):
         super().__init__(config)
         self.router_scaling_factor = config.router_scaling_factor
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, dtype=torch.float32))
 
     def forward(
         self,
@@ -198,6 +195,7 @@ class HYV3MoE(MiniMaxM2SparseMoeBlock):
         self.experts = HYV3Experts(config)
         shared_intermediate = config.moe_intermediate_size * config.num_shared_experts
         self.shared_experts = HYV3MLP(config, intermediate_size=shared_intermediate)
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len, hidden_dim = hidden_states.shape
@@ -230,14 +228,13 @@ class HYV3DecoderLayer(DeepseekV3DecoderLayer):
 class HYV3PreTrainedModel(LlamaPreTrainedModel):
     # Not supporting multi-token prediction (MTP) atm
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.80.*"]
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
     _can_record_outputs = {
         "router_logits": OutputRecorder(HYV3TopKRouter, index=0),
         "hidden_states": HYV3DecoderLayer,
         "attentions": HYV3Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
@@ -267,13 +264,14 @@ class HYV3ForCausalLM(LlamaForCausalLM):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -289,15 +287,15 @@ class HYV3ForCausalLM(LlamaForCausalLM):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -307,7 +305,7 @@ class HYV3ForCausalLM(LlamaForCausalLM):
             loss=loss,
             aux_loss=None,  # Not used in this model
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,

@@ -28,12 +28,16 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Read Python version
+        id: python
+        run: echo "version=$(cat .python-version)" >> "$GITHUB_OUTPUT"
+
       - name: Install miniconda
         uses: conda-incubator/setup-miniconda@8ee1f361103df19b6f8c8655fd3967a8ecb162d5  # v4.0.1
         with:
           auto-update-conda: true
           auto-activate-base: false
-          python-version: 3.8
+          python-version: ${{ steps.python.outputs.version }}
           activate-environment: "build-transformers"
           channels: huggingface
 

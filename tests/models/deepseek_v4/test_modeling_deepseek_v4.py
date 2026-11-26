@@ -56,44 +56,45 @@ class DeepseekV4ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = DeepseekV4Model
 
-    def __init__(self, parent, **kwargs):
-        super().__init__(parent, **kwargs)
-        # Standard CausalLMModelTester knobs — override the parent's positional defaults.
-        self.hidden_size = 64
-        self.num_attention_heads = 4
-        self.num_key_value_heads = 1
-        self.num_hidden_layers = 2
-        self.num_experts_per_tok = 2
-        self.moe_intermediate_size = 64
-        self.max_position_embeddings = 64
+    small_config_overrides = {
+        # Overrides of the shared causal LM defaults.
+        "hidden_size": 64,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 1,
+        "num_hidden_layers": 2,
+        "num_experts_per_tok": 2,
+        "moe_intermediate_size": 64,
+        "max_position_embeddings": 64,
         # V4-only knobs.
-        self.head_dim = 32
-        self.partial_rotary_factor = 8 / 32  # qk_rope_head_dim=8 / head_dim=32
-        self.q_lora_rank = 32
-        self.o_groups = 2
-        self.o_lora_rank = 16
-        self.n_routed_experts = 4
-        self.n_shared_experts = 1
+        "head_dim": 32,
+        # qk_rope_head_dim=8 / head_dim=32
+        "partial_rotary_factor": 0.25,
+        "q_lora_rank": 32,
+        "o_groups": 2,
+        "o_lora_rank": 16,
+        "n_routed_experts": 4,
+        "n_shared_experts": 1,
         # All "moe" (no "hash_moe") so inputs_embeds-only generation tests in
         # CausalLMModelTest exercise the model without hitting the hash router's
         # input_ids requirement. A dedicated test covers the hash path.
-        self.mlp_layer_types = ["moe", "moe"]
-        self.layer_types = ["heavily_compressed_attention", "compressed_sparse_attention"]
-        self.sliding_window = 8
-        self.hc_mult = 2
-        self.hc_sinkhorn_iters = 3
-        self.hc_eps = 1.0e-6
-        self.index_n_heads = 2
-        self.index_head_dim = 16
-        self.index_topk = 2
-        self.num_nextn_predict_layers = 0
-        self.scoring_func = "sqrtsoftplus"
-        self.routed_scaling_factor = 1.5
-        self.swiglu_limit = 10.0
-        self.rope_theta = 10000.0
-        self.compress_rope_theta = 160000.0
-        self.attention_bias = False
-        self.attention_dropout = 0.0
+        "mlp_layer_types": ["moe", "moe"],
+        "layer_types": ["heavily_compressed_attention", "compressed_sparse_attention"],
+        "sliding_window": 8,
+        "hc_mult": 2,
+        "hc_sinkhorn_iters": 3,
+        "hc_eps": 1e-06,
+        "index_n_heads": 2,
+        "index_head_dim": 16,
+        "index_topk": 2,
+        "num_nextn_predict_layers": 0,
+        "scoring_func": "sqrtsoftplus",
+        "routed_scaling_factor": 1.5,
+        "swiglu_limit": 10.0,
+        "rope_theta": 10000.0,
+        "compress_rope_theta": 160000.0,
+        "attention_bias": False,
+        "attention_dropout": 0.0,
+    }
 
 
 @require_torch
@@ -117,14 +118,8 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_tp_generation_quantized(self):
         pass
 
-    @unittest.skip(
-        "V4's compressor stores rolling-window state on custom cache layers, which is not compatible with QuantizedCache."
-    )
-    def test_generate_with_quant_cache(self):
-        pass
-
     def _check_attentions_for_generate(
-        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
     ):
         # V4 layers with a Compressor attend to extra pooled positions, so the KV
         # length varies per layer. We only check the shape invariants: batched, same
@@ -168,7 +163,7 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
                         (inputs_dict["input_ids"].shape[0], seq_len, config.hc_mult, config.hidden_size),
                     )
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
         # Every V4 layer is sliding-window, so the cache is length-bounded to
         # ``sliding_window`` instead of the full ``seq_length`` the parent tester expects.
         # We also accept the compressed-segment positions that ``DeepseekV4Attention``
@@ -177,7 +172,7 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
 
         num_kv_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         head_dim = config.head_dim
-        for layer in past_key_values.layers:
+        for layer in cache.layers:
             keys, values = layer.keys, layer.values
             self.assertIsInstance(keys, torch.Tensor)
             self.assertEqual(keys.shape[0], batch_size)
@@ -454,7 +449,7 @@ def main() -> int:
         attn_implementation="eager",
         experts_implementation=LOADTIME_DISPATCH,
         distributed_config=DistributedConfig(
-            tp_size=int(os.environ["WORLD_SIZE"]), enable_expert_parallel=True
+            tp_size=int(os.environ["WORLD_SIZE"]), ep_size=int(os.environ["WORLD_SIZE"])
         ),
     )
     model.eval()
@@ -533,7 +528,7 @@ def main() -> int:
         attn_implementation="eager",
         experts_implementation=LOADTIME_DISPATCH,
         distributed_config=DistributedConfig(
-            tp_size=int(os.environ["WORLD_SIZE"]), enable_expert_parallel=True
+            tp_size=int(os.environ["WORLD_SIZE"]), ep_size=int(os.environ["WORLD_SIZE"])
         ),
     )
     model.eval()

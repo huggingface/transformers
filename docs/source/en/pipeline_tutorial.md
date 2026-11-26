@@ -76,7 +76,7 @@ pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac
 from transformers import pipeline
 
 pipeline = pipeline(task="image-classification", model="google/vit-base-patch16-224")
-pipeline(images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 [{'label': 'lynx, catamount', 'score': 0.43350091576576233},
  {'label': 'cougar, puma, catamount, mountain lion, painter, panther, Felis concolor',
   'score': 0.034796204417943954},
@@ -87,17 +87,24 @@ pipeline(images="https://huggingface.co/datasets/huggingface/documentation-image
 ```
 
 </hfoption>
-<hfoption id="visual question answering">
+<hfoption id="image-text-to-text">
 
 ```py
 from transformers import pipeline
 
-pipeline = pipeline(task="visual-question-answering", model="Salesforce/blip-vqa-base")
-pipeline(
-    image="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-few-shot.jpg",
-    question="What is in the image?",
-)
-[{'answer': 'statue of liberty'}]
+pipeline = pipeline(task="image-text-to-text", model="HuggingFaceTB/SmolVLM-256M-Instruct")
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-few-shot.jpg"},
+            {"type": "text", "text": "What is in the image?"},
+        ],
+    }
+]
+pipeline(messages, max_new_tokens=50, return_full_text=False)
+[{'input_text': [{'role': 'user', 'content': [{'type': 'image', 'image': 'https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-few-shot.jpg'}, {'type': 'text', 'text': 'What is in the image?'}]}],
+  'generated_text': ' There is a statue in the image.'}]
 ```
 
 </hfoption>
@@ -217,7 +224,7 @@ Pass the `return_timestamps="word"` parameter to [`Pipeline`] to return when eac
 from transformers import pipeline
 
 pipeline = pipeline(task="automatic-speech-recognition", model="openai/whisper-large-v3")
-pipeline(audio="https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac", return_timestamps="word")
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac", return_timestamps="word")
 {'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.',
  'chunks': [{'text': ' I', 'timestamp': (0.0, 1.1)},
   {'text': ' have', 'timestamp': (1.1, 1.44)},

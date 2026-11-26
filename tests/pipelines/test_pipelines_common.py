@@ -31,13 +31,14 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DistilBertForSequenceClassification,
+    ImageTextToTextPipeline,
     MaskGenerationPipeline,
     TextClassificationPipeline,
     TextGenerationPipeline,
     pipeline,
 )
-from transformers.pipelines import PIPELINE_REGISTRY, get_task
-from transformers.pipelines.base import Pipeline, _pad
+from transformers.pipelines import PIPELINE_REGISTRY, REMOVED_TASKS, check_task, get_task
+from transformers.pipelines.base import Pipeline, _pad, pad_collate_fn
 from transformers.testing_utils import (
     TOKEN,
     USER,
@@ -161,6 +162,82 @@ class CommonPipelineTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             # Wrong framework
             get_task("espnet/siddhana_slurp_entity_asr_train_asr_conformer_raw_en_word_valid.acc.ave_10best")
+
+    def test_check_task_deprecated_tasks(self):
+        """
+        Some tasks were deprecated, such as image-to-text. Models which had this pipeline tag can still be loaded
+        through different tasks (in this case, image-text-to-text). This test verifies that there is an adequate
+        warning and that the loaded pipeline is the one expected.
+        """
+        with self.assertWarnsRegex(UserWarning, "image-to-text has been removed"):
+            normalized_task, _, _ = check_task("image-to-text")
+        self.assertEqual(normalized_task, "image-text-to-text")
+
+    def test_check_task_removed_tasks(self):
+        """
+        Same as above, except some pipelines were removed. This test verifies that the correct error is raised.
+        """
+        for task in [*REMOVED_TASKS, "translation_en_to_fr"]:
+            with self.subTest(task=task), self.assertRaisesRegex(KeyError, "has been removed from transformers"):
+                check_task(task)
+
+    @staticmethod
+    def _mock_hub_pipeline_tag(pipeline_tag):
+        model_info = mock.Mock(pipeline_tag=pipeline_tag, library_name="transformers")
+        return mock.patch(
+            "transformers.pipelines.hf_api", return_value=mock.Mock(model_info=lambda *a, **k: model_info)
+        )
+
+    def test_get_task_deprecated_hub_tag(self):
+        """
+        Ensures that when a model has a deprecated pipeline tag, the correct task is returned in `get_task`.
+        """
+        with self._mock_hub_pipeline_tag("image-to-text"):
+            with self.assertWarnsRegex(UserWarning, "image-to-text has been removed"):
+                task = get_task("some/model")
+        self.assertEqual(task, "image-text-to-text")
+
+    def test_get_task_removed_hub_tag(self):
+        """
+        Same as above, but with removed tags.
+        """
+        for task in REMOVED_TASKS:
+            with self.subTest(task=task), self._mock_hub_pipeline_tag(task):
+                with self.assertRaisesRegex(KeyError, f"The task {task} has been removed from transformers"):
+                    get_task("some/model")
+
+    @require_torch
+    def test_pipeline_deprecated_task_is_redirected(self):
+        """
+        Ensures that loading a model with a deprecated pipeline tag redirects to the correct task.
+        """
+        model_id = "hf-internal-testing/tiny-random-LlavaForConditionalGeneration"
+
+        # Task passed explicitly
+        with self.assertWarnsRegex(UserWarning, "image-to-text has been removed"):
+            pipe = pipeline("image-to-text", model=model_id)
+        self.assertIsInstance(pipe, ImageTextToTextPipeline)
+        self.assertEqual(pipe.task, "image-text-to-text")
+
+        # Task inferred from the Hub `pipeline_tag`
+        with self._mock_hub_pipeline_tag("image-to-text"):
+            with self.assertWarnsRegex(UserWarning, "image-to-text has been removed"):
+                pipe = pipeline(model=model_id)
+        self.assertIsInstance(pipe, ImageTextToTextPipeline)
+        self.assertEqual(pipe.task, "image-text-to-text")
+
+    def test_pipeline_removed_task_raises(self):
+        """
+        Same as above, except with removed tasks (should raise).
+        """
+        # Raises before any default model would be downloaded
+        with self.assertRaisesRegex(KeyError, "The task summarization has been removed from transformers"):
+            pipeline("summarization")
+
+        # Task inferred from the Hub `pipeline_tag`
+        with self._mock_hub_pipeline_tag("question-answering"):
+            with self.assertRaisesRegex(KeyError, "The task question-answering has been removed from transformers"):
+                pipeline(model="hf-internal-testing/tiny-random-bert")
 
     @require_torch
     def test_iterator_data(self):
@@ -405,11 +482,40 @@ class PipelinePadTest(unittest.TestCase):
                 torch.LongTensor([[10, 10, 1, 23, 24, 2], [1, 23, 24, 43, 44, 2]]),
             )
         )
+        empty = [{"input_ids": torch.LongTensor([[]])}, {"input_ids": torch.LongTensor([[1, 2]])}]
+        self.assertTrue(torch.equal(_pad(empty, "input_ids", 10, "left"), torch.LongTensor([[10, 10], [1, 2]])))
         self.assertTrue(
             torch.allclose(
                 _pad(items, "attention_mask", 0, "right"), torch.LongTensor([[0, 1, 1, 0, 0, 0], [0, 1, 1, 1, 1, 0]])
             )
         )
+
+    @require_torch
+    def test_pipeline_padding_text_left_and_audio_features_right(self):
+        import torch
+
+        tokenizer = mock.Mock(pad_token_id=0, padding_side="left", model_input_names=["input_ids", "attention_mask"])
+        feature_extractor = mock.Mock(padding_value=0.0, padding_side="right", model_input_names=["input_features"])
+        items = [
+            {
+                "input_ids": torch.LongTensor([[5]]),
+                "attention_mask": torch.LongTensor([[1]]),
+                "input_features": torch.ones(1, 1, 2),
+                "input_features_mask": torch.LongTensor([[1]]),
+            },
+            {
+                "input_ids": torch.LongTensor([[5, 6]]),
+                "attention_mask": torch.LongTensor([[1, 1]]),
+                "input_features": torch.ones(1, 2, 2),
+                "input_features_mask": torch.LongTensor([[1, 1]]),
+            },
+        ]
+
+        batch = pad_collate_fn(tokenizer, feature_extractor)(items)
+        self.assertTrue(torch.equal(batch["input_ids"], torch.LongTensor([[0, 5], [5, 6]])))
+        self.assertTrue(torch.equal(batch["attention_mask"], torch.LongTensor([[0, 1], [1, 1]])))
+        self.assertTrue(torch.equal(batch["input_features"][:, :, 0], torch.tensor([[1.0, 0.0], [1.0, 1.0]])))
+        self.assertTrue(torch.equal(batch["input_features_mask"], torch.LongTensor([[1, 0], [1, 1]])))
 
     @require_torch
     def test_pipeline_image_padding(self):
@@ -644,6 +750,14 @@ class PipelineUtilsTest(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             pipe = pipeline("text-generation", model=model, device="cpu", tokenizer=tokenizer)
+
+    @require_torch_accelerator
+    def test_pipeline_single_device_device_map(self):
+        # A single-device `device_map` must not be overridden by the pipeline's fallback to device 0
+        import torch
+
+        pipe = pipeline("text-generation", model="hf-internal-testing/tiny-random-bert", device_map="cpu")
+        self.assertEqual(pipe.model.device, torch.device("cpu"))
 
     @require_torch_multi_accelerator
     def test_pipeline_device_not_equal_model_device(self):

@@ -23,16 +23,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
-
-
-class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": True,
-        },
-    }
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...utils.deprecation import deprecate_attr
 
 
 class PaddleOCRVLProcessor(ProcessorMixin):
@@ -50,7 +42,8 @@ class PaddleOCRVLProcessor(ProcessorMixin):
 
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
-    valid_processor_kwargs = PaddleOCRVLProcessorKwargs
+
+    return_mm_token_type_ids = True
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token
@@ -62,5 +55,34 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         num_tokens = int(image_inputs["image_grid_thw"][image_idx].prod()) // (merge_size * merge_size)
         return self.image_token * num_tokens
 
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
+
+
+__getattr__ = deprecate_attr(__name__, rename={"PaddleOCRVLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["PaddleOCRVLProcessor"]

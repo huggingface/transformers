@@ -495,6 +495,20 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
             common_properties=["num_query_tokens", "image_token_index"],
         )
 
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        # override - old testers that is composed of separate classes for vision/text
+        try:
+            original_batch_size = self.model_tester.batch_size
+            self.model_tester.text_model_tester.batch_size = batch_size
+            self.model_tester.vision_model_tester.batch_size = batch_size
+            self.model_tester.qformer_model_tester.batch_size = batch_size
+            config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
+        finally:
+            self.model_tester.text_model_tester.batch_size = original_batch_size
+            self.model_tester.vision_model_tester.batch_size = original_batch_size
+            self.model_tester.qformer_model_tester.batch_size = original_batch_size
+        return config, inputs_dict
+
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):
         return _prepare_qformer_config_headdim(config, requested_dim)
@@ -803,6 +817,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 (None, None): [32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 22910, 9565, 310, 445, 1967, 338, 278, 10122, 310, 263, 767, 13407, 373, 2246, 310, 263, 8818, 29875, 7776, 29892, 607, 338, 19500, 1623, 263, 19587, 4272, 11952, 29889],
+                ("cuda", (8, 6)): [32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 1967, 338, 22910, 1363, 372, 5680, 263, 767, 13407, 373, 2246, 310, 263, 8818, 29875, 29892, 607, 338, 19500, 1623, 263, 19587, 4272, 11952, 29889, 910, 338, 385, 22910],
             }
         )  # fmt: off
         expected_output = expected_outputs.get_expectation()
@@ -810,6 +825,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 (None, None): 'What is unusual about this image? The unusual aspect of this image is the presence of a man standing on top of a taxi cab, which is driving down a busy city street.',
+                ("cuda", (8, 6)): "What is unusual about this image? The image is unusual because it features a man standing on top of a taxi, which is driving down a busy city street. This is an unusual",
             }
         )  # fmt: off
         expected_text = expected_texts.get_expectation()
@@ -849,6 +865,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 (None, None): [0, 37, 7225, 1023, 9850, 7, 3, 9, 388, 4125, 30, 420, 13, 3, 9, 9256, 10891, 16, 8, 2214, 13, 3, 9, 690, 2815, 5, 37, 388, 19, 6771, 3, 9, 508, 1464, 2689, 6, 15495, 24, 3, 88, 164, 36, 464, 30, 3, 9, 1449, 516, 42, 3, 26564, 3, 9, 1689, 5, 37, 1023, 92, 753, 3, 9, 4459, 9256, 10891, 28, 3, 9, 1320, 24, 608, 7, 96, 382, 8606, 121, 16, 8, 4548, 18, 3535, 2752, 13, 8, 1023, 5, 37, 1320, 9379, 24, 8, 568, 19, 3, 9, 9256, 2535, 6, 84, 164, 6360, 24, 8, 568, 19, 3, 9, 1449, 10416, 5, 1],
+                ("cuda", (8, 6)): [0, 37, 7225, 1023, 9850, 7, 3, 9, 388, 4125, 30, 420, 13, 3, 9, 4459, 9256, 10891, 16, 8, 2214, 13, 3, 9, 690, 2815, 5, 37, 388, 19, 3609, 3, 9, 508, 1464, 2689, 6, 15495, 24, 3, 88, 164, 36, 464, 30, 3, 9, 1449, 516, 42, 3, 26564, 3, 9, 1689, 5, 37, 1023, 92, 1267, 3, 9, 740, 28, 5065, 3950, 16, 8, 2458, 6, 15495, 24, 8, 388, 164, 36, 464, 30, 3, 9, 1449, 516, 42, 3, 26564, 3, 9, 1689, 5, 1],
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(outputs[0].tolist(), expected_outputs)
@@ -856,6 +873,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         expected_text = Expectations(
             {
                 (None, None): 'The unusual image depicts a man standing on top of a taxicab in the middle of a city street. The man is carrying a large toolbox, suggesting that he may be working on a construction project or repairing a vehicle. The image also features a yellow taxicab with a sign that reads "Taxi" in the upper-right corner of the image. The sign indicates that the person is a taxi driver, which may indicate that the person is a construction worker.',
+                ("cuda", (8, 6)): "The unusual image depicts a man standing on top of a yellow taxicab in the middle of a city street. The man is holding a large toolbox, suggesting that he may be working on a construction project or repairing a vehicle. The image also shows a building with tall buildings in the background, suggesting that the man may be working on a construction project or repairing a vehicle.",
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(generated_text, expected_text)

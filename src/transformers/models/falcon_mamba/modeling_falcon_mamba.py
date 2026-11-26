@@ -32,8 +32,9 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...utils import ModelOutput, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import (
     is_mambapy_available,
     is_torch_greater_or_equal,
@@ -46,18 +47,18 @@ from .configuration_falcon_mamba import FalconMambaConfig
 class FalconMambaWeightlessRMSNorm(torch.nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
         # Dummy weights that are not used (only for imitating the kernels path)
         self.weight = nn.Buffer(torch.ones(hidden_size, requires_grad=False), persistent=False)
 
     def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.variance_epsilon)
 
     def forward(self, x):
         return self._norm(x.float()).type_as(x)
 
     def extra_repr(self):
-        return f"eps={self.eps}"
+        return f"eps={self.variance_epsilon}"
 
 
 def apply_mask_to_padding_states(hidden_states, attention_mask):
@@ -115,28 +116,57 @@ def causal_conv1d_fn(
     return out.to(hidden_states.dtype)
 
 
-@use_kernel_func_from_hub_with_fallback("mamba_inner_fn", "mamba_ssm")
-def mamba_inner_fn(
-    xz: torch.Tensor,
-    conv1d_weight: torch.Tensor,
-    conv1d_bias: torch.Tensor | None,
-    x_proj_weight: torch.Tensor,
-    delta_proj_weight: torch.Tensor,
-    out_proj_weight: torch.Tensor,
-    out_proj_bias: torch.Tensor | None,
-    A: torch.Tensor,
-    B: torch.Tensor | None = None,
-    C: torch.Tensor | None = None,
-    D: torch.Tensor | None = None,
-    delta_bias: torch.Tensor | None = None,
-    delta_softplus: bool = True,
-    b_rms_weight: torch.Tensor | None = None,
-    c_rms_weight: torch.Tensor | None = None,
-    dt_rms_weight: torch.Tensor | None = None,
-    b_c_dt_rms_eps: float = 1e-6,
+@use_kernel_forward_from_hub("causal_conv1d_forward")
+def causal_conv1d_forward(
+    conv1d: nn.Conv1d,
+    hidden_states: torch.Tensor,
+    cache: Cache | None,
+    layer_idx: int,
+    activation: str | None = None,
+    state_idx: int = 0,
     **kwargs,
-):
-    return None
+) -> torch.Tensor:
+    """
+    Causal depthwise convolution of a linear attention layer, reading and updating its conv state in `cache`.
+    Layers list it in `use_kernelized_func`, so that `kernelize` can replace it, e.g. with a runtime that manages
+    the conv state itself.
+
+    Args:
+        conv1d (`nn.Conv1d`):
+            The depthwise convolution, whose weights and kernel size are used.
+        hidden_states (`torch.Tensor` of shape `(batch_size, channels, seq_len)`):
+            The input to the convolution.
+        cache (`Cache`, *optional*):
+            The cache holding the conv state, updated in place.
+        layer_idx (`int`):
+            The index of the layer in `cache`.
+        activation (`str`, *optional*):
+            The activation applied to the output of the convolution.
+        state_idx (`int`, *optional*, defaults to 0):
+            Which of the layer's conv states to use.
+        kwargs:
+            Passed to the convolution kernel.
+
+    Returns:
+        `torch.Tensor` of shape `(batch_size, channels, seq_len)`: The output of the convolution.
+    """
+    seq_len = hidden_states.shape[-1]
+    conv_state = cache.get_conv_state(layer_idx, state_idx=state_idx) if cache is not None else None
+    weight = conv1d.weight.squeeze(1)
+
+    # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
+    if conv_state is not None and seq_len == 1 and not cache.is_recording_past(layer_idx):
+        return causal_conv1d_update(hidden_states, conv_state, weight, conv1d.bias, activation=activation)
+
+    if cache is not None:
+        hidden_states = cache.update_conv_state(
+            hidden_states, layer_idx, state_idx=state_idx, conv_kernel_size=conv1d.kernel_size[0]
+        )
+    hidden_states = causal_conv1d_fn(hidden_states, weight, conv1d.bias, activation=activation, **kwargs)
+    # Drop the previous states prepended by the cache
+    if cache is not None:
+        hidden_states = hidden_states[:, :, -seq_len:]
+    return hidden_states
 
 
 @use_kernel_func_from_hub_with_fallback("selective_state_update", "mamba_ssm")
@@ -293,15 +323,101 @@ def mamba_selective_scan(
     return scan_output
 
 
+@use_kernel_forward_from_hub("mamba_scan_forward")
+def mamba_scan_forward(
+    module: nn.Module,
+    hidden_states: torch.Tensor,
+    time_step: torch.Tensor,
+    B: torch.Tensor,
+    C: torch.Tensor,
+    gate: torch.Tensor,
+    cache: Cache | None,
+    **kwargs,
+) -> torch.Tensor:
+    """
+    Selective scan of a FalconMamba layer, reading and updating its recurrent state in `cache`. Layers list it in
+    `use_kernelized_func`, so that `kernelize` can replace it, e.g. with a runtime that manages the recurrent state
+    itself.
+
+    Args:
+        module (`nn.Module`):
+            The mixer, from which `A_log`, `D`, `dt_proj.bias`, `layer_idx` and the scan options are read.
+        hidden_states (`torch.Tensor` of shape `(batch_size, intermediate_size, seq_len)`):
+            The input to the scan.
+        time_step (`torch.Tensor` of shape `(batch_size, intermediate_size, seq_len)`):
+            The time step, before `dt_proj.bias` and softplus.
+        B (`torch.Tensor` of shape `(batch_size, seq_len, ssm_state_size)`):
+            The input projection of the state space model.
+        C (`torch.Tensor` of shape `(batch_size, seq_len, ssm_state_size)`):
+            The output projection of the state space model.
+        gate (`torch.Tensor` of shape `(batch_size, intermediate_size, seq_len)`):
+            The gate applied to the output of the scan.
+        cache (`Cache`, *optional*):
+            The cache holding the recurrent state, updated in place.
+
+    Returns:
+        `torch.Tensor` of shape `(batch_size, intermediate_size, seq_len)`: The gated output of the scan, including
+        the `D` skip connection.
+    """
+    recurrent_state = cache.get_recurrent_state(module.layer_idx, state_idx=0) if cache is not None else None
+    A = -torch.exp(module.A_log.float())
+    time_proj_bias = module.dt_proj.bias.float() if module.dt_proj.bias is not None else None
+
+    if recurrent_state is not None and hidden_states.shape[-1] == 1:
+        return mamba_selective_state_update(
+            recurrent_state,
+            hidden_states[..., 0],
+            time_step[..., 0],
+            A,
+            B[:, 0],
+            C[:, 0],
+            module.D,
+            z=gate[..., 0],
+            dt_bias=time_proj_bias,
+            dt_softplus=True,
+        ).unsqueeze(-1)
+
+    output_final_state = cache is not None
+    scan_result = mamba_selective_scan(
+        hidden_states,
+        time_step,
+        A,
+        B.transpose(1, 2),
+        C.transpose(1, 2),
+        D=module.D.float(),
+        z=gate,
+        delta_bias=time_proj_bias,
+        delta_softplus=True,
+        return_last_state=output_final_state,
+        use_mambapy=module.use_mambapy,
+        use_associative_scan=module.use_associative_scan,
+    )
+    if not output_final_state:
+        return scan_result
+    scan_output, final_state = scan_result
+    cache.update_recurrent_state(final_state, module.layer_idx)
+    return scan_output
+
+
 @use_kernelized_func(
-    [mamba_inner_fn, mamba_selective_scan, mamba_selective_state_update, causal_conv1d_fn, causal_conv1d_update]
+    [
+        mamba_selective_scan,
+        mamba_selective_state_update,
+        mamba_scan_forward,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class FalconMambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
-    A, D are input independent (see FalconMamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
-    ∆, B, C are input-dependent (this is a key difference between FalconMamba and the linear time invariant S4,
-    and is why FalconMamba is called **selective** state spaces)
+    A, D are input independent (see Mamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
+    ∆, B, C are input-dependent (this is a key difference between Mamba and the linear time invariant S4,
+    and is why Mamba is called **selective** state spaces)
+
+    NOTE: unlike Mamba, there is no fused `mamba_inner_fn` path: it can only normalize dt after `dt_proj`, while
+    FalconMamba normalizes it before, see https://github.com/huggingface/transformers/pull/51184
     """
 
     def __init__(self, config: FalconMambaConfig, layer_idx: int, initialize_mixer_weights: bool = True):
@@ -378,81 +494,30 @@ class FalconMambaMixer(nn.Module):
         init.ones_(self.c_layernorm.weight)
 
     @force_accelerate_hooks(["conv1d", "dt_proj"])
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
-        seq_len = hidden_states.shape[1]
         dtype = hidden_states.dtype
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
-
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
-        A = -torch.exp(self.A_log.float())
-        if self.training and cache_params is None:
-            fused_output = mamba_inner_fn(
-                projected_states,
-                self.conv1d.weight,
-                self.conv1d.bias if self.use_conv_bias else None,
-                self.x_proj.weight,
-                self.dt_proj.weight,
-                self.out_proj.weight,
-                self.out_proj.bias.float() if self.use_bias else None,
-                A,
-                None,  # input-dependent B
-                None,  # input-dependent C
-                self.D.float(),
-                delta_bias=self.dt_proj.bias.float(),
-                delta_softplus=True,
-                # Key difference: norms on B, C, and dt
-                b_rms_weight=self.b_layernorm.weight,
-                c_rms_weight=self.c_layernorm.weight,
-                dt_rms_weight=self.dt_layernorm.weight,
-                b_c_dt_rms_eps=self.rms_eps,
-            )
-
-            # Only kernels can use this shortcircuit, fallback to normal torch otherwise
-            if fused_output is not None:
-                return fused_output
-
         hidden_states_B_C, gate = projected_states.chunk(2, dim=1)
 
-        if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
-
         # 2. Convolution sequence transformation
-        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
-            hidden_states_B_C = causal_conv1d_update(
-                hidden_states_B_C,
-                conv_state,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                activation=self.activation,
-            )
-        else:
-            if cache_params is not None:
-                hidden_states_B_C = cache_params.update_conv_state(
-                    hidden_states_B_C,
-                    self.layer_idx,
-                    conv_kernel_size=self.conv_kernel_size,
-                )
-
-            hidden_states_B_C = causal_conv1d_fn(
-                hidden_states_B_C,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                activation=self.activation,
-                **kwargs,
-            )
-
-            if cache_params is not None:
-                hidden_states_B_C = hidden_states_B_C[:, :, -seq_len:]
+        hidden_states_B_C = causal_conv1d_forward(
+            self.conv1d,
+            hidden_states_B_C,
+            cache,
+            self.layer_idx,
+            activation=self.activation,
+            **kwargs,
+        )
 
         # 3. SSM transformation
         hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C.transpose(1, 2), attention_mask)
@@ -473,46 +538,9 @@ class FalconMambaMixer(nn.Module):
             time_step = (self.dt_proj(time_step) - self.dt_proj.bias).transpose(1, 2)
         else:
             time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
-        time_proj_bias = self.dt_proj.bias.float() if self.dt_proj.bias is not None else None
-
-        # Recurrent form
-        if use_precomputed_states and seq_len == 1:
-            scan_output = mamba_selective_state_update(
-                recurrent_state,
-                hidden_states_B_C.transpose(1, 2)[..., 0],
-                time_step[..., 0],
-                A,
-                B[:, 0],
-                C[:, 0],
-                self.D,
-                z=gate[..., 0],
-                dt_bias=time_proj_bias,
-                dt_softplus=True,
-            ).unsqueeze(-1)
-
-        # Full sequence form
-        else:
-            output_final_state = cache_params is not None
-            scan_result = mamba_selective_scan(
-                hidden_states_B_C.transpose(1, 2),
-                time_step,
-                A,
-                B.transpose(1, 2),
-                C.transpose(1, 2),
-                D=self.D.float(),
-                z=gate,
-                delta_bias=time_proj_bias,
-                delta_softplus=True,
-                return_last_state=output_final_state,
-                use_mambapy=self.use_mambapy,
-                use_associative_scan=self.use_associative_scan,
-            )
-
-            if output_final_state:
-                scan_output, final_state = scan_result
-                cache_params.update_recurrent_state(final_state, self.layer_idx)
-            else:
-                scan_output = scan_result
+        scan_output = mamba_scan_forward(
+            self, hidden_states_B_C.transpose(1, 2), time_step, B, C, gate, cache, **kwargs
+        )
 
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2).to(dtype))
@@ -549,10 +577,11 @@ class FalconMambaBlock(GradientCheckpointingLayer):
         self.norm = FalconMambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.mixer = FalconMambaMixer(config, layer_idx=layer_idx, initialize_mixer_weights=False)
 
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
         **kwargs,
     ):
@@ -561,7 +590,7 @@ class FalconMambaBlock(GradientCheckpointingLayer):
         if self.residual_in_fp32:
             residual = residual.to(torch.float32)
 
-        hidden_states = self.mixer(hidden_states, cache_params=cache_params, attention_mask=attention_mask)
+        hidden_states = self.mixer(hidden_states, cache=cache, attention_mask=attention_mask)
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -574,7 +603,6 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _is_stateful = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         super()._init_weights(module)
@@ -611,16 +639,16 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
 @dataclass
 class FalconMambaOutput(ModelOutput):
     r"""
-    cache_params (`Cache`):
+    cache (`Cache`):
         The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
         avoid providing the old `input_ids`.
 
         Includes both the State space model state matrices after the selective scan, and the Convolutional states
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    cache_params: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    cache: Cache | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -631,26 +659,26 @@ class FalconMambaOutput(ModelOutput):
 @dataclass
 class FalconMambaCausalLMOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    cache_params (`Cache`):
+    cache (`Cache`):
         The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
         avoid providing the old `input_ids`.
 
         Includes both the State space model state matrices after the selective scan, and the Convolutional states
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    cache_params: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    cache: Cache | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
 class FalconMambaModel(FalconMambaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FalconMambaConfig):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
@@ -670,11 +698,12 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         self.embeddings = new_embeddings
 
     @auto_docstring
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.LongTensor | None = None,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -682,11 +711,11 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         **kwargs,
     ) -> tuple | FalconMambaOutput:
         r"""
-        cache_params (`Cache`, *optional*):
+        cache (`Cache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
             `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
         use_cache (`bool`, *optional*):
-            If set to `True`, the `cache_params` is returned and can be used to quickly generate the next logits.
+            If set to `True`, the `cache` is returned and can be used to quickly generate the next logits.
         """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -703,15 +732,15 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         if self.gradient_checkpointing and self.training and use_cache:
             use_cache = False
 
-        if use_cache and cache_params is None:
-            cache_params = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         hidden_states = inputs_embeds
         all_hidden_states = () if output_hidden_states else None
         for mixer_block in self.layers:
             hidden_states = mixer_block(
                 hidden_states,
-                cache_params=cache_params,
+                cache=cache,
                 attention_mask=attention_mask,
             )
 
@@ -724,11 +753,11 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, cache_params, all_hidden_states] if v is not None)
+            return tuple(v for v in [hidden_states, cache, all_hidden_states] if v is not None)
 
         return FalconMambaOutput(
             last_hidden_state=hidden_states,
-            cache_params=cache_params if use_cache else None,
+            cache=cache if use_cache else None,
             hidden_states=all_hidden_states,
         )
 
@@ -742,7 +771,7 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
 class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "backbone.embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: FalconMambaConfig):
         super().__init__(config)
         self.backbone = FalconMambaModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -755,12 +784,13 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, new_embeddings):
         return self.backbone.set_input_embeddings(new_embeddings)
 
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         input_ids,
         inputs_embeds=None,
         use_cache=None,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
         is_first_iteration: bool | None = False,
         **kwargs,
@@ -769,7 +799,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
             input_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_params=cache_params,
+            cache=cache,
             attention_mask=attention_mask,
             is_first_iteration=is_first_iteration,
             **kwargs,
@@ -781,12 +811,13 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         return model_inputs
 
     @auto_docstring
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        cache_params: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        cache: Cache | None = None,
         labels: torch.LongTensor | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -795,7 +826,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         **kwargs,  # for now we need this for generation
     ) -> tuple | FalconMambaCausalLMOutput:
         r"""
-        cache_params (`Cache`, *optional*):
+        cache (`Cache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
             `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -803,13 +834,13 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         use_cache (`bool`, *optional*):
-            If set to `True`, the `cache_params` is returned and can be used to quickly generate the next logits.
+            If set to `True`, the `cache` is returned and can be used to quickly generate the next logits.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         falcon_mamba_outputs = self.backbone(
             input_ids,
-            cache_params=cache_params,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -818,9 +849,8 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = falcon_mamba_outputs[0]
-        # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :].to(self.lm_head.weight.dtype)).float()
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
 
         loss = None
         if labels is not None:
@@ -833,7 +863,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         return FalconMambaCausalLMOutput(
             loss=loss,
             logits=logits,
-            cache_params=falcon_mamba_outputs.cache_params,
+            cache=falcon_mamba_outputs.cache,
             hidden_states=falcon_mamba_outputs.hidden_states,
         )
 

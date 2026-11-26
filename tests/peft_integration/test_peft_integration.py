@@ -442,7 +442,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 frozen_output = model.get_input_embeddings()(dummy_input)
                 self.assertTrue(frozen_output.requires_grad is False)
 
-                model.gradient_checkpointing_enable()
+                model.activation_checkpointing_enable()
 
                 # Since here we attached the hook, the input should have requires_grad to set
                 # properly
@@ -940,6 +940,18 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 key = f".other.{suffix}"
                 msg = f"{key} | MISSING |"
                 self.assertIn(msg, cl.out)
+
+    def test_peft_load_second_adapter_no_missing_keys(self):
+        """
+        Test that loading a second adapter does not report the first adapter's weights as missing, also when its name
+        is a substring of the first one's.
+        """
+        for model_id, peft_model_id in zip(self.transformers_test_model_ids, self.peft_test_model_ids):
+            for transformers_class in self.transformers_test_model_classes:
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+                model.load_adapter(peft_model_id, adapter_name="adapter_10")
+                loading_info = model.load_adapter(peft_model_id, adapter_name="adapter_1")
+                self.assertEqual(loading_info.missing_keys, set())
 
     def test_peft_load_adapter_training_inference_mode_true(self):
         """

@@ -30,18 +30,19 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
     DeepseekV3PreTrainedModel,
-    DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
     apply_rotary_pos_emb,
     apply_rotary_pos_emb_interleave,
@@ -49,6 +50,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 )
 from ..glm4_moe_lite.configuration_glm4_moe_lite import Glm4MoeLiteConfig
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
+from ..llama.modeling_llama import LlamaRMSNorm
 
 
 logger = logging.get_logger(__name__)
@@ -89,9 +91,6 @@ class DeepseekV32Config(Glm4MoeLiteConfig):
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -159,11 +158,10 @@ class DeepseekV32Config(Glm4MoeLiteConfig):
         # BC: re-route `num_experts` to `n_routed_experts`
         if (num_experts := kwargs.get("num_experts")) is not None:
             self.n_routed_experts = num_experts
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
-        super().__post_init__(**kwargs)
 
-
-class DeepseekV32RMSNorm(DeepseekV3RMSNorm):
+class DeepseekV32RMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -181,7 +179,7 @@ class DeepseekV32Indexer(nn.Module):
 
     **Cache strategy**: the indexer key cache lives on the per-layer `DynamicIndexedLayer` (or the
     `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
-    `past_key_values.update_indexer()`.
+    `cache.update_indexer()`.
     """
 
     def __init__(self, config: "DeepseekV32Config", layer_idx: int):
@@ -203,6 +201,7 @@ class DeepseekV32Indexer(nn.Module):
         self.softmax_scale = self.head_dim**-0.5
 
     @torch.no_grad()
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -210,7 +209,7 @@ class DeepseekV32Indexer(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,  # Kept for BC
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
     ) -> torch.Tensor:
         """
         Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
@@ -228,7 +227,7 @@ class DeepseekV32Indexer(nn.Module):
             q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
             position_embeddings: `(cos, sin)` from RotaryEmbedding.
             attention_mask: Causal mask, broadcastable to `[B, S, T]`.
-            past_key_values: Cache object containing the indexer key cache for this layer.
+            cache: Cache object containing the indexer key cache for this layer.
 
         Returns:
             `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
@@ -248,8 +247,8 @@ class DeepseekV32Indexer(nn.Module):
         q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
 
-        if past_key_values is not None:
-            k = past_key_values.update_indexer(k, self.layer_idx)
+        if cache is not None:
+            k = cache.update_indexer(k, self.layer_idx)
 
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
         scores = F.relu(scores)
@@ -278,12 +277,13 @@ class DeepseekV32Attention(AXK1Attention):
         super().__init__(config, layer_idx)
         self.indexer = DeepseekV32Indexer(config, layer_idx)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -303,8 +303,8 @@ class DeepseekV32Attention(AXK1Attention):
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
 
         # Cache read / write is performed while latent KV is still compressed
-        if past_key_values is not None:
-            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+        if cache is not None:
+            k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
 
@@ -317,7 +317,7 @@ class DeepseekV32Attention(AXK1Attention):
             position_embeddings,
             attention_mask[:, 0, :, :],
             position_ids,  # Kept for BC
-            past_key_values=past_key_values,
+            cache=cache,
         )  # [B, S, topk]
 
         sparse_indices = None
@@ -362,7 +362,7 @@ class DeepseekV32DecoderLayer(Glm4MoeLiteDecoderLayer):
 
 class DeepseekV32PreTrainedModel(DeepseekV3PreTrainedModel):
     _keep_in_fp32_modules = ["indexer.weights_proj"]
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
@@ -370,27 +370,28 @@ class DeepseekV32PreTrainedModel(DeepseekV3PreTrainedModel):
 
 
 class DeepseekV32Model(DeepseekV3Model):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -400,7 +401,7 @@ class DeepseekV32Model(DeepseekV3Model):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
                 "allow_is_causal_skip": False,  # Always force creation to account for causality in the indexer
             }
@@ -415,15 +416,15 @@ class DeepseekV32Model(DeepseekV3Model):
                 attention_mask=causal_mask_mapping["indexed_attention"],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 **kwargs,
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 

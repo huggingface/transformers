@@ -55,7 +55,17 @@ class GraniteMoeSharedConfig(PreTrainedConfig):
     """
 
     model_type = "granitemoeshared"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+    }
+    base_model_ep_plan = {
+        "layers.*.block_sparse_moe.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.block_sparse_moe.experts.down_proj": "grouped_gemm",
+        "layers.*.block_sparse_moe.experts": "ep_dispatch_experts",
+    }
 
     vocab_size: int = 32000
     hidden_size: int = 4096

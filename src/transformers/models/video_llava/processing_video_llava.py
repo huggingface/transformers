@@ -18,24 +18,22 @@ Processor class for VideoLlava.
 import numpy as np
 
 from ...image_utils import get_image_size, to_numpy_array
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class VideoLlavaProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class VideoLlavaProcessor(ProcessorMixin):
-    valid_processor_kwargs = VideoLlavaProcessorKwargs
+    text_kwargs = {
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_tensors": "pt",
+    }
+    videos_kwargs = {
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,
@@ -74,7 +72,8 @@ class VideoLlavaProcessor(ProcessorMixin):
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
-        image = image_inputs["pixel_values_images"][image_idx]
+        new_pixel_values = image_inputs.get("pixel_values")
+        image = image_inputs.get("pixel_values_images", new_pixel_values)[image_idx]
         height, width = get_image_size(to_numpy_array(image))
         num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
         num_image_tokens += self.num_additional_image_tokens
@@ -94,5 +93,45 @@ class VideoLlavaProcessor(ProcessorMixin):
         num_image_tokens += self.num_additional_image_tokens
         return self.video_token * (num_image_tokens * num_frames)
 
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        merged_kwargs = self._merge_kwargs(**kwargs)
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = merged_kwargs["images_kwargs"]
+            crop_size = images_kwargs.get("crop_size", None) or self.image_processor.crop_size
+            num_image_tokens = (crop_size["height"] // self.patch_size) * (crop_size["width"] // self.patch_size)
+            num_image_tokens += self.num_additional_image_tokens
+            if self.vision_feature_select_strategy == "default":
+                num_image_tokens -= 1
+
+            num_image_tokens = [num_image_tokens] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = merged_kwargs["videos_kwargs"]
+            crop_size = videos_kwargs.get("crop_size", None) or self.video_processor.crop_size
+            num_frame_tokens = (crop_size["height"] // self.patch_size) * (crop_size["width"] // self.patch_size)
+            num_frame_tokens += self.num_additional_image_tokens
+            vision_data["num_video_tokens"] = [num_frames * num_frame_tokens for num_frames, _, _ in video_sizes]
+
+        return MultiModalData(**vision_data)
+
+
+__getattr__ = deprecate_attr(__name__, rename={"VideoLlavaProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["VideoLlavaProcessor"]

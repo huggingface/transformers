@@ -69,7 +69,6 @@ class Cohere2MoeConfig(PreTrainedConfig):
     """
 
     model_type = "cohere2_moe"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -85,10 +84,9 @@ class Cohere2MoeConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 256000
@@ -115,6 +113,7 @@ class Cohere2MoeConfig(PreTrainedConfig):
     sliding_window: int | None = 4096
     num_experts_per_tok: int = 2
     num_experts: int = 8
+    output_router_logits: bool = False
     num_shared_experts: int = 0
     shared_expert_combination_strategy: str = "average"
     expert_selection_fn: str = "softmax"

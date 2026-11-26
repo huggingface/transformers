@@ -20,22 +20,19 @@ import unittest
 import numpy as np
 import pytest
 from datasets import Audio, load_dataset
-from pytest import mark
 
 from tests.utils.test_audio_utils import normalize_waveform
-from transformers import AutoFeatureExtractor, MimiConfig, set_seed
+from transformers import AutoFeatureExtractor, MimiConfig, MimiDecoderConfig, MimiEncoderConfig, set_seed
 from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
     Expectations,
-    is_flaky,
     is_torch_available,
-    require_flash_attn,
     require_torch,
-    require_torch_accelerator,
     slow,
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -43,7 +40,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import MimiModel
+    from transformers import MimiDecoderModel, MimiEncoderModel, MimiModel
 
 
 # Copied from transformers.tests.encodec.test_modeling_encodec.prepare_inputs_dict
@@ -66,48 +63,33 @@ def prepare_inputs_dict(
 
 
 @require_torch
-class MimiModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=5,
-        num_channels=1,
-        is_training=False,
-        intermediate_size=40,
-        hidden_size=32,
-        num_filters=8,
-        num_residual_layers=1,
-        upsampling_ratios=[8, 4],
-        codebook_size=64,
-        vector_quantization_hidden_dimension=64,
-        codebook_dim=64,
-        upsample_groups=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        sliding_window=4,
-        use_cache=False,
-        max_position_embeddings=512,
-    ):
+class MimiModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 5,
+        "num_channels": 1,
+        "is_training": False,
+        "intermediate_size": 40,
+        "hidden_size": 32,
+        "num_filters": 8,
+        "num_residual_layers": 1,
+        "upsampling_ratios": [8, 4],
+        "codebook_size": 64,
+        "vector_quantization_hidden_dimension": 64,
+        "codebook_dim": 64,
+        "upsample_groups": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "sliding_window": 4,
+        "use_cache": False,
+        "max_position_embeddings": 512,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.intermediate_size = intermediate_size
-        self.hidden_size = hidden_size
-        self.num_filters = num_filters
-        self.num_residual_layers = num_residual_layers
-        self.upsampling_ratios = upsampling_ratios
-        self.codebook_size = codebook_size
-        self.vector_quantization_hidden_dimension = vector_quantization_hidden_dimension
-        self.codebook_dim = codebook_dim
-        self.upsample_groups = upsample_groups
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.sliding_window = sliding_window
-        self.use_cache = use_cache
-        self.max_position_embeddings = max_position_embeddings
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self, input_values_length=None):
         input_values = floats_tensor(
@@ -166,6 +148,8 @@ class MimiModelTester:
 
 @require_torch
 class MimiModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = MimiModelTester
+
     all_model_classes = (MimiModel,) if is_torch_available() else ()
     is_encoder_decoder = True
 
@@ -270,16 +254,12 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertTrue(isinstance(dict_output, dict))
 
                 for tuple_value, dict_value in zip(tuple_output, dict_output.values()):
-                    self.assertTrue(
-                        torch.allclose(
-                            set_nan_tensor_to_zero(tuple_value), set_nan_tensor_to_zero(dict_value), atol=1e-5
-                        ),
-                        msg=(
-                            "Tuple and dict output are not equal. Difference:"
-                            f" {torch.max(torch.abs(tuple_value - dict_value))}. Tuple has `nan`:"
-                            f" {torch.isnan(tuple_value).any()} and `inf`: {torch.isinf(tuple_value)}. Dict has"
-                            f" `nan`: {torch.isnan(dict_value).any()} and `inf`: {torch.isinf(dict_value)}."
-                        ),
+                    torch.testing.assert_close(
+                        set_nan_tensor_to_zero(tuple_value),
+                        set_nan_tensor_to_zero(dict_value),
+                        rtol=1e-5,
+                        atol=1e-5,
+                        msg=lambda m: f"Tuple and dict output are not equal.\n{m}",
                     )
 
         for model_class in self.all_model_classes:
@@ -297,12 +277,10 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
         config.use_conv_shortcut = False
         self.model_tester.create_and_check_model_forward(config, inputs_dict)
 
-    @require_flash_attn
-    @require_torch_accelerator
-    @mark.flash_attn_test
-    @slow
-    @is_flaky()
-    def test_flash_attn_2_inference_equivalence(self):
+    def flash_attn_inference_equivalence(self, attn_implementation, padding_side="left"):
+        if padding_side == "right":
+            self.skipTest("The MimiModel does not support right padding")
+
         for model_class in self.all_model_classes:
             # Set seed for deterministic test - ensures reproducible model initialization and inputs
             set_seed(42)
@@ -312,7 +290,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation
                 )
                 model_fa.to(torch_device)
 
@@ -331,14 +309,55 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
 
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
 
-    @unittest.skip(reason="The MimiModel does not support right padding")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
     @unittest.skip(reason="The MimiModel does not have support dynamic compile yet")
     @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
+
+    def test_config_without_encoder_or_decoder(self):
+        config = self.model_tester.get_config()
+        self.assertNotIn("encoder_config", config.to_diff_dict())
+
+        config.encoder_config = None
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            config = MimiConfig.from_pretrained(tmp_dir)
+        self.assertIsNone(config.encoder_config)
+        self.assertIsInstance(config.decoder_config, MimiDecoderConfig)
+
+        with self.assertRaises(ValueError):
+            config.decoder_config = None
+        with self.assertRaises(ValueError):
+            config.encoder_config = MimiEncoderConfig()
+
+    def test_model_without_encoder_or_decoder(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_values = inputs_dict["input_values"]
+        model = MimiModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            audio_codes = model.encode(input_values).audio_codes
+            audio_values = model.decode(audio_codes).audio_values
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            encoder_only, encoder_info = MimiModel.from_pretrained(
+                tmp_dir, decoder_config=None, output_loading_info=True
+            )
+            decoder_only, decoder_info = MimiModel.from_pretrained(
+                tmp_dir, encoder_config=None, output_loading_info=True
+            )
+        self.assertFalse(any(encoder_info.values()))
+        self.assertFalse(any(decoder_info.values()))
+
+        encoder_only.to(torch_device).eval()
+        decoder_only.to(torch_device).eval()
+        with torch.no_grad():
+            torch.testing.assert_close(encoder_only.encode(input_values).audio_codes, audio_codes)
+            torch.testing.assert_close(decoder_only.decode(audio_codes).audio_values, audio_values)
+        with self.assertRaises(ValueError):
+            encoder_only.decode(audio_codes)
+        with self.assertRaises(ValueError):
+            decoder_only.encode(input_values)
 
 
 def compute_rmse(arr1, arr2):
@@ -380,7 +399,7 @@ class MimiIntegrationTest(unittest.TestCase):
                 decoder_outputs_first_part = model.decode(audio_codes[:, :, : audio_codes.shape[2] // 2])
                 decoder_outputs_second_part = model.decode(
                     audio_codes[:, :, audio_codes.shape[2] // 2 :],
-                    decoder_past_key_values=decoder_outputs_first_part.decoder_past_key_values,
+                    decoder_cache=decoder_outputs_first_part.decoder_cache,
                 )
 
                 audio_output_entire_context = model.decode(audio_codes)[0]
@@ -424,7 +443,7 @@ class MimiIntegrationTest(unittest.TestCase):
         audio_codes = model.encode(inputs["input_values"]).audio_codes
 
         # streaming chunk by chunk
-        encoder_past_key_values = None
+        encoder_cache = None
         padding_cache = None
         encoded_frames_list = []
 
@@ -433,10 +452,10 @@ class MimiIntegrationTest(unittest.TestCase):
             encoder_outputs = model.encode(
                 input_values_chunk,
                 padding_cache=padding_cache,
-                encoder_past_key_values=encoder_past_key_values,
+                encoder_cache=encoder_cache,
                 use_streaming=True,
             )
-            encoder_past_key_values = encoder_outputs.encoder_past_key_values
+            encoder_cache = encoder_outputs.encoder_cache
             padding_cache = encoder_outputs.padding_cache
             encoded_frames_list.append(encoder_outputs.audio_codes)
 
@@ -574,3 +593,23 @@ class MimiIntegrationTest(unittest.TestCase):
 
                 rmse = compute_rmse(arr, arr_enc_dec)
                 self.assertTrue(np.abs(rmse - expected_rmse) < 1e-5)
+
+    @slow
+    def test_encoder_decoder_halves(self):
+        """Each half, loaded alone from the full checkpoint, matches `MimiModel` around its quantizer."""
+        model_id = "kyutai/mimi"
+        model = MimiModel.from_pretrained(model_id).to(torch_device)
+        encoder = MimiEncoderModel.from_pretrained(model_id).to(torch_device)
+        decoder = MimiDecoderModel.from_pretrained(model_id).to(torch_device)
+        torch.manual_seed(0)
+        audio_values = torch.randn(2, 1, 24000, device=torch_device) * 0.1
+        with torch.no_grad():
+            audio_codes = model.encode(audio_values).audio_codes
+            latents = encoder(audio_values).latents
+            torch.testing.assert_close(model.quantizer.encode(latents).transpose(0, 1), audio_codes, atol=0, rtol=0)
+            torch.testing.assert_close(
+                decoder(model.quantizer.decode(audio_codes)).audio_values,
+                model.decode(audio_codes).audio_values,
+                atol=0,
+                rtol=0,
+            )

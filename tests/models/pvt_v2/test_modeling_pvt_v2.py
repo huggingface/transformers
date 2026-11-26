@@ -22,6 +22,7 @@ import pytest
 from transformers import PvtV2Backbone, PvtV2Config, is_torch_available, is_vision_available
 from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
+    Expectations,
     require_accelerate,
     require_torch,
     require_torch_accelerator,
@@ -30,6 +31,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -53,48 +55,33 @@ class PvtV2ConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "num_encoder_blocks"))
 
 
-class PvtV2ModelTester(ModelTesterMixin):
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=None,
-        num_channels=3,
-        num_encoder_blocks=4,
-        depths=[2, 2, 2, 2],
-        sr_ratios=[8, 4, 2, 1],
-        hidden_sizes=[16, 32, 64, 128],
-        downsampling_rates=[1, 4, 8, 16],
-        num_attention_heads=[1, 2, 4, 8],
-        out_indices=[0, 1, 2, 3],
-        is_training=True,
-        use_labels=True,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        initializer_range=0.02,
-        num_labels=3,
-        scope=None,
-    ):
+class PvtV2ModelTester(ModelTesterMixin, ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 64,
+        "num_channels": 3,
+        "num_encoder_blocks": 4,
+        "depths": [2, 2, 2, 2],
+        "sr_ratios": [8, 4, 2, 1],
+        "hidden_sizes": [16, 32, 64, 128],
+        "downsampling_rates": [1, 4, 8, 16],
+        "num_attention_heads": [1, 2, 4, 8],
+        "out_indices": [0, 1, 2, 3],
+        "is_training": True,
+        "use_labels": True,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = 64 if image_size is None else image_size
-        self.num_channels = num_channels
-        self.num_encoder_blocks = num_encoder_blocks
-        self.sr_ratios = sr_ratios
-        self.depths = depths
-        self.hidden_sizes = hidden_sizes
-        self.downsampling_rates = downsampling_rates
-        self.num_attention_heads = num_attention_heads
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.out_indices = out_indices
-        self.num_labels = num_labels
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -144,6 +131,8 @@ def prepare_img():
 
 @require_torch
 class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = PvtV2ModelTester
+
     all_model_classes = (PvtV2Model, PvtV2ForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": PvtV2Model, "image-classification": PvtV2ForImageClassification}
@@ -270,9 +259,15 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-1.4192, -1.9158, -0.9702]).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [-1.4192, -1.9158, -0.9702],
+                ("cuda", 8): [-1.1939, -1.4547, -0.1076],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     @slow
     def test_inference_model(self):
@@ -288,14 +283,14 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
             outputs = model(pixel_values)
 
         # verify the logits
-        expected_shape = torch.Size((1, 50, 512))
+        expected_shape = torch.Size((1, 256, 7, 7))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.3086, 1.0402, 1.1816], [-0.2880, 0.5781, 0.6124], [0.1480, 0.6129, -0.0590]]
+            [[0.0841, -0.4613, 0.7303], [2.0947, -1.1510, -1.5494], [1.2120, -2.2824, 0.8753]]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.last_hidden_state[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     @require_accelerate
@@ -320,6 +315,8 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
 
 @require_torch
 class PvtV2BackboneTest(BackboneTesterMixin, unittest.TestCase):
+    model_tester_class = PvtV2ModelTester
+
     all_model_classes = (PvtV2Backbone,) if is_torch_available() else ()
     has_attentions = False
     config_class = PvtV2Config

@@ -13,23 +13,13 @@
 # limitations under the License.
 
 
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class Ovis2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-        "images_kwargs": {},
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class Ovis2Processor(ProcessorMixin):
-    valid_processor_kwargs = Ovis2ProcessorKwargs
-
     def __init__(
         self,
         image_processor=None,
@@ -65,9 +55,37 @@ class Ovis2Processor(ProcessorMixin):
         placeholder += "<IMG_END>"
         return placeholder
 
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [self.image_seq_length * num_patches for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
+
     @property
     def unused_input_names(self) -> list[str]:
         return ["grids"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Ovis2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Ovis2Processor"]

@@ -22,12 +22,14 @@ from typing import TYPE_CHECKING, Union
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
 from ...processing_utils import (
+    MultiModalData,
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
 )
 from ...tokenization_utils_base import AddedToken, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 if TYPE_CHECKING:
@@ -45,20 +47,8 @@ def is_image_or_image_url(elem):
     return is_url(elem) or is_valid_image(elem)
 
 
-class Idefics2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "is_split_into_words": False,
-        },
-    }
-
-
 @auto_docstring
 class Idefics2Processor(ProcessorMixin):
-    valid_processor_kwargs = Idefics2ProcessorKwargs
-
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: str | None = None, **kwargs
     ):
@@ -102,13 +92,12 @@ class Idefics2Processor(ProcessorMixin):
         self,
         images: ImageInput | list[ImageInput] | list[list[ImageInput]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        **kwargs: Unpack[Idefics2ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
 
         output_kwargs = self._merge_kwargs(
-            Idefics2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -188,5 +177,33 @@ class Idefics2Processor(ProcessorMixin):
 
         return BatchFeature(inputs, tensor_type=return_tensors)
 
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            do_image_splitting = images_kwargs.get("do_image_splitting", self.image_processor.do_image_splitting)
+
+            # Image splitting yields 4 crops + the original image
+            num_patches = 5 if do_image_splitting else 1
+            num_image_tokens = [self.image_seq_len * num_patches] * len(image_sizes)
+            num_image_patches = [num_patches] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
+
+
+__getattr__ = deprecate_attr(__name__, rename={"Idefics2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Idefics2Processor"]

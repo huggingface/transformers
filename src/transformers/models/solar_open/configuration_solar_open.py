@@ -34,7 +34,6 @@ class SolarOpenConfig(PreTrainedConfig):
     """
 
     model_type = "solar_open"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     # Default tensor parallel plan for base model `SolarOpenModel`
     base_model_tp_plan = {
@@ -42,9 +41,6 @@ class SolarOpenConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -52,10 +48,9 @@ class SolarOpenConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     attribute_map = {
         "num_local_experts": "n_routed_experts",
@@ -77,6 +72,7 @@ class SolarOpenConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     moe_intermediate_size: int = 1280
     num_experts_per_tok: int = 8
+    output_router_logits: bool = False
     n_shared_experts: int = 1
     n_routed_experts: int = 128
     routed_scaling_factor: float = 1.0

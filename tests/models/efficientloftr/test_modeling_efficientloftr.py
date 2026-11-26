@@ -49,7 +49,7 @@ class EfficientLoFTRModelTester:
         image_width=6,  # need to be a multiple of `stage_stride[0] * stage_stride[1]`
         image_height=4,  # need to be a multiple of `stage_stride[0] * stage_stride[1]`
         stage_num_blocks: list[int] = [1, 1],
-        out_features: list[int] = [16, 16],  # need to be >= 2 to make `config.fine_fusion_dims > 0`
+        out_features: list[int] = [16, 128],  # need to be >= 2 to make `config.fine_fusion_dims > 0`
         stage_stride: list[int] = [2, 1],
         q_aggregation_kernel_size: int = 1,
         kv_aggregation_kernel_size: int = 1,
@@ -57,7 +57,7 @@ class EfficientLoFTRModelTester:
         kv_aggregation_stride: int = 1,
         num_attention_layers: int = 2,
         num_attention_heads: int = 8,
-        hidden_size: int = 16,
+        hidden_size: int = 128,
         coarse_matching_threshold: float = 0.0,
         fine_kernel_size: int = 2,
         coarse_matching_border_removal: int = 0,
@@ -398,6 +398,31 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
                     model_batched_output[key] = model_batched_output[key][1:]
                     model_row_output[key] = model_row_output[key][1:]
                 recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
+
+    def test_batching_independence(self):
+        config = self.model_tester.get_config()
+        config.fine_matching_regress_temperature = 0.01
+        torch.manual_seed(0)
+        model = EfficientLoFTRForKeypointMatching(config=config).to(torch_device, torch.float64).eval()
+
+        input_shape = (1, 2, 3, self.model_tester.image_height, self.model_tester.image_width)
+        pair_a = torch.rand(input_shape, dtype=torch.float64).to(torch_device)
+        pair_b = torch.rand(input_shape, dtype=torch.float64).to(torch_device)
+
+        with torch.no_grad():
+            out_a = model(pixel_values=pair_a)
+            out_b = model(pixel_values=pair_b)
+            out_batched = model(pixel_values=torch.cat([pair_a, pair_b], dim=0))
+
+        # Matches and scores for each pair must not depend on other pairs in the batch (#50743)
+        self.assertTrue(torch.equal(out_a.matches[0], out_batched.matches[0]))
+        self.assertTrue(torch.equal(out_b.matches[0], out_batched.matches[1]))
+        torch.testing.assert_close(out_a.matching_scores[0], out_batched.matching_scores[0], rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(out_b.matching_scores[0], out_batched.matching_scores[1], rtol=1e-5, atol=1e-5)
+
+        # Refined keypoints must be identical whether processed individually or in a batch (#50744)
+        torch.testing.assert_close(out_a.keypoints[0], out_batched.keypoints[0], rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(out_b.keypoints[0], out_batched.keypoints[1], rtol=1e-5, atol=1e-5)
 
 
 def prepare_imgs():

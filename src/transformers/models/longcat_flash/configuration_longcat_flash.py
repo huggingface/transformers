@@ -25,6 +25,9 @@ from ...utils import auto_docstring
 @strict
 class LongcatFlashConfig(PreTrainedConfig):
     r"""
+    num_layers (`int`, *optional*, defaults to 28):
+        Number of decoder layers. Each holds two attention sublayers, so
+        `num_hidden_layers` is always derived as `2 * num_layers`.
     ffn_hidden_size (`int`, *optional*, defaults to 12288):
         Dimension of the MLP representations.
     qk_head_dim (`int`, *optional*):
@@ -35,9 +38,6 @@ class LongcatFlashConfig(PreTrainedConfig):
         Number of zero experts (identity function) to add to the expert pool.
     expert_ffn_hidden_size (`int`, *optional*, defaults to 2048):
         Hidden size of individual expert FFN layers.
-    num_layers (`int`, *optional*, defaults to 28):
-        Number of decoder layers. Each holds two attention sublayers, so
-        `num_hidden_layers` is always derived as `2 * num_layers`.
 
     ```python
     >>> from transformers import LongcatFlashModel, LongcatFlashConfig
@@ -54,7 +54,6 @@ class LongcatFlashConfig(PreTrainedConfig):
     """
 
     model_type = "longcat_flash"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_local_experts": "n_routed_experts",
         "num_experts_per_tok": "moe_topk",
@@ -67,15 +66,15 @@ class LongcatFlashConfig(PreTrainedConfig):
         "layers.*.self_attn.*.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.*.kv_b_proj": "colwise",
         "layers.*.self_attn.*.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts.identity_expert": "moe_identity_expert",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlps.*.gate_proj": "colwise",
         "layers.*.mlps.*.up_proj": "colwise",
         "layers.*.mlps.*.down_proj": "rowwise",
     }
-
+    base_model_ep_plan = {
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+    }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -109,6 +108,7 @@ class LongcatFlashConfig(PreTrainedConfig):
     qk_head_dim: int | None = None
     moe_topk: int = 12
     n_routed_experts: int = 512
+    output_router_logits: bool = False
     zero_expert_num: int = 256
     expert_ffn_hidden_size: int = 2048
     routed_scaling_factor: float = 6.0

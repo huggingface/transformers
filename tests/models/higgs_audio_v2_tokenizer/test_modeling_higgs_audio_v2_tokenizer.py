@@ -14,23 +14,18 @@
 
 import inspect
 import math
-import os
-import tempfile
 import unittest
 
 import numpy as np
-from pytest import mark
 
+from tests.model_tester_config import ModelTesterConfigMixin
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from transformers import DacConfig, HiggsAudioV2TokenizerConfig, HubertConfig
 from transformers.testing_utils import (
-    is_flaky,
     is_torch_available,
-    require_flash_attn,
     require_torch,
-    require_torch_gpu,
-    slow,
+    require_torchaudio,
     torch_device,
 )
 
@@ -42,24 +37,22 @@ if is_torch_available():
 
 
 @require_torch
-class HiggsAudioV2TokenizerModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=4,
-        num_channels=1,
-        sample_rate=16000,
-        codebook_size=1024,
-        num_samples=256,
-        is_training=False,
-    ):
+class HiggsAudioV2TokenizerModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 4,
+        "num_channels": 1,
+        "sample_rate": 16000,
+        "codebook_size": 1024,
+        "is_training": False,
+        "num_samples": 256,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.sample_rate = sample_rate
-        self.codebook_size = codebook_size
-        self.is_training = is_training
-        self.num_samples = num_samples
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
         self.acoustic_model_config = DacConfig(
             decoder_hidden_size=8, encoder_hidden_size=8, codebook_size=16, downsampling_ratios=[16, 16]
         )
@@ -106,18 +99,15 @@ class HiggsAudioV2TokenizerModelTester:
 
 
 @require_torch
+@require_torchaudio
 class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = HiggsAudioV2TokenizerModelTester
+
     all_model_classes = (HiggsAudioV2TokenizerModel,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_pruning = False
-    test_headmasking = False
     test_resize_embeddings = False
-    test_torchscript = False
     test_can_init_all_missing_weights = False
-    # The quantizer module takes ~78% of model size, so default split percents (0.5, 0.7, 0.9)
-    # are too low — at 0.7 the GPU budget can't fit any module and everything lands on a single
-    # device, preventing accelerate from creating a multi-device map.
-    model_split_percents = [0.5, 0.8, 0.9]
+    model_split_percents = [0.5, 0.9]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not support returning hidden states
@@ -167,7 +157,7 @@ class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
             config.audio_encoder.gradient_checkpointing = True
             config.decoder.gradient_checkpointing = True
             model = model_class(config)
-            self.assertTrue(model.is_gradient_checkpointing)
+            self.assertTrue(model.is_activation_checkpointing)
 
     @unittest.skip("HiggsAudioV2TokenizerModel cannot be tested with meta device")
     def test_can_load_with_meta_device_context_manager(self):
@@ -188,105 +178,6 @@ class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not have the usual `attention` logic")
     def test_retain_grad_hidden_states_attentions(self):
         pass
-
-    @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not have the usual `attention` logic")
-    def test_torchscript_output_attentions(self):
-        pass
-
-    @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not have the usual `hidden_states` logic")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
-    # Copied from transformers.tests.encodec.test_modeling_encodec.XcodecModelTest._create_and_check_torchscript
-    def _create_and_check_torchscript(self, config, inputs_dict):
-        if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to False")
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.torchscript = True
-        configs_no_init.return_dict = False
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            main_input_name = model_class.main_input_name
-
-            try:
-                main_input = inputs[main_input_name]
-                model(main_input)
-                traced_model = torch.jit.trace(model, main_input)
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
-
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
-
-                try:
-                    torch.jit.save(traced_model, pt_file_name)
-                except Exception:
-                    self.fail("Couldn't save module.")
-
-                try:
-                    loaded_model = torch.jit.load(pt_file_name)
-                except Exception:
-                    self.fail("Couldn't load module.")
-
-            model.to(torch_device)
-            model.eval()
-
-            loaded_model.to(torch_device)
-            loaded_model.eval()
-
-            model_state_dict = model.state_dict()
-            loaded_model_state_dict = loaded_model.state_dict()
-
-            non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
-                    non_persistent_buffers[key] = loaded_model_state_dict[key]
-
-            loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
-            }
-
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
-
-            model_buffers = list(model.buffers())
-            for non_persistent_buffer in non_persistent_buffers.values():
-                found_buffer = False
-                for i, model_buffer in enumerate(model_buffers):
-                    if torch.equal(non_persistent_buffer, model_buffer):
-                        found_buffer = True
-                        break
-
-                self.assertTrue(found_buffer)
-                model_buffers.pop(i)
-
-            model_buffers = list(model.buffers())
-            for non_persistent_buffer in non_persistent_buffers.values():
-                found_buffer = False
-                for i, model_buffer in enumerate(model_buffers):
-                    if torch.equal(non_persistent_buffer, model_buffer):
-                        found_buffer = True
-                        break
-
-                self.assertTrue(found_buffer)
-                model_buffers.pop(i)
-
-            models_equal = True
-            for layer_name, p1 in model_state_dict.items():
-                if layer_name in loaded_model_state_dict:
-                    p2 = loaded_model_state_dict[layer_name]
-                    if p1.data.ne(p2.data).sum() > 0:
-                        models_equal = False
-
-            self.assertTrue(models_equal)
-
-            # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
-            # (Even with this call, there are still memory leak by ~0.04MB)
-            self.clear_torch_jit_class_registry()
 
     @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not have the usual `attention` logic")
     def test_attention_outputs(self):
@@ -342,16 +233,12 @@ class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
                 dict_to_tuple_output = (dict_output["audio_codes"], dict_output["audio_values"])
 
                 for tuple_value, dict_value in zip(tuple_output, dict_to_tuple_output):
-                    self.assertTrue(
-                        torch.allclose(
-                            set_nan_tensor_to_zero(tuple_value), set_nan_tensor_to_zero(dict_value), atol=1e-5
-                        ),
-                        msg=(
-                            "Tuple and dict output are not equal. Difference:"
-                            f" {torch.max(torch.abs(tuple_value - dict_value))}. Tuple has `nan`:"
-                            f" {torch.isnan(tuple_value).any()} and `inf`: {torch.isinf(tuple_value)}. Dict has"
-                            f" `nan`: {torch.isnan(dict_value).any()} and `inf`: {torch.isinf(dict_value)}."
-                        ),
+                    torch.testing.assert_close(
+                        set_nan_tensor_to_zero(tuple_value),
+                        set_nan_tensor_to_zero(dict_value),
+                        rtol=1e-5,
+                        atol=1e-5,
+                        msg=lambda m: f"Tuple and dict output are not equal.\n{m}",
                     )
 
         for model_class in self.all_model_classes:
@@ -381,42 +268,6 @@ class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of {model_class.__name__} seems not properly initialized",
                         )
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    @is_flaky()
-    def test_flash_attn_2_inference_equivalence(self):
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
-                model.to(torch_device)
-
-                dummy_input = inputs_dict[model.main_input_name][:1]
-                if dummy_input.dtype in [torch.float32, torch.float16]:
-                    dummy_input = dummy_input.to(torch.bfloat16)
-
-                outputs = model(dummy_input)
-                outputs_fa = model_fa(dummy_input)
-
-                logits = outputs[1]
-                logits_fa = outputs_fa[1]
-
-                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-
-    @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not support right padding")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
 
     @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not have support dynamic compile yet")
     def test_sdpa_can_compile_dynamic(self):

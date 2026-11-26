@@ -35,22 +35,22 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, maybe_autocast
+from ...utils.generic import can_return_tuple
 from ...utils.output_capturing import capture_outputs
 from .configuration_neomme import NeoMMEConfig
 
 
 class NeoMMERMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6, with_scale: bool = True):
+    def __init__(self, hidden_size: int, eps: float = 1e-6, with_scale: bool = True):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
         self.with_scale = with_scale
 
         if self.with_scale:
-            self.weight = nn.Parameter(torch.ones(dim), requires_grad=True)
+            self.weight = nn.Parameter(torch.ones(hidden_size), requires_grad=True)
 
     def _norm(self, hidden_states: torch.Tensor):
-        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
+        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.variance_epsilon
         # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to address compiler differences between Torch and JAX
         return hidden_states * torch.pow(mean_squared, -0.5)
 
@@ -91,7 +91,6 @@ class NeoMMEPatchEmbeddings(nn.Module):
 class NeoMMERotaryEmbedding(nn.Module):
     """Two-axis interleaved M-RoPE with per-layer-type frequency spectra."""
 
-    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: NeoMMEConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -114,7 +113,6 @@ class NeoMMERotaryEmbedding(nn.Module):
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: NeoMMEConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
@@ -142,7 +140,6 @@ class NeoMMERotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(
         self, x: torch.Tensor, position_ids: torch.LongTensor, layer_type: str | None = None
@@ -150,15 +147,12 @@ class NeoMMERotaryEmbedding(nn.Module):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
-        inv_freq_expanded = inv_freq[None, None, :, None].float().expand(2, position_ids.shape[1], -1, 1)
-        position_ids_expanded = position_ids[:, :, None, :].float()  # (2, batch, 1, seq_len)
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            # (2, batch, seq_len, rotary_dim // 2)
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(2, 3)
-            cos = freqs.cos() * attention_scaling
-            sin = freqs.sin() * attention_scaling
+        # One row of positions per M-RoPE axis: (num_axes, bs, positions)
+        position_ids = position_ids.expand(2, -1, -1)
+        # (2, batch, seq_len, rotary_dim // 2)
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * attention_scaling
+        sin = freqs.sin() * attention_scaling
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
@@ -323,6 +317,7 @@ class NeoMMEAttention(nn.Module):
         self.exclusive_self_attention = NeoMMEExclusiveSelfAttention(config)
         self.output_projection = NeoMMESigmoidGatedProjection(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -426,7 +421,6 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["NeoMMEEncoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -447,7 +441,6 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
         backbone = getattr(self, self.base_model_prefix, self)
         backbone.embed_tokens.word_embeddings = value
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         # `apply` visits children before parents, so the NeoMME-specific parent initialization below runs last.
         super()._init_weights(module)
@@ -620,6 +613,7 @@ class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
         "lm_head.weight": "model.embed_tokens.word_embeddings.weight",
         "unembedding_projection.weight": "model.embed_tokens.embedding_projection.weight",
     }
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: NeoMMEConfig):
         super().__init__(config)
@@ -675,18 +669,18 @@ class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
 @dataclass
 class NeoMMEForRetrievalOutput(BaseModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
         Retrieval loss. This value is always `None`.
-    embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, embedding_dim)`, *optional*):
+    embeddings (`torch.Tensor` of shape `(batch_size, sequence_length, embedding_dim)`, *optional*):
         Normalized token embeddings for late-interaction retrieval. Padding rows are zeroed. Score them with MeanMaxSim.
-    dense_embeddings (`torch.FloatTensor` of shape `(batch_size, hidden_size)` or `(batch_size, dense_dim)`, *optional*):
+    dense_embeddings (`torch.Tensor` of shape `(batch_size, hidden_size)` or `(batch_size, dense_dim)`, *optional*):
         A normalized mean-pooled embedding for each input. When `dense_dim` is set, the last dimension is `dense_dim`.
         Score them with cosine similarity.
     """
 
-    loss: torch.FloatTensor | None = None
-    embeddings: torch.FloatTensor | None = None
-    dense_embeddings: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    embeddings: torch.Tensor | None = None
+    dense_embeddings: torch.Tensor | None = None
 
 
 class NeoMMEMultiVectorHead(nn.Module):

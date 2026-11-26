@@ -34,6 +34,7 @@ if is_torch_available():
     torch.set_float32_matmul_precision("highest")
 
     from transformers import (
+        AXK1Config,
         AXK1Model,
     )
 
@@ -42,49 +43,38 @@ class AXK1ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = AXK1Model
 
-    def __init__(
-        self,
-        parent,
-        n_routed_experts=8,
-        num_local_experts=8,
-        n_shared_experts=1,
-        n_group=2,
-        topk_group=1,
-        num_experts_per_tok=2,
-        first_k_dense_replace=1,
-        moe_intermediate_size=16,
-        kv_lora_rank=16,
-        q_lora_rank=32,
-        qk_nope_head_dim=16,
-        qk_rope_head_dim=32,
-        v_head_dim=32,
-    ):
-        super().__init__(parent=parent)
-        self.n_routed_experts = n_routed_experts
-        self.num_local_experts = num_local_experts
-        self.n_shared_experts = n_shared_experts
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.num_experts_per_tok = num_experts_per_tok
-        self.first_k_dense_replace = first_k_dense_replace
-        self.moe_intermediate_size = moe_intermediate_size
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
+    small_config_overrides = {
+        "n_routed_experts": 8,
+        "num_local_experts": 8,
+        "n_shared_experts": 1,
+        "n_group": 2,
+        "topk_group": 1,
+        "num_experts_per_tok": 2,
+        "mlp_layer_types": ["dense", "sparse"],
+        "moe_intermediate_size": 16,
+        "kv_lora_rank": 16,
+        "q_lora_rank": 32,
+        "qk_nope_head_dim": 16,
+        "qk_rope_head_dim": 32,
+        "v_head_dim": 32,
+    }
 
 
 @require_torch
 class AXK1ModelTest(CausalLMModelTest, unittest.TestCase):
     # Routed experts that receive no token in a step get no gradient.
-    test_all_params_have_gradient = False
     model_tester_class = AXK1ModelTester
     model_split_percents = [0.5, 0.8, 0.9]
 
     @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims (MLA qk/v dims differ)")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
+
+    def test_legacy_mlp_layer_types(self):
+        # Checkpoints describe the MLP layout with `first_k_dense_replace` / `moe_layer_freq`
+        # See https://github.com/huggingface/transformers/pull/49518
+        config = AXK1Config(num_hidden_layers=5, first_k_dense_replace=1, moe_layer_freq=2)
+        self.assertEqual(config.mlp_layer_types, ["dense", "dense", "sparse", "dense", "sparse"])
 
 
 @slow
@@ -101,14 +91,14 @@ class AXK1IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # Last-3x3 logits slice, left-padded (batch 0) and unpadded (batch 1) rows.
         EXPECTED_LOGITS_LEFT_PADDED = Expectations(
             {
-                ("cuda", (8, 6)): [[-0.1895, 1.7656, 0.8828], [0.2637, -0.1377, -1.0078], [-0.4648, 0.2031, 1.0391]],
+                ("cuda", (8, 6)): [[-0.1504, 1.7578, 0.9102], [0.2676, -0.1592, -1.0000], [-0.4727, 0.2100, 1.0547]],
                 ("xpu", None): [[-0.1934, 1.7266, 0.9141], [0.2393, -0.2363, -1.0156], [-0.4062, 0.1309, 1.0234]],
             }
         )
         expected_left_padded = torch.tensor(EXPECTED_LOGITS_LEFT_PADDED.get_expectation(), device=torch_device)
         EXPECTED_LOGITS_UNPADDED = Expectations(
             {
-                ("cuda", (8, 6)): [[-0.5703, -0.0099, -0.3477], [-0.3613, -0.3008, 0.1836], [-0.8008, 0.0840, -0.4453]],
+                ("cuda", (8, 6)): [[-0.5938, -0.0312, -0.3203], [-0.3789, -0.3184, 0.1797], [-0.7852, 0.0742, -0.4551]],
                 ("xpu", None): [[-0.5469, -0.0574, -0.3691], [-0.3301, -0.3770, 0.2012], [-0.8320, 0.0732, -0.4492]],
             }
         )  # fmt: skip

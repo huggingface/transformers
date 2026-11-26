@@ -61,6 +61,8 @@ GGUF_TOKENIZER_MAPPING = {
     },
     "tokenizer_config": {
         "chat_template": "chat_template",
+        "ggml.add_bos_token": "add_bos_token",
+        "ggml.add_eos_token": "add_eos_token",
     },
 }
 
@@ -85,6 +87,15 @@ def get_gguf_tokenizer(gguf_path: str) -> tuple[str, dict, dict]:
         for group, renames in GGUF_TOKENIZER_MAPPING.items()
     }
     tokenizer, tokenizer_config = grouped["tokenizer"], grouped["tokenizer_config"]
+
+    tokenizer_type = tokenizer.get("tokenizer_type")
+    if tokenizer_type == "llama":
+        # Older files have no flag, and llama.cpp adds BOS to a sentencepiece vocabulary that does not say otherwise.
+        tokenizer_config.setdefault("add_bos_token", True)
+    elif tokenizer_type == "gemma4":
+        # The flag is set, but the reference tokenizer adds no BOS because the chat template writes `<bos>` itself.
+        # llama.cpp forces BOS on here (ggml-org/llama.cpp#21500); we follow the reference.
+        tokenizer_config["add_bos_token"] = False
 
     for name, key in _SPECIAL_TOKENS.items():
         token_id = metadata.get(f"tokenizer.ggml.{key}")
@@ -179,7 +190,8 @@ def get_merges(tokenizer_dict, vocab_scores=None):
 
 
 def add_gguf_special_tokens(tokenizer, tokenizer_dict):
-    """Add the tokens the file marks as control, like `<|endoftext|>`, as special tokens.
+    """Add the tokens the file marks as control, like `<|endoftext|>`, as special tokens, and the
+    ones it marks as user-defined, like `<think>`, as plain added tokens.
 
     Without this they get cut into pieces instead of staying whole. In a byte-level vocabulary every
     real token is written in the byte alphabet, so one marked control that uses any other character
@@ -195,6 +207,16 @@ def add_gguf_special_tokens(tokenizer, tokenizer_dict):
     ]
     if control:
         tokenizer.add_special_tokens({"additional_special_tokens": control}, replace_extra_special_tokens=False)
+    # 4 is USER_DEFINED: an added token that is not special, like `<think>`. llama.cpp always matches
+    # these whole in the text, so they must be added here too or they get cut into pieces.
+    vocab = tokenizer.get_vocab()
+    user_defined = [
+        AddedToken(token, normalized=False, special=False)
+        for token, token_type in zip(tokenizer_dict["tokens"], tokenizer_dict.get("token_type") or ())
+        if token_type == 4 and token in vocab
+    ]
+    if user_defined:
+        tokenizer.add_tokens(user_defined)
     return tokenizer
 
 

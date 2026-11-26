@@ -20,42 +20,29 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_vision_available():
     from PIL import Image
 
 
-class NeoMMEImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=5,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=80,
-        do_resize=True,
-        do_rescale=True,
-        rescale_factor=1 / 127.5,
-        do_normalize=True,
-        image_mean=None,
-        image_std=None,
-        patch_size=4,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        # These values implement `pixel / 127.5 - 1`; they are not dataset statistics.
-        self.image_mean = image_mean if image_mean is not None else [1.0, 1.0, 1.0]
-        self.image_std = image_std if image_std is not None else [1.0, 1.0, 1.0]
-        self.patch_size = patch_size
+class NeoMMEImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 5)
+        kwargs.setdefault("num_channels", 3)
+        kwargs.setdefault("min_resolution", 30)
+        kwargs.setdefault("max_resolution", 80)
+
+        # Image processor init kwargs
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("rescale_factor", 1 / 127.5)
+        kwargs.setdefault("patch_size", 4)
+
+        super().__init__(**kwargs)
 
     def prepare_image_processor_dict(self):
         """Return mixin kwargs without resolution budgets."""
@@ -64,8 +51,6 @@ class NeoMMEImageProcessingTester:
             "do_rescale": self.do_rescale,
             "rescale_factor": self.rescale_factor,
             "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
             "patch_size": self.patch_size,
         }
 
@@ -98,38 +83,7 @@ class NeoMMEImageProcessingTester:
 @require_torch
 @require_vision
 class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = NeoMMEImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            for attribute in ("do_resize", "do_rescale", "rescale_factor", "do_normalize", "patch_size"):
-                self.assertTrue(hasattr(image_processing, attribute))
-            for attribute in ("max_side", "size"):
-                self.assertTrue(hasattr(image_processing, attribute))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.patch_size, self.image_processor_tester.patch_size)
-            self.assertIsNone(image_processor.max_side)
-            self.assertIsNone(image_processor.size)
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict,
-                patch_size=8,
-                max_side=64,
-                size={"min_pixels": 256, "max_pixels": 1024},
-            )
-            self.assertEqual(image_processor.patch_size, 8)
-            self.assertEqual(image_processor.max_side, 64)
-            self.assertEqual(dict(image_processor.size), {"min_pixels": 256, "max_pixels": 1024})
+    image_processor_tester_class = NeoMMEImageProcessingTester
 
     def _check_call(self, image_inputs) -> None:
         for image_processing_class in self.image_processing_classes.values():

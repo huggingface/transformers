@@ -23,9 +23,8 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeModel,
     Glm4MoeMoE,
     Glm4MoePreTrainedModel,
-    Glm4MoeRMSNorm,
 )
-from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm
 
 
 logger = logging.get_logger(__name__)
@@ -48,9 +47,6 @@ class SolarOpenConfig(Glm4MoeConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
     }
     attribute_map = {
         "num_local_experts": "n_routed_experts",
@@ -87,7 +83,7 @@ class SolarOpenAttention(LlamaAttention):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
 
-class SolarOpenRMSNorm(Glm4MoeRMSNorm):
+class SolarOpenRMSNorm(LlamaRMSNorm):
     pass
 
 

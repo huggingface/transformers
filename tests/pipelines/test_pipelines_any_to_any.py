@@ -30,8 +30,9 @@ from transformers.testing_utils import (
     CaptureLogger,
     Expectations,
     is_pipeline_test,
-    require_librosa,
+    require_audio,
     require_torch,
+    require_torchvision,
     require_vision,
     slow,
 )
@@ -52,10 +53,116 @@ if is_torch_available():
 
 @is_pipeline_test
 @require_vision
-@require_librosa
+@require_audio
 @require_torch
 class AnyToAnyPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MULTIMODAL_LM_MAPPING
+
+    def test_media_only_blip_image_text_output(self):
+        import torch
+        from PIL import Image
+
+        from transformers import AutoModelForMultimodalLM
+
+        model_id = "hf-internal-testing/tiny-random-BlipForConditionalGeneration"
+        processor = AutoProcessor.from_pretrained(model_id)
+        model = AutoModelForMultimodalLM.from_pretrained(model_id, dtype=torch.float32).eval()
+        pipe = AnyToAnyPipeline(model=model, processor=processor, task="any-to-any", device=-1)
+        image = Image.new("RGB", (64, 64), "white")
+
+        for return_full_text in (False, True):
+            with self.subTest(return_full_text=return_full_text):
+                result = pipe(
+                    images=image,
+                    max_new_tokens=1,
+                    return_full_text=return_full_text,
+                )
+                self.assertEqual(len(result), 1)
+                self.assertIsNone(result[0]["input_text"])
+                self.assertIsInstance(result[0]["generated_text"], str)
+
+    def test_return_tensors_with_chat_input(self):
+        pipe = pipeline(
+            "any-to-any",
+            model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration",
+        )
+        messages = [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]
+
+        kwargs = {"generation_mode": "text", "thinker_max_new_tokens": 2}
+
+        outputs = pipe(text=messages, return_tensors=True, generate_kwargs=kwargs)
+
+        self.assertEqual(outputs[0]["input_text"], messages)
+
+    def test_string_assistant_prefill_full_text(self):
+        import copy
+
+        pipe = pipeline(
+            "any-to-any",
+            model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration",
+        )
+        messages = [
+            {"role": "user", "content": "Hello!"},
+            {"role": "assistant", "content": "My answer is"},
+        ]
+        original = copy.deepcopy(messages)
+
+        kwargs = {
+            "generation_mode": "text",
+            "thinker_do_sample": False,
+            "thinker_max_new_tokens": 2,
+        }
+
+        new_text = pipe(
+            text=messages,
+            return_full_text=False,
+            continue_final_message=True,
+            generate_kwargs=kwargs.copy(),
+        )[0]["generated_text"]
+
+        full_text = pipe(
+            text=messages,
+            return_full_text=True,
+            continue_final_message=True,
+            generate_kwargs=kwargs.copy(),
+        )[0]["generated_text"]
+
+        self.assertEqual(full_text[-1]["role"], "assistant")
+        self.assertEqual(full_text[-1]["content"], "My answer is" + new_text)
+        self.assertEqual(messages, original)
+
+    def test_multiple_candidates_tiny_model(self):
+        pipe = pipeline(
+            "any-to-any",
+            model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration",
+        )
+        kwargs = {
+            "generation_mode": "text",
+            "thinker_do_sample": False,
+            "thinker_num_beams": 2,
+            "thinker_num_return_sequences": 2,
+            "thinker_max_new_tokens": 2,
+        }
+
+        single = pipe(text="Hello", return_full_text=False, generate_kwargs=kwargs)
+        batched = pipe(text=["Hello", "World"], return_full_text=False, generate_kwargs=kwargs)
+
+        self.assertEqual(len(single), 2)
+        self.assertEqual(len(batched), 4)
+
+        # Test real audio generation through the full pipeline.
+        audio_outputs = pipe(
+            text="Hello",
+            generation_mode="audio",
+            generate_kwargs={
+                "thinker_do_sample": False,
+                "thinker_max_new_tokens": 4,
+                "talker_do_sample": False,
+                "talker_max_new_tokens": 10,
+            },
+        )
+        self.assertEqual(len(audio_outputs), 1)
+        self.assertIsInstance(audio_outputs[0]["generated_audio"], np.ndarray)
 
     # We only need `processor` but the Mixin will pass all possible preprocessing classes for a model.
     # So we add them all in signature
@@ -242,6 +349,35 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         self.assertEqual([output["input_text"] for output in outputs], ["hello", "world"])
         self.assertTrue(all("generated_text" in output for output in outputs))
 
+    @require_torchvision
+    def test_batched_generation_left_pads_decoder_only_model(self):
+        # The Qwen2.5-VL tokenizer pads on the right by default, which breaks batched decoder-only generation
+        pipe = pipeline("any-to-any", model="trl-internal-testing/tiny-Qwen2_5_VLForConditionalGeneration")
+        image = PIL.Image.new("RGB", (64, 64), color=(120, 30, 200))
+        messages = [
+            [{"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": text}]}]
+            for text in ("Describe.", "Describe the colors, the shapes and the overall layout of this picture.")
+        ]
+        kwargs = {"max_new_tokens": 6, "do_sample": False}
+
+        single = [pipe(text=chat, generate_kwargs=kwargs, return_full_text=False) for chat in messages]
+        batched = pipe(text=messages, batch_size=2, generate_kwargs=kwargs, return_full_text=False)
+        self.assertEqual(batched, single)
+
+    @require_torchvision
+    def test_batched_text_generation_with_right_padding_feature_extractor(self):
+        # Qwen2.5-Omni pads its text and audio features on the right, only the text has to move to the left
+        pipe = pipeline("any-to-any", model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration")
+        messages = [
+            [{"role": "user", "content": [{"type": "text", "text": text}]}]
+            for text in ("Hello!", "Hello, how are you doing on this fine spring morning?")
+        ]
+        kwargs = {"generation_mode": "text", "thinker_max_new_tokens": 5, "thinker_do_sample": False}
+
+        single = [pipe(text=chat, generate_kwargs=kwargs, return_full_text=False) for chat in messages]
+        batched = pipe(text=messages, batch_size=2, generate_kwargs=kwargs, return_full_text=False)
+        self.assertEqual(batched, single)
+
     @slow
     def test_small_model_pt_token_text_only(self):
         pipe = pipeline("any-to-any", model="google/gemma-3n-E4B-it")
@@ -390,7 +526,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
             "defaults": {"role": "assistant"},
             "start_anchor": "<start_of_turn>model\n",
             "fields": {
-                "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
+                "reasoning_content": {"open": "<think>", "close": "</think>", "content": "text"},
                 "content": {"close": "<end_of_turn>", "content": "text"},
             },
         }
@@ -405,14 +541,14 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         outputs = pipe(text=messages, generate_kwargs={"do_sample": False})
         parsed_message = outputs[0]["generated_text"][-1]
         # The model never emits </think> here, so everything it generates stays inside the
-        # `thinking` region opened by the chat template in the prompt. Without `prefix=`,
+        # `reasoning_content` region opened by the chat template in the prompt. Without `prefix=`,
         # the parser would never see the opening <think> and would mis-route the generated
         # text into `content` instead.
         self.assertEqual(parsed_message["role"], "assistant")
-        self.assertIn("thinking", parsed_message)
+        self.assertIn("reasoning_content", parsed_message)
         self.assertNotIn("content", parsed_message)
-        self.assertIsInstance(parsed_message["thinking"], str)
-        self.assertGreater(len(parsed_message["thinking"]), 0)
+        self.assertIsInstance(parsed_message["reasoning_content"], str)
+        self.assertGreater(len(parsed_message["reasoning_content"]), 0)
 
     @slow
     def test_small_model_pt_token_audio_input(self):

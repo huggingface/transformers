@@ -19,8 +19,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
@@ -63,7 +62,19 @@ class PromptDepthAnythingConfig(PreTrainedConfig):
     ```"""
 
     model_type = "prompt_depth_anything"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="dinov2",
+            init_kwargs={
+                "image_size": 518,
+                "hidden_size": 384,
+                "num_attention_heads": 6,
+                "out_indices": [9, 10, 11, 12],
+                "reshape_hidden_states": False,
+            },
+        ),
+    }
 
     backbone_config: dict | PreTrainedConfig | None = None
     patch_size: int | list[int] | tuple[int, int] = 14
@@ -75,24 +86,7 @@ class PromptDepthAnythingConfig(PreTrainedConfig):
     head_in_index: int = -1
     head_hidden_size: int = 32
     depth_estimation_type: str = "relative"
-    max_depth: int | None = None
-
-    def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="dinov2",
-            default_config_kwargs={
-                "image_size": 518,
-                "hidden_size": 384,
-                "num_attention_heads": 6,
-                "out_indices": [9, 10, 11, 12],
-                "reshape_hidden_states": False,
-            },
-            **kwargs,
-        )
-
-        self.max_depth = self.max_depth if self.max_depth else 1
-        super().__post_init__(**kwargs)
+    max_depth: int | None = 1
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

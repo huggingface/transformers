@@ -16,6 +16,7 @@ import math
 from ...image_utils import ImageInput, make_flat_list_of_images, make_nested_list_of_images
 from ...processing_utils import (
     BatchFeature,
+    MultiModalData,
     ProcessingKwargs,
     ProcessorMixin,
     TextKwargs,
@@ -23,14 +24,16 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class Lfm2VlTextKwargs(TextKwargs, total=False):
+class DeprecatedLfm2VlTextKwargs(TextKwargs, total=False):
     """
     use_image_special_tokens (`bool`, *optional*, defaults to `True`):
+        Deprecated, use [`Lfm2VlProcessorKwargs.use_image_special_tokens`] instead.
         Whether to use special image tokens (`<|image_start|>` and `<|image_end|>`) to delimit image sequences
         in the text. When enabled, images are wrapped with these tokens to clearly mark image boundaries.
         When disabled, only the image token itself is used without delimiters.
@@ -40,23 +43,28 @@ class Lfm2VlTextKwargs(TextKwargs, total=False):
 
 
 class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: Lfm2VlTextKwargs
-    _defaults = {
-        "images_kwargs": {
-            "return_row_col_info": True,
-        },
-        "text_kwargs": {
-            "use_image_special_tokens": True,
-            "add_special_tokens": False,
-            "padding": False,
-            "is_split_into_words": False,
-        },
-    }
+    """
+    use_image_special_tokens (`bool`, *optional*, defaults to `True`):
+        Whether to use special image tokens (`<|image_start|>` and `<|image_end|>`) to delimit image sequences
+        in the text. When enabled, images are wrapped with these tokens to clearly mark image boundaries.
+        When disabled, only the image token itself is used without delimiters.
+    """
+
+    text_kwargs: DeprecatedLfm2VlTextKwargs
+    use_image_special_tokens: bool
 
 
 @auto_docstring
 class Lfm2VlProcessor(ProcessorMixin):
     valid_processor_kwargs = Lfm2VlProcessorKwargs
+
+    text_kwargs = {
+        "add_special_tokens": False,
+    }
+    images_kwargs = {
+        "return_row_col_info": True,
+    }
+    use_image_special_tokens = True
 
     def __init__(
         self,
@@ -87,26 +95,38 @@ class Lfm2VlProcessor(ProcessorMixin):
         self.validate_inputs(images=images, text=text, **kwargs)
 
         merged_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
             **kwargs,
         )
-        # The arg is supposed to be in `images_kwargs` but was assigned in `text_kwargs` when shipping
-        merged_kwargs["images_kwargs"]["use_image_special_tokens"] = merged_kwargs["text_kwargs"].pop(
-            "use_image_special_tokens"
+
+        if "use_image_special_tokens" in merged_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `use_image_special_tokens` in `text_kwargs` is deprecated "
+                "and will be removed in v5.29.0. "
+                "Pass it directly to the processor instead."
+            )
+
+        # text_kwargs has priority for backwards compatibility
+        use_image_special_tokens = merged_kwargs["text_kwargs"].pop(
+            "use_image_special_tokens", merged_kwargs["use_image_special_tokens"]
         )
 
         processed_images = {}
         images_replacements = []
         if images is not None:
-            processed_images, images_replacements = self._process_images(images, **merged_kwargs["images_kwargs"])
+            processed_images, images_replacements = self._process_images(
+                images, use_image_special_tokens=use_image_special_tokens, **merged_kwargs["images_kwargs"]
+            )
 
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
         if text is not None:
-            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+            # text_kwargs has priority for backwards compatibility
+            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
+                "return_mm_token_type_ids", merged_kwargs["return_mm_token_type_ids"]
+            )
             return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
-                "return_text_replacement_offsets", False
+                "return_text_replacement_offsets", merged_kwargs["return_text_replacement_offsets"]
             )
 
             text, text_replacement_offsets = self.get_text_with_replacements(text, images_replacements)
@@ -151,20 +171,16 @@ class Lfm2VlProcessor(ProcessorMixin):
                 "You must provide `text` when `images` is provided. Minimal text consists of a single image token."
             )
 
-        if text is not None:
+        if text is not None and images is not None:
             n_images_in_text = [sample.count(self.image_token) for sample in text]
-            if sum(n_images_in_text) > 0 and images is None:
-                raise ValueError(f"We detected {sum(n_images_in_text)} tokens in the text but no images were passed")
+            n_images_in_images = [len(sublist) for sublist in images]
+            if n_images_in_text != n_images_in_images:
+                raise ValueError(
+                    f"The number of {self.image_token} tokens in each prompt should be the same as the number of images passed."
+                    f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
+                )
 
-            if images is not None:
-                n_images_in_images = [len(sublist) for sublist in images]
-                if n_images_in_images != n_images_in_text:
-                    raise ValueError(
-                        f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
-                    )
-
-    def _process_images(self, images: ImageInput, **kwargs):
-        use_image_special_tokens = kwargs.pop("use_image_special_tokens")
+    def _process_images(self, images: ImageInput, use_image_special_tokens: bool, **kwargs):
         processed_images = self.image_processor(images, **kwargs)
 
         image_replacements = []
@@ -254,9 +270,58 @@ class Lfm2VlProcessor(ProcessorMixin):
 
         return tokens_per_tile, tokens_for_image
 
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            image_processor = self.image_processor
+            layout_kwargs = {
+                name: images_kwargs.get(name, getattr(image_processor, name))
+                for name in (
+                    "downsample_factor",
+                    "min_tiles",
+                    "max_tiles",
+                    "min_image_tokens",
+                    "max_image_tokens",
+                    "encoder_patch_size",
+                    "tile_size",
+                    "max_pixels_tolerance",
+                )
+            }
+            if not images_kwargs.get("do_image_splitting", image_processor.do_image_splitting):
+                layout_kwargs["min_tiles"] = layout_kwargs["max_tiles"] = 1
+            use_thumbnail = images_kwargs.get("use_thumbnail", image_processor.use_thumbnail)
+
+            num_image_tokens, num_image_patches = [], []
+            for image_size in image_sizes:
+                _, rows, cols, *resized_size = image_processor._get_split_layout(*image_size, **layout_kwargs)
+                tokens_per_tile, tokens_for_image = self._get_image_num_tokens(resized_size, **images_kwargs)
+                if rows > 1 or cols > 1:
+                    num_image_tokens.append(rows * cols * tokens_per_tile + (tokens_for_image if use_thumbnail else 0))
+                    num_image_patches.append(rows * cols + int(use_thumbnail))
+                else:
+                    num_image_tokens.append(tokens_for_image)
+                    num_image_patches.append(1)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
+
     @property
     def unused_input_names(self) -> list[str]:
         return ["image_rows", "image_cols", "image_sizes", "token_type_ids"]
 
 
+__getattr__ = deprecate_attr(__name__, remove={"Lfm2VlTextKwargs": (DeprecatedLfm2VlTextKwargs, "5.29.0")})
 __all__ = ["Lfm2VlProcessor"]

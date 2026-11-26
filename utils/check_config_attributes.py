@@ -42,12 +42,18 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "Dots3NoteAudioConfig": ["feature_size"],  # used in __post_init__ to compute conv_output_size
+    "NemotronH_Omni_Reasoning_V3_Config": [
+        "sound_context_token",  # used by the processor for `<audio>` placeholder expansion
+    ],
     # We need it for DSA (but it's not really used as it's implicitly assumed)
     "HYV4Config": ["layer_types"],
     # For consistency we keep head dim but it's not used as NoPE is applied
     "Glm5NextTextConfig": ["head_dim"],
     # Kept as a config field, the ViT-style attention has no output dropout
     "RadioConfig": ["hidden_dropout_prob"],
+    # Kept for BC, the old `rotary_dim` clamp it fed was a no-op for every published checkpoint
+    "CodeGenConfig": ["n_ctx"],
     # EP related refactor that also relies on correct naming for FP8/4 conventions
     "DeepseekV3Config": ["n_routed_experts"],
     "Glm4MoeConfig": ["n_routed_experts"],
@@ -55,6 +61,12 @@ SPECIAL_CASES_TO_ALLOW = {
     "Glm4vMoeTextConfig": ["n_routed_experts"],
     "Mistral4Config": ["n_routed_experts"],
     "SolarOpenConfig": ["n_routed_experts"],
+    "BailingHybridConfig": [
+        "first_k_dense_replace",  # consumed in __post_init__ to derive mlp_layer_types
+        "layer_group_size",  # consumed in __post_init__ to derive layer_types
+        "short_conv_kernel_size",  # consumed in __post_init__ to derive linear_conv_kernel_dim
+        "mtp_loss_scaling_factor",  # metadata for the training-only MTP loss
+    ],
     "FunAsrNanoEncoderConfig": [
         "num_mel_bins",
         "num_stacked_frames",
@@ -75,9 +87,8 @@ SPECIAL_CASES_TO_ALLOW = {
         "mtp_layer_types",
         "mtp_mlp_layer_types",
     ],
-    "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
+    "OpenAIPrivacyFilterConfig": ["classifier_dropout", "router_aux_loss_coef"],
     "Qwen4ExpTextConfig": ["split_ngram_parts"],  # Used by Concatenate during checkpoint conversion
-    "HYV3Config": ["output_router_logits"],
     "NougatConfig": ["decoder", "encoder"],
     "PI0Config": ["vlm_projection_dim"],
     "EuroBertConfig": ["is_causal"],  # not used directly, allows causal-bidirectional switch
@@ -88,6 +99,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
     "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
     "LagunaConfig": ["moe_apply_router_weight_on_input"],
+    # Consumed by `get_mtp_config()` in its config, not used directly by the modeling forward.
+    "MellumConfig": ["mtp_layer_types", "mtp_mlp_layer_types"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Lfm2Config": ["full_attn_idxs"],
     "DiaConfig": ["delay_pattern"],
@@ -100,9 +113,34 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_period",
         "use_mamba_kernels",
     ],
-    "JetMoeConfig": ["output_router_logits"],
     "Phi3Config": ["embd_pdrop"],
     "EncodecConfig": ["overlap"],
+    # Read by `generation_pocket_tts.py`, and by `loss/loss_lsd.py` for the `lsd_*` / `flow_loss_*` ones
+    "PocketTTSConfig": [
+        "eos_threshold",
+        "min_frames_before_eos",
+        "num_flow_steps",
+        "frame_rate",
+        "flow_loss_num_samples",
+        "lsd_diagonal_weight",
+        "lsd_distill_probability",
+        "lsd_time_logit_mean",
+        "lsd_time_logit_std",
+    ],
+    # Same as `PocketTTSConfig`: read by the inherited `generation_pocket_tts.py` and by `loss/loss_lsd.py`
+    "GradiumPhononTTSConfig": [
+        "frame_rate",
+        "flow_loss_num_samples",
+        "lsd_diagonal_weight",
+        "lsd_distill_probability",
+        "lsd_time_logit_mean",
+        "lsd_time_logit_std",
+    ],
+    # Encoder/decoder halves share every field of their codec's config; each half reads only its own.
+    "MimiEncoderConfig": True,
+    "MimiDecoderConfig": True,
+    "PocketTTSAudioTokenizerEncoderConfig": True,
+    "PocketTTSAudioTokenizerDecoderConfig": True,
     "XcodecConfig": ["sample_rate", "audio_channels"],
     "RecurrentGemmaConfig": ["block_types", "attention_window_size"],
     "MambaConfig": ["expand"],
@@ -116,6 +154,9 @@ SPECIAL_CASES_TO_ALLOW = {
         "rms_norm_eps_moe_gate",
         "shared_expert_sink",
     ],
+    # Consumed by config logic: `mlp_ratio` sets `intermediate_size`.
+    "Inkling2VisionConfig": ["mlp_ratio"],
+    "Inkling2LoopTextConfig": ["hidden_act"],
     "FalconMambaConfig": ["expand"],
     "FSMTConfig": ["langs", "common_kwargs", "early_stopping", "length_penalty", "max_length", "num_beams"],
     "GPTNeoConfig": ["attention_types"],
@@ -199,6 +240,7 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "DeepseekV32Config": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
     "GlmMoeDsaConfig": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
+    "MistralLarge4TextConfig": ["layer_types", "first_k_dense_replace", "kv_source_layers"],
     "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
     "Zamba2Config": ["use_mamba_kernels", "use_mem_eff_path"],
@@ -285,12 +327,23 @@ SPECIAL_CASES_TO_ALLOW = {
     "PPChart2TableConfig": True,
     "PPChart2TableVisionConfig": True,
     "GlmgaConfig": ["vision_config"],
+    # Use the Llama implementation, which the auto mappings point to
+    "InternLM3Config": True,
+    "ExaoneConfig": True,
+    "IQuestCoderConfig": True,
     "Sapiens2Config": [
         "num_first_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
         "num_key_value_attention_heads",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
         "num_last_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
         "flip_pairs",  # used externally for post-processing keypoints, not in forward pass
     ],
+    # Consumed by cache_utils to select indexed-attention cache layers.
+    "HYV4VLTextConfig": ["layer_types"],
+    "UnlimitedOcrTextConfig": ["sliding_window"],  # only used for cache init
+    # Use the DeepseekV3 implementation, which the auto mappings point to
+    "SarvamMLAConfig": True,
+    # Use the GLM-4-MoE implementation, which the auto mappings point to
+    "SarvamMoEConfig": True,
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
@@ -306,6 +359,7 @@ ATTRIBUTES_TO_ALLOW = (
     "tokenizer_class",
     "is_encoder_decoder",
     "output_hidden_states",
+    "output_router_logits",  # read by `capture_outputs`, not by the modeling code
     "return_dict",
     # Inits related
     "initializer_range",
@@ -349,6 +403,7 @@ ATTRIBUTES_TO_ALLOW = (
     "num_mtp_layers",  # for MTP, not used by main model architecture
     # used by GenericForTokenClassification in modeling_layers.py via getattr
     "token_classification_bias",
+    "num_kv_shared_layers",  # used to derive other config properties that are used
 )
 
 

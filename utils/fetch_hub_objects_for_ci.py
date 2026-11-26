@@ -91,7 +91,7 @@ URLS_FOR_TESTING_DATA = [
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/two_dogs.jpg",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tiny_video.mp4",
-    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tiny_video.mp4",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/karate.mp4",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg",
     # we should rely on this single dataset for our tests
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
@@ -156,6 +156,16 @@ URLS_FOR_TESTING_DATA = [
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/Cooking_cake.mp4",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/archery.mp4",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/concert.mp4",
+    # small test assets used by the processor tests (`karate.mp4` from this repo is the same file as the
+    # `fixtures_videos` one above, so it is not listed again)
+    "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/big_buck_bunny_320x240_10s.mp4",
+    "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/sample_demo_1_320x240.mp4",
+    "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tennis_320x240.mp4",
+    "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4",
+    "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/chicago_64x64.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/golden_gate_64x64.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/statue_of_liberty_64x64.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/view_64x64.jpg",
 ]
 
 

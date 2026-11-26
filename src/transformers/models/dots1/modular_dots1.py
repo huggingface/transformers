@@ -11,25 +11,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import torch
 from huggingface_hub.dataclasses import strict
 
+from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_outputs import CausalLMOutputWithPast
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3DecoderLayer,
+    DeepseekV3ForCausalLM,
     DeepseekV3MLP,
     DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
     DeepseekV3TopkRouter,
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen3.modeling_qwen3 import (
     Qwen3Attention,
-    Qwen3ForCausalLM,
     Qwen3Model,
-    Qwen3RMSNorm,
     Qwen3RotaryEmbedding,
     TransformersKwargs,
 )
@@ -59,7 +63,6 @@ class Dots1Config(PreTrainedConfig):
     """
 
     model_type = "dots1"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -68,9 +71,6 @@ class Dots1Config(PreTrainedConfig):
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -85,10 +85,9 @@ class Dots1Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     attribute_map = {
@@ -104,6 +103,7 @@ class Dots1Config(PreTrainedConfig):
     num_key_value_heads: int | None = 32
     n_shared_experts: int | None = None
     n_routed_experts: int | None = None
+    output_router_logits: bool = False
     n_group: int | None = 1
     topk_group: int | None = 1
     num_experts_per_tok: int | None = None
@@ -141,7 +141,7 @@ class Dots1Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class Dots1RMSNorm(Qwen3RMSNorm):
+class Dots1RMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -174,14 +174,73 @@ class Dots1PreTrainedModel(DeepseekV3PreTrainedModel):
 
 
 class Dots1Model(Qwen3Model):
-    pass
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
+
+        if position_ids is None:
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache": cache,
+                "position_ids": position_ids,
+            }
+            mask_creation_functions = {
+                "full_attention": lambda: create_causal_mask(**mask_kwargs),
+                "sliding_attention": lambda: create_sliding_window_causal_mask(**mask_kwargs),
+            }
+            causal_mask_mapping = {}
+            for layer_type in set(self.config.layer_types):
+                causal_mask_mapping[layer_type] = mask_creation_functions[layer_type]()
+
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                cache=cache,
+                use_cache=use_cache,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+        return MoeModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            cache=cache,
+        )
 
 
-class Dots1ForCausalLM(Qwen3ForCausalLM):
+class Dots1ForCausalLM(DeepseekV3ForCausalLM):
     def forward(
         self,
         **super_kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> MoeCausalLMOutputWithPast:
         r"""
         Example:
 

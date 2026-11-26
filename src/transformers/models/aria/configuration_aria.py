@@ -19,11 +19,11 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ...utils.type_validators import interval
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="rhymes-ai/Aria")
@@ -39,7 +39,6 @@ class AriaTextConfig(PreTrainedConfig):
     """
 
     model_type = "aria_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -78,6 +77,11 @@ class AriaTextConfig(PreTrainedConfig):
     mlp_bias: bool = False
     head_dim: int | None = None
     base_config_key = "text_config"
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+    }
     moe_num_experts: int = 8
     moe_topk: int = 2
     moe_num_shared_experts: int = 2
@@ -108,10 +112,11 @@ class AriaConfig(PreTrainedConfig):
     """
 
     model_type = "aria"
-    attribute_map = {
-        "image_token_id": "image_token_index",
+    attribute_map = {"image_token_id": "image_token_index"}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="idefics3_vision"),
+        "text_config": AriaTextConfig,
     }
-    sub_configs = {"text_config": AriaTextConfig, "vision_config": AutoConfig}
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | AriaTextConfig | None = None
@@ -131,18 +136,6 @@ class AriaConfig(PreTrainedConfig):
             }
         self.projector_patch_to_query_dict = {int(k): int(v) for k, v in self.projector_patch_to_query_dict.items()}
         self.max_value_projector_patch_to_query_dict = max(self.projector_patch_to_query_dict.values())
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = "idefics3_vision"
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["idefics3_vision"]()
-
-        if isinstance(self.text_config, dict) and "model_type" in self.text_config:
-            self.text_config = AriaTextConfig(**self.text_config)
-        elif self.text_config is None:
-            self.text_config = AriaTextConfig()
-
         super().__post_init__(**kwargs)
 
 

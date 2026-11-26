@@ -26,9 +26,10 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import ImagesKwargs, VideosKwargs
+from ...processing_utils import VideosKwargs
 from ...utils import TensorType
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
+from ..glm4v.image_processing_glm4v import Glm4vImageProcessorKwargs
 from ..glm4v.video_processing_glm4v import smart_resize
 from ..glm46v.configuration_glm46v import Glm46VConfig
 from ..glm46v.image_processing_glm46v import Glm46VImageProcessor
@@ -66,7 +67,7 @@ class GlmgaConfig(Glm46VConfig):
     model_type = "glmga"
 
 
-class GlmgaImageProcessorKwargs(ImagesKwargs, total=False):
+class GlmgaImageProcessorKwargs(Glm4vImageProcessorKwargs):
     """
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
@@ -78,9 +79,6 @@ class GlmgaImageProcessorKwargs(ImagesKwargs, total=False):
         The patch_expand_factor of the vision encoder to llm encoder.
     """
 
-    patch_size: int
-    temporal_patch_size: int
-    merge_size: int
     patch_expand_factor: int
 
 
@@ -243,7 +241,6 @@ class GlmgaVideoProcessorInitKwargs(VideosKwargs, total=False):
 class GlmgaVideoProcessor(Glm46VVideoProcessor):
     size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 2 * 55790}
     max_image_size = {"longest_edge": 28 * 28 * 2 * 55790}
-    fps = 2
     patch_expand_factor = 1
     max_frames = 640
 
@@ -260,8 +257,7 @@ class GlmgaVideoProcessor(Glm46VVideoProcessor):
             fps (`int` or `float`, *optional*):
                 Target frames to sample per second. Defaults to `self.fps`.
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            np.ndarray: Indices to sample video frames.
         """
         if metadata is None or getattr(metadata, "fps", None) is None:
             raise ValueError(
@@ -317,7 +313,6 @@ class GlmgaVideoProcessor(Glm46VVideoProcessor):
     def _preprocess(
         self,
         videos: list[torch.Tensor],
-        do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: SizeDict | None = None,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None" = PILImageResampling.BICUBIC,
@@ -337,8 +332,6 @@ class GlmgaVideoProcessor(Glm46VVideoProcessor):
         resized_videos_grouped = {}
 
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(
                     videos=stacked_videos,

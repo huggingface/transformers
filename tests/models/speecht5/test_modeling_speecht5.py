@@ -22,7 +22,7 @@ from functools import cached_property
 from transformers import SpeechT5Config, SpeechT5HifiGanConfig
 from transformers.testing_utils import (
     is_torch_available,
-    require_deterministic_for_xpu,
+    require_deterministic_for_accelerator,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -32,6 +32,7 @@ from transformers.testing_utils import (
 from transformers.trainer_utils import set_seed
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -83,28 +84,24 @@ def prepare_inputs_dict(
 
 
 @require_torch
-class SpeechT5ModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=False,
-        vocab_size=81,
-        hidden_size=24,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        intermediate_size=4,
-    ):
+class SpeechT5ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": False,
+        "vocab_size": 81,
+        "hidden_size": 24,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "intermediate_size": 4,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.seq_length, self.hidden_size], scale=1.0)
@@ -152,6 +149,8 @@ class SpeechT5ModelTester:
 
 @require_torch
 class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = SpeechT5ModelTester
+
     all_model_classes = (SpeechT5Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"automatic-speech-recognition": SpeechT5ForSpeechToText, "feature-extraction": SpeechT5Model}
@@ -205,42 +204,31 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
 
 @require_torch
-class SpeechT5ForSpeechToTextTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        encoder_seq_length=1024,  # speech is longer
-        decoder_seq_length=7,
-        is_training=False,
-        hidden_size=24,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        intermediate_size=4,
-        conv_dim=(32, 32, 32),
-        conv_stride=(4, 4, 4),
-        conv_kernel=(8, 8, 8),
-        conv_bias=False,
-        num_conv_pos_embeddings=16,
-        num_conv_pos_embedding_groups=2,
-        vocab_size=81,
-    ):
+class SpeechT5ForSpeechToTextTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "encoder_seq_length": 1024,  # speech is longer
+        "decoder_seq_length": 7,
+        "is_training": False,
+        "hidden_size": 24,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "intermediate_size": 4,
+        "conv_dim": (32, 32, 32),
+        "conv_stride": (4, 4, 4),
+        "conv_kernel": (8, 8, 8),
+        "conv_bias": False,
+        "num_conv_pos_embeddings": 16,
+        "num_conv_pos_embedding_groups": 2,
+        "vocab_size": 81,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        self.decoder_seq_length = decoder_seq_length
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.conv_dim = conv_dim
-        self.conv_stride = conv_stride
-        self.conv_kernel = conv_kernel
-        self.conv_bias = conv_bias
-        self.num_conv_pos_embeddings = num_conv_pos_embeddings
-        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
-        self.vocab_size = vocab_size
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.encoder_seq_length], scale=1.0)
@@ -308,7 +296,7 @@ class SpeechT5ForSpeechToTextTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size).clamp(2)
@@ -319,9 +307,9 @@ class SpeechT5ForSpeechToTextTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(
-            next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values, use_cache=True
-        )["last_hidden_state"]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache, use_cache=True)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -336,6 +324,8 @@ class SpeechT5ForSpeechToTextTester:
 
 @require_torch
 class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, GenerationTesterMixin):
+    model_tester_class = SpeechT5ForSpeechToTextTester
+
     all_model_classes = (SpeechT5ForSpeechToText,) if is_torch_available() else ()
     is_encoder_decoder = True
 
@@ -421,8 +411,8 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
             # loss is at first position
             if "labels" in inputs_dict:
                 correct_outlen += 1  # loss is added to beginning
-            if "past_key_values" in outputs:
-                correct_outlen += 1  # past_key_values have been returned
+            if "cache" in outputs:
+                correct_outlen += 1  # cache have been returned
 
             self.assertEqual(out_len, correct_outlen)
 
@@ -663,7 +653,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
         pass
 
     @unittest.skip(reason="Very flaky")  # TODO (joao, eustache): have a look at this test
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         pass
 
 
@@ -729,40 +719,30 @@ class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
 
 
 @require_torch
-class SpeechT5ForTextToSpeechTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        encoder_seq_length=7,
-        decoder_seq_length=1024,  # speech is longer
-        is_training=False,
-        hidden_size=24,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        intermediate_size=4,
-        vocab_size=81,
-        num_mel_bins=20,
-        reduction_factor=2,
-        speech_decoder_postnet_layers=2,
-        speech_decoder_postnet_units=32,
-        speech_decoder_prenet_units=32,
-    ):
+class SpeechT5ForTextToSpeechTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "encoder_seq_length": 7,
+        "decoder_seq_length": 1024,  # speech is longer
+        "is_training": False,
+        "hidden_size": 24,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "intermediate_size": 4,
+        "vocab_size": 81,
+        "num_mel_bins": 20,
+        "reduction_factor": 2,
+        "speech_decoder_postnet_layers": 2,
+        "speech_decoder_postnet_units": 32,
+        "speech_decoder_prenet_units": 32,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        self.decoder_seq_length = decoder_seq_length
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.vocab_size = vocab_size
-        self.num_mel_bins = num_mel_bins
-        self.reduction_factor = reduction_factor
-        self.speech_decoder_postnet_layers = speech_decoder_postnet_layers
-        self.speech_decoder_postnet_units = speech_decoder_postnet_units
-        self.speech_decoder_prenet_units = speech_decoder_prenet_units
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2)
@@ -818,6 +798,8 @@ class SpeechT5ForTextToSpeechTester:
 
 @require_torch
 class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = SpeechT5ForTextToSpeechTester
+
     all_model_classes = (SpeechT5ForTextToSpeech,) if is_torch_available() else ()
     all_generative_model_classes = ()
     is_encoder_decoder = True
@@ -975,7 +957,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             "Shape mismatch between generate_speech and generate methods.",
         )
 
-    @require_deterministic_for_xpu
+    @require_deterministic_for_accelerator(devices=["xpu", "rocm"])
     def test_one_to_many_generation(self):
         model = self.default_model
         processor = self.default_processor
@@ -1084,7 +1066,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
                 "Mismatch in waveform between standalone and integrated vocoder for single instance generation.",
             )
 
-    @require_deterministic_for_xpu
+    @require_deterministic_for_accelerator(devices=["xpu", "rocm"])
     def test_batch_generation(self):
         model = self.default_model
         processor = self.default_processor
@@ -1203,52 +1185,36 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
 
 
 @require_torch
-class SpeechT5ForSpeechToSpeechTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        encoder_seq_length=1024,  # speech is longer
-        decoder_seq_length=1024,
-        is_training=False,
-        hidden_size=24,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        intermediate_size=4,
-        conv_dim=(32, 32, 32),
-        conv_stride=(4, 4, 4),
-        conv_kernel=(8, 8, 8),
-        conv_bias=False,
-        num_conv_pos_embeddings=16,
-        num_conv_pos_embedding_groups=2,
-        vocab_size=81,
-        num_mel_bins=20,
-        reduction_factor=2,
-        speech_decoder_postnet_layers=2,
-        speech_decoder_postnet_units=32,
-        speech_decoder_prenet_units=32,
-    ):
+class SpeechT5ForSpeechToSpeechTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "encoder_seq_length": 1024,  # speech is longer
+        "decoder_seq_length": 1024,
+        "is_training": False,
+        "hidden_size": 24,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "intermediate_size": 4,
+        "conv_dim": (32, 32, 32),
+        "conv_stride": (4, 4, 4),
+        "conv_kernel": (8, 8, 8),
+        "conv_bias": False,
+        "num_conv_pos_embeddings": 16,
+        "num_conv_pos_embedding_groups": 2,
+        "vocab_size": 81,
+        "num_mel_bins": 20,
+        "reduction_factor": 2,
+        "speech_decoder_postnet_layers": 2,
+        "speech_decoder_postnet_units": 32,
+        "speech_decoder_prenet_units": 32,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        self.decoder_seq_length = decoder_seq_length
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.conv_dim = conv_dim
-        self.conv_stride = conv_stride
-        self.conv_kernel = conv_kernel
-        self.conv_bias = conv_bias
-        self.num_conv_pos_embeddings = num_conv_pos_embeddings
-        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
-        self.vocab_size = vocab_size
-        self.num_mel_bins = num_mel_bins
-        self.reduction_factor = reduction_factor
-        self.speech_decoder_postnet_layers = speech_decoder_postnet_layers
-        self.speech_decoder_postnet_units = speech_decoder_postnet_units
-        self.speech_decoder_prenet_units = speech_decoder_prenet_units
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.encoder_seq_length], scale=1.0)
@@ -1310,6 +1276,8 @@ class SpeechT5ForSpeechToSpeechTester:
 
 @require_torch
 class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = SpeechT5ForSpeechToSpeechTester
+
     all_model_classes = (SpeechT5ForSpeechToSpeech,) if is_torch_available() else ()
     is_encoder_decoder = True
 
@@ -1418,8 +1386,8 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
             # loss is at first position
             if "labels" in inputs_dict:
                 correct_outlen += 1  # loss is added to beginning
-            if "past_key_values" in outputs:
-                correct_outlen += 1  # past_key_values have been returned
+            if "cache" in outputs:
+                correct_outlen += 1  # cache have been returned
 
             self.assertEqual(out_len, correct_outlen)
 
@@ -1608,20 +1576,20 @@ class SpeechT5ForSpeechToSpeechIntegrationTests(unittest.TestCase):
         self.assertLessEqual(generated_speech.shape[0], 310)
 
 
-class SpeechT5HifiGanTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=False,
-        num_mel_bins=20,
-    ):
+class SpeechT5HifiGanTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": False,
+        "num_mel_bins": 20,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.num_mel_bins = num_mel_bins
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.seq_length, self.num_mel_bins], scale=1.0)
@@ -1647,6 +1615,8 @@ class SpeechT5HifiGanTester:
 
 @require_torch
 class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = SpeechT5HifiGanTester
+
     all_model_classes = (SpeechT5HifiGan,) if is_torch_available() else ()
 
     test_resize_embeddings = False

@@ -25,7 +25,6 @@ import copy
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
-from torch.nn import functional as F
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
@@ -33,8 +32,9 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..granite_swa.modeling_granite_swa import GraniteSWAAttention
 from ..granitemoe.modeling_granitemoe import GraniteMoeMoE, GraniteMoeTopKRouter
 from ..granitemoeshared.configuration_granitemoeshared import GraniteMoeSharedConfig
@@ -82,27 +82,13 @@ class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
     ```"""
 
     model_type = "granitemoe_swa"
-    # Attention shards like Granite (+ per-head `sinks` colwise to track the head-sharding); the
-    # routed experts shard tensor-parallel (packed gate/up colwise, down rowwise, `moe_tp_experts`)
-    # with the router replicated. The optional shared expert (`shared_mlp`, off by default) is left
-    # replicated -- it is small and its full output sums consistently with the all-reduced MoE output.
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.sinks": "colwise",
-        "layers.*.block_sparse_moe.experts.gate_up_proj": "packed_colwise",
-        "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
-        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
-    }
-    # Expert-parallel plan: shard the routed experts across ranks (each rank owns a slice of the
-    # experts) with the router driving the dispatch. The optional shared expert is left replicated.
-    base_model_ep_plan = {
-        "layers.*.block_sparse_moe.router": "ep_router",
-        "layers.*.block_sparse_moe.experts.gate_up_proj": "grouped_gemm",
-        "layers.*.block_sparse_moe.experts.down_proj": "grouped_gemm",
-        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
+        "layers.*.self_attn": "local_params",
     }
 
     sliding_window: int | None = 128
@@ -124,24 +110,11 @@ class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
 
 
 class GraniteMoeSWATopKRouter(GraniteMoeTopKRouter):
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # Only different return order (router_logits, router_scores, router_indices) to enable EP
-        # TODO: refactor older granitemoe models to enable EP as well and remove this override
-        router_logits = F.linear(hidden_states, self.weight).float()  # (num_tokens, num_experts)
-        top_k_logits, top_k_index = router_logits.topk(self.top_k, dim=-1)  # (num_tokens, top_k)
-        top_k_weights = torch.softmax(top_k_logits, dim=-1).type_as(hidden_states)  # (num_tokens, top_k)
-        return router_logits, top_k_weights, top_k_index
+    pass
 
 
 class GraniteMoeSWAMoE(GraniteMoeMoE):
-    def forward(self, layer_input: torch.Tensor) -> torch.Tensor:
-        # Only different return order (router_logits, router_scores, router_indices) to enable EP
-        # TODO: refactor older granitemoe models to enable EP as well and remove this override
-        bsz, length, emb_size = layer_input.size()
-        hidden_states = layer_input.reshape(-1, emb_size)
-        _, top_k_weights, top_k_index = self.router(hidden_states)
-        layer_output = self.experts(hidden_states, top_k_index, top_k_weights)
-        return layer_output.view(bsz, length, self.input_size)
+    pass
 
 
 class GraniteMoeSWAAttention(GraniteSWAAttention):
@@ -157,13 +130,17 @@ class GraniteMoeSWADecoderLayer(GraniteMoeSharedDecoderLayer):
 class GraniteMoeSWAPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     _no_split_modules = ["GraniteMoeSWADecoderLayer"]
     _supports_sdpa = False
-    _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
+    _compatible_flash_implementations = [
+        "kernels-community/vllm-flash-attn3",
+        "flash_attention_4",
+        "kernels-community/aiter-flash-attn",
+    ]
     _can_record_outputs = {
+        "router_logits": OutputRecorder(GraniteMoeSWATopKRouter, index=0),
         "hidden_states": GraniteMoeSWADecoderLayer,
         "attentions": GraniteMoeSWAAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GraniteMoeSWAAttention):
@@ -192,13 +169,14 @@ class GraniteMoeSWAModel(GraniteMoeSharedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
@@ -210,11 +188,11 @@ class GraniteMoeSWAModel(GraniteMoeSharedModel):
 
         inputs_embeds = inputs_embeds * self.embedding_multiplier
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -224,7 +202,7 @@ class GraniteMoeSWAModel(GraniteMoeSharedModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             causal_mask_mapping = {
@@ -247,7 +225,7 @@ class GraniteMoeSWAModel(GraniteMoeSharedModel):
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=layer_position_embeddings,
                 **kwargs,
@@ -257,7 +235,7 @@ class GraniteMoeSWAModel(GraniteMoeSharedModel):
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 

@@ -26,7 +26,9 @@ from transformers.models.openai_privacy_filter.configuration_openai_privacy_filt
 )
 from transformers.testing_utils import Expectations, require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -35,6 +37,7 @@ from ...test_modeling_common import (
     random_attention_mask,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -48,52 +51,41 @@ if is_torch_available():
     )
 
 
-class OpenAIPrivacyFilterModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        pad_token_id=0,
-        hidden_size=32,
-        intermediate_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        head_dim=8,
-        num_local_experts=4,
-        num_experts_per_tok=2,
-        sliding_window=2,
-        max_position_embeddings=64,
-        initializer_range=0.02,
-        num_labels=len(OPENAI_PRIVACY_FILTER_NER_LABELS),
-        scope=None,
-    ):
+class OpenAIPrivacyFilterModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "pad_token_id": 0,
+        "hidden_size": 32,
+        "intermediate_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 8,
+        "num_local_experts": 4,
+        "num_experts_per_tok": 2,
+        "sliding_window": 2,
+        "max_position_embeddings": 64,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.pad_token_id = pad_token_id
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
-        self.num_local_experts = num_local_experts
-        self.num_experts_per_tok = num_experts_per_tok
-        self.sliding_window = sliding_window
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values.setdefault("num_labels", len(OPENAI_PRIVACY_FILTER_NER_LABELS))
+        return values
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -160,7 +152,11 @@ class OpenAIPrivacyFilterModelTester:
 
 
 @require_torch
-class OpenAIPrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class OpenAIPrivacyFilterModelTest(
+    ModelTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, ExpertParallelTesterMixin, unittest.TestCase
+):
+    model_tester_class = OpenAIPrivacyFilterModelTester
+
     all_model_classes = (
         (
             OpenAIPrivacyFilterModel,
@@ -178,7 +174,6 @@ class OpenAIPrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
         if is_torch_available()
         else {}
     )
-    test_all_params_have_gradient = False
 
     def setUp(self):
         self.model_tester = OpenAIPrivacyFilterModelTester(self)

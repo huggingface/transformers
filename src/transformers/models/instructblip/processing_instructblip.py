@@ -17,32 +17,21 @@ Processor class for InstructBLIP. Largely copy of Blip2Processor with addition o
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class InstructBlipProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "return_length": False,
-            "verbose": True,
-        },
-    }
-
-
 @auto_docstring
 class InstructBlipProcessor(ProcessorMixin):
+    text_kwargs = {
+        "return_token_type_ids": False,
+    }
+
     def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
         r"""
         qformer_tokenizer (`AutoTokenizer`):
@@ -65,13 +54,12 @@ class InstructBlipProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[InstructBlipProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         if images is None and text is None:
             raise ValueError("You have to specify at least images or text.")
 
         output_kwargs = self._merge_kwargs(
-            InstructBlipProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -112,6 +100,27 @@ class InstructBlipProcessor(ProcessorMixin):
         encoding = BatchFeature(encoding, tensor_type=return_tensors)
         return encoding
 
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            num_image_tokens = [self.num_query_tokens] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
+
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
@@ -119,5 +128,7 @@ class InstructBlipProcessor(ProcessorMixin):
         qformer_input_names = ["qformer_input_ids", "qformer_attention_mask"]
         return tokenizer_input_names + image_processor_input_names + qformer_input_names
 
+
+__getattr__ = deprecate_attr(__name__, rename={"InstructBlipProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["InstructBlipProcessor"]

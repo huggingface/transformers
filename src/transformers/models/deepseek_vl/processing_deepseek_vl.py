@@ -19,24 +19,15 @@
 # limitations under the License.
 
 
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class DeepseekVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class DeepseekVLProcessor(ProcessorMixin):
-    valid_processor_kwargs = DeepseekVLProcessorKwargs
+    text_kwargs = {"return_tensors": "pt"}
+    images_kwargs = {"return_tensors": "pt"}
 
     def __init__(
         self,
@@ -58,5 +49,26 @@ class DeepseekVLProcessor(ProcessorMixin):
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         return self.image_token * self.num_image_tokens
 
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            num_image_tokens = [self.num_image_tokens] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
+
+
+__getattr__ = deprecate_attr(__name__, rename={"DeepseekVLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["DeepseekVLProcessor"]

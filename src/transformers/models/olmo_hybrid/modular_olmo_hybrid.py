@@ -32,17 +32,18 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaDecoderLayer
-from ..olmo2.modeling_olmo2 import Olmo2RotaryEmbedding
+from ..mamba.modeling_mamba import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
+from ..olmo2.modeling_olmo2 import Olmo2RMSNorm, Olmo2RotaryEmbedding
 from ..olmo3.modeling_olmo3 import (
     Olmo3Attention,
     Olmo3DecoderLayer,
     Olmo3ForCausalLM,
     Olmo3MLP,
-    Olmo3RMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -51,8 +52,6 @@ from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextPreTrainedModel,
     Qwen3NextRMSNormGated,
     apply_mask_to_padding_states,
-    causal_conv1d_fn,
-    causal_conv1d_update,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
 )
@@ -180,7 +179,7 @@ class OlmoHybridRMSNormGated(Qwen3NextRMSNormGated):
     pass
 
 
-class OlmoHybridRMSNorm(Olmo3RMSNorm):
+class OlmoHybridRMSNorm(Olmo2RMSNorm):
     pass
 
 
@@ -199,12 +198,13 @@ class OlmoHybridAttention(Olmo3Attention):
         del self.sliding_window
         del self.attention_type
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -224,8 +224,8 @@ class OlmoHybridAttention(Olmo3Attention):
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -253,22 +253,23 @@ class OlmoHybridRotaryEmbedding(Olmo2RotaryEmbedding):
     """
 
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         # KEY difference from parent: return float32, don't cast to x.dtype
         return cos, sin
 
 
 @use_kernelized_func(
-    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+    [
+        torch_recurrent_gated_delta_rule,
+        torch_chunk_gated_delta_rule,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class OlmoHybridGatedDeltaNet(nn.Module):
     """
@@ -334,10 +335,11 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         self.layer_type = config.layer_types[layer_idx]
 
     @force_accelerate_hooks("conv1d")
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -346,11 +348,14 @@ class OlmoHybridGatedDeltaNet(nn.Module):
 
         batch_size, seq_len, _ = hidden_states.shape
 
-        use_cache = cache_params is not None
+        use_cache = cache is not None
         # Reads "we have cached conv/recurrent state to continue from". Single-token vs multi-token
         # branching lives inside `ShortConvolution` and in the recurrent-vs-chunk kernel dispatch
         # below, each of which gates on `seq_len == 1` locally.
-        use_precomputed_states = use_cache and cache_params.has_previous_state()
+        if use_cache:
+            recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            recurrent_state = None
 
         mixed_qkv = torch.cat(
             [
@@ -361,37 +366,14 @@ class OlmoHybridGatedDeltaNet(nn.Module):
             dim=-1,
         ).transpose(1, 2)
 
-        if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
-
-        # Single token decode path
-        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
-            mixed_qkv = causal_conv1d_update(
-                mixed_qkv,
-                conv_state,
-                weight=self.conv1d.weight.squeeze(1),
-                bias=self.conv1d.bias,
-                activation=self.activation,
-            )
-        # Multi token prefill or simple "full" prefill
-        else:
-            # Concatenated state for prefill
-            if cache_params is not None:
-                mixed_qkv = cache_params.update_conv_state(
-                    mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
-                )
-
-            mixed_qkv = causal_conv1d_fn(
-                mixed_qkv,
-                weight=self.conv1d.weight.squeeze(1),
-                bias=self.conv1d.bias,
-                activation=self.activation,
-                **kwargs,
-            )
-
-            # Cut out any tail
-            mixed_qkv = mixed_qkv[:, :, -seq_len:]
+        mixed_qkv = causal_conv1d_forward(
+            self.conv1d,
+            mixed_qkv,
+            cache,
+            self.layer_idx,
+            activation=self.activation,
+            **kwargs,
+        )
 
         q, k, v = torch.split(
             mixed_qkv.transpose(1, 2),
@@ -403,18 +385,13 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         k = k.view(batch_size, seq_len, -1, self.head_k_dim)
         v = v.view(batch_size, seq_len, -1, self.head_v_dim)
 
-        if self.num_v_heads > self.num_k_heads:
-            expand_ratio = self.num_v_heads // self.num_k_heads
-            q = q.repeat_interleave(expand_ratio, dim=2)
-            k = k.repeat_interleave(expand_ratio, dim=2)
-
         beta = self.b_proj(hidden_states).sigmoid()
         if self.allow_neg_eigval:
             beta = beta * 2.0
 
         g = -self.A_log.float().exp() * F.softplus(self.a_proj(hidden_states).float() + self.dt_bias)
 
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             output, last_recurrent_state = torch_recurrent_gated_delta_rule(
                 q,
                 k,
@@ -434,7 +411,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 v,
                 g=g,
                 beta=beta,
-                initial_state=recurrent_state if use_precomputed_states else None,
+                initial_state=recurrent_state,
                 output_final_state=use_cache,
                 use_qk_l2norm_in_kernel=True,
                 cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
@@ -442,8 +419,8 @@ class OlmoHybridGatedDeltaNet(nn.Module):
             )
 
         # Update cache
-        if cache_params is not None:
-            cache_params.update_recurrent_state(last_recurrent_state, self.layer_idx)
+        if cache is not None:
+            cache.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         gate = self.g_proj(hidden_states)
         output = output.reshape(-1, self.head_v_dim)
@@ -475,12 +452,13 @@ class OlmoHybridLinearAttentionDecoderLayer(LlamaDecoderLayer):
         self.post_attention_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp = OlmoHybridMLP(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         output_attentions: bool | None = False,
@@ -488,10 +466,10 @@ class OlmoHybridLinearAttentionDecoderLayer(LlamaDecoderLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        # Main difference to llama - signature (`cache_params`) and linear attention
+        # Main difference to llama - signature (`cache`) and linear attention
         hidden_states = self.linear_attn(
             hidden_states=hidden_states,
-            cache_params=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             **kwargs,
         )
@@ -513,7 +491,6 @@ class OlmoHybridPreTrainedModel(Qwen3NextPreTrainedModel):
         "attentions": OlmoHybridAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, OlmoHybridGatedDeltaNet):
@@ -553,13 +530,14 @@ class OlmoHybridModel(Qwen3NextModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -569,11 +547,11 @@ class OlmoHybridModel(Qwen3NextModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -583,7 +561,7 @@ class OlmoHybridModel(Qwen3NextModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             # Create the masks
@@ -604,7 +582,7 @@ class OlmoHybridModel(Qwen3NextModel):
                 position_embeddings=layer_position_embeddings,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 **kwargs,
             )
@@ -613,7 +591,7 @@ class OlmoHybridModel(Qwen3NextModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 

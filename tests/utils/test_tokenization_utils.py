@@ -50,7 +50,7 @@ class TokenizerUtilTester(unittest.TestCase):
         _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the tokenizer.
-        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
+        with mock.patch.object(httpx.Client, "request", return_value=response_mock) as mock_head:
             _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -70,7 +70,7 @@ class TokenizerUtilTester(unittest.TestCase):
         _ = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
 
         # Under the mock environment we get a 500 error when trying to reach the tokenizer.
-        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
+        with mock.patch.object(httpx.Client, "request", return_value=response_mock) as mock_head:
             _ = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -219,6 +219,17 @@ class TokenizersBackendTest(unittest.TestCase):
 
 
 class TrieTest(unittest.TestCase):
+    def test_trie_split_without_matching_start(self):
+        for words in [[], ["<extra_id_0>"], ["<extra_id_0>", "[CLS]", "🤗hug"]]:
+            trie = Trie(words)
+            for text in ["", "ordinary prose", "é中😀\x00\n", "a" * 1024]:
+                with self.subTest(words=words, text=text):
+                    self.assertEqual(trie.split(text), [text] if text else [])
+
+            trie.add("ordinary")
+            self.assertEqual(trie.split("ordinary prose"), ["ordinary", " prose"])
+            self.assertEqual(trie.split("<extra_id_"), ["<extra_id_"])
+
     def test_trie(self):
         trie = Trie()
         trie.add("Hello 友達")

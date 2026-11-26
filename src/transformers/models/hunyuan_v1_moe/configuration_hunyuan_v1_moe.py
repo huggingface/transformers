@@ -32,12 +32,21 @@ class HunYuanMoEV1Config(PreTrainedConfig):
     """
 
     model_type = "hunyuan_v1_moe"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.query_layernorm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.key_layernorm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.shared_mlp.gate_proj": "colwise",
+        "layers.*.mlp.shared_mlp.up_proj": "colwise",
+        "layers.*.mlp.shared_mlp.down_proj": "rowwise",
+    }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     attribute_map = {
         "num_experts_per_tok": "moe_topk",
@@ -66,6 +75,7 @@ class HunYuanMoEV1Config(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
     num_experts: int = 1
+    output_router_logits: bool = False
     moe_topk: int | list[int] = 1
     head_dim: int | None = None
 

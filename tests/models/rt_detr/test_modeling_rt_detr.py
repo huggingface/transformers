@@ -40,6 +40,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -58,100 +59,67 @@ if is_vision_available():
 CHECKPOINT = "PekingU/rtdetr_r50vd"  # TODO: replace
 
 
-class RTDetrModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        is_training=True,
-        use_labels=True,
-        n_targets=3,
-        num_labels=10,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        batch_norm_eps=1e-5,
-        # backbone
-        backbone_config=None,
-        # encoder HybridEncoder
-        encoder_hidden_dim=32,
-        encoder_in_channels=[128, 256, 512],
-        feat_strides=[8, 16, 32],
-        encoder_layers=1,
-        encoder_ffn_dim=64,
-        encoder_attention_heads=2,
-        dropout=0.0,
-        activation_dropout=0.0,
-        encode_proj_layers=[2],
-        positional_encoding_temperature=10000,
-        encoder_activation_function="gelu",
-        activation_function="silu",
-        eval_size=None,
-        normalize_before=False,
-        # decoder RTDetrTransformer
-        d_model=32,
-        num_queries=30,
-        decoder_in_channels=[32, 32, 32],
-        decoder_ffn_dim=64,
-        num_feature_levels=3,
-        decoder_n_points=4,
-        decoder_layers=2,
-        decoder_attention_heads=2,
-        decoder_activation_function="relu",
-        attention_dropout=0.0,
-        num_denoising=0,
-        label_noise_ratio=0.5,
-        box_noise_scale=1.0,
-        learn_initial_query=False,
-        anchor_image_size=None,
-        image_size=64,
-        disable_custom_kernels=True,
-        with_box_refine=True,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = 3
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.n_targets = n_targets
-        self.num_labels = num_labels
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.batch_norm_eps = batch_norm_eps
-        self.backbone_config = backbone_config
-        self.encoder_hidden_dim = encoder_hidden_dim
-        self.encoder_in_channels = encoder_in_channels
-        self.feat_strides = feat_strides
-        self.encoder_layers = encoder_layers
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_attention_heads = encoder_attention_heads
-        self.dropout = dropout
-        self.activation_dropout = activation_dropout
-        self.encode_proj_layers = encode_proj_layers
-        self.positional_encoding_temperature = positional_encoding_temperature
-        self.encoder_activation_function = encoder_activation_function
-        self.activation_function = activation_function
-        self.eval_size = eval_size
-        self.normalize_before = normalize_before
-        self.d_model = d_model
-        self.num_queries = num_queries
-        self.decoder_in_channels = decoder_in_channels
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.num_feature_levels = num_feature_levels
-        self.decoder_n_points = decoder_n_points
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.decoder_activation_function = decoder_activation_function
-        self.attention_dropout = attention_dropout
-        self.num_denoising = num_denoising
-        self.label_noise_ratio = label_noise_ratio
-        self.box_noise_scale = box_noise_scale
-        self.learn_initial_query = learn_initial_query
-        self.anchor_image_size = anchor_image_size
-        self.image_size = image_size
-        self.disable_custom_kernels = disable_custom_kernels
-        self.with_box_refine = with_box_refine
+class RTDetrModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
-        self.encoder_seq_length = math.ceil(self.image_size / 32) * math.ceil(self.image_size / 32)
+    small_config_overrides = {
+        "batch_size": 3,
+        "is_training": True,
+        "use_labels": True,
+        "n_targets": 3,
+        "num_labels": 10,
+        "initializer_range": 0.02,
+        "layer_norm_eps": 1e-5,
+        "batch_norm_eps": 1e-5,
+        # backbone
+        "backbone_config": None,
+        # encoder HybridEncoder
+        "encoder_hidden_dim": 32,
+        "encoder_in_channels": [128, 256, 512],
+        "feat_strides": [8, 16, 32],
+        "encoder_layers": 1,
+        "encoder_ffn_dim": 64,
+        "encoder_attention_heads": 2,
+        "dropout": 0.0,
+        "activation_dropout": 0.0,
+        "encode_proj_layers": [2],
+        "positional_encoding_temperature": 10000,
+        "encoder_activation_function": "gelu",
+        "activation_function": "silu",
+        "eval_size": None,
+        "normalize_before": False,
+        # decoder RTDetrTransformer
+        "d_model": 32,
+        "num_queries": 30,
+        "decoder_in_channels": [32, 32, 32],
+        "decoder_ffn_dim": 64,
+        "num_feature_levels": 3,
+        "decoder_n_points": 4,
+        "decoder_layers": 2,
+        "decoder_attention_heads": 2,
+        "decoder_activation_function": "relu",
+        "attention_dropout": 0.0,
+        "num_denoising": 0,
+        "label_noise_ratio": 0.5,
+        "box_noise_scale": 1.0,
+        "learn_initial_query": False,
+        "anchor_image_size": None,
+        "image_size": 64,
+        "disable_custom_kernels": True,
+        "with_box_refine": True,
+        "num_channels": 3,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["encoder_seq_length"] = math.ceil(values["image_size"] / 32) * math.ceil(values["image_size"] / 32)
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -254,6 +222,8 @@ class RTDetrModelTester:
 
 @require_torch
 class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = RTDetrModelTester
+
     all_model_classes = (RTDetrModel, RTDetrForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-feature-extraction": RTDetrModel, "object-detection": RTDetrForObjectDetection}

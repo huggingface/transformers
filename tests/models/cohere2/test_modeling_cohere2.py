@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
@@ -54,13 +53,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 class Cohere2ModelTester(CohereModelTester):
     config_class = Cohere2Config
-    if is_torch_available():
-        model_class = Cohere2Model
-        for_causal_lm_class = Cohere2ForCausalLM
+    model_class = Cohere2Model
 
 
 @require_torch
 class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Cohere2ModelTester
+
     all_model_classes = (Cohere2Model, Cohere2ForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -183,9 +182,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
     @pytest.mark.torch_export_test
     def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.5.0"):
-            self.skipTest(reason="This test requires torch >= 2.5 to run.")
-
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,

@@ -23,6 +23,7 @@ from ...test_processing_common import ProcessorTesterMixin
 @require_vision
 class Llama4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Llama4Processor
+    num_image_tokens_images_kwargs = {"max_patches": 4, "size": {"height": 56, "width": 56}}
     # Tiny processor created with make_tiny_processor.py from "meta-llama/Llama-4-Scout-17B-16E-Instruct"
     tiny_model_id = "hf-internal-testing/tiny-processor-llama4"
 
@@ -32,7 +33,3 @@ class Llama4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Small size (20×20) keeps tensor allocations minimal.
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class(max_patches=1, size={"height": 20, "width": 20})
-
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token

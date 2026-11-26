@@ -49,7 +49,6 @@ class DeepseekV2Config(PreTrainedConfig):
     """
 
     model_type = "deepseek_v2"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -57,9 +56,6 @@ class DeepseekV2Config(PreTrainedConfig):
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -95,10 +91,9 @@ class DeepseekV2Config(PreTrainedConfig):
     mlp_bias: bool = False
     head_dim: int | None = None
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     attribute_map = {
         "num_experts": "n_routed_experts",
@@ -108,6 +103,7 @@ class DeepseekV2Config(PreTrainedConfig):
     q_lora_rank: int | None = 1536
     n_group: int | None = None
     n_routed_experts: int = 64
+    output_router_logits: bool = False
     n_shared_experts: int = 2
     qk_nope_head_dim: int = 128
     qk_rope_head_dim: int = 64

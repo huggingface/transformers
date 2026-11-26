@@ -103,6 +103,12 @@ trainer = Trainer(
 trainer.push_to_hub()
 ```
 
+To upload the model to a private repository, set `hub_private_repo=True` in [`TrainingArguments`]. If the repository hasn't been created yet (for example, when `push_to_hub=False` in [`TrainingArguments`]), you can also pass `private=True` to [`~transformers.Trainer.push_to_hub`] instead. The `private` argument only takes effect when the repository is created, so it doesn't change the visibility of an existing repository.
+
+```py
+trainer.push_to_hub(private=True)
+```
+
 ### PushToHubMixin
 
 The [`~utils.PushToHubMixin`] provides functionality for pushing a model or tokenizer to the Hub.
@@ -157,6 +163,6 @@ A model card is a `README.md` file in your repository. Add this file by:
 - manually creating and uploading a `README.md` file
 - clicking on the **Edit model card** button in the repository
 
-Take a look at the Llama 3.1 [model card](https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct) for an example of what to include on a model card.
+Take a look at the Llama 3.1 [model card](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct) for an example of what to include on a model card.
 
 Learn more about other model card metadata (carbon emissions, license, link to paper, etc.) available in the [Model Cards](https://hf.co/docs/hub/model-cards#model-cards) guide.

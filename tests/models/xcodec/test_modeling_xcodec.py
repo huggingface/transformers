@@ -112,6 +112,7 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
 
     test_resize_embeddings = False
+    model_split_percents = [0.5, 0.9]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not support returning hidden states
@@ -158,7 +159,7 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
             config.audio_encoder.gradient_checkpointing = True
             config.decoder.gradient_checkpointing = True
             model = model_class(config)
-            self.assertTrue(model.is_gradient_checkpointing)
+            self.assertTrue(model.is_activation_checkpointing)
 
     @unittest.skip(reason="The XcodecModel does not have `inputs_embeds` logics")
     def test_inputs_embeds(self):
@@ -224,16 +225,12 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertTrue(isinstance(dict_output, dict))
 
                 for tuple_value, dict_value in zip(tuple_output, dict_output.values()):
-                    self.assertTrue(
-                        torch.allclose(
-                            set_nan_tensor_to_zero(tuple_value), set_nan_tensor_to_zero(dict_value), atol=1e-5
-                        ),
-                        msg=(
-                            "Tuple and dict output are not equal. Difference:"
-                            f" {torch.max(torch.abs(tuple_value - dict_value))}. Tuple has `nan`:"
-                            f" {torch.isnan(tuple_value).any()} and `inf`: {torch.isinf(tuple_value)}. Dict has"
-                            f" `nan`: {torch.isnan(dict_value).any()} and `inf`: {torch.isinf(dict_value)}."
-                        ),
+                    torch.testing.assert_close(
+                        set_nan_tensor_to_zero(tuple_value),
+                        set_nan_tensor_to_zero(dict_value),
+                        rtol=1e-5,
+                        atol=1e-5,
+                        msg=lambda m: f"Tuple and dict output are not equal.\n{m}",
                     )
 
         for model_class in self.all_model_classes:

@@ -28,7 +28,7 @@ import torch
 from packaging import version
 
 from ..utils import logging
-from ..utils.import_utils import is_kernels_available, maybe_import_error
+from ..utils.import_utils import is_kernels_available, is_rocm_platform, maybe_import_error
 from .hub_kernels import lazy_load_kernel
 
 
@@ -59,9 +59,9 @@ def is_sonicmoe_loadable(raise_error: bool = False) -> bool:
             "sonic-moe requires the `kernels` package. Use a different `experts_implementation`.",
             raise_error=raise_error,
         )
-    if not torch.cuda.is_available():
+    if is_rocm_platform() or not torch.cuda.is_available():
         return maybe_import_error(
-            "sonic-moe kernel requires CUDA, but CUDA is not available. Use a different `experts_implementation`.",
+            "sonic-moe kernel requires CUDA on an NVIDIA GPU. Use a different `experts_implementation`.",
             raise_error=raise_error,
         )
     major = torch.cuda.get_device_capability()[0]
@@ -167,6 +167,8 @@ def sonicmoe_experts_forward(
 ) -> torch.Tensor:
     if not self.has_gate:
         raise ValueError("sonicmoe requires gated experts (has_gate=True)")
+    if self.has_post_expert_norm:
+        raise ValueError("The `sonicmoe` experts implementation does not support experts with a post-expert norm.")
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
@@ -180,7 +182,7 @@ def sonicmoe_experts_forward(
     # EP sentinel handling: leave `expert_ids` unclamped — the kernel's metadata stage drops
     # `expert_ids >= num_experts` from the per-expert histogram and masks them out of the
     # scatter indices, so sentinels never enter the grouped GEMM. Their routing weights are
-    # already zero (RouterParallel masks them at dispatch), so the per-token reduction
+    # already zero (the EP implementation masks them at dispatch), so the per-token reduction
     # contributes nothing for sentinel slots.
 
     w1 = self.gate_up_proj
