@@ -112,6 +112,10 @@ class Scheduler(ABC):
         self._requests_to_fork: list[RequestState] = []
         self.block_new_requests = False
         self._proto_decode_only_batches = 0  # PROTOTYPE: decode-only batches since the last prefill-only one
+        # [scratch] Qwen3-Next's mixed steps run uncompiled and without graphs (its chunked scans read the lengths on the
+        # host): by default its prompts go in batches apart, one every 16 decode-only batches. B300 rolling: 1,558 tok/s
+        # mixed, 2,626 / 3,163 / 3,772 / 2,861 every 4 / 8 / 16 / 32 (Granite-4.0-H-Small and Qwen3-8B lose 3-8%)
+        self._proto_default_apart = 16 if getattr(self.cache.config, "model_type", None) == "qwen3_next" else -1
         # Active requests that failed cache allocation in the last scheduled batch w/ the length that was denied
         self.starved_requests: list[tuple[RequestState, int]] = []
 
@@ -428,6 +432,15 @@ class FIFOScheduler(Scheduler):
         # PROTOTYPE: prefills apart from decodes
         # gap3-mtpa: with CB_MTP_ASYNC, prefills are always apart from decodes (every other batch when both wait)
         prefills_apart = _PROTO_PREFILLS_APART if _PROTO_PREFILLS_APART >= 0 or not _MTP_ASYNC else 1
+        if prefills_apart < 0:
+            prefills_apart = self._proto_default_apart
+        # [scratch] only a few new prompt tokens wait for their turn: a batch's worth or more (a burst of long prompts)
+        # mixes with the decodes as usual, the decode tokens riding along the big prefill steps (Qwen3-Next long prompts
+        # 917 -> 774 tok/s when they went apart too)
+        if prefills_apart >= 0 and priority_states and second_priority_states:
+            waiting_tokens = sum(len(state.remaining_prefill_tokens) for state in second_priority_states)
+            if waiting_tokens >= token_budget:
+                prefills_apart = -1
         if prefills_apart >= 0 and priority_states and second_priority_states:
             if self._proto_decode_only_batches >= prefills_apart:
                 self._proto_decode_only_batches = 0
