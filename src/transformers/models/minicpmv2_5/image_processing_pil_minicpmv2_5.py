@@ -206,18 +206,24 @@ class MiniCPMV2_5ImageProcessorPil(PilBackend):
             slice_sizes.extend([(slice_height // patch_size, slice_width // patch_size)] * (len(image_patches) - 1))
             grids.append(best_grid if best_grid is not None else [0, 0])
 
+        pixel_values, pixel_attention_mask, patch_position_ids = self.pad_slices(slices, slice_sizes, patch_size)
         return BatchFeature(
-            data={**self.pad_slices(slices, slice_sizes, patch_size), "grids": grids},
+            data={
+                "pixel_values": pixel_values,
+                "pixel_attention_mask": pixel_attention_mask,
+                "patch_position_ids": patch_position_ids,
+                "grids": grids,
+            },
             tensor_type=return_tensors,
             skip_tensor_conversion=["grids"],
         )
 
     def pad_slices(
         self, slices: list[np.ndarray], slice_sizes: list[tuple[int, int]], patch_size: int
-    ) -> dict[str, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Pad every slice (one row of patches each) to the longest one. Returns the stacked `pixel_values`, the
-        `pixel_attention_mask` of real patches, and each patch's `(row, col)` in its slice in `patch_position_ids` (0 for
+        `pixel_attention_mask` of real patches, and each patch's `(row, col)` in its slice as `patch_position_ids` (0 for
         padding).
         """
         num_patches = [height * width for height, width in slice_sizes]
@@ -228,11 +234,8 @@ class MiniCPMV2_5ImageProcessorPil(PilBackend):
         pixel_attention_mask = patch_index < np.array(num_patches)[:, None]
         widths = np.array([width for _, width in slice_sizes])[:, None]
         patch_position_ids = np.stack([patch_index // widths, patch_index % widths], axis=-1)
-        return {
-            "pixel_values": pixel_values,
-            "pixel_attention_mask": pixel_attention_mask,
-            "patch_position_ids": patch_position_ids * pixel_attention_mask[..., None],
-        }
+        patch_position_ids = patch_position_ids * pixel_attention_mask[..., None]
+        return pixel_values, pixel_attention_mask, patch_position_ids
 
 
 __all__ = ["MiniCPMV2_5ImageProcessorPil"]

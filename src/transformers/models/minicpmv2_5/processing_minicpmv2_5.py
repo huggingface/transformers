@@ -18,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessorMixin
 from ...utils import auto_docstring
 
 
@@ -62,6 +62,35 @@ class MiniCPMV2_5Processor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         # Each image's slice grid, which the processor needs to build its placeholder text
         return ["grids"]
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            max_slice_nums = images_kwargs.get("max_slice_nums") or self.image_processor.max_slice_nums
+            scale_resolution = images_kwargs.get("scale_resolution") or self.image_processor.scale_resolution
+            slice_mode = images_kwargs.get("slice_mode", self.image_processor.slice_mode)
+
+            # The overview image, plus one slice per grid cell when the image is sliced
+            num_image_patches = []
+            for image_size in image_sizes:
+                grid = self.image_processor.get_sliced_grid(image_size, max_slice_nums, scale_resolution)
+                num_image_patches.append(1 + grid[0] * grid[1] if slice_mode and grid is not None else 1)
+            num_image_tokens = [self.num_image_tokens * num_patches for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
 
 __all__ = ["MiniCPMV2_5Processor"]

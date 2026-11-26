@@ -88,6 +88,10 @@ class MiniCPMV2_5VisionText2TextModelTester(VLMModelTester):
 class MiniCPMV2_5ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = MiniCPMV2_5VisionText2TextModelTester
 
+    @unittest.skip(reason="SDPA can't dispatch on flash with the attention mask of the tester's padded slices")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     def test_reverse_loading_mapping(self):
         # As in llava, the base model has no `model.` prefix to reverse the `^llm\.model\.` rename onto
         super().test_reverse_loading_mapping(skip_base_model=True)
