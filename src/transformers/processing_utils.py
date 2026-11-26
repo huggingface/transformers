@@ -1969,6 +1969,7 @@ class ProcessorMixin(PushToHubMixin):
         auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
         if sub_processor_type == "tokenizer":
             # Primary tokenizer: load from root
+            print(kwargs)
             tokenizer = auto_processor_class.from_pretrained(
                 pretrained_model_name_or_path, subfolder=subfolder, **kwargs
             )
@@ -2023,9 +2024,15 @@ class ProcessorMixin(PushToHubMixin):
                 continue
 
             if "tokenizer" in sub_processor_type:
-                tokenizer = cls._load_tokenizer_from_pretrained(
-                    sub_processor_type, pretrained_model_name_or_path, **kwargs
-                )
+                # This is only necessary for real official checkpoints on the hub. DO NOT remove it 
+                if "PixtralProcessor" in cls.__name__:
+                    from .tokenization_utils_tokenizers import TokenizersBackend
+
+                    tokenizer = TokenizersBackend.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                else:
+                    tokenizer = cls._load_tokenizer_from_pretrained(
+                        sub_processor_type, pretrained_model_name_or_path, **kwargs
+                    )
                 processor_dict[sub_processor_type] = tokenizer
             elif (
                 isinstance(sub_processor_config := processor_dict.get(sub_processor_type), dict)
