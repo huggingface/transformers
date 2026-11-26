@@ -26,12 +26,13 @@ from typing import TYPE_CHECKING
 from ..conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
 from ..modeling_flash_attention_utils import FLASH_ATTN_KERNEL_VERSIONS
 from ..monkey_patching import register_patch_mapping
-from ..utils import ENV_VARS_TRUE_VALUES, logging
+from ..utils import logging
 from ..utils.generic import suppress_kernels_logging
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
     get_device_type,
+    is_env_variable_true,
     is_kernels_available,
     is_torch_available,
     is_torchdynamo_compiling,
@@ -62,7 +63,7 @@ _MISSING_KERNELS_MESSAGE = (
 
 
 def _kernels_enabled() -> bool:
-    return os.environ.get("USE_HUB_KERNELS", "YES").upper() in ENV_VARS_TRUE_VALUES
+    return is_env_variable_true("USE_HUB_KERNELS", "YES")
 
 
 def _ensure_kernels_enabled() -> None:
@@ -110,23 +111,12 @@ if is_kernels_available():
         ROCMProperties,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
+        use_kernel_forward_from_hub,
         use_kernel_mapping,
     )
-    from kernels import (
-        get_kernel as get_kernel_hub,
-    )
-    from kernels import (
-        kernelize as _kernels_kernelize,
-    )
-    from kernels import (
-        use_kernel_forward_from_hub as _kernels_use_kernel_forward_from_hub,
-    )
+    from kernels import get_kernel as get_kernel_hub
+    from kernels import kernelize as _kernels_kernelize
     from kernels import use_kernelized_func as _kernels_use_kernelized_func
-
-    # We change the strategy to prepare the metadata like kernels but the exchange
-    # at runtime can be determined by the env variable `USE_HUB_KERNELS`
-    def use_kernel_forward_from_hub(layer_name: str):
-        return _kernels_use_kernel_forward_from_hub(layer_name)
 
     def use_kernelized_func(module_names: list[Callable] | Callable):
         if isinstance(module_names, Callable):
@@ -152,8 +142,7 @@ if is_kernels_available():
                 )
 
         # NOTE:   Every entry here has to be compatible with torch compile otherwise it is not added to the list
-        # REASON: We cannot control/detect when users compile the fwd of a model which means that incompatible kernels could
-        #         silently return wrong outputs (worst case) or just crash outright.
+        # REASON: We cannot just swap kernels implementations during runtime (e.g. a simple forward)
         _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
             "EsmFold2TriangleMultiplication": {
                 "cuda": {

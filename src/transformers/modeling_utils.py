@@ -4213,7 +4213,7 @@ class PreTrainedModel(
         tp_size = kwargs.pop("tp_size", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         allow_all_kernels = kwargs.pop("allow_all_kernels", False)
-        use_kernels = kwargs.pop("use_kernels", True)
+        use_kernels = kwargs.pop("use_kernels", None)
         kernel_config = kwargs.pop("kernel_config", None)
         kernels_mode = kwargs.pop("kernels_mode", None)
         key_mapping = kwargs.pop("key_mapping", None)
@@ -4411,12 +4411,15 @@ class PreTrainedModel(
 
             register_fusion_patches(cls, config, fusion_config)
 
-        if use_kernels and not _kernels_enabled():
-            logger.warning_once(
-                "Detected the usage of `use_kernels=True` but the env variable `USE_HUB_KERNELS` is set to turn kernels off. "
-                "We set `use_kernels=False` to follow the priority of the env varibale. Please consider passing `use_kernels=False` as well."
-            )
+        if not _kernels_enabled():  # Default is enabled
+            if use_kernels is True:
+                logger.warning_once(
+                    "`use_kernels=True` was requested, but `USE_HUB_KERNELS` disables kernels. "
+                    "Disabling kernels to respect the environment variable."
+                )
             use_kernels = False
+        elif use_kernels is None:
+            use_kernels = True
 
         # Kernel patches: single-layer replacement (stateful __init__) then fusions.
         if use_kernels and kernel_config is not None:
