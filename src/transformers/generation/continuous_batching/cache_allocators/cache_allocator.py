@@ -346,9 +346,7 @@ class CacheAllocator(ABC):
         """Returns the physical indices for writing to the cache."""
 
     @abstractmethod
-    def fill_block_table(
-        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor | np.ndarray
-    ) -> None:
+    def fill_block_table(self, request_id: str, past_length: int, query_length: int, block_table: np.ndarray) -> None:
         """Fills the block table for a given request_id, past_length and query_length."""
 
     # ________________________________________________ RUNTIME UPDATE ________________________________________________ #

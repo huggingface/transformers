@@ -15,6 +15,7 @@ from functools import partial
 from itertools import repeat
 from typing import TypedDict
 
+import numpy as np
 import torch
 
 from transformers.configuration_utils import PretrainedConfig
@@ -207,6 +208,12 @@ class ContinuousBatchingIOs:
             device=self.device,
             pin_memory=pin_memory,
         )
+        # The rows are filled through numpy on the host: a view of the table when it lives there, else a host copy
+        # uploaded once per step
+        if self.device.type == "cpu":
+            self.host_block_table = self.block_table.numpy()
+        else:
+            self.host_block_table = np.full(tuple(self.block_table.shape), -1, dtype=np.int32)
 
         # For other kwargs, we need a list of tensors with as many tensors as there are groups
         self.write_index_storage = torch.empty(
@@ -283,11 +290,11 @@ class ContinuousBatchingIOs:
 
         # If this is a full reset, we reset every tensors
         if full_reset:
-            self.block_table[:, :b_size].fill_(-1)
+            self.host_block_table[:, :b_size] = -1
             self._reset_read_and_write_indices(q_len, kv_len)
         # If this is not a full reset, and we are going to use the block table, we only reset it
         elif self.use_block_table:
-            self.block_table[:, :b_size].fill_(-1)
+            self.host_block_table[:, :b_size] = -1
         # Otherwise, the read and write indices are the ones used, so we reset them
         else:
             self._reset_read_and_write_indices(q_len, kv_len)
@@ -379,9 +386,6 @@ class ContinuousBatchingIOs:
         cumulative_seqlens_k = {layer_type: [0] for layer_type in self.cumulative_seqlens_k.keys()}
         write_index = [[] for _ in range(num_attn_types)]
         read_index = None if self.max_kv_read == 0 else [[] for _ in range(num_attn_types)]
-        # A host table is filled through numpy: a torch view per request was most of the step's host time at hundreds
-        # of requests
-        block_table = self.block_table.numpy() if self.block_table.device.type == "cpu" else self.block_table
 
         # Go through all the requests in the batch
         for i, future_state in enumerate(requests_in_batch):
@@ -408,7 +412,7 @@ class ContinuousBatchingIOs:
             # We extend the read and write indices for the cache, or fill the block table if the kernel can read and
             # write the cache itself
             if self.use_block_table:
-                self.cache.fill_block_table(state.request_id, past_length, query_length, block_table[:, i])
+                self.cache.fill_block_table(state.request_id, past_length, query_length, self.host_block_table[:, i])
             else:
                 self.cache.extend_read_and_write_indices(
                     state.request_id, past_length, query_length, read_index, write_index
@@ -469,6 +473,11 @@ class ContinuousBatchingIOs:
             self.total_seqlen_k[layer_type] = total_seqlen_k
             layer_type_seqlens_k.extend(repeat(total_seqlen_k, fake_sequences))
             self.cumulative_seqlens_k[layer_type][: len(layer_type_seqlens_k)] = to_tensor(layer_type_seqlens_k)
+
+        # A block table on the device gets its rows from the host table in one upload
+        if self.use_block_table and self.device.type != "cpu":
+            b_size = min(self.num_q_tokens, self.max_requests_per_batch)
+            self.block_table[:, :b_size].copy_(torch.from_numpy(self.host_block_table[:, :b_size]))
 
         # If we are not using the block table, we populate the write indices (and maybe the read indices)
         if not self.use_block_table:

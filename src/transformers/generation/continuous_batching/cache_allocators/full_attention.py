@@ -182,19 +182,12 @@ class FullAttentionCacheAllocator(CacheAllocator):
             physical_indices.extend(range(physical_start + local_start, physical_start + local_end))
         return physical_indices
 
-    def fill_block_table(
-        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor | np.ndarray
-    ) -> None:
-        """Fills the request's row of the kernel block table (a numpy view of it when the table is on the host)."""
+    def fill_block_table(self, request_id: str, past_length: int, query_length: int, block_table: np.ndarray) -> None:
+        """Fills the request's row of the kernel block table, through numpy on the host."""
         block_ids = self.block_table[request_id]
-        pages_stride = self.block_physical_stride // self.tokens_per_page
-        if isinstance(block_table, np.ndarray):
-            row = block_table[: len(block_ids)]
-            row[:] = block_ids
-            row *= pages_stride
-        else:
-            entries = torch.tensor(block_ids, dtype=block_table.dtype) * pages_stride
-            block_table[: len(block_ids)].copy_(entries, non_blocking=True)
+        row = block_table[: len(block_ids)]
+        row[:] = block_ids
+        row *= self.block_physical_stride // self.tokens_per_page
 
     # ________________________________________________ RUNTIME UPDATE ________________________________________________ #
 

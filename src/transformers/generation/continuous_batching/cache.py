@@ -489,9 +489,7 @@ class PagedAttentionCache:
             free_bytes += allocator.pool.count_free_blocks(allocator.index) * allocator.bytes_per_block
         return free_bytes / (self.num_sectors * self.bytes_per_sector if relative else 1)
 
-    def fill_block_table(
-        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor | np.ndarray
-    ) -> None:
+    def fill_block_table(self, request_id: str, past_length: int, query_length: int, block_table: np.ndarray) -> None:
         """Fills each allocator's row of the kernel block table for the given request."""
         for allocator in self.cache_allocators.values():
             allocator.fill_block_table(request_id, past_length, query_length, block_table[allocator.index])
