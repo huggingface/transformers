@@ -36,6 +36,7 @@ from ...integrations import (
     use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
+from ...integrations._proto_gdn_decode import _PROTO_GDN_IN_PLACE, gdn_decode_inplace
 from ...integrations.linear_attention_paged import causal_conv1d_varlen
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -681,8 +682,21 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         # Under continuous batching, the cache is the paged one. Its batch is one row of packed sequences, and each
         # sequence continues from the states its request left in that cache.
         paged_cache = cache if isinstance(cache, PagedAttentionCache) else None
+        # [scratch] Decode steps of the block table path update the recurrent states in place in the paged cache
+        decode_in_place = (
+            _PROTO_GDN_IN_PLACE
+            and paged_cache is not None
+            and kwargs["max_length_q"] == 1
+            and kwargs.get("block_table") is not None
+        )
         # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
-        if paged_cache is not None:
+        if decode_in_place:
+            allocator = paged_cache.layer_to_allocator[self.layer_idx]
+            conv_view, state_view = allocator.state_views(self.layer_idx)
+            read_rows = paged_cache._linear_attention_state_index(allocator, kwargs, write=False)
+            write_rows = paged_cache._linear_attention_state_index(allocator, kwargs, write=True)
+            conv_state, recurrent_state = conv_view[read_rows], None
+        elif paged_cache is not None:
             conv_state, recurrent_state = paged_cache.read_cache_states(self.layer_idx, kwargs)
         elif cache is not None:
             conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
@@ -751,7 +765,15 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         # If the model is loaded in fp16, without the .float() here, A might be -inf
         g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
 
-        if paged_cache is not None:
+        if decode_in_place:
+            num_tokens = min(mixed_qkv.shape[1], write_rows.shape[0])
+            core_attn_out = value.new_zeros(1, mixed_qkv.shape[1], self.num_v_heads, self.head_v_dim)
+            gdn_decode_inplace(
+                mixed_qkv[0, :num_tokens].contiguous(), a[0, :num_tokens].contiguous(), b[0, :num_tokens].contiguous(),
+                self.A_log, self.dt_bias, state_view, conv_view, conv_state[:num_tokens], read_rows[:num_tokens],
+                write_rows[:num_tokens], core_attn_out[0, :num_tokens], self.head_k_dim**-0.5, self.num_k_heads,
+            )  # fmt: skip
+        elif paged_cache is not None:
             # The batch is all single decode tokens when its longest sequence has one token
             delta_rule = (
                 torch_recurrent_gated_delta_rule if kwargs["max_length_q"] == 1 else torch_chunk_gated_delta_rule
