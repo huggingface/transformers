@@ -74,7 +74,9 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
-    if os.environ.get("HF_TP_SINGLE_MLP_ALL_REDUCE", "1") == "1":
+    # [scratch] off by default: under TP4 + EP4 (B300) the GLM-5.3 decode graphs failed to warm up with it (dynamo, fake
+    # tensors in the vocab-parallel embedding's reduce), and the run crashed; without it 8 requests went 318 -> 359 tok/s
+    if os.environ.get("HF_TP_SINGLE_MLP_ALL_REDUCE", "0") == "1":
         # [gap prototype] One all-reduce per MLP block: the routed experts, the shared experts and the dense MLP keep
         # their partial sums, the block's output is all-reduced once (2 all-reduces per layer instead of 3).
         base_model_tp_plan = {
