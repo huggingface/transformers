@@ -27,7 +27,7 @@ from unittest.mock import MagicMock, patch
 
 from huggingface_hub.utils import httpx
 
-from transformers import DecisionConfig
+from transformers import DecisionConfig, GenerationConfig
 from transformers.cli.serve import Serve
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
 from transformers.cli.serving.completion import CompletionHandler
@@ -523,6 +523,50 @@ class TestBuildGenerationConfig(unittest.TestCase):
 
         result = self._make_handler()._build_generation_config({"max_tokens": 50}, GenerationConfig(max_new_tokens=20))
         self.assertEqual(result.max_new_tokens, 50)
+
+    def test_generation_config_json_merges_with_model_defaults(self):
+        """Partial generation_config JSON overrides must preserve model defaults like eos_token_id and do_sample."""
+        model_gc = GenerationConfig(
+            eos_token_id=[1, 106],
+            pad_token_id=0,
+            bos_token_id=2,
+            do_sample=True,
+            temperature=1.0,
+            top_p=0.95,
+        )
+        result = self._make_handler()._build_generation_config(
+            {"generation_config": json.dumps({"top_k": 64})}, model_gc
+        )
+        self.assertEqual(result.top_k, 64)
+        self.assertEqual(result.eos_token_id, [1, 106])
+        self.assertEqual(result.pad_token_id, 0)
+        self.assertEqual(result.bos_token_id, 2)
+        self.assertTrue(result.do_sample)
+        self.assertEqual(result.temperature, 1.0)
+        self.assertEqual(result.top_p, 0.95)
+        self.assertEqual(result.max_new_tokens, 1024)
+        # Ensure original model_generation_config was not mutated in-place
+        self.assertNotEqual(model_gc.top_k, 64)
+
+    def test_generation_config_json_temperature_zero_disables_sampling(self):
+        """Passing temperature=0.0 in generation_config JSON disables sampling and keeps model defaults."""
+        model_gc = GenerationConfig(eos_token_id=[1, 106], do_sample=True, temperature=1.0)
+        result = self._make_handler()._build_generation_config(
+            {"generation_config": json.dumps({"temperature": 0.0})}, model_gc
+        )
+        self.assertFalse(result.do_sample)
+        self.assertEqual(result.temperature, 0.0)
+        self.assertEqual(result.eos_token_id, [1, 106])
+
+    def test_generation_config_json_max_length_preserves_explicit_limit(self):
+        """Explicit max_length in generation_config JSON should not be overridden by default max_new_tokens."""
+        model_gc = GenerationConfig(eos_token_id=1)
+        result = self._make_handler()._build_generation_config(
+            {"generation_config": json.dumps({"max_length": 50})}, model_gc
+        )
+        self.assertEqual(result.max_length, 50)
+        self.assertIsNone(result.max_new_tokens)
+        self.assertEqual(result.eos_token_id, 1)
 
 
 @require_serve

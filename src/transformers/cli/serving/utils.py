@@ -1241,14 +1241,24 @@ class BaseHandler:
         Returns:
             `GenerationConfig`: A new config with request-specific overrides applied.
         """
-        from transformers import GenerationConfig
-
+        generation_config = copy.deepcopy(model_generation_config)
+        overrides = {}
         if body.get("generation_config") is not None:
-            generation_config = GenerationConfig(**json.loads(body["generation_config"]))
-        else:
-            generation_config = copy.deepcopy(model_generation_config)
-            if generation_config.max_new_tokens is None or generation_config.max_new_tokens < 1024:
-                generation_config.max_new_tokens = 1024
+            overrides = json.loads(body["generation_config"])
+            if (
+                overrides.get("temperature") is not None
+                and float(overrides["temperature"]) == 0.0
+                and "do_sample" not in overrides
+            ):
+                overrides["do_sample"] = False
+            generation_config.update(allow_custom_entries=True, **overrides)
+
+        if (
+            "max_new_tokens" not in overrides
+            and "max_length" not in overrides
+            and (generation_config.max_new_tokens is None or generation_config.max_new_tokens < 1024)
+        ):
+            generation_config.max_new_tokens = 1024
 
         if body.get("temperature") is not None:
             generation_config.temperature = float(body["temperature"])
