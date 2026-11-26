@@ -160,6 +160,29 @@ Run slow tests locally with the command below.
 RUN_SLOW=1 python -m pytest tests/models/my_model/ -v
 ```
 
+### Model integration contracts
+
+Model integration contracts (MICs) run the documented usage code of published models on small fixtures and compare the outputs with reviewed expected values, the baselines. The `fast-integration / transformers` job runs the contracts your changes select (see [Run Model Integration Contracts locally](./testing#run-model-integration-contracts-locally)), and its summary lists every red case.
+
+A red case is **blocked** when it is green on the PR's base and red on the PR, so the PR caused it. Any other red case is a warning that isn't yours to fix: `main` is already red, a setup error (a missing baseline, fixture drift), or a known failure that now passes. The job doesn't fail the PR yet, but reviewers treat a blocked case as a failure.
+
+For a blocked case, decide whether the new output is a regression or an intended change.
+
+- **Regression**: fix it in your PR. Reproduce it locally with `make run-mic MODEL=<model>`.
+- **Intended change** (a bug fix, a new default, a different but correct kernel): update the baselines for your PR. Push your final changes and let the contracts job finish, because the new values come from the PR's latest contracts run. Then someone with write access to the repository comments on the PR, with the models to update on the first line:
+
+  ```text
+  record-mic: gptj codegen
+  ```
+
+  or runs `make record-mic MODEL="gptj codegen"` from a checkout of the branch (add `PR=<number>` when the branch has no PR). Models can be named by model type (`gptj`), contract or target. A bot replies on the PR with the values to review, and the PR's next contracts run uses them.
+
+The new values apply to your PR only until it merges. From the merge commit on, every run uses them: later PRs, `main`, and reruns of later commits. A run of an older commit keeps the old values, so your change doesn't turn it red. Nothing needs updating after the merge. `make run-mic` is the exception: it checks against the fleet pinned in `tests/contracts.lock` and doesn't apply recorded values, so the re-recorded cases stay red locally until that pin is updated.
+
+When recording isn't possible, a maintainer who reviewed the change as intended can add the `mic-intended-change` label instead. Blocked cases then only warn, and the baselines have to be updated separately or `main` turns red after the merge.
+
+A PR labeled `New model` never blocks on contracts: its red cases are warnings.
+
 ### Documentation build
 
 A `build_pr_documentation` job builds and generates a preview of the documentation. A bot posts a preview link in your PR, and the check must pass before merging. Most failures are a missing entry in the `toctree`. To build the documentation locally, see the [README.md](https://github.com/huggingface/transformers/tree/main/docs) in the docs folder.
