@@ -87,7 +87,7 @@ class CompletionHandler(BaseHandler):
         if not isinstance(prompt, str):
             raise HTTPException(status_code=400, detail="prompt must be a string.")
 
-        engine = self._get_engine(body)
+        engine = self.model_manager.get_engine(body.get("model"))
         tokenizer = getattr(engine.processor, "tokenizer", engine.processor)
         inputs = await self.run_in_thread(tokenizer, prompt, return_tensors=None if engine.use_cb else "pt")
         generation_kwargs = self._build_generation_kwargs(body, engine.generation_config)
@@ -124,7 +124,7 @@ class CompletionHandler(BaseHandler):
             try:
                 done = False
                 while not done:
-                    new_outputs = await self.get_new_outputs(queue)
+                    new_outputs = await self.read_queue_outputs(queue)
                     sse_parts: list[str] = []
                     for text in new_outputs:
                         if text is None:
@@ -231,9 +231,9 @@ class CompletionHandler(BaseHandler):
 
     # ----- generation config -----
 
-    def _build_generation_kwargs(self, body: dict, default: "GenerationConfig") -> dict:
+    def _build_generation_kwargs(self, body: dict, model_generation_config: "GenerationConfig") -> dict:
         """Adds the legacy completion params (``max_tokens``, ``frequency_penalty``, ``stop``) to the shared ones."""
-        generation_kwargs = super()._build_generation_kwargs(body, default)
+        generation_kwargs = super()._build_generation_kwargs(body, model_generation_config)
 
         if body.get("max_tokens") is not None:
             generation_kwargs["max_new_tokens"] = int(body["max_tokens"])

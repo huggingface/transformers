@@ -245,7 +245,7 @@ class EngineClient:
         self._shutdown_requested = shutdown_requested
 
         def read_results(results_queue) -> None:
-            def deliver_results(ids: list[int], tokens: list[int], finished: list[tuple[int, Any]]) -> None:
+            def deliver_results(ids: list[int], tokens: list[int], finished: list[tuple[int | None, Any]]) -> None:
                 """Delivers a message of the engine to the requests waiting in `_send_request`: each streamed token
                 (`tokens`, with the id of its request in `ids`) to its request's streamer, and each result of
                 `finished` to its request's future, which ends the request."""
@@ -369,13 +369,13 @@ class EngineClient:
         if generation_state.seed is not None:
             set_torch_seed(generation_state.seed)
 
-        def send_results(ids: list[int], tokens: list[int], finished: list[tuple[int, Any]]) -> None:
+        def send_results(ids: list[int], tokens: list[int], finished: list[tuple[int | None, Any]]) -> None:
             if len(results) == 1:
                 results[0].put((ids, tokens, finished))
                 return
             for api_server, results_queue in enumerate(results):
                 streamed = [pair for pair in zip(ids, tokens) if api_server_of(pair[0]) == api_server]
-                ended = [pair for pair in finished if api_server_of(pair[0]) == api_server]
+                ended = [pair for pair in finished if pair[0] is None or api_server_of(pair[0]) == api_server]
                 if streamed or ended:
                     results_queue.put(
                         ([request_id for request_id, _ in streamed], [token for _, token in streamed], ended)

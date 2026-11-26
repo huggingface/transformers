@@ -390,7 +390,7 @@ class ResponseHandler(BaseHandler):
         """
         self._validate_request(body)
 
-        engine = self._get_engine(body)
+        engine = self.model_manager.get_engine(body.get("model"))
         inputs = await self.run_in_thread(self.render_messages, engine, self._normalize_input(body), body)
         generation_kwargs = self._build_generation_kwargs(body, engine.generation_config)
         streaming = body.get("stream", False)
@@ -534,7 +534,7 @@ class ResponseHandler(BaseHandler):
                 tool_call_index = 0
                 done = False
                 while not done:
-                    new_outputs = await self.get_new_outputs(queue)
+                    new_outputs = await self.read_queue_outputs(queue)
                     parts: list[str] = []
                     for item in new_outputs:
                         if item is None:
@@ -663,9 +663,9 @@ class ResponseHandler(BaseHandler):
 
     # ----- helpers -----
 
-    def _build_generation_kwargs(self, body: dict, default: "GenerationConfig") -> dict:
+    def _build_generation_kwargs(self, body: dict, model_generation_config: "GenerationConfig") -> dict:
         """Adds the Responses API params (``max_output_tokens``) to the shared ones."""
-        generation_kwargs = super()._build_generation_kwargs(body, default)
+        generation_kwargs = super()._build_generation_kwargs(body, model_generation_config)
 
         if body.get("max_output_tokens") is not None:
             generation_kwargs["max_new_tokens"] = int(body["max_output_tokens"])

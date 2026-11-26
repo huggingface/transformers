@@ -98,7 +98,7 @@ class SystemOneHandler(BaseHandler):
             `JSONResponse`: `model`, `answers` keyed by question name, and `usage`.
         """
         request = self._validate_request(body)
-        engine = self._get_engine(body)
+        engine = self.model_manager.get_engine(body.get("model"))
         request_logger.info("Request %s: model %s, %d questions", request_id, engine.model_id, len(request.questions))
 
         try:
@@ -109,7 +109,7 @@ class SystemOneHandler(BaseHandler):
             raise HTTPException(status_code=400, detail=str(error)) from error
         return JSONResponse(
             {
-                "model": body["model"],
+                "model": engine.model_id,
                 "answers": answers,
                 "usage": {"input_tokens": input_tokens, "output_tokens": 0},
             }

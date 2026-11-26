@@ -111,7 +111,7 @@ class ChatCompletionHandler(BaseHandler):
         """
         self._validate_request(body)
 
-        engine = self._get_engine(body)
+        engine = self.model_manager.get_engine(body.get("model"))
         inputs = await self.run_in_thread(self.render_messages, engine, body["messages"], body)
         generation_kwargs = self._build_generation_kwargs(body, engine.generation_config)
 
@@ -159,7 +159,7 @@ class ChatCompletionHandler(BaseHandler):
                 has_tool_calls = False
                 done = False
                 while not done:
-                    new_outputs = await self.get_new_outputs(queue)
+                    new_outputs = await self.read_queue_outputs(queue)
                     sse_parts: list[str] = []
                     for item in new_outputs:
                         if item is None:
@@ -268,10 +268,10 @@ class ChatCompletionHandler(BaseHandler):
 
     # ----- helpers -----
 
-    def _build_generation_kwargs(self, body: dict, default: "GenerationConfig") -> dict:
+    def _build_generation_kwargs(self, body: dict, model_generation_config: "GenerationConfig") -> dict:
         """Adds the Chat Completions params (``max_completion_tokens``, ``max_tokens``, ``frequency_penalty``,
         ``logit_bias``, ``stop``) to the shared ones."""
-        generation_kwargs = super()._build_generation_kwargs(body, default)
+        generation_kwargs = super()._build_generation_kwargs(body, model_generation_config)
 
         if body.get("max_completion_tokens") is not None:
             generation_kwargs["max_new_tokens"] = int(body["max_completion_tokens"])

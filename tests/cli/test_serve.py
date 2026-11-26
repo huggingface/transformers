@@ -605,7 +605,7 @@ class TestValidation(unittest.TestCase):
 
 
 class TestGetEngine(unittest.TestCase):
-    def _make_handler(self, force_model=None):
+    def _make_manager(self, force_model=None):
         mm = ModelManager(MagicMock())
         mm.force_model = force_model
         engine_client = patch(
@@ -614,22 +614,20 @@ class TestGetEngine(unittest.TestCase):
         )
         engine_client.start()
         self.addCleanup(engine_client.stop)
-        return ChatCompletionHandler(model_manager=mm, generation_state=GenerationState())
+        return mm
 
     def test_force_model_overrides_when_model_omitted(self):
-        handler = self._make_handler(force_model="org/pinned")
-        body = {}
-        self.assertEqual(handler._get_engine(body).model_id, "org/pinned@main")
-        self.assertEqual(body["model"], "org/pinned")
+        manager = self._make_manager(force_model="org/pinned")
+        self.assertEqual(manager.get_engine(None).model_id, "org/pinned@main")
 
     def test_force_model_allows_matching_request(self):
-        handler = self._make_handler(force_model="org/pinned")
-        self.assertEqual(handler._get_engine({"model": "org/pinned"}).model_id, "org/pinned@main")
+        manager = self._make_manager(force_model="org/pinned")
+        self.assertEqual(manager.get_engine("org/pinned").model_id, "org/pinned@main")
 
     def test_force_model_rejects_mismatched_request(self):
-        handler = self._make_handler(force_model="org/pinned")
+        manager = self._make_manager(force_model="org/pinned")
         with self.assertRaises(ModelNotServedError) as ctx:
-            handler._get_engine({"model": "other/model"})
+            manager.get_engine("other/model")
         self.assertIn("org/pinned", str(ctx.exception))
         self.assertIn("other/model", str(ctx.exception))
 
@@ -965,7 +963,7 @@ class TestSystemOneEndpoint(ServeIntegrationTestCase):
         response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=120)
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["model"], self.MODEL)
+        self.assertEqual(data["model"], f"{self.MODEL}@main")
         answers = data["answers"]
         self.assertEqual(set(answers), {"team", "urgency", "upset"})
         self.assertEqual(answers["team"]["type"], "choice")
@@ -2479,6 +2477,19 @@ class TestErrorResponses(unittest.TestCase):
         )
         self.assertEqual((ids, tokens), ([8, 8], [5, 6]))
         self.assertEqual(list(runner.active_requests), [8])
+
+    def test_continuous_batching_worker_death_is_reported(self):
+        """A dead continuous batching worker is reported to every API server at once, even with no request in progress:
+        their `/health` answers 503."""
+        sent = queue.Queue()
+        model = MagicMock()
+        manager = model.init_continuous_batching.return_value
+        manager.get_result.return_value = None
+        manager.background_thread_status.fatal_error = "CUDA error"
+        CBGenerateRunner(model, None, lambda ids, tokens, finished: sent.put(finished), cb_config=None)
+        ((request_id, error),) = sent.get(timeout=10)
+        self.assertIsNone(request_id)  # for every API server
+        self.assertIsInstance(error, EngineDeadError)
 
 
 class _TestToolCallBase:

@@ -805,7 +805,7 @@ class GenerateRunner:
     `send_results(ids, tokens, finished)` sends its results: streamed tokens as two lists, each token's request id
     and the token, and the requests that ended, as ``(request id, result)`` pairs, the result being what the request
     returned (its generated tokens, or what the function returned; ``None`` if it streamed) or the error that failed
-    it."""
+    it. A result with no request id (``None``) goes to every API server."""
 
     def __init__(self, model: "PreTrainedModel", processor: Any, send_results: Callable):
         self.model, self.processor, self.send_results = model, processor, send_results
@@ -1031,8 +1031,9 @@ class CBGenerateRunner(GenerateRunner):
                             failed = list(self.active_requests)
                             self.active_requests.clear()
                         error = EngineDeadError(f"The continuous batching worker died: {fatal_error}")
-                        if failed:
-                            self.send_results([], [], [(request_id, error) for request_id in failed])
+                        finished = [(None, error)] + [(request_id, error) for request_id in failed]
+                        self.send_results([], [], finished)
+                        return
                     continue
                 # All the outputs that are ready go in one message: a message per token would cost much more
                 ids, tokens, finished = [], [], []
@@ -1250,7 +1251,7 @@ class BaseHandler:
         return template
 
     @staticmethod
-    async def get_new_outputs(queue: asyncio.Queue) -> list:
+    async def read_queue_outputs(queue: asyncio.Queue) -> list:
         """A stream's new outputs (see `Detokenizer`): waits for the next one, and takes all those already in `queue`
         behind it. Consecutive texts of the same kind (answer or reasoning) are joined: a stream that fell behind
         sends them as one event."""
@@ -1285,14 +1286,6 @@ class BaseHandler:
             return "length"
         return "stop"
 
-    def _get_engine(self, body: dict) -> "EngineClient":
-        """The request's model's engine (see `ModelManager.get_engine`). Sets the body's model to the one served."""
-        engine = self.model_manager.get_engine(body.get("model"))
-        # Without its GGUF file, which `engine.model_id` keeps
-        repo, revision, _ = parse_model_id(body.get("model") or self.model_manager.force_model)
-        body["model"] = repo if revision is None else f"{repo}@{revision}"
-        return engine
-
     def _chat_template_kwargs(self, body: dict) -> dict:
         """The chat template's arguments: the server's defaults, overridden by the request's."""
         return {**self.chat_template_kwargs, **(body.get("chat_template_kwargs") or {})}
@@ -1317,20 +1310,20 @@ class BaseHandler:
         if request_logger.isEnabledFor(logging.DEBUG):
             request_logger.debug("Request %s body: %s", request_id, json.dumps(body, default=str)[:4000])
 
-    def _build_generation_kwargs(self, body: dict, default: "GenerationConfig") -> dict:
+    def _build_generation_kwargs(self, body: dict, model_generation_config: "GenerationConfig") -> dict:
         """
-        What the request generates with, on top of `default`, the model's generation config (see
-        `GenerateRunner.generate`). It always has ``max_new_tokens`` (at least 1024), ``eos_token_id``,
-        ``do_sample``, ``temperature``, ``top_k`` and ``top_p``. Here, the params all the endpoints take (temperature,
-        top_p, seed, and `generation_config`, a JSON of generation settings).
+        What the request generates with, on top of `model_generation_config` (see `GenerateRunner.generate`). It
+        always has ``max_new_tokens`` (at least 1024), ``eos_token_id``, ``do_sample``, ``temperature``, ``top_k`` and
+        ``top_p``. Here, the params all the endpoints take (temperature, top_p, seed, and `generation_config`, a JSON
+        of generation settings).
 
         Subclasses call ``super()._build_generation_kwargs(...)`` then add theirs (``max_tokens``, ``stop``, etc.).
         """
         from fastapi import HTTPException
 
         required = ("max_new_tokens", "eos_token_id", "do_sample", "temperature", "top_k", "top_p")
-        generation_kwargs = {name: getattr(default, name) for name in required}
-        if default.max_new_tokens is None or default.max_new_tokens < 1024:
+        generation_kwargs = {name: getattr(model_generation_config, name) for name in required}
+        if model_generation_config.max_new_tokens is None or model_generation_config.max_new_tokens < 1024:
             generation_kwargs["max_new_tokens"] = 1024
         if body.get("generation_config") is not None:
             requested = json.loads(body["generation_config"])
@@ -1348,7 +1341,7 @@ class BaseHandler:
         if body.get("seed") is not None:
             generation_kwargs["seed"] = int(body["seed"])  # set in the model's process, which generates
 
-        if self.generation_state._compile and default.cache_implementation is None:
+        if self.generation_state._compile and model_generation_config.cache_implementation is None:
             generation_kwargs["cache_implementation"] = "static"
 
         return generation_kwargs
