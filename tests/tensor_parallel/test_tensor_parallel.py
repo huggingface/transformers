@@ -18,6 +18,7 @@ from unittest.mock import patch
 import torch
 import torch.distributed as dist
 from parameterized import parameterized
+from torch.distributed.tensor import Shard
 
 from transformers import AutoModelForCausalLM, LlamaConfig, LlamaForCausalLM, LlamaModel
 from transformers.distributed import DistributedConfig, tensor_parallel
@@ -28,6 +29,7 @@ from transformers.distributed.tensor_parallel import (
     PackedColwiseParallel,
     PackedRowwiseParallel,
     RowwiseParallel,
+    Unit,
     get_kv_heads_per_rank,
 )
 from transformers.distributed.utils import TransformersDeviceMesh
@@ -207,6 +209,11 @@ class TestTensorParallelLayer(TestCasePlus):
 
         def get_local_rank(self):
             return self.rank
+
+        def get_coordinate(self):
+            # `DtensorShardOperation` reads a rank's coordinate rather than its submesh rank, so a mesh built from
+            # ranks alone works; a 1-D mesh's coordinate is its rank.
+            return (self.rank,)
 
     def _get_parameter_placements(self, module, style, mesh=None):
         placements = {}
@@ -476,6 +483,44 @@ class TestUnitParallel(TestCasePlus):
         self.assertEqual(placements[0].dim, 1, "o_proj shards its input features")
         self.assertTrue(placements[1].is_replicate())
         self.assertEqual(attention.o_proj.weight.shape[1] // math.gcd(num_heads, world_size) % self.HEAD_DIM, 0)
+
+    def test_a_fused_projection_gives_each_source_its_own_op(self):
+        """`[Shard(0), Unit(0), Unit(0)]`: a plan states one shard op per source of one weight — q one block per rank,
+        k/v whole heads on the unit mesh — so a checkpoint storing `q | k | v` fused is described per segment, not by a
+        single layout that would have to be right for all three."""
+        attention, config = self._attention(8, 2)
+        manager = self._manager(4)
+        colwise = ColwiseParallel(param_placements=[Shard(0), Unit(0, units=2), Unit(0, units=2)])
+        with self._fake_device_mesh():
+            q = colwise.placements(
+                attention.q_proj, "weight", config=config, mesh_manager=manager, source_index=0, sources=3
+            )
+            k = colwise.placements(
+                attention.k_proj, "weight", config=config, mesh_manager=manager, source_index=1, sources=3
+            )
+            v = colwise.placements(
+                attention.v_proj, "weight", config=config, mesh_manager=manager, source_index=2, sources=3
+            )
+
+        self.assertEqual(q, (None, [Shard(0)]), "q shards on the TP mesh, one block per rank")
+        for mesh, placements in (k, v):  # 2 KV heads over 4 ranks: 2 ranks per head
+            self.assertEqual(tuple(mesh.mesh.shape), (2, 2))
+            self.assertEqual(placements[0].dim, 0)
+            self.assertTrue(placements[1].is_replicate(), "the second axis is the replicas")
+
+    def test_a_fused_source_is_one_op_per_segment(self):
+        """One source holding `q | k | v` (`sources == 1`) gives the whole list: an engine applies them back to back,
+        which is what a DTensor cannot hold (one mesh per param)."""
+        attention, config = self._attention(8, 2)
+        manager = self._manager(4)
+        colwise = ColwiseParallel(param_placements=[Shard(0), Unit(0, units=2), Unit(0, units=2)])
+        with self._fake_device_mesh():
+            fused = colwise.placements(
+                attention.q_proj, "weight", config=config, mesh_manager=manager, source_index=0, sources=1
+            )
+        self.assertEqual(len(fused), 3)
+        self.assertEqual(fused[0], (None, [Shard(0)]))
+        self.assertEqual(tuple(fused[1][0].mesh.shape), (2, 2))
 
     @parameterized.expand([(2, 4), (6, 4), (8, 4), (12, 8), (32, 16)])
     def test_colwise_and_rowwise_agree_on_the_mesh(self, num_heads, world_size):

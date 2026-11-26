@@ -93,6 +93,77 @@ def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], t
     return num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
 
 
+class Unit:
+    """One shard op of a plan: whole units (attention heads) per rank, ranks beyond that sharing a unit.
+
+    Resolves to Transformers' unit mesh (`(units, replicas)`) and `[Shard(dim), Replicate()]`, so the unit a rank owns
+    is `rank // replicas`. It is the op a fused `qkv_proj` needs for its k/v rows — q shards on the plain TP mesh, one
+    shard per rank, while k/v keep whole heads replicated over the ranks that share one. Written as a list of ops, one
+    per source, that is `[Shard(0), Unit(0), Unit(0)]`.
+
+    `units` has to be given: a fused weight's row count is the sum of q's and k/v's heads, so the head count of one
+    source cannot be read off the param.
+    """
+
+    def __init__(self, dim: int = 0, units: int | None = None):
+        self.dim, self.units = dim, units
+
+    def resolve(self, mesh_manager, meta, replicate_only: bool = False):
+        """`(mesh, placements)` of this op, on the unit mesh of a param whose `dim` holds `units` units."""
+        if mesh_manager is None or self.units is None:
+            raise ValueError("`Unit` needs `units` and a `mesh_manager`: it shards on the unit mesh, not the TP mesh.")
+        mesh = mesh_manager.get_unit_mesh(self.units)
+        # a bias is added once after the reduce, so it stays replicated
+        placements = [Replicate(), Replicate()] if replicate_only else [Shard(self.dim), Replicate()]
+        return mesh, placements
+
+
+def _resolve_op(spec, module, param, mesh_manager, config):
+    """`(mesh, placements)` of one shard op: a placement list is mesh-agnostic (`mesh` is `None`), `Unit` is not."""
+    if isinstance(spec, Unit):
+        return spec.resolve(mesh_manager, module._parameters.get(param))
+    if isinstance(spec, tuple) and len(spec) == 2 and not hasattr(spec[0], "dim"):
+        return spec
+    return None, list(spec if isinstance(spec, (list, tuple)) else [spec])
+
+
+def _source_placements(spec, source_index, sources, module, param, mesh_manager, config):
+    """The shard op a plan gives one source of one param.
+
+    A flat placement list (e.g. `[Shard(0)]`) applies to every source; a list of ops (a placement list, a `Unit`, or
+    `(mesh, placements)`) is one per source, picked by `source_index`, and for a param the checkpoint stores fused (one
+    source holding q | k | v) is the whole list, applied back to back by an engine's shard-on-read.
+    """
+    ops = list(spec)
+    if not any(isinstance(op, (list, tuple, Unit)) for op in ops):  # one layout, every source
+        return ops
+    if sources > 1:
+        return _resolve_op(ops[source_index], module, param, mesh_manager, config)
+    return [_resolve_op(op, module, param, mesh_manager, config) for op in ops]
+
+
+def _unit_op(module, param, config, sources, *, dim, mesh_manager, replicate_only: bool = False):
+    """The unit op of one source of a head-aligned Linear. A fused param's sources have head counts of their own (q's is
+    not k/v's), which the weight does not show, so those pass `Unit(units=...)` per source to `param_placements`."""
+    if sources > 1:
+        raise ValueError(
+            f"`{param}` holds {sources} sources with heads of their own: give the plan one op per source, e.g. "
+            "`ColwiseParallel(param_placements=[Shard(0), Unit(0, units=num_kv_heads), Unit(0, units=num_kv_heads)])`."
+        )
+    meta = module._parameters.get(param)
+    units = _unit_count(module, param, config, dim=dim)
+    return Unit(dim=meta.ndim - 2 if dim == 0 else meta.ndim - 1, units=units).resolve(
+        mesh_manager, meta, replicate_only=replicate_only
+    )
+
+
+def _unit_count(module, param, config, *, dim: int = 0) -> int:
+    """The units along `dim` of a head-aligned Linear: its rows (or columns) over the head width."""
+    weight = module._parameters["weight"]
+    head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+    return weight.shape[dim] // head_dim
+
+
 class TensorParallelLayer:
     def should_use_local_tensors(self, module):
         """Whether this module's forward requires local inputs and parameters."""
@@ -102,9 +173,36 @@ class TensorParallelLayer:
         """Validate a parameter before applying this TP style."""
         pass
 
+    def placements(self, module, param, *, config=None, mesh_manager=None, source_index=0, sources=1):
+        """The placements this style gives ONE source of one param, or `None` to leave it whole.
+
+        Mesh-agnostic: one placement per mesh dim, so the same list applies on a 1-D mesh or on the matching dims
+        of a 2-D one. A style that shards a param's sources differently (the q, k and v of a fused projection)
+        reads `source_index`; a style that shards on a mesh of its own returns `(mesh, placements)`, which is what
+        `Unit` resolves to.
+        """
+        return None
+
     def shard_param(self, module, param, mesh, *, config=None, mesh_manager=None):
-        """Wrap ONE parameter as a DTensor placeholder. Default: no-op."""
-        pass
+        """Wrap ONE parameter as a DTensor placeholder, with this style's `placements`."""
+        meta = module._parameters.get(param)
+        if (
+            meta is None
+            or (placed := self.placements(module, param, config=config, mesh_manager=mesh_manager)) is None
+        ):
+            return
+        if isinstance(placed, tuple):  # (mesh, placements): a style that shards on a mesh of its own
+            own_mesh, placed = placed
+            mesh = own_mesh or mesh
+        if placed and isinstance(placed[0], tuple) and not hasattr(placed[0][0], "dim"):
+            raise ValueError(
+                f"`{param}` is sharded per source on meshes of its own (a fused q/k/v): a DTensor holds one mesh, so "
+                "an engine shards it on read instead (`LoadStateDictConfig.get_sharding_op` / `FusedShardOperation`)."
+            )
+        module._parameters[param] = torch.nn.Parameter(
+            distribute_tensor(meta, mesh, placed, src_data_rank=None),
+            requires_grad=meta.requires_grad,
+        )
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         return args, kwargs
@@ -145,7 +243,12 @@ class ColwiseParallel(TensorParallelLayer):
 
     The output width (`out_features`) need not divide by the TP size: the last rank then holds a shorter slice."""
 
-    def __init__(self, *, input_layouts=None, output_layouts=None, use_local_output: bool = True):
+    def __init__(
+        self, *, param_placements=None, input_layouts=None, output_layouts=None, use_local_output: bool = True
+    ):
+        # the shard op of each source of `weight`: `None` is `[Shard(-2)]` for all of them, a flat placement list is
+        # one layout for every source, and a list of ops is one per source (see `_source_placements`)
+        self.param_placements = param_placements
         self.input_layouts = input_layouts or Replicate()
         self.output_layouts = output_layouts if output_layouts is not None else Shard(-1)
         self.use_local_output = use_local_output
@@ -160,15 +263,13 @@ class ColwiseParallel(TensorParallelLayer):
             raise ValueError(f"{type(module).__name__} has no `out_features`: colwise shards linear layers.")
         return super().install_forward(module, mesh, config=config, mesh_manager=mesh_manager)
 
-    def shard_param(self, module, param, mesh, *, config=None, mesh_manager=None):
+    def placements(self, module, param, *, config=None, mesh_manager=None, source_index=0, sources=1):
         meta = module._parameters.get(param)
         if meta is None:
-            return
-        placement = Shard(meta.ndim - 2)
-        module._parameters[param] = torch.nn.Parameter(
-            distribute_tensor(meta, mesh, [placement], src_data_rank=None),
-            requires_grad=meta.requires_grad,
-        )
+            return None
+        if self.param_placements is None:  # one `Shard` for the whole output dim
+            return [Shard(meta.ndim - 2)]
+        return _source_placements(self.param_placements, source_index, sources, module, param, mesh_manager, config)
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         input_tensor = args[0]
@@ -234,17 +335,12 @@ class UnitColwiseParallel(ColwiseParallel):
     A clean fix needs a dedicated style instead of treating every sharded parameter as a Linear weight.
     """
 
-    def shard_param(self, module, param, mesh, *, config=None, mesh_manager=None):
+    def placements(self, module, param, *, config=None, mesh_manager=None, source_index=0, sources=1):
         meta = module._parameters.get(param)
         if meta is None:
-            return
-        weight = module._parameters["weight"]
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        module._unit_mesh = mesh_manager.get_unit_mesh(weight.shape[0] // head_dim)
-        module._parameters[param] = torch.nn.Parameter(
-            distribute_tensor(meta, module._unit_mesh, [Shard(meta.ndim - 2), Replicate()], src_data_rank=None),
-            requires_grad=meta.requires_grad,
-        )
+            return None
+        module._unit_mesh, placements = _unit_op(module, param, config, sources, dim=0, mesh_manager=mesh_manager)
+        return module._unit_mesh, placements
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         # The inputs are on a different mesh. We HAVE to swap the meshes as cross mesh comms
@@ -296,16 +392,9 @@ class RowwiseParallel(TensorParallelLayer):
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
         return use_local_quantized_path or uses_local_inference_kernel
 
-    def shard_param(self, module, param, mesh, *, config=None, mesh_manager=None):
-        meta = module._parameters.get(param)
-        if meta is None:
-            return
+    def placements(self, module, param, *, config=None, mesh_manager=None):
         # bias is replicated (added after the row-reduce); weight shards on input dim (-1)
-        placement = Replicate() if param == "bias" else Shard(-1)
-        module._parameters[param] = torch.nn.Parameter(
-            distribute_tensor(meta, mesh, [placement], src_data_rank=None),
-            requires_grad=meta.requires_grad,
-        )
+        return [Replicate()] if param == "bias" else [Shard(-1)]
 
     def install_forward(self, module, mesh, *, config=None, mesh_manager=None):
         if not hasattr(module, "in_features"):
@@ -385,19 +474,14 @@ class UnitRowwiseParallel(RowwiseParallel):
     rank keeps whole heads. The replica axis recomputes the same heads, so their gradients are scaled by `1/replicas`
     here and summed back by `UnitColwiseParallel`'s `_AllReduceBackward`."""
 
-    def shard_param(self, module, param, mesh, *, config=None, mesh_manager=None):
+    def placements(self, module, param, *, config=None, mesh_manager=None, source_index=0, sources=1):
         meta = module._parameters.get(param)
         if meta is None:
-            return
-        weight = module._parameters["weight"]
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        module._unit_mesh = mesh_manager.get_unit_mesh(weight.shape[-1] // head_dim)
-        # bias is added once after the reduce, so it stays replicated
-        placements = [Replicate(), Replicate()] if param == "bias" else [Shard(meta.ndim - 1), Replicate()]
-        module._parameters[param] = torch.nn.Parameter(
-            distribute_tensor(meta, module._unit_mesh, placements, src_data_rank=None),
-            requires_grad=meta.requires_grad,
+            return None
+        module._unit_mesh, placements = _unit_op(
+            module, param, config, sources, dim=-1, mesh_manager=mesh_manager, replicate_only=(param == "bias")
         )
+        return module._unit_mesh, placements
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         input_tensor = args[0]
@@ -441,14 +525,8 @@ class EmbeddingParallel(TensorParallelLayer):
     def should_use_local_tensors(self, module):
         return getattr(module, "_hf_quantized_needs_local_tp", False)
 
-    def shard_param(self, module, param, mesh, *, config=None, mesh_manager=None):
-        meta = module._parameters.get(param)
-        if meta is None:
-            return
-        module._parameters[param] = torch.nn.Parameter(
-            distribute_tensor(meta, mesh, [Shard(self.shard_dim)], src_data_rank=None),
-            requires_grad=meta.requires_grad,
-        )
+    def placements(self, module, param, *, config=None, mesh_manager=None):
+        return [Shard(self.shard_dim)]
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         input_tensor = args[0]
@@ -613,20 +691,15 @@ class PackedColwiseParallel(TensorParallelLayer):
             return -1
         return param_ndim - 2
 
-    def shard_param(self, module, param, mesh, *, config=None, mesh_manager=None):
+    def placements(self, module, param, *, config=None, mesh_manager=None):
         meta = module._parameters.get(param)
         if meta is None:
-            return
+            return None
         shard_dim = self._packed_output_shard_dim(meta.ndim)
-        # Wrap as a DTensor placeholder. Runs on meta — distribute_tensor builds metadata only.
         if meta.ndim == 1:
-            placement = Shard(shard_dim)
-        else:
-            placement = _StridedShard(dim=shard_dim, split_factor=self.split_factor)
-        module._parameters[param] = torch.nn.Parameter(
-            distribute_tensor(meta, mesh, [placement], src_data_rank=None),
-            requires_grad=meta.requires_grad,
-        )
+            return [Shard(shard_dim)]
+        # Interleaved: each of the `split_factor` packed segments is sharded on its own
+        return [_StridedShard(dim=shard_dim, split_factor=self.split_factor)]
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         input_tensor = args[0]
@@ -656,15 +729,11 @@ class PackedRowwiseParallel(TensorParallelLayer):
     def __init__(self, *, split_factor: int = 2):
         self.split_factor = split_factor
 
-    def shard_param(self, module, param, mesh, *, config=None, mesh_manager=None):
+    def placements(self, module, param, *, config=None, mesh_manager=None):
         meta = module._parameters.get(param)
         if meta is None:
-            return
-        placement = Replicate() if meta.ndim == 1 else _StridedShard(dim=-1, split_factor=self.split_factor)
-        module._parameters[param] = torch.nn.Parameter(
-            distribute_tensor(meta, mesh, [placement], src_data_rank=None),
-            requires_grad=meta.requires_grad,
-        )
+            return None
+        return [Replicate()] if meta.ndim == 1 else [_StridedShard(dim=-1, split_factor=self.split_factor)]
 
 
 class MoeExpertsParallel(TensorParallelLayer):
