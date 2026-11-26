@@ -151,7 +151,6 @@ class Gemma3nAudioModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_missing_keys = False
     is_generative = False
-    _is_stateful = True
     main_input_name = "audio_mel"
 
     def setUp(self):
@@ -305,7 +304,6 @@ class Gemma3nTextModelTester(CausalLMModelTester):
 @require_torch
 class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Gemma3nTextModelTester
-    _is_stateful = True
     model_split_percents = [0.5, 0.6]
     training_overfit_steps = 400
 
@@ -665,7 +663,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     all_generative_model_classes = (Gemma3nForConditionalGeneration,) if is_torch_available() else ()
 
     test_missing_keys = False
-    _is_stateful = True
     has_attentions = False
     # The unsplittable timm vision tower is ~60% of the test model: at 0.6 it does not fit on
     # GPU 0, the whole model lands on GPU 1 and `test_model_parallelism` sees no split.

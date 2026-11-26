@@ -939,7 +939,6 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
         "hidden_states": KimiLinearDecoderLayer,
         "attentions": KimiLinearAttention,
     }
-    _is_stateful = True
     _can_compile_fullgraph = True
     _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight", "dt_bias"]
 

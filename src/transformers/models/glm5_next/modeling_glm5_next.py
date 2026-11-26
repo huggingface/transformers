@@ -1456,7 +1456,6 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     # TODO: this can be fixed but is limited by
     # 1. assuming the cache name
     # 2. linear attention not being considered atm
-    _is_stateful = True
     _can_compile_fullgraph = True
 
     _can_record_outputs = {

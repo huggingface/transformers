@@ -1001,7 +1001,6 @@ class BailingHybridPreTrainedModel(PreTrainedModel):
         "hidden_states": BailingHybridDecoderLayer,
         "attentions": BailingHybridAttention,
     }
-    _is_stateful = True
     _can_compile_fullgraph = True
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",

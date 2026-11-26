@@ -1092,7 +1092,6 @@ class NemotronHPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _is_stateful = True
     _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": NemotronHBlock,

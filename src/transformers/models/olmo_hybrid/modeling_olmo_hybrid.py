@@ -944,7 +944,6 @@ class OlmoHybridPreTrainedModel(PreTrainedModel):
         "hidden_states": [OlmoHybridAttentionDecoderLayer, OlmoHybridLinearAttentionDecoderLayer],
         "attentions": OlmoHybridAttention,
     }
-    _is_stateful = True
     _can_compile_fullgraph = True
 
     def _init_weights(self, module):

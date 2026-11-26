@@ -916,7 +916,6 @@ class JambaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["JambaAttentionDecoderLayer", "JambaMambaDecoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _is_stateful = True
     _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": [JambaAttentionDecoderLayer, JambaMambaDecoderLayer],

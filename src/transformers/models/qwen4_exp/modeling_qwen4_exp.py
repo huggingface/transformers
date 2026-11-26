@@ -1438,7 +1438,6 @@ class Qwen4ExpPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
     _can_record_outputs = None  # will be set on text and vision separately
-    _is_stateful = True
     _can_compile_fullgraph = True
     _supports_flex_attn = False
     # This embedding is so big (~95 GiB) that on most hardware setups, we must completely skip it from the `device_map` as otherwise
