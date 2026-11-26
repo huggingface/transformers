@@ -809,6 +809,31 @@ class Glm5NextTextIndexer(nn.Module):
         attention_mask: torch.Tensor,
         cache: Cache | None = None,
     ) -> torch.Tensor:
+        """
+        Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA) with compressed indexer keys.
+
+        Unlike [`DeepseekV32Indexer`], the indexer compresses groups of `index_kpool` valid tokens into
+        a single key using a weighted average, with learned per-token gates and positional biases.
+
+        The scoring logic computes:
+            index_score[b,s,g] = Σ_h (weight[b,s,h] · ReLU(softmax_scale · (q[b,s,h,:] · k[b,g,:])))
+
+        Selected groups are expanded into physical KV indices. Tokens in the unfinished group are
+        additionally selected outside the token budget if `index_kpool_always_select_tail` is enabled.
+
+        Args:
+            hidden_states: Input hidden states `[B, S, hidden_size]`.
+            q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
+            attention_mask: Right-aligned cumulative valid-token counts.
+            cache: Cache object containing the compressed indexer keys and the remaining uncompressed
+                keys and gates for this layer.
+
+        Returns:
+            `torch.Tensor`: the `int32` top-k physical KV indices of shape `[B, S, index_topk]`
+                or `[B, S, index_topk + index_kpool - 1]` if the tail is included, with -1 for
+                unavailable selections. The eager / SDPA paths turn these into additive / boolean masks,
+                respectively.
+        """
         batch_size, seq_len, _ = hidden_states.shape
         group_size = self.index_kpool
 

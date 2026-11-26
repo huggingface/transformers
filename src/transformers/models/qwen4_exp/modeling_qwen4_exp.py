@@ -1409,7 +1409,6 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
         elif position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(4, position_ids.shape[0], -1)
 
-        # We only need the mm position ids for now as the indexer cannot extract things from text pos ids anyways
         if position_ids.shape[0] == 4:
             position_ids = position_ids[1:]
         elif position_ids.shape[0] == 1:

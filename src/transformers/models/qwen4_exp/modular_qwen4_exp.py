@@ -14,6 +14,7 @@
 """PyTorch Qwen4-Exp model."""
 
 import math
+from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
@@ -24,10 +25,15 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
-from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
+from ...masking_utils import create_compression_mask, create_recurrent_attention_mask
+from ...modeling_compression_utils import (
+    build_attention_mask_from_topk,
+    prepare_compression_groups,
+    select_compression_indices,
+)
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, MoeModelOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
@@ -41,6 +47,7 @@ from ..qwen3_5.modeling_qwen3_5 import (
     apply_mask_to_padding_states,
     causal_conv1d_fn,
     causal_conv1d_update,
+    eager_attention_forward,
     rotate_half,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
@@ -378,7 +385,6 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         self.index_head_dim = config.indexer_head_dim
         self.token_budget = config.indexer_budget
         self.compress_ratio = config.indexer_compress_ratio
-        self.block_topk = self.token_budget // self.compress_ratio
         self.index_qk_proj = nn.Linear(
             config.hidden_size,
             (self.index_n_heads + self.index_kv_heads) * self.index_head_dim,
@@ -393,84 +399,55 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
-        cache: Cache | None,
+        cache: Cache | None = None,
     ) -> torch.Tensor:
         batch_size, seq_length, _ = hidden_states.shape
         hidden_shape = (batch_size, seq_length, -1, self.index_head_dim)
-        # The cos/sin here are the full positions for the keys, so we need to slice to get only the current positions for the queries
-        full_cos, full_sin = position_embeddings
-        current_cos, current_sin = full_cos[:, -seq_length:, :], full_sin[:, -seq_length:, :]
+        group_size = self.compress_ratio
 
+        cache_layer = cache.layers[self.layer_idx] if cache is not None else None
+        tail = cache_layer.compression_tails.get("indexer") if cache_layer is not None else None
+
+        cos, sin = position_embeddings
         qk = self.index_qk_proj(hidden_states)
-        q, token_k = torch.split(
-            qk,
-            [self.index_n_heads * self.index_head_dim, self.index_kv_heads * self.index_head_dim],
-            dim=-1,
+        q, k = torch.split(
+            qk, [self.index_n_heads * self.index_head_dim, self.index_kv_heads * self.index_head_dim], dim=-1
         )
-        q, raw_keys = q.reshape(*hidden_shape), token_k.reshape(*hidden_shape).squeeze(2)
-        q = self.q_layernorm(q)
-        q = apply_rotary_pos_emb(q, cos=current_cos, sin=current_sin, unsqueeze_dim=2)
 
-        if cache is not None:
-            raw_keys = cache.update_indexer(raw_keys, self.layer_idx)
+        q = self.q_layernorm(q.reshape(*hidden_shape))
+        q = apply_rotary_pos_emb(q, cos=cos, sin=sin, unsqueeze_dim=2)
+        k = k.reshape(*hidden_shape).squeeze(2)
 
-        # Note that the mask is never None here as we only allow eager and sdpa, and we do not allow sdpa's mask skip
-        # It's always 4D with either bool (sdpa) or float (eager) and already gives us the valid indices
-        visible_token_indices = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
+        # Retain group-start M-RoPE across decoding steps.
+        rope_dim = cos.shape[-1]
+        states = torch.cat((k, cos.expand(batch_size, -1, -1), sin.expand(batch_size, -1, -1)), dim=-1)
 
-        selected_token_indices = torch.full(
-            (batch_size, seq_length, self.token_budget + self.compress_ratio - 1),
-            -1,
-            dtype=torch.int32,
-            device=hidden_states.device,
+        # Get pools and tails (of keys, cos, and sin) of size compress_ratio
+        groups, tail = prepare_compression_groups(states, attention_mask, group_size=group_size, tail=tail)
+
+        # Compress pools by mean -> norm -> (grouped) rope
+        keys, cos_groups, sin_groups = groups.split([self.index_head_dim, rope_dim, rope_dim], dim=-1)
+
+        k = self.k_layernorm(keys.float().mean(dim=2).to(k.dtype))
+        k = apply_rotary_pos_emb(
+            k.unsqueeze(2), cos=cos_groups[:, :, 0], sin=sin_groups[:, :, 0], unsqueeze_dim=2
+        ).squeeze(2)
+
+        if cache_layer is not None:
+            k = cache_layer.update_compressed_states(k, attention_mask, seq_length, group_size=group_size, tail=tail)
+
+        # Score groups of tokens
+        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
+        scores = scores.relu().sum(dim=-2) / math.sqrt(self.index_head_dim)
+
+        return select_compression_indices(
+            scores,
+            attention_mask,
+            self.token_budget,
+            group_size=group_size,
+            # Always keep tail
+            include_tail=True,
         )
-        for batch_idx in range(batch_size):
-            for query_idx in range(seq_length):
-                local_visible_indices = torch.nonzero(
-                    visible_token_indices[batch_idx, 0, query_idx], as_tuple=False
-                ).flatten()
-                num_complete_blocks = local_visible_indices.shape[-1] // self.compress_ratio
-                # Compute selected tokens
-                if num_complete_blocks > 0:
-                    block_token_indices = local_visible_indices[: num_complete_blocks * self.compress_ratio].view(
-                        num_complete_blocks, self.compress_ratio
-                    )
-
-                    key_groups = raw_keys[batch_idx].index_select(0, block_token_indices.flatten())
-                    key_groups = key_groups.view(*block_token_indices.shape, self.index_head_dim)
-                    pooled_keys = key_groups.float().mean(dim=1).to(raw_keys.dtype)
-                    pooled_keys = self.k_layernorm(pooled_keys)
-                    group_starts = block_token_indices[:, 0]
-                    block_key_states = apply_rotary_pos_emb(
-                        pooled_keys.unsqueeze(1),
-                        cos=full_cos[batch_idx].index_select(0, group_starts),
-                        sin=full_sin[batch_idx].index_select(0, group_starts),
-                    ).squeeze(1)
-
-                    scores = torch.matmul(
-                        q[batch_idx, query_idx].float(), block_key_states.float().transpose(-1, -2)
-                    ).transpose(-1, -2)
-                    scores = torch.relu(scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
-
-                    selected_block_indices = scores.topk(min(self.block_topk, num_complete_blocks), dim=0).indices
-                    # Remap the indices of the blocks to the indices of individual tokens
-                    selected_tokens = block_token_indices.index_select(0, selected_block_indices).flatten()
-                else:
-                    selected_tokens = torch.tensor([], device=hidden_states.device)
-                tail = local_visible_indices[num_complete_blocks * self.compress_ratio :]
-                selected_tokens = torch.cat([selected_tokens, tail]).to(torch.int32)
-                selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
-
-        # Create the selection mask to combine with the main causal mask
-        kv_length = attention_mask.shape[-1]
-        selected_token_mask = torch.zeros(
-            (*selected_token_indices.shape[:-1], kv_length + 1), device=attention_mask.device, dtype=torch.bool
-        )
-        # We absorb all the -1 by scaterring them to the last index that we will drop
-        scatter_indices = torch.where(selected_token_indices >= 0, selected_token_indices, kv_length)
-        selected_token_mask = selected_token_mask.scatter(-1, scatter_indices, True)[..., :kv_length].unsqueeze(1)
-
-        return selected_token_mask
 
 
 class Qwen4ExpTextAttention(Qwen3_5Attention):
@@ -485,28 +462,62 @@ class Qwen4ExpTextAttention(Qwen3_5Attention):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        selected_token_mask = self.indexer(hidden_states, position_embeddings, attention_mask, cache)
-        # Combine the boolean selection mask with the causal mask (bool for sdpa, float for eager).
-        if attention_mask.dtype == torch.bool:
-            attention_mask = attention_mask & selected_token_mask
-        else:
-            # Adding minimum-finite values overflows to -inf and yields NaNs for fully masked queries.
-            attention_mask = attention_mask.masked_fill(~selected_token_mask, torch.finfo(attention_mask.dtype).min)
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # The cos/sin are the full positions here due to the indexer, so we need to slice to get current positions
-        position_embeddings = (x[:, -hidden_states.shape[1] :, :] for x in position_embeddings)
+        query_states, gate = torch.chunk(
+            self.q_proj(hidden_states).view(*input_shape, -1, self.head_dim * 2), 2, dim=-1
+        )
+        gate = gate.reshape(*input_shape, -1)
 
-        return super().forward(
+        query_states = self.q_norm(query_states.view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
+
+        topk_indices = self.indexer(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             cache=cache,
+        )
+
+        attention_mask = build_attention_mask_from_topk(
+            self.config,
+            topk_indices=topk_indices,
+            query_states=query_states,
+            kv_length=key_states.shape[-2],
+        )
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            indices=topk_indices,
             **kwargs,
         )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output * torch.sigmoid(gate)
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class Qwen4ExpTextMLP(Qwen3NextMLP):
@@ -619,7 +630,6 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         self.ngram_vocab_size_base = config.ngram_vocab_size_base
         head_dim_per_ngram = embedding_dim // self.ngram_heads
         self.seed = config.seed
-        # CODEPATH: @ArthurZucker fix flagging for no reason here
         self.eos_token_id = config.eos_token_id[0] if isinstance(config.eos_token_id, list) else config.eos_token_id
 
         self.head_vocab_sizes = []
@@ -795,7 +805,6 @@ class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
         else:
             self.self_attn = Qwen4ExpTextAttention(config, layer_idx)
         self.mlp = Qwen4ExpTextSparseMoeBlock(config)
-        # CODEPATH: @ArthurZucker fix flagging for no reason here
         ple_layer_index = config.ple_layer_ids.index(layer_idx + 1) if layer_idx + 1 in config.ple_layer_ids else None
         self.ple = Qwen4ExpTextPLELayer(config, layer_idx, ple_layer_index) if ple_layer_index is not None else None
         self.attn_hyper_connection = Qwen4ExpTextGatedResidual(config)
@@ -949,7 +958,6 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        # CODEPATH: @ArthurZucker fix flagging for no reason here
         if self.config.ple_layer_ids and ple_input_ids is None:
             # If we do not have input_ids but have ple, we need to revert the embeddings to find back the ids
             ple_input_ids = input_ids if input_ids is not None else self.reverse_embedding(inputs_embeds)
@@ -957,7 +965,6 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
         if use_cache and cache is None:
             cache = DynamicCache(config=self.config)
 
-        # position_ids are the full position_ids here, as the indexer needs full position_embeddings
         if position_ids is None:
             past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
@@ -966,21 +973,9 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
             position_ids = position_ids[None, ...].expand(4, position_ids.shape[0], -1)
 
         if position_ids.shape[0] == 4:
-            text_position_ids = position_ids[0]
             position_ids = position_ids[1:]
         elif position_ids.shape[0] == 1:
-            text_position_ids = position_ids[0]
             position_ids = position_ids.expand(3, -1, -1)
-        else:
-            text_position_ids = None
-
-        # All indexers share the full 3D positions. Store them on the first indexed layer so cache operations
-        # such as reset, crop and beam reordering also update the position history.
-        if cache is not None and "indexed_attention" in self.config.layer_types:
-            indexer_cache = cache.layers[self.config.layer_types.index("indexed_attention")]
-            if indexer_cache.indexer_position_ids is not None:
-                position_ids = torch.cat([indexer_cache.indexer_position_ids, position_ids], dim=-1)
-            indexer_cache.indexer_position_ids = position_ids
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
@@ -988,18 +983,14 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache": cache,
-                "position_ids": text_position_ids,
-                # Due to the indexer, we always want to create a mask to then simply overlay the indexer mask in each layer - otherwise
-                # we may have to recreate it in each layer if it gets skipped
-                "allow_is_causal_skip": False,
             }
+
             causal_mask_mapping = {
-                "indexed_attention": create_causal_mask(**mask_kwargs),
+                "indexed_attention": create_compression_mask(**mask_kwargs),
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
         conv_mask = causal_mask_mapping.get("linear_attention")
-        # CODEPATH: @ArthurZucker fix flagging for no reason here
         if self.config.ple_layer_ids and conv_mask is not None:
             eos_token_id = self.config.eos_token_id
             eos_token_id = eos_token_id[0] if isinstance(eos_token_id, list) else eos_token_id
@@ -1070,7 +1061,6 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         ple_input_ids = None
-        # CODEPATH: @ArthurZucker fix flagging for no reason here
         if self.config.text_config.ple_layer_ids:
             # If we do not have input_ids but have ple, we need to revert the embeddings to find back the ids
             ple_input_ids = (
