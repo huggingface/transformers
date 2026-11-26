@@ -93,6 +93,5 @@ jobs:
         and not Qwen3OmniModelIntegrationTest and not Qwen3VLMoeIntegrationTest
         and not SeedOssIntegrationTest and not test_cwm_sliding_window_long_sequence
       extra_pytest_args: "--timeout=1200 --timeout-method=signal"
-      job_timeout_minutes: 380
       commit_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
     secrets: inherit
