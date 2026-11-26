@@ -736,10 +736,12 @@ def _can_use_fp8_fused_experts(self, hidden_states, top_k_index) -> bool:
 # PROTO_EXPERTS_DECODE=1  Triton kernel pair with the dispatch fused, one program per (expert, N tile)
 # PROTO_EXPERTS_DECODE=fold  the same with one activation scale per (routed row, weight tile) in the first kernel
 # Both replace the `grouped_mm` and `batched_mm` forwards of `FP8Experts` when no gradient is needed.
-_PROTO_EXPERTS_TRTLLM = os.environ.get("PROTO_EXPERTS_TRTLLM", "0") == "1"
+# [scratch] on by default, in place: the expert weights take TRT-LLM's layout while the CB loop runs, on Blackwell only
+# (`trtllm_supported`). DeepSeek-V3.1 B300 TP4 + EP4 rolling: 295 -> 2,103 tok/s (vLLM 2,439), 8 requests 270 -> 390
+_PROTO_EXPERTS_TRTLLM = os.environ.get("PROTO_EXPERTS_TRTLLM", "1") == "1"
 # PROTO_EXPERTS_TRTLLM_INPLACE=1 (with PROTO_EXPERTS_TRTLLM=1): no copy, the parameters are re-laid in place while the
 # continuous batching loop runs (`_proto_relayout_fp8_experts`)
-_PROTO_EXPERTS_TRTLLM_INPLACE = _PROTO_EXPERTS_TRTLLM and os.environ.get("PROTO_EXPERTS_TRTLLM_INPLACE", "0") == "1"
+_PROTO_EXPERTS_TRTLLM_INPLACE = _PROTO_EXPERTS_TRTLLM and os.environ.get("PROTO_EXPERTS_TRTLLM_INPLACE", "1") == "1"
 # PROTO_EXPERTS_TRTLLM_ROUTING=1 (with PROTO_EXPERTS_TRTLLM=1): the MoE block hands the fp32 router logits and the score
 # correction bias to the TRT-LLM kernel, which routes inside (DeepSeekV3 routing), instead of the router's own top-k
 # (`proto_trtllm_moe_routing`, called from the model's MoE block)
@@ -752,7 +754,9 @@ _PROTO_EXPERTS_DECODE = os.environ.get("PROTO_EXPERTS_DECODE", "1") in ("1", "fo
 _PROTO_EXPERTS_DECODE_FOLD = os.environ.get("PROTO_EXPERTS_DECODE", "1") == "fold"
 
 
-def _proto_experts_supported(module: "FP8Experts") -> bool:
+def _proto_experts_supported(module: "FP8Experts", trtllm: bool = False) -> bool:
+    # TRT-LLM takes fp32 block scales: UE8M0 ones (DeepSeek-V3.1) are copied to fp32 buffers, exactly
+    scale_dtypes = (torch.float32, torch.float8_e8m0fnu) if trtllm else (torch.float32,)
     return (
         module.has_gate
         and module.block_size is not None
@@ -763,7 +767,7 @@ def _proto_experts_supported(module: "FP8Experts") -> bool:
         and module.swiglu_alpha is None
         and module.limit is None
         and module.gate_up_proj.dtype == _FP8_DTYPE
-        and module.gate_up_proj_scale_inv.dtype == torch.float32
+        and module.gate_up_proj_scale_inv.dtype in scale_dtypes
         and module.hidden_dim % 128 == 0
         and module.gate_up_proj.shape[1] % 256 == 0
     )
@@ -811,12 +815,12 @@ def _proto_relayout_fp8_experts(model: nn.Module, trtllm: bool) -> bool:
     torch.accelerator.synchronize()  # the generation loop reads the weights on its own stream
     with torch.no_grad():
         for module in model.modules():
-            if not isinstance(module, FP8Experts) or module._proto_trtllm_laid == trtllm or module._is_expert_parallel:
+            if not isinstance(module, FP8Experts) or module._proto_trtllm_laid == trtllm:
                 continue
-            if module.config._experts_implementation not in ("grouped_mm", "batched_mm"):
+            if module.config._experts_implementation not in ("grouped_mm", "batched_mm", "proto_decode"):
                 continue
             with _use_local_dtensor_params(module):
-                if not _proto_experts_supported(module) or not proto.trtllm_supported(module.gate_up_proj.device):
+                if not _proto_experts_supported(module, trtllm=True) or not proto.trtllm_supported(module.gate_up_proj.device):
                     continue
                 gate_up, down = module.gate_up_proj.data, module.down_proj.data
                 proto.trtllm_relayout_(gate_up, swap_halves=True, inverse=not trtllm)
@@ -828,8 +832,8 @@ def _proto_relayout_fp8_experts(model: nn.Module, trtllm: bool) -> bool:
                     continue
                 if module._proto_trtllm_scales is None:
                     module._proto_trtllm_scales = (
-                        torch.empty_like(module.gate_up_proj_scale_inv.data),
-                        torch.empty_like(module.down_proj_scale_inv.data),
+                        torch.empty_like(module.gate_up_proj_scale_inv.data, dtype=torch.float32),
+                        torch.empty_like(module.down_proj_scale_inv.data, dtype=torch.float32),
                     )
                 s13, s2 = module._proto_trtllm_scales
                 proto.trtllm_scales_(s13, s2, module.gate_up_proj_scale_inv.data, module.down_proj_scale_inv.data)
@@ -856,13 +860,17 @@ def _fuse_trtllm_routed_moe(
     s13: torch.Tensor,
     w2: torch.Tensor,
     s2: torch.Tensor,
+    expert_offset: int = 0,
+    num_global_experts: int = 0,
 ) -> torch.Tensor:
     from . import _proto_fp8_experts as proto
 
-    return proto.trtllm_experts_forward((w13, s13, w2, s2), hidden_states, top_k_index, top_k_weights)
+    return proto.trtllm_experts_forward(
+        (w13, s13, w2, s2), hidden_states, top_k_index, top_k_weights, expert_offset, num_global_experts
+    )
 
 
-def _fuse_trtllm_routed_moe_fake(hidden_states, top_k_index, top_k_weights, w13, s13, w2, s2):
+def _fuse_trtllm_routed_moe_fake(hidden_states, top_k_index, top_k_weights, w13, s13, w2, s2, *args):
     return torch.empty_like(hidden_states)
 
 
@@ -953,7 +961,7 @@ def _proto_autotune_fp8_experts(model: nn.Module, group=None) -> None:
 
 def _proto_experts_forward(self, hidden_states, top_k_index, top_k_weights):
     """The prototype forward selected by the flags, or `None` when the default path has to run."""
-    if self._is_expert_parallel or (torch.is_grad_enabled() and hidden_states.requires_grad):
+    if torch.is_grad_enabled() and hidden_states.requires_grad:
         if self._proto_trtllm_laid:
             raise RuntimeError(
                 "The expert weights hold TRT-LLM's layout while the continuous batching loop runs: use the model "
@@ -963,13 +971,21 @@ def _proto_experts_forward(self, hidden_states, top_k_index, top_k_weights):
     from . import _proto_fp8_experts as proto
 
     if _PROTO_EXPERTS_TRTLLM and self._proto_trtllm is not None:
+        expert_offset, num_global = 0, 0
+        if self._is_expert_parallel:
+            # [scratch] AllReduceEP hands this rank's experts local ids, num_experts for the other ranks' routes (weight
+            # 0): the kernel takes global ids and skips the experts outside [offset, offset + num_experts)
+            rank, world = torch.distributed.get_rank(), torch.distributed.get_world_size()
+            num_global, expert_offset = self.num_experts * world, self.num_experts * rank
+            top_k_index = torch.where(
+                top_k_index >= self.num_experts, (expert_offset + self.num_experts) % num_global, top_k_index + expert_offset
+            )  # fmt: skip
+        args = (hidden_states.contiguous(), top_k_index.contiguous(), top_k_weights.contiguous())
         if torch.compiler.is_compiling():  # [gap3 compile] one opaque op inside a compiled region
-            return torch.ops.transformers.fuse_trtllm_routed_moe(
-                hidden_states.contiguous(), top_k_index.contiguous(), top_k_weights.contiguous(), *self._proto_trtllm
-            )
-        return proto.trtllm_experts_forward(
-            self._proto_trtllm, hidden_states.contiguous(), top_k_index.contiguous(), top_k_weights.contiguous()
-        )
+            return torch.ops.transformers.fuse_trtllm_routed_moe(*args, *self._proto_trtllm, expert_offset, num_global)
+        return proto.trtllm_experts_forward(self._proto_trtllm, *args, expert_offset, num_global)
+    if self._is_expert_parallel:
+        return None
     if _PROTO_EXPERTS_DECODE and _proto_experts_supported(self):
         return proto.decode_experts_forward(
             hidden_states.contiguous(),

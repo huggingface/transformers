@@ -186,8 +186,10 @@ def trtllm_scales_(s13, s2, gate_up_scale, down_scale):
     s2.copy_(down_scale).clamp_(min=_TRTLLM_MIN_BLOCK_SCALE)
 
 
-def trtllm_experts_forward(prepared, hidden_states, top_k_index, top_k_weights):
-    """Activation quant (1 launch), then routing, gemm1, activation, gemm2 and finalize inside flashinfer."""
+def trtllm_experts_forward(prepared, hidden_states, top_k_index, top_k_weights, expert_offset=0, num_global_experts=0):
+    """Activation quant (1 launch), then routing, gemm1, activation, gemm2 and finalize inside flashinfer. Under expert
+    parallelism `top_k_index` holds global expert ids, this rank's are `[expert_offset, expert_offset + local)` out of
+    `num_global_experts` (the kernel skips the others)."""
     import flashinfer
     from flashinfer.fused_moe import Fp8QuantizationType, WeightLayout
 
@@ -210,12 +212,12 @@ def trtllm_experts_forward(prepared, hidden_states, top_k_index, top_k_weights):
         gemm1_clamp_limit=None,
         gemm2_weights=w2,
         gemm2_weights_scale=s2,
-        num_experts=num_experts,
+        num_experts=num_global_experts or num_experts,
         top_k=top_k_index.shape[-1],
         n_group=None,
         topk_group=None,
         intermediate_size=two_i // 2,
-        local_expert_offset=0,
+        local_expert_offset=expert_offset,
         local_num_experts=num_experts,
         routed_scaling_factor=None,
         routing_method_type=1,  # not used with precomputed routing
