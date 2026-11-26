@@ -769,7 +769,7 @@ def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, tp_plan: dic
         module = modules[module_name]
         if is_param:
             style.validate_param(module, param_name, tp_mesh, parameter_name=name)
-            style.shard_param(module, param_name, config=config, mesh_manager=mesh_manager)
+            style.shard_param(module, param_name, tp_mesh, config=config, mesh_manager=mesh_manager)
         else:
             style.install_forward(module, tp_mesh, config=config, mesh_manager=mesh_manager)
         module._is_hooked = True
