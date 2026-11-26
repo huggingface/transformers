@@ -149,3 +149,5 @@ print(f"The predicted token is: {predicted_token}")
 ## Bert specific outputs
 
 [[autodoc]] models.bert.modeling_bert.BertForPreTrainingOutput
+
+<!-- CI: AMD runs-on fallback check (temporary, will be closed) -->
