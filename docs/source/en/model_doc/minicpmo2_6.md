@@ -57,7 +57,7 @@ print(processor.post_process_image_text_to_text(generated[:, inputs["input_ids"]
 - In a prompt, each audio is marked with `<|audio|>`. The processor splits audio longer than 30 s into 30 s windows and expands the marker to 25 `<|audio|>` tokens per second of audio, each second wrapped in `<|audio_start|>` and `<|audio_end|>`.
 - Images are marked with `<unk>` and expanded as in [MiniCPM-V 2.6](minicpmv2_6); the chat template adds `<image_id>N</image_id>` before each image.
 - When the conversation contains audio, the chat template drops the default system prompt and opens the assistant turn with `<|spk_bos|><|spk|><|spk_eos|><|tts_bos|>`, as the original `chat()` does. The model then ends its answer with `<|tts_eos|>`, a special token.
-- Every audio is encoded on its own. When one message holds several audios (in omni mode, one 1 s clip per video frame), the original code concatenates them before encoding, so later clips see the earlier ones; here they don't.
+- Every audio is encoded on its own. Omni mode (video frames interleaved with 1 s audio clips) isn't covered: there the original code concatenates the clips of a message before encoding, so later clips see the earlier ones, and it joins the content without newlines or image ids, which the chat template doesn't produce.
 - `generate()` is greedy by default. The original `chat()` samples with `top_p=0.8`, `top_k=100`, `temperature=0.7` and `repetition_penalty=1.05`.
 - Beam search and `num_return_sequences > 1` mix up the audio of a prompt with more than one 30 s window (a longer audio, or several audios), because `generate()` repeats `input_features` per window. The original `chat(sampling=False)` is beam search with `num_beams=3`.
 

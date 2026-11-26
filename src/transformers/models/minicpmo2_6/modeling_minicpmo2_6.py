@@ -423,7 +423,8 @@ def chunked_limited_mask_function(left_ctx: int, right_ctx: int) -> Callable:
 
 @auto_docstring(
     custom_intro="""
-    The audio encoder of MiniCPM-o 2.6, without any head or projection on top.
+    The audio encoder of MiniCPM-o 2.6, without any head or projection on top: a Whisper encoder over up to 30 s of audio
+    per row, where each frame attends to its own 1 s chunk and to all earlier ones.
     """
 )
 class MiniCPMO2_6AudioEncoder(MiniCPMO2_6PreTrainedModel):

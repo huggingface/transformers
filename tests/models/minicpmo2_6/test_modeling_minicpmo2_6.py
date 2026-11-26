@@ -149,6 +149,7 @@ class MiniCPMO2_6Vision2TextModelTest(MiniCPMO2_6ModelTestMixin, VLMModelTest, u
 class MiniCPMO2_6Audio2TextModelTest(MiniCPMO2_6ModelTestMixin, ALMModelTest, unittest.TestCase):
     model_tester_class = MiniCPMO2_6Audio2TextModelTester
 
+    # TODO: drop once https://huggingface.co/openbmb/MiniCPM-o-2_6/discussions/59 is merged
     @unittest.skip(reason="Reads the Hub repo's current config; its native keys come with the Hub PR")
     def test_save_pretrained_matches_hub_checkpoint(self):
         pass
@@ -178,8 +179,7 @@ class MiniCPMO2_6Audio2TextModelTest(MiniCPMO2_6ModelTestMixin, ALMModelTest, un
 @require_torch_accelerator
 class MiniCPMO2_6IntegrationTest(unittest.TestCase):
     model_id = "openbmb/MiniCPM-o-2_6"
-    # The Hub PR with the converted config and processor files (the weights are the original ones)
-    revision = "refs/pr/59"
+    revision = "refs/pr/59"  # TODO: drop once https://huggingface.co/openbmb/MiniCPM-o-2_6/discussions/59 is merged
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)

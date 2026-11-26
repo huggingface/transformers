@@ -36,7 +36,6 @@ if is_vision_available():
 @require_torchvision
 class MiniCPMO2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MiniCPMO2_6Processor
-    audio_unstructured_max_length = 401  # longer than the STFT window
 
     @staticmethod
     def prepare_processor_dict():

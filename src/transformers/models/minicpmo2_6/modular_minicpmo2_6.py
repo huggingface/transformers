@@ -151,7 +151,8 @@ class MiniCPMO2_6AudioEncoderLayer(Qwen2AudioEncoderLayer):
 
 @auto_docstring(
     custom_intro="""
-    The audio encoder of MiniCPM-o 2.6, without any head or projection on top.
+    The audio encoder of MiniCPM-o 2.6, without any head or projection on top: a Whisper encoder over up to 30 s of audio
+    per row, where each frame attends to its own 1 s chunk and to all earlier ones.
     """
 )
 class MiniCPMO2_6AudioEncoder(Qwen2AudioEncoder):
@@ -500,8 +501,10 @@ class MiniCPMO2_6Processor(MiniCPMV2_6Processor):
         # Audio longer than 30 s is split into 30 s windows, one row of `input_features` each
         window = self.feature_extractor.n_samples
         windows = [waveform[start : start + window] for waveform in audio for start in range(0, len(waveform), window)]
-        # Always zero-padded to 30 s, as the checkpoint's features were computed
-        audio_inputs = self.feature_extractor(windows, **{**kwargs, "padding": "max_length"})
+        # Always zero-padded to 30 s, as the checkpoint's features were computed; the model needs the mask
+        audio_inputs = self.feature_extractor(
+            windows, **{**kwargs, "padding": "max_length", "max_length": window, "return_attention_mask": True}
+        )
         audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
         audio_inputs["num_audio_tokens"] = self._get_num_multimodal_tokens(
             audio_lengths=[len(waveform) for waveform in audio]
