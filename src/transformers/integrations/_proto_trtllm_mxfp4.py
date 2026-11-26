@@ -89,13 +89,30 @@ def trtllm_gpt_oss_experts(p, hidden_states, top_k_index, top_k_weights, local_e
         num_experts=p["num_experts"], top_k=top_k_index.shape[-1], n_group=None, topk_group=None,
         intermediate_size=p["intermediate_padded"], local_expert_offset=local_expert_offset,
         local_num_experts=p["num_experts"], routed_scaling_factor=None,
-        routing_method_type=RoutingMethodType.Renormalize, do_finalize=True,
+        routing_method_type=RoutingMethodType.Renormalize, do_finalize=True, tune_max_num_tokens=8192,
     )  # fmt: skip
     out = out[0] if isinstance(out, (list, tuple)) else out
     return out[:, : p["hidden"]]
 
 
 PROTO_MXFP4_TRTLLM = os.environ.get("PROTO_MXFP4_TRTLLM", "1") == "1"
+# flashinfer's autotuner picks the MoE tactics of every power-of-2 token count up to 8192 once, after the weights are
+# prepared, as vLLM does at engine start (gpt-oss-120b B300 rolling: 6,955 -> 8,374 tok/s, ITL 18.2 -> 15.2 ms with the
+# tuned tactics). PROTO_MXFP4_TRTLLM_AUTOTUNE=0 keeps the default ones
+PROTO_MXFP4_TRTLLM_AUTOTUNE = os.environ.get("PROTO_MXFP4_TRTLLM_AUTOTUNE", "1") == "1"
+
+
+def _autotune(p, top_k):
+    from flashinfer.autotuner import autotune
+
+    g = torch.Generator(device="cuda").manual_seed(0)
+    x = torch.randn(8192, p["hidden"], device="cuda", dtype=torch.bfloat16, generator=g)
+    logits = torch.randn(8192, p["num_experts"], device="cuda", generator=g)
+    top_k_logits, top_k_index = torch.topk(logits, top_k, dim=-1)
+    top_k_weights = torch.softmax(top_k_logits, dim=-1).to(torch.bfloat16)
+    with torch.no_grad(), autotune(True):
+        trtllm_gpt_oss_experts(p, x, top_k_index.to(torch.int32), top_k_weights)
+    torch.cuda.synchronize()
 
 
 def maybe_prepare_model(model) -> int:
@@ -127,5 +144,7 @@ def maybe_prepare_model(model) -> int:
         )  # fmt: skip
         module.gate_up_proj = module.down_proj = None
         prepared += 1
+        if PROTO_MXFP4_TRTLLM_AUTOTUNE and prepared == 1:  # every layer has the same shapes
+            _autotune(module._proto_trtllm, model.config.num_experts_per_tok)
     torch.cuda.empty_cache()
     return prepared
