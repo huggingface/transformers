@@ -20,6 +20,7 @@ import tempfile
 import unittest
 import warnings
 
+import numpy as np
 from huggingface_hub import create_pull_request
 from parameterized import parameterized
 
@@ -456,6 +457,28 @@ class GenerationConfigSerializationTest(unittest.TestCase):
         expected_sequence_bias = {(45, 67): -0.6, (89,): 1.2}
         bias_logits_processor = SequenceBiasLogitsProcessor(new_config.sequence_bias)
         self.assertDictEqual(bias_logits_processor.sequence_bias, expected_sequence_bias)
+
+    def test_serialize_generation_sequence_bias_dict(self):
+        """Tests that the dict format of `sequence_bias` (tuple keys, numpy ids included) survives a save/load round trip"""
+        sequence_bias = {(45, 67): -0.6, (np.int64(89),): 1.2}
+        generation_config = GenerationConfig(sequence_bias=sequence_bias)
+        with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
+            generation_config.save_pretrained(tmp_dir)
+            new_config = GenerationConfig.from_pretrained(tmp_dir)
+
+        bias_logits_processor = SequenceBiasLogitsProcessor(new_config.sequence_bias)
+        self.assertDictEqual(bias_logits_processor.sequence_bias, sequence_bias)
+        reordered_config = GenerationConfig(sequence_bias=dict(reversed(sequence_bias.items())))
+        self.assertEqual(generation_config, reordered_config)
+        self.assertEqual(hash(generation_config), hash(reordered_config))
+
+        # An invalid dict is left for `SequenceBiasLogitsProcessor` to reject, instead of being saved as a valid list
+        for invalid_sequence_bias in ({(): 1.0}, {(4.5,): 1.0}):
+            with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
+                GenerationConfig(sequence_bias=invalid_sequence_bias).save_pretrained(tmp_dir)
+                new_config = GenerationConfig.from_pretrained(tmp_dir)
+            with self.assertRaises(ValueError):
+                SequenceBiasLogitsProcessor(new_config.sequence_bias)
 
     def test_serialize_generation_min_length_eos_token(self):
         """Tests that GenerationConfig is serialized and MinLengthLogitsProcessor is initialized with min_length and eos_token_id"""
