@@ -40,6 +40,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_coco_image, load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -50,17 +51,17 @@ if is_torch_available():
     import torch
 
 
-class LlavaVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        image_token_index=0,
-        projector_hidden_act="gelu",
-        seq_length=7,
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-1,
-        text_config={
+class LlavaVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "ignore_index": -100,
+        "image_token_index": 0,
+        "projector_hidden_act": "gelu",
+        "seq_length": 7,
+        "vision_feature_select_strategy": "default",
+        "vision_feature_layer": -1,
+        "text_config": {
             "model_type": "llama",
             "seq_length": 7,
             "is_training": True,
@@ -83,8 +84,8 @@ class LlavaVisionText2TextModelTester:
             "num_choices": 4,
             "pad_token_id": 1,
         },
-        is_training=True,
-        vision_config={
+        "is_training": True,
+        "vision_config": {
             "image_size": 8,
             "patch_size": 2,
             "num_channels": 3,
@@ -98,29 +99,30 @@ class LlavaVisionText2TextModelTester:
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
-    ):
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
-        self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.pad_token_id = text_config["pad_token_id"]
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.num_channels = 3
-        self.image_size = 336
-        self.num_image_tokens = (self.vision_config["image_size"] // self.vision_config["patch_size"]) ** 2
-        self.seq_length = seq_length + self.num_image_tokens
-        self.encoder_seq_length = self.seq_length
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config, vision_config = values["text_config"], values["vision_config"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["batch_size"] = 3
+        values["num_channels"] = 3
+        values["image_size"] = 336
+        values["num_image_tokens"] = (vision_config["image_size"] // vision_config["patch_size"]) ** 2
+        # `seq_length` is the text length; the tester's sequence also holds the image tokens
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        values["encoder_seq_length"] = values["seq_length"]
+        return values
 
     def get_config(self):
         return LlavaConfig(
@@ -171,6 +173,8 @@ class LlavaForConditionalGenerationModelTest(
     """
     Model tester for `LlavaForConditionalGeneration`.
     """
+
+    model_tester_class = LlavaVisionText2TextModelTester
 
     all_model_classes = (
         (
@@ -697,6 +701,10 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ("rocm", (9, 5)): [
                     'What breed is the dog?The dog in the image is a black Labrador Retriever.',
                     'What is shown in this image?A dirt path stretches into the distance, flanked by grassy areas on either side. The path appears to be well-trodden and leads towards a wooded area with tall trees. The sky is clear and blue, suggesting a bright and sunny day'
+                ],
+                ("xpu", 5): [
+                    "What breed is the dog?The dog in the image is a black Labrador Retriever.",
+                    "What is shown in this image?A narrow dirt path is surrounded by grass and trees. The path leads to a distant point, and the sky is clear and blue."
                 ],
                 ("rocm", (9, 4)): ['What breed is the dog?The dog in the image is a black Labrador Retriever.', 'What is shown in this image?A narrow dirt path is surrounded by grass and trees. The path leads to a distant point, and the sky is clear and blue.'],
             }

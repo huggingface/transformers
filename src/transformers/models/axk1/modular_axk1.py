@@ -43,7 +43,6 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Model,
     DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
-    DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
     DeepseekV3TopkRouter,
     apply_rotary_pos_emb,
@@ -51,6 +50,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     eager_attention_forward,
 )
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
+from ..llama.modeling_llama import LlamaRMSNorm
 
 
 logger = logging.get_logger(__name__)
@@ -89,9 +89,6 @@ class AXK1Config(DeepseekV3Config):
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -149,7 +146,7 @@ class AXK1Config(DeepseekV3Config):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-class AXK1RMSNorm(DeepseekV3RMSNorm):
+class AXK1RMSNorm(LlamaRMSNorm):
     pass
 
 

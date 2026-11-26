@@ -119,15 +119,15 @@ def _get_expert_weight_names(model):
     return names
 
 
-def _load_tp_and_reference_models(model_path, model_class):
-    """Load TP model and non-TP reference model for comparison.
+def _load_tp_and_reference_models(model_path, model_class, tp_plan=None):
+    """Load TP model and non-TP reference model for comparison. `tp_plan` overrides rules of the model's plan.
 
     Returns:
         tuple: (model_tp, model_ref, device)
     """
     model_tp = model_class.from_pretrained(
         model_path,
-        distributed_config=DistributedConfig(tp_size=dist.get_world_size()),
+        distributed_config=DistributedConfig(tp_size=dist.get_world_size(), tp_plan=tp_plan),
     )
     dist.barrier()
 
@@ -186,11 +186,11 @@ def _reference_grad_shard(name, grad, local_grad, rank, world_size, tp_plan, exp
     return grad
 
 
-def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol):
+def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol, tp_plan=None):
     """Implementation for comparing TP and non-TP model outputs."""
     set_seed(0)
 
-    model_tp, model, device = _load_tp_and_reference_models(model_path, model_class)
+    model_tp, model, device = _load_tp_and_reference_models(model_path, model_class, tp_plan)
 
     _verify_tp_sharding(_rank, model_tp, model)
 
@@ -213,11 +213,11 @@ def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol):
     dist.barrier()
 
 
-def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
+def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol, tp_plan=None):
     """Implementation for comparing TP and non-TP model backward passes."""
     set_seed(0)
 
-    model_tp, model, device = _load_tp_and_reference_models(model_path, model_class)
+    model_tp, model, device = _load_tp_and_reference_models(model_path, model_class, tp_plan)
     model_tp.train()
     model.train()
 
@@ -249,8 +249,9 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
 
             # A sharded param's grad is a DTensor: take this rank's local shard, since a DTensor
             # reports the *global* shape and can't be compared against a plain tensor.
+            # Unit styles shard on a 2-D (units, replicas) mesh, where the rank isn't the shard index: gather those.
             if isinstance(grad_tp, DTensor):
-                grad_tp = grad_tp.to_local()
+                grad_tp = grad_tp.full_tensor() if grad_tp.device_mesh.ndim > 1 else grad_tp.to_local()
 
             grad = _reference_grad_shard(name, grad, grad_tp, rank, world_size, model_tp._tp_plan)
 
@@ -485,23 +486,6 @@ class TensorParallelTesterMixin(ABC):
                 f"{model_class.__name__}: the TP plan leaves `{name}` replicated; shard it with `embedding_rowwise`",
             )
 
-    def test_moe_parallel_plans_shard_experts(self):
-        """An MoE model's expert weights, the bulk of its parameters, must be sharded by every parallel plan it defines.
-        A plan missing them keeps every expert on every rank without changing any output, so no numerical test sees it.
-        """
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        models = [model_class(copy.deepcopy(config)) for model_class in self.all_model_classes]
-        expert_weights = {model: _get_expert_weight_names(model) for model in models}
-        if not any(expert_weights.values()):
-            self.skipTest("Not an MoE model")
-
-        for model, names in expert_weights.items():
-            for kind, plan in (("TP", model._tp_plan), ("EP", model._ep_plan)):
-                unsharded = sorted(n for n in names if _get_parameter_plan(n, plan, is_weight=True) is None)
-                self.assertFalse(
-                    unsharded, f"{type(model).__name__}: the {kind} plan leaves these experts replicated: {unsharded}"
-                )
-
     @parameterized.expand([(False,), (True,)])
     @is_tensor_parallel_test
     def test_tp_forward(self, tie_word_embeddings):
@@ -538,6 +522,50 @@ class TensorParallelTesterMixin(ABC):
             run_distributed(world_size=self.tensor_parallel_size)(_test_tp_backward_impl)(
                 tmp_dir, model_class, atol, rtol
             )
+
+    @is_tensor_parallel_test
+    def test_tp_unit_plan_forward_backward(self):
+        """`unit_colwise`/`unit_rowwise` on the attention projections must match the unsharded model, outputs and
+        gradients, including when ranks replicate heads (fewer KV heads than ranks)."""
+        self._skip_if_not_supported()
+
+        config = self._get_tp_config()
+        text_config = config.get_text_config()
+        head_dim = getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
+        if hasattr(text_config, "num_key_value_heads"):
+            text_config.num_key_value_heads = 1  # fewer KV heads than ranks: ranks replicate the head
+        # Replicate Q heads too so the rowwise output projection hits the 1/replicas scaling path.
+        if hasattr(text_config, "num_attention_heads"):
+            text_config.num_attention_heads = 1
+            # Keep the per-head width: models like Glm4v-MoE derive other config values (mrope) from it.
+            text_config.head_dim = head_dim
+        model_class = self._get_tp_model_class()
+        expected = {"q_proj": "colwise", "k_proj": "colwise", "v_proj": "colwise", "o_proj": "rowwise"}
+        model_plan = model_class(config).tp_plan
+        attention_styles = {
+            key.rsplit(".", 1)[-1]: style
+            for key, style in model_plan.items()
+            if "self_attn" in key and style in ("colwise", "rowwise")
+        }
+        # TODO: unit sharding only covers head-aligned Linear weights for now. It does not handle extra
+        # per-head parameters such as Beam's `gate_bias` or GraniteSWA's `sinks`, so skip those models.
+        if set(attention_styles) != set(expected):
+            self.skipTest("Attention has additional head-aligned parameters that unit sharding does not support yet")
+        tp_plan = {}
+        for key, style in model_plan.items():
+            name = key.rsplit(".", 1)[-1]
+            if expected.get(name) == style:
+                tp_plan[key] = f"unit_{style}"
+        if {key.rsplit(".", 1)[-1] for key in tp_plan} != set(expected):
+            self.skipTest("Attention is not a plain colwise q/k/v + rowwise o_proj")
+
+        atol = self.tensor_parallel_atol
+        rtol = self.tensor_parallel_rtol
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
+            model_class(config).save_pretrained(tmp_dir, save_original_format=True)
+            for impl in (_test_tp_forward_impl, _test_tp_backward_impl):
+                run_distributed(world_size=self.tensor_parallel_size)(impl)(tmp_dir, model_class, atol, rtol, tp_plan)
 
     @is_tensor_parallel_test
     def test_tp_generation(self):

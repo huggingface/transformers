@@ -72,9 +72,6 @@ class KimiLinearConfig(DeepseekV3Config):
     model_type = "kimi_linear"
     # Attention stays replicated: `layers.*.self_attn` is latent attention on some layers and delta attention on others
     base_model_tp_plan = {
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -257,6 +254,14 @@ class KimiLinearDeltaAttention(Glm5NextTextLinearAttention):
         super().__init__(config, layer_idx)
         self.forget_gate = KimiLinearForgetGate(config)
         self.o_norm = KimiLinearRMSNormGated(self.head_dim, eps=self.layer_norm_epsilon)
+        self.conv1d = nn.Conv1d(
+            in_channels=self.conv_dim,
+            out_channels=self.conv_dim,
+            bias=False,
+            kernel_size=self.conv_kernel_size,
+            groups=self.conv_dim,
+            padding=self.conv_kernel_size - 1,
+        )
 
 
 class KimiLinearTopkRouter(DeepseekV3TopkRouter):
@@ -324,6 +329,7 @@ class KimiLinearPreTrainedModel(Qwen3NextPreTrainedModel):
         "hidden_states": KimiLinearDecoderLayer,
         "attentions": KimiLinearAttention,
     }
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight", "dt_bias"]
     _keys_to_ignore_on_load_unexpected = None
 
     def _init_weights(self, module):

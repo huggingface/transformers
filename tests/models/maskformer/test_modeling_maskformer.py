@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -50,35 +51,27 @@ if is_vision_available():
     from PIL import Image
 
 
-class MaskFormerModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        is_training=True,
-        use_auxiliary_loss=False,
-        num_queries=10,
-        num_channels=3,
-        min_size=32 * 4,
-        max_size=32 * 6,
-        num_labels=4,
-        mask_feature_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.use_auxiliary_loss = use_auxiliary_loss
-        self.num_queries = num_queries
-        self.num_channels = num_channels
-        self.min_size = min_size
-        self.max_size = max_size
-        self.num_labels = num_labels
-        self.mask_feature_size = mask_feature_size
+class MaskFormerModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 2,
+        "is_training": True,
+        "use_auxiliary_loss": False,
+        "num_queries": 10,
+        "num_channels": 3,
+        "min_size": 128,  # 32 * 4
+        "max_size": 192,  # 32 * 6
+        "num_labels": 4,
+        "mask_feature_size": 32,
         # This is passed to the decoder config. We add it to the model tester here for testing
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+    }
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size]).to(
@@ -196,6 +189,8 @@ class MaskFormerModelTester:
 
 @require_torch
 class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = MaskFormerModelTester
+
     all_model_classes = (MaskFormerModel, MaskFormerForInstanceSegmentation) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-feature-extraction": MaskFormerModel, "image-segmentation": MaskFormerForInstanceSegmentation}

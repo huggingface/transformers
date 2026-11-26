@@ -49,49 +49,48 @@ class Kimi_K25VisionText2TextModelTester(VLMModelTester):
 
     conditional_generation_class = Kimi_K25ForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 3)
-        kwargs.setdefault("video_token_id", 4)
-        kwargs.setdefault("image_size", 32)
-        kwargs.setdefault("patch_size", 8)
-        kwargs.setdefault("num_image_tokens", 16)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("head_dim", 8)
-        kwargs.setdefault("num_heads", 4)
-        kwargs.setdefault("pos_emb_height", 4)
-        kwargs.setdefault("merge_kernel_size", (1, 1))
-        kwargs.setdefault("pos_emb_width", 4)
-        kwargs.setdefault("pos_emb_time", 1)
-        kwargs.setdefault("kv_lora_rank", 16)
-        kwargs.setdefault("q_lora_rank", 32)
-        kwargs.setdefault("qk_rope_head_dim", 16)
-        kwargs.setdefault("v_head_dim", 32)
-        kwargs.setdefault("qk_nope_head_dim", 32)
-        kwargs.setdefault("attention_probs_dropout_prob", 0.0)
-
+    small_config_overrides = {
+        "image_token_id": 3,
+        "video_token_id": 4,
+        "image_size": 32,
+        "patch_size": 8,
+        "num_image_tokens": 16,
+        "hidden_act": "silu",
+        "head_dim": 8,
+        "num_heads": 4,
+        "pos_emb_height": 4,
+        "merge_kernel_size": (1, 1),
+        "pos_emb_width": 4,
+        "pos_emb_time": 1,
+        "kv_lora_rank": 16,
+        "q_lora_rank": 32,
+        "qk_rope_head_dim": 16,
+        "v_head_dim": 32,
+        "qk_nope_head_dim": 32,
+        "attention_probs_dropout_prob": 0.0,
         # MoE fields synced with DeepSeekV3Tester
         # `first_k_dense_replace` enables MoEs after `layer=0`
-        kwargs.setdefault("first_k_dense_replace", 1)
-        kwargs.setdefault("n_group", 2)
-        kwargs.setdefault("topk_group", 1)
-        kwargs.setdefault("num_experts_per_tok", 8)
-        kwargs.setdefault("n_shared_experts", 1)
-        kwargs.setdefault("n_routed_experts", 8)
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("aux_loss_alpha", 0.001)
-        kwargs.setdefault("routed_scaling_factor", 2.5)
+        "first_k_dense_replace": 1,
+        "n_group": 2,
+        "topk_group": 1,
+        "num_experts_per_tok": 8,
+        "n_shared_experts": 1,
+        "n_routed_experts": 8,
+        "moe_intermediate_size": 16,
+        "aux_loss_alpha": 0.001,
+        "routed_scaling_factor": 2.5,
+        "rope_parameters": {
+            "rope_type": "default",
+            "rope_theta": 10000,
+        },
+    }
 
-        kwargs.setdefault(
-            "rope_parameters",
-            {
-                "rope_type": "default",
-                "rope_theta": 10000,
-            },
-        )
-        super().__init__(parent, **kwargs)
-
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # These can be inferred from existing properties and don't get separate kwargs
-        self.projection_hidden_size = self.hidden_size
+        values["projection_hidden_size"] = values["hidden_size"]
+        return values
 
     def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models

@@ -40,6 +40,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -49,14 +50,14 @@ if is_torch_available():
     import torch
 
 
-class MllamaText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        seq_length=7,
-        is_training=True,
-        text_config={
+class MllamaText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "ignore_index": -100,
+        "seq_length": 7,
+        "is_training": True,
+        "text_config": {
             "vocab_size": 99,
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -71,19 +72,24 @@ class MllamaText2TextModelTester:
             "bos_token_id": 1,
             "eos_token_id": 2,
         },
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.text_config = text_config
-        self.seq_length = seq_length
+    }
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-        self.pad_token_id = self.text_config["pad_token_id"]
-        self.batch_size = 3
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config = values["text_config"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["batch_size"] = 3
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return MllamaTextConfig(**self.text_config)
@@ -118,6 +124,8 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     Model tester for `MllamaForConditionalGeneration`.
     """
 
+    model_tester_class = MllamaText2TextModelTester
+
     all_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
 
     def setUp(self):
@@ -129,15 +137,15 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         pass
 
 
-class MllamaVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        image_token_id=4,
-        seq_length=7,
-        is_training=True,
-        text_config={
+class MllamaVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "ignore_index": -100,
+        "image_token_id": 4,
+        "seq_length": 7,
+        "is_training": True,
+        "text_config": {
             "vocab_size": 99,
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -153,7 +161,7 @@ class MllamaVisionText2TextModelTester:
             "eos_token_id": 2,
             "cross_attention_layers": [1],
         },
-        vision_config={
+        "vision_config": {
             "image_size": 30,
             "patch_size": 2,
             "num_channels": 3,
@@ -169,27 +177,29 @@ class MllamaVisionText2TextModelTester:
             "initializer_range": 0.02,
             "supported_aspect_ratios": [[1, 1], [1, 2], [1, 3], [1, 4], [2, 1], [2, 2], [3, 1], [4, 1]],
         },
-    ):
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config = values["text_config"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["batch_size"] = 3
+        values["num_channels"] = 3
+        values["image_size"] = 224
+        values["max_num_images"] = 1
+        values["max_image_tiles"] = 4
+        values["image_length"] = 904
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.is_training = is_training
-        self.ignore_index = ignore_index
-        self.image_token_id = image_token_id
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.seq_length = seq_length
-
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.pad_token_id = self.text_config["pad_token_id"]
-
-        self.batch_size = 3
-        self.num_channels = 3
-        self.image_size = 224
-        self.max_num_images = 1
-        self.max_image_tiles = 4
-        self.image_length = 904
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return MllamaConfig(
@@ -265,6 +275,8 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     """
     Model tester for `MllamaForConditionalGeneration`.
     """
+
+    model_tester_class = MllamaVisionText2TextModelTester
 
     all_model_classes = (
         (

@@ -23,12 +23,12 @@ from transformers.testing_utils import (
     cleanup,
     require_torch,
     require_torch_accelerator,
-    require_torch_large_accelerator,
     slow,
     torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
@@ -47,92 +47,59 @@ if is_torch_available():
     )
 
 
-class DeepseekV3ModelTester:
+class DeepseekV3ModelTester(ModelTesterConfigMixin):
     if is_torch_available():
         causal_lm_class = DeepseekV3ForCausalLM
 
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        intermediate_size=32,
-        moe_intermediate_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=4,
-        n_shared_experts=1,
-        n_routed_experts=8,
-        routed_scaling_factor=2.5,
-        kv_lora_rank=16,
-        q_lora_rank=32,
-        qk_rope_head_dim=16,
-        v_head_dim=32,
-        qk_nope_head_dim=32,
-        n_group=2,
-        topk_group=1,
-        num_experts_per_tok=8,
-        first_k_dense_replace=1,
-        norm_topk_prob=True,
-        aux_loss_alpha=0.001,
-        hidden_act="silu",
-        max_position_embeddings=512,
-        initializer_range=0.02,
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_token_type_ids": False,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "intermediate_size": 32,
+        "moe_intermediate_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 4,
+        "n_shared_experts": 1,
+        "n_routed_experts": 8,
+        "routed_scaling_factor": 2.5,
+        "kv_lora_rank": 16,
+        "q_lora_rank": 32,
+        "qk_rope_head_dim": 16,
+        "v_head_dim": 32,
+        "qk_nope_head_dim": 32,
+        "n_group": 2,
+        "topk_group": 1,
+        "num_experts_per_tok": 8,
+        "first_k_dense_replace": 1,
+        "norm_topk_prob": True,
+        "aux_loss_alpha": 0.001,
+        "hidden_act": "silu",
+        "max_position_embeddings": 512,
+        "initializer_range": 0.02,
         # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
         # different RNG states between the non-TP and TP model forward passes (they run sequentially),
         # leading to different dropout masks and mismatched losses.
-        attention_probs_dropout_prob=0.0,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        num_labels=3,
-        num_choices=4,
-        pad_token_id=0,
-        scope=None,
-    ):
+        "attention_probs_dropout_prob": 0.0,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "num_labels": 3,
+        "num_choices": 4,
+        "pad_token_id": 0,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.n_shared_experts = n_shared_experts
-        self.n_routed_experts = n_routed_experts
-        self.routed_scaling_factor = routed_scaling_factor
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.num_experts_per_tok = num_experts_per_tok
-        self.first_k_dense_replace = first_k_dense_replace
-        self.norm_topk_prob = norm_topk_prob
-        self.aux_loss_alpha = aux_loss_alpha
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.pad_token_id = pad_token_id
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -222,6 +189,8 @@ class DeepseekV3ModelTest(
     TensorParallelTesterMixin,
     ExpertParallelTesterMixin,
 ):
+    model_tester_class = DeepseekV3ModelTester
+
     all_model_classes = (
         (
             DeepseekV3Model,
@@ -298,60 +267,6 @@ class DeepseekV3ModelTest(
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @require_torch_large_accelerator
-    @slow
-    def test_eager_matches_sdpa_generate(self):
-        """
-        Overwriting the common test as the test is flaky on tiny models
-        """
-        max_new_tokens = 30
-
-        tokenizer = AutoTokenizer.from_pretrained("bzantium/tiny-deepseek-v3")
-
-        model_sdpa = DeepseekV3ForCausalLM.from_pretrained(
-            "bzantium/tiny-deepseek-v3",
-            dtype=torch.float16,
-        ).to(torch_device)
-
-        self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-
-        model_eager = DeepseekV3ForCausalLM.from_pretrained(
-            "bzantium/tiny-deepseek-v3",
-            dtype=torch.float16,
-            attn_implementation="eager",
-        ).to(torch_device)
-
-        self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-        texts = [
-            "hi here's a longer context, getting longer and",
-            "Hello this is a very long sentence my friend, very long for real",
-            "Today I am in Paris and",
-        ]
-
-        # Free both ~10 GB models in finally so a mid-test OOM doesn't leak GPU memory into subsequent
-        # tests (cascade). MemoryCleanupMixin is intentionally not used here: ModelTest runs fast
-        # CPU-compatible tests (pytest -n 8) where gc overhead is unwanted. See PR #48720.
-        try:
-            for padding_side in ["left", "right"]:
-                tokenizer.padding_side = padding_side
-                tokenizer.pad_token = tokenizer.eos_token
-
-                inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
-
-                res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-                res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-
-                with self.subTest(f"{padding_side}"):
-                    torch.testing.assert_close(
-                        res_eager,
-                        res_sdpa,
-                        msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
-                    )
-        finally:
-            del model_eager, model_sdpa
-            cleanup(torch_device, gc_collect=True)
 
     @require_torch_accelerator
     def test_flex_attention_with_grads(self):

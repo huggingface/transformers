@@ -23,7 +23,13 @@ import warnings
 from huggingface_hub import create_pull_request
 from parameterized import parameterized
 
-from transformers import AutoConfig, GenerationConfig, WatermarkingConfig, is_torch_available
+from transformers import (
+    AutoConfig,
+    GenerationConfig,
+    SynthIDTextWatermarkingConfig,
+    WatermarkingConfig,
+    is_torch_available,
+)
 from transformers import logging as transformers_logging
 
 
@@ -820,6 +826,23 @@ class GenerationConfigSerializationTest(unittest.TestCase):
         self.assertEqual(watermark.hash_key, hashing_key)
         self.assertEqual(watermark.seeding_scheme, seeding_scheme)
         self.assertEqual(watermark.context_width, context_width)
+
+    def test_serialize_generation_synthid_watermarking_config(self):
+        """Tests that a SynthID watermarking config is restored as `SynthIDTextWatermarkingConfig` after a round trip"""
+        watermarking_config = SynthIDTextWatermarkingConfig(keys=[654, 400, 836], ngram_len=5, context_history_size=64)
+        generation_config = GenerationConfig(do_sample=True, watermarking_config=watermarking_config)
+
+        with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
+            generation_config.save_pretrained(tmp_dir)
+            new_config = GenerationConfig.from_pretrained(tmp_dir)
+        self.assertIsInstance(new_config.watermarking_config, SynthIDTextWatermarkingConfig)
+        self.assertEqual(new_config.watermarking_config.to_dict(), watermarking_config.to_dict())
+
+        # `update` converts dicts too
+        new_config.update(watermarking_config=watermarking_config.to_dict())
+        self.assertIsInstance(new_config.watermarking_config, SynthIDTextWatermarkingConfig)
+        new_config.update(watermarking_config={"greenlist_ratio": 0.5})
+        self.assertIsInstance(new_config.watermarking_config, WatermarkingConfig)
 
 
 @is_staging_test

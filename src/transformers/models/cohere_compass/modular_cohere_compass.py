@@ -30,7 +30,7 @@ from ...modeling_layers import GenericForSequenceClassification
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
@@ -38,12 +38,12 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
+from ..cohere.modeling_cohere import CohereLayerNorm
 from ..cohere2.configuration_cohere2 import Cohere2Config
 from ..cohere2.modeling_cohere2 import (
     Cohere2Attention,
     Cohere2DecoderLayer,
     Cohere2ForCausalLM,
-    Cohere2LayerNorm,
     Cohere2MLP,
     eager_attention_forward,
 )
@@ -246,7 +246,7 @@ class CohereCompassMLP(Cohere2MLP):
     pass
 
 
-class CohereCompassLayerNorm(Cohere2LayerNorm):
+class CohereCompassLayerNorm(CohereLayerNorm):
     pass
 
 
@@ -482,7 +482,7 @@ class CohereCompassForConditionalGeneration(Qwen3VLForConditionalGeneration, Coh
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> MultimodalCausalLMOutputWithPast:
         r"""
         Example:
 
@@ -557,12 +557,14 @@ class CohereCompassForConditionalGeneration(Qwen3VLForConditionalGeneration, Coh
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return CausalLMOutputWithPast(
+        return MultimodalCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
 

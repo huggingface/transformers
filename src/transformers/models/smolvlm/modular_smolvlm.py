@@ -61,6 +61,8 @@ class SmolVLMVisionConfig(Idefics3VisionConfig):
     >>> configuration = model.config
     ```"""
 
+    model_type = "smolvlm_vision"
+
 
 class SmolVLMPreTrainedModel(Idefics3PreTrainedModel):
     pass
@@ -87,6 +89,8 @@ class SmolVLMConfig(Idefics3Config):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
+    model_type = "smolvlm"
 
 
 class SmolVLMImageProcessor(Idefics3ImageProcessor):
@@ -262,13 +266,7 @@ class SmolVLMModel(Idefics3Model):
             **kwargs,
         )
 
-        return SmolVLMBaseModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=mm_encoder_outputs.get("image"),
-        )
+        return SmolVLMBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):

@@ -29,6 +29,7 @@ from transformers.utils import (
     is_vision_available,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -47,54 +48,37 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class HieraModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=[64, 64],
-        mlp_ratio=1.0,
-        num_channels=3,
-        depths=[1, 1, 1, 1],
-        patch_stride=[4, 4],
-        patch_size=[7, 7],
-        patch_padding=[3, 3],
-        masked_unit_size=[8, 8],
-        num_heads=[1, 1, 1, 1],
-        embed_dim_multiplier=2.0,
-        is_training=True,
-        use_labels=True,
-        embed_dim=8,
-        hidden_act="gelu",
-        decoder_hidden_size=2,
-        decoder_depth=1,
-        decoder_num_heads=1,
-        initializer_range=0.02,
-        scope=None,
-        type_sequence_label_size=10,
-    ):
+class HieraModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": [64, 64],
+        "mlp_ratio": 1.0,
+        "num_channels": 3,
+        "depths": [1, 1, 1, 1],
+        "patch_stride": [4, 4],
+        "patch_size": [7, 7],
+        "patch_padding": [3, 3],
+        "masked_unit_size": [8, 8],
+        "num_heads": [1, 1, 1, 1],
+        "embed_dim_multiplier": 2.0,
+        "is_training": True,
+        "use_labels": True,
+        "embed_dim": 8,
+        "hidden_act": "gelu",
+        "decoder_hidden_size": 2,
+        "decoder_depth": 1,
+        "decoder_num_heads": 1,
+        "initializer_range": 0.02,
+        "scope": None,
+        "type_sequence_label_size": 10,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.mlp_ratio = mlp_ratio
-        self.num_channels = num_channels
-        self.depths = depths
-        self.patch_stride = patch_stride
-        self.patch_size = patch_size
-        self.patch_padding = patch_padding
-        self.masked_unit_size = masked_unit_size
-        self.num_heads = num_heads
-        self.embed_dim_multiplier = embed_dim_multiplier
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.embed_dim = embed_dim
-        self.hidden_act = hidden_act
-        self.decoder_hidden_size = decoder_hidden_size
-        self.decoder_depth = decoder_depth
-        self.decoder_num_heads = decoder_num_heads
-        self.initializer_range = initializer_range
-        self.scope = scope
-        self.type_sequence_label_size = type_sequence_label_size
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]])
@@ -227,6 +211,8 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     Here we also overwrite some of the tests of test_modeling_common.py, as Hiera does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
+
+    model_tester_class = HieraModelTester
 
     all_model_classes = (
         (
@@ -419,16 +405,12 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     elif tuple_object is None:
                         return
                     else:
-                        self.assertTrue(
-                            torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
-                            ),
-                            msg=(
-                                "Tuple and dict output are not equal. Difference:"
-                                f" {torch.max(torch.abs(tuple_object.float() - dict_object.float()))}. Tuple has `nan`:"
-                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
-                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
-                            ),
+                        torch.testing.assert_close(
+                            set_nan_tensor_to_zero(tuple_object),
+                            set_nan_tensor_to_zero(dict_object),
+                            rtol=1e-5,
+                            atol=1e-5,
+                            msg=lambda m: f"Tuple and dict output are not equal.\n{m}",
                         )
 
                 recursive_check(tuple_output, dict_output)
@@ -626,6 +608,8 @@ class HieraModelIntegrationTest(unittest.TestCase):
 
 @require_torch
 class HieraBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    model_tester_class = HieraModelTester
+
     all_model_classes = (HieraBackbone,) if is_torch_available() else ()
     config_class = HieraConfig
 
