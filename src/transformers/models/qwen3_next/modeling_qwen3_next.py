@@ -37,6 +37,8 @@ from ...integrations import (
 )
 from ...integrations.accelerate import force_accelerate_hooks
 from ...integrations._proto_gdn_decode import _PROTO_GDN_IN_PLACE, gdn_decode_inplace
+from ...integrations._proto_router import PROTO_ROUTER as _PROTO_ROUTER
+from ...integrations._proto_router import router_topk as _proto_router_topk
 from ...integrations.linear_attention_paged import causal_conv1d_varlen
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -901,6 +903,10 @@ class Qwen3NextTopKRouter(nn.Module):
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
+        # [scratch] one kernel for softmax + top-k + renormalization (no backward)
+        if _PROTO_ROUTER and router_logits.is_cuda and not torch.is_grad_enabled():
+            router_scores, router_indices = _proto_router_topk(router_logits, self.top_k, self.norm_topk_prob)
+            return router_logits, router_scores, router_indices
         router_probs = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
         router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
         if self.norm_topk_prob:
