@@ -14,6 +14,7 @@
 import atexit
 import contextlib
 import functools
+import importlib.util
 import os
 import re
 import threading
@@ -149,7 +150,11 @@ if is_torch_distributed_available():
     # created once (`prime_fast_tp_all_reduce`, else by the first eligible call outside a graph capture) and never
     # reallocated: CUDA graphs record its pointers. A call that does not fit it (rows, dtype, layout), or that comes
     # from a thread other than the engine's (`_FAST_REDUCE_THREAD`), takes NCCL, on every rank alike.
-    _TP_ALL_REDUCE = os.environ.get("HF_TP_ALL_REDUCE", "nccl")
+    # [scratch] flashinfer by default when installed: B300 rolling Qwen3-235B-A22B TP2 2,813 -> 2,943 tok/s, 8 requests
+    # 315 -> 330; GLM-5.3 TP4 8 requests 316 -> 327
+    _TP_ALL_REDUCE = os.environ.get(
+        "HF_TP_ALL_REDUCE", "flashinfer" if importlib.util.find_spec("flashinfer") is not None else "nccl"
+    )
     if _TP_ALL_REDUCE == "flashinfer_fused":
         # Hard guard. Before flashinfer 0.7.3 the fused kernel could die with Xid 13 ("CTA Not Present") on Blackwell
         # under CUDA graphs when other streams were busy, which is what continuous batching does
