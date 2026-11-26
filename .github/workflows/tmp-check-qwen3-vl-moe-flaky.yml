@@ -55,6 +55,14 @@ jobs:
         with:
           ref: ${{ matrix.commit.sha }}
 
+      # The stats plugin lives on this temporary branch, not in the commit under test
+      - name: Checkout the stats plugin
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: tmp_tools
+          sparse-checkout: .github/tmp_q3
+
       - name: Fix git safe directory
         run: git config --global --add safe.directory '*'
 
@@ -75,8 +83,9 @@ jobs:
           mkdir -p reports
           status=0
           for b in $(seq 1 $NUM_BATCHES); do
-            python -m pytest -p no:cacheprovider --flake-finder --flake-runs=$FLAKE_RUNS -n $NUM_WORKERS -q -rf \
-              "$TEST_ID" > reports/pytest_batch$b.log 2>&1 || status=1
+            Q3_STATS_DIR=reports/stats PYTHONPATH=$GITHUB_WORKSPACE/tmp_tools/.github/tmp_q3 \
+              python -m pytest -p no:cacheprovider -p q3_stats_plugin --flake-finder --flake-runs=$FLAKE_RUNS \
+              -n $NUM_WORKERS -q -rf "$TEST_ID" > reports/pytest_batch$b.log 2>&1 || status=1
             echo "batch $b: $(tail -n 1 reports/pytest_batch$b.log)"
             grep -E "^(FAILED|E +AssertionError)" reports/pytest_batch$b.log | head -n 5 || true
           done
