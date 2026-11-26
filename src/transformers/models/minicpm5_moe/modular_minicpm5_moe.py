@@ -62,11 +62,8 @@ class MiniCPM5MoeConfig(Glm4MoeConfig):
     model_type = "minicpm5_moe"
     default_theta = 5000000.0
 
+    # NOTE: We intentionally don't shard attention as it only has 2 KV heads (== TP size 2) which is unrealistic in practice
     base_model_tp_plan = {
-        "layers.*.self_attn.q_gate_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
