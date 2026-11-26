@@ -25,14 +25,18 @@ Each recipe below demonstrates a specific [`Trainer`] feature: custom loss funct
 
 Pass [`~Trainer#compute_loss_func`] to [`Trainer`] to replace the default loss function. The function runs *after* the forward pass and only defines how loss is computed from the outputs. To modify the forward pass itself, [subclass](./trainer_customize#compute-loss) [`~Trainer.compute_loss`] instead.
 
-The custom loss function must have the following signature:
+The custom loss function must have the following signature. The example below is for a causal language model.
 
 ```py
 import torch.nn.functional as F
 
 def my_loss_fn(outputs, labels, num_items_in_batch):
-    logits = outputs["logits"]
-    loss = F.cross_entropy(logits, labels, reduction="sum")
+    # the logits at position i predict the token at position i + 1
+    shift_logits = outputs["logits"][..., :-1, :].float()
+    shift_labels = labels[..., 1:]
+    loss = F.cross_entropy(
+        shift_logits.reshape(-1, shift_logits.size(-1)), shift_labels.reshape(-1), reduction="sum"
+    )
     return loss / num_items_in_batch
 ```
 
@@ -96,6 +100,7 @@ trainer = Trainer(
         eval_strategy="epoch",
         eval_accumulation_steps=16,   # move predictions to CPU every 16 batches
     ),
+    train_dataset=train_dataset,
     eval_dataset=eval_dataset,
     compute_metrics=compute_metrics,
 )
@@ -130,6 +135,7 @@ trainer = Trainer(
         eval_strategy="epoch",
         eval_accumulation_steps=16,
     ),
+    train_dataset=train_dataset,
     eval_dataset=eval_dataset,
     compute_metrics=compute_metrics,
     preprocess_logits_for_metrics=preprocess_logits_for_metrics,
