@@ -758,18 +758,15 @@ def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
             "Sequence parallelism is enabled but no SP process group is available. "
             "Ensure torch_device_mesh is initialized or sp_backend='deepspeed' with sp_size > 1."
         )
-    # differentiable weighted per-shard-loss aggregation across ranks
-    losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
-    # special dealing with SFT that has prompt tokens that aren't used in loss computation
-    good_tokens = (inputs["shift_labels"] != -100).view(-1).sum()
-    good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
-    losses_stacked = torch.stack(losses_per_rank)
-    good_tokens_stacked = torch.stack(good_tokens_per_rank)
-    mask = good_tokens_stacked > 0
-    safe_losses = torch.where(mask, losses_stacked, torch.zeros_like(losses_stacked))
-    total_loss = (safe_losses * good_tokens_stacked).sum()
-    total_good_tokens = good_tokens_stacked.sum()
-    loss = total_loss / total_good_tokens.clamp(min=1)
+    # Token-weighted mean over the SP group. A shard with no valid token (e.g. only prompt tokens in SFT) has a NaN
+    # mean and contributes zero.
+    good_tokens = (inputs["shift_labels"] != -100).sum()
+    local_sum = torch.where(good_tokens > 0, loss.float(), 0.0) * good_tokens
+    totals = torch.stack((local_sum.detach(), good_tokens.float()))
+    torch.distributed.all_reduce(totals, group=sp_group)
+    # The value is the mean over the whole sequence, but each rank backpropagates only its own share: DeepSpeed sums
+    # gradients over the SP group, so backpropagating the full mean on every rank would scale them by `sp_size`.
+    loss = (local_sum + (totals[0] - local_sum.detach())) / totals[1].clamp(min=1)
 
     return (loss, outputs) if return_outputs else loss
 

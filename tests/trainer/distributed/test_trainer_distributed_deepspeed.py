@@ -1130,9 +1130,10 @@ class TestTrainerDistributedDeepSpeedCommon(DeepSpeedCommandsMixin, TrainerDistr
         # ZeRO inference only works with ZeRO-3
         self.check_eval(config_file=DS_CONFIGS[ZERO3])
 
-    def test_alst_ulysses_sp(self):
-        """Test that ALST/Ulysses sequence parallelism produces the same losses as without it."""
-        sp_config = os.path.join(CONFIGS_DIR, "deepspeed_zero2_sp.yaml")
+    @parameterized.expand(stages, name_func=_parameterized_custom_name_func)
+    def test_alst_ulysses_sp(self, stage):
+        """Test that ALST/Ulysses sequence parallelism produces the same losses and gradients as without it."""
+        sp_config = os.path.join(CONFIGS_DIR, f"deepspeed_{stage}_sp.yaml")
         common_args = [
             "--max_steps",
             "10",
@@ -1153,6 +1154,7 @@ class TestTrainerDistributedDeepSpeedCommon(DeepSpeedCommandsMixin, TrainerDistr
         # Step 1: Run with SP enabled
         sp_yes_dir = self.get_auto_remove_tmp_dir()
         sp_yes_losses = os.path.join(sp_yes_dir, "losses.json")
+        sp_yes_grad_norms = os.path.join(sp_yes_dir, "grad_norms.json")
         sp_yes_eval = os.path.join(sp_yes_dir, "eval_metrics.json")
         cmd = self.get_accelerate_cmd(
             TRAIN_SCRIPT,
@@ -1165,37 +1167,46 @@ class TestTrainerDistributedDeepSpeedCommon(DeepSpeedCommandsMixin, TrainerDistr
                 "1",
                 "--loss_output_file",
                 sp_yes_losses,
+                "--grad_norm_output_file",
+                sp_yes_grad_norms,
                 "--eval_output_file",
                 sp_yes_eval,
             ],
         )
         execute_subprocess_async(cmd, env=self.get_env())
 
-        # Step 2: Run without SP
+        # Step 2: Run without SP on a single process, which trains on the same batches as the SP group
         sp_no_dir = self.get_auto_remove_tmp_dir()
         sp_no_losses = os.path.join(sp_no_dir, "losses.json")
+        sp_no_grad_norms = os.path.join(sp_no_dir, "grad_norms.json")
         cmd = self.get_accelerate_cmd(
             TRAIN_SCRIPT,
-            config_file=DS_CONFIGS[ZERO2],
+            config_file=DS_CONFIGS[stage],
+            num_processes=1,
             script_args=common_args
             + [
                 "--output_dir",
                 sp_no_dir,
                 "--loss_output_file",
                 sp_no_losses,
+                "--grad_norm_output_file",
+                sp_no_grad_norms,
             ],
         )
         execute_subprocess_async(cmd, env=self.get_env())
 
-        # Compare losses — SP splits sequences across GPUs so expect some numerical divergence
-        sp_yes_losses_data = read_json_file(sp_yes_losses)
-        sp_no_losses_data = read_json_file(sp_no_losses)
-        self.assertEqual(len(sp_yes_losses_data), len(sp_no_losses_data))
+        # Compare losses and gradient norms
         torch.testing.assert_close(
-            torch.tensor(sp_yes_losses_data),
-            torch.tensor(sp_no_losses_data),
-            atol=0.5,
-            rtol=0.05,
+            torch.tensor(read_json_file(sp_yes_losses)),
+            torch.tensor(read_json_file(sp_no_losses)),
+            rtol=1e-3,
+            atol=1e-4,
+        )
+        torch.testing.assert_close(
+            torch.tensor(read_json_file(sp_yes_grad_norms)),
+            torch.tensor(read_json_file(sp_no_grad_norms)),
+            rtol=1e-3,
+            atol=1e-4,
         )
 
         # Eval should succeed even though eval sequences are not divisible by sp_size,

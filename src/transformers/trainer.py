@@ -526,6 +526,17 @@ class Trainer:
         pc = getattr(self.accelerator, "parallelism_config", None)
         if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
             self.model_accepts_loss_kwargs = False
+            import deepspeed
+
+            # `deepspeed_sp_compute_loss` relies on DeepSpeed summing gradients over the SP group, which ZeRO-3 does
+            # since deepspeedai/DeepSpeed#8854 (it averaged them before)
+            if self.accelerator.state.deepspeed_plugin.zero_stage == 3 and version.parse(
+                deepspeed.__version__
+            ) < version.parse("0.20.2"):
+                raise ImportError(
+                    "DeepSpeed sequence parallelism with ZeRO-3 requires `deepspeed>=0.20.2`, older versions scale "
+                    f"the gradients by 1/sp_size. Found `deepspeed=={deepspeed.__version__}`."
+                )
 
         model_to_inspect = unwrap_peft_model(self.model)
         default_label_names = find_labels(model_to_inspect.__class__)
