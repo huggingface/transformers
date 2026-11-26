@@ -723,6 +723,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 "zamba",  # special loop, and no real need to add support for now
                 "zaya",  # a bit specific, could work but need a bit more work and no need rn
                 "deepseek_v4",  # non standard cache, would require more work
+                "deepseek_v41",  # same cache limits as deepseek_v4
                 "xlstm",  # extremely special cache mechanism, won't fix
                 "rwkv",  # does not use cache classes, won't fix
                 "reformer",  # does not use cache classes, won't fix
@@ -895,6 +896,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 "zamba",  # special loop, and no real need to add support for now
                 "zaya",  # a bit specific, could work but need a bit more work and no need rn
                 "deepseek_v4",  # non standard cache, would require more work
+                "deepseek_v41",  # same cache limits as deepseek_v4
                 "xlstm",  # extremely special cache mechanism, won't fix
                 "rwkv",  # does not use cache classes, won't fix
                 "reformer",  # does not use cache classes, won't fix

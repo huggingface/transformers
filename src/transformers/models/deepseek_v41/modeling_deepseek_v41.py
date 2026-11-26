@@ -69,6 +69,9 @@ class DeepseekV41CacheLayer(DynamicSlidingWindowLayer):
     # We're watching for it to merge: the compressed states then move onto that class, and this one and its
     # `"shared_compressed_attention"` layer type go away.
     _layer_type = "shared_compressed_attention"
+    # The compressed entries, the pooling buffer and the token history only ever move forward, so this cache
+    # cannot go back to an earlier length. That rules out assisted generation and the other modes that crop it.
+    is_croppable = False
 
     def __init__(self, config: "DeepseekV41TextConfig", **kwargs):
         super().__init__(sliding_window=config.sliding_window)
@@ -1421,8 +1424,6 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):
     # The compressed KV, the pooling buffers and the Engram token history live in `DeepseekV41CacheLayer`,
     # which has no static version
     _can_compile_fullgraph = False
-    # ... and they cannot be rolled back either, which rules out assisted generation and friends
-    _is_stateful = True
     # Everything listed here is also created in float32 in its `__init__`. `from_pretrained` enforces this
     # list, but a model built straight from a config would otherwise get the default dtype
     _keep_in_fp32_modules_strict = [
