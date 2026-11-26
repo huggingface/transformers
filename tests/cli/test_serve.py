@@ -3105,3 +3105,39 @@ class TestContinuousBatchingResponses(ServeIntegrationTestCase):
             max_output_tokens=10,
         )
         self.assertTrue(len(resp.output[0].content[0].text) > 0)
+
+
+class TestContinuousBatchingFallback(unittest.TestCase):
+    """Serve falls back to sequential generation for models continuous batching can't run, instead of failing."""
+
+    # MIC fixtures (https://huggingface.co/huggingface-mic): small models with the real checkpoints' architecture
+    MOE = ("huggingface-mic/Qwen3-30B-A3B-mic", "770fd1fa927f6e229fb86961c631c85d24350419")
+    HYBRID = ("huggingface-mic/Qwen3-Next-80B-A3B-Instruct-mic", "7eb57dd61582f58fc530063458ea6b53fc2e21a9")
+
+    @staticmethod
+    def _model(fixture):
+        from transformers import AutoModelForCausalLM
+
+        model_id, revision = fixture
+        return AutoModelForCausalLM.from_pretrained(model_id, revision=revision).eval()
+
+    def test_moe_model_uses_continuous_batching(self):
+        from transformers.cli.serving.utils import GenerationState
+
+        model = self._model(self.MOE)
+        self.assertTrue(GenerationState(continuous_batching=True).use_continuous_batching(model, Modality.LLM))
+        self.assertFalse(GenerationState().use_continuous_batching(model, Modality.LLM))  # not asked for
+
+    def test_linear_attention_model_falls_back(self):
+        from transformers.cli.serving.utils import GenerationState
+        from transformers.generation.continuous_batching.cache import unsupported_layer_types
+
+        model = self._model(self.HYBRID)
+        self.assertEqual(unsupported_layer_types(model.config), ["linear_attention"])
+        self.assertFalse(GenerationState(continuous_batching=True).use_continuous_batching(model, Modality.LLM))
+
+    def test_vlm_falls_back(self):
+        from transformers.cli.serving.utils import GenerationState
+
+        model = self._model(self.MOE)
+        self.assertFalse(GenerationState(continuous_batching=True).use_continuous_batching(model, Modality.VLM))
