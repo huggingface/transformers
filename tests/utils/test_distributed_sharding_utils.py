@@ -21,6 +21,8 @@ from transformers.distributed.sharding_utils import DtensorShardOperation
 if torch.distributed.is_available():
     from torch.distributed.tensor.placement_types import Replicate, Shard, _StridedShard
 
+from transformers.distributed.sharding_utils import Layout, LayoutShard, Segment
+
 
 class FakeMesh:
     """Fake multi-dimensional device mesh for testing DtensorShardOperation."""
@@ -155,6 +157,67 @@ class TestDtensorShardOperation(unittest.TestCase):
                 mesh, [_StridedShard(dim=0, split_factor=2)], param_shape=(4, 4), local_shape=(2, 4)
             )
             torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
+
+    def test_layout_covers_what_a_placement_cannot(self):
+        """`LayoutShard` says, per param dim, which segments exist and how each is sharded: the cases a per-dim placement
+        cannot express — kv heads replicated across ranks, several independently sharded segments in one dim, padding a
+        param bigger than its checkpoint tensor, round-robin experts, and a segment that duplicates another."""
+        rows = torch.arange(8 * 2).reshape(8, 2).float()  # a dim of 8 rows, 2 wide
+
+        # 1. fused qkv, kv heads replicated: (heads=2, replicas=2) mesh, every segment on the heads dim
+        q, kv = 4, 2
+        fused = torch.cat([rows[:q], rows[q : q + kv], rows[q + kv : q + 2 * kv]])  # q | k | v
+        layout = Layout({0: [Segment(q, mesh_dim=0), Segment(kv, mesh_dim=0), Segment(kv, mesh_dim=0)]})
+        for rank in range(4):  # (heads, replicas) mesh: ranks 0/1 and 2/3 hold the same head
+            head = rank // 2
+            op = LayoutShard(tuple(fused.shape), FakeMesh(shape=(2, 2), rank=rank), layout)
+            expected = torch.cat(
+                [rows[head * 2 : head * 2 + 2], rows[q + head : q + head + 1], rows[q + kv + head : q + kv + head + 1]]
+            )
+            torch.testing.assert_close(op.shard_tensor(fused), expected, msg=f"qkv rank {rank}")
+
+        # 2. Mamba2: [conv, gate, x, B, C, dt], only conv/gate/dt sharded, dt padded from `extra` rows
+        segments = [Segment(2, 0), Segment(2, 0), Segment(1), Segment(1), Segment(1), Segment(2, 0, source_length=0)]
+        layout = Layout({0: segments})
+        for rank in range(2):
+            op = LayoutShard((8, 2), FakeMesh(shape=(2,), rank=rank), layout)
+            expected = torch.cat(
+                [
+                    rows[rank * 1 : rank * 1 + 1],  # conv
+                    rows[2 + rank : 2 + rank + 1],  # gate
+                    rows[4:5],  # x, replicated
+                    rows[5:6],  # B
+                    rows[6:7],  # C
+                    rows.new_zeros(1, 2),  # dt: nothing readable on this rank, padded
+                ]
+            )
+            torch.testing.assert_close(op.shard_tensor(rows), expected, msg=f"mamba2 rank {rank}")
+
+        # 3. round-robin experts: rank r takes rows r, r+2, r+4, ... (a placement cannot say this)
+        op = LayoutShard((8, 2), FakeMesh(shape=(2,), rank=1), Layout({0: [Segment(8, mesh_dim=0, stride=2)]}))
+        torch.testing.assert_close(op.shard_tensor(rows), rows[1::2])
+
+        # 4. padding: the param is bigger than the checkpoint tensor (a padded vocab), zeros at the end
+        op = LayoutShard((6, 2), FakeMesh(shape=(2,), rank=1), Layout({0: [Segment(6, mesh_dim=0, source_length=5)]}))
+        torch.testing.assert_close(op.shard_tensor(rows[:5]), torch.cat([rows[3:5], rows.new_zeros(1, 2)]))
+
+        # 5. a segment duplicating another (an EPLB replica): the same rows, read twice
+        op = LayoutShard(
+            (4, 2), FakeMesh(shape=(2,), rank=1), Layout({0: [Segment(2), Segment(2, source_start=0)]})
+        )
+        torch.testing.assert_close(op.shard_tensor(rows), torch.cat([rows[:2], rows[:2]]))
+
+    def test_layout_from_placements_matches_the_placements(self):
+        """`Layout.from_placements` is the same slicing as the placement list: a packed (strided) shard becomes its
+        `split_factor` segments, and both ops return the same rows."""
+        tensor = torch.arange(8 * 4).reshape(8, 4).float()
+        for placements, shape in (([Shard(0)], (8, 4)), ([_StridedShard(dim=0, split_factor=2)], (8, 4))):
+            layout = Layout.from_placements(shape, placements)
+            for rank in range(2):
+                mesh = FakeMesh(shape=(2,), rank=rank)
+                expected = DtensorShardOperation(shape, mesh, placements).shard_tensor(tensor)
+                actual = LayoutShard(shape, mesh, layout).shard_tensor(tensor)
+                torch.testing.assert_close(actual, expected, msg=f"{placements} rank {rank}")
 
     def test_op_from_values_matches_dtensor_layouts(self):
         """The op can be built from `(shape, device_mesh, placements)` instead of a DTensor, for an engine whose params

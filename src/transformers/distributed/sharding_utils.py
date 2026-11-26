@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ..utils import is_torch_available, is_torch_distributed_available
@@ -327,6 +328,109 @@ class DtensorShardOperation:
     def _normalize_param_dim(self, dim: int) -> int:
         # if dim is negative, it should be normalized to the last axis
         return dim if dim >= 0 else self.param_ndim + dim
+
+
+@dataclass(frozen=True)
+class Segment:
+    """One run of a param dim, and how it maps to the checkpoint.
+
+    It covers `length` rows of the param dim, sharded on `mesh_dim` (`None`: every rank holds it) taking every
+    `stride`-th row of the run (round-robin experts). It reads `source_length` rows (default `length`) starting at
+    `source_start` (default: the run's own offset); the rows it cannot read are zero-filled, which is what padding a
+    param bigger than its checkpoint tensor, and an expert no rank owns, are.
+    """
+
+    length: int
+    mesh_dim: int | None = None
+    stride: int = 1
+    source_start: int | None = None
+    source_length: int | None = None
+
+
+@dataclass(frozen=True)
+class Layout:
+    """A param dim is a list of `Segment`s, each sharded on its own mesh dim (or replicated): the general case that
+    `Shard` (one segment) and `_StridedShard` (`split_factor` equal segments) are a special case of.
+
+    E.g. a fused `qkv_proj` with kv heads replicated, on a `(heads, replicas)` mesh::
+
+        Layout({0: [Segment(q_rows, mesh_dim=0), Segment(kv_rows, mesh_dim=0), Segment(kv_rows, mesh_dim=0)]})
+
+    and Mamba2's `[conv, gate, x, B, C, dt]` layout, where only some segments are sharded and the last is padded::
+
+        Layout({0: [Segment(conv, 0), Segment(gate, 0), Segment(x), Segment(B), Segment(C),
+                    Segment(dt, 0, source_length=dt - extra)]})
+    """
+
+    dims: dict[int, list[Segment]]
+
+    @classmethod
+    def from_placements(cls, shape: tuple[int, ...], placements) -> Layout:
+        """The layout a placement list describes, the same slicing expressed as segments."""
+        dims = {}
+        for mesh_dim, placement in enumerate(placements):
+            if not hasattr(placement, "dim"):
+                continue
+            dim = placement.dim % len(shape)
+            split_factor = getattr(placement, "split_factor", 1)
+            dims[dim] = [Segment(shape[dim] // split_factor, mesh_dim=mesh_dim)] * split_factor
+        return cls(dims)
+
+
+class LayoutShard(DtensorShardOperation):
+    """Shard-on-read for a `Layout`: each segment of each param dim is read from its own place in the checkpoint and
+    sliced by its own rule. Subclasses `DtensorShardOperation` for its interval slicing (`_slice_and_cat`) and its
+    rank lookup (`_rank_and_size`); `placements` are not used.
+    """
+
+    def __init__(self, shape: tuple[int, ...], device_mesh, layout: Layout):
+        self.device_mesh = device_mesh
+        self.param_ndim = len(shape)
+        self.layout = layout
+
+    def _segment_intervals(self, segment: Segment, offset: int) -> tuple[list[tuple[int, int]], int]:
+        """`(source ranges this rank reads for the segment, rows it must have)`, the rows it cannot read being padded"""
+        if segment.mesh_dim is None:
+            ranks, rank = 1, 0
+        else:
+            rank, ranks = self._rank_and_size(segment.mesh_dim)
+        start = offset if segment.source_start is None else segment.source_start
+        readable = segment.length if segment.source_length is None else segment.source_length
+        if segment.stride == 1:
+            rows, offset = _local_shard_size_and_offset(segment.length, ranks, rank)
+            first, last = offset, min(offset + rows, readable)
+            intervals = [(start + first, start + last)] if last > first else []
+            return intervals, rows
+        local = range(rank, segment.length, ranks)
+        intervals = [(start + row, start + row + 1) for row in local if row < readable]
+        return intervals, len(local)
+
+    def shard_tensor(self, source, tensor_idx=None, device=None, dtype=None):
+        if tensor_idx is not None:
+            raise NotImplementedError("A `Layout` describes a whole param: per-expert sources use `placements`.")
+        source_shape = list(source.shape) if isinstance(source, torch.Tensor) else source.get_shape()
+        intervals_by_dim, expected = [], []
+        for dim, size in enumerate(source_shape):
+            segments = self.layout.dims.get(dim)
+            if segments is None:
+                intervals_by_dim.append([(0, size)])
+                expected.append(size)
+                continue
+            intervals, rows, offset = [], 0, 0
+            for segment in segments:
+                segment_intervals, segment_rows = self._segment_intervals(segment, offset)
+                intervals.extend(segment_intervals)
+                rows += segment_rows
+                offset += segment.length  # the next segment's default place in the checkpoint
+            intervals_by_dim.append(intervals)
+            expected.append(rows)
+        out = self._slice_and_cat(source, intervals_by_dim, device=device, dtype=dtype)
+        for dim, size in enumerate(expected):
+            if out.shape[dim] < size:  # a segment read fewer rows than it holds: zero-fill (padding, an absent expert)
+                padding = list(out.shape)
+                padding[dim] = size - out.shape[dim]
+                out = torch.cat([out, out.new_zeros(padding)], dim=dim)
+        return out
 
 
 def _dtensor_from_local_like(local_tensor: torch.Tensor, ref: DTensor) -> DTensor:

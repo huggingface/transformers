@@ -145,6 +145,7 @@ if TYPE_CHECKING:
     from kernels.layer.mode import Mode
 
     from ._typing import DeviceMeshLike
+    from .distributed.sharding_utils import Layout
 
 
 if is_sagemaker_mp_enabled():
@@ -186,7 +187,9 @@ class LoadStateDictConfig:
     device_mesh: "DeviceMeshLike | None" = None
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
-    # An engine owning its params (e.g. vLLM): `get_placements(target, param, source_pattern)` returns `(device_mesh,
+    # An engine owning its params (e.g. vLLM): `get_layout(target, param, source_pattern)` returns `(device_mesh,
+    # Layout)` for a param whose dims are not sharded uniformly (several segments, padding, replicas), and
+    # `get_placements(target, param, source_pattern)` returns `(device_mesh,
     # placements, shape)` for a model whose params are not DTensors (see `DtensorShardOperation`), `shape` being the
     # global one when the engine's param is only this rank's shard (`None`: the param's own shape is the global one).
     # It is per source, as a fused param's sources may shard differently (e.g. q and kv heads), and only for layouts a
@@ -196,6 +199,7 @@ class LoadStateDictConfig:
     # `load_in_place(param, value)` writes the
     # loaded tensors into the engine's own params (it checks their shape: padded, fused). Without it, the loader sets
     # the params itself, keeping their class: see `set_param_for_module`
+    get_layout: Callable[[str, "torch.Tensor", str], tuple["DeviceMeshLike", "Layout"] | None] | None = None
     get_placements: (
         Callable[[str, "torch.Tensor", str], tuple["DeviceMeshLike", list, tuple[int, ...] | None] | None] | None
     ) = None

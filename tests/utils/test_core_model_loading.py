@@ -48,6 +48,7 @@ from transformers.core_model_loading import (
     revert_weight_conversion,
     spawn_materialize,
 )
+from transformers.distributed.sharding_utils import Layout, Segment
 from transformers.modeling_utils import LoadStateDictConfig
 from transformers.utils.import_utils import is_triton_available
 
@@ -1416,6 +1417,40 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         self.assertEqual(param.device.type, "cpu")
         self.assertIs(param, model.mlp.down_proj._parameters["weight"])
         torch.testing.assert_close(param, weight)
+
+    def test_get_layout_shards_on_read_without_dtensors(self):
+        """An engine can describe a param dim as segments (here: a padded one, bigger than its checkpoint tensor) and the
+        loader reads only this rank's rows, zero-filling the padding."""
+        with torch.device("meta"):
+            model = DummyRoot(PreTrainedConfig())
+        model.mlp.down_proj.weight = nn.Parameter(torch.empty(3, 2))  # this rank's 3 of 6 padded rows
+
+        weight = torch.arange(10.0).reshape(5, 2)  # the checkpoint: 5 rows, the param is padded to 6
+        mesh = FakeMesh(shape=(2,), rank=1)
+        loaded = {}
+
+        def load_in_place(param, value):
+            loaded["shape"] = tuple(value.shape)
+            param.data.copy_(value)
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            {"mlp.down_proj.weight": weight},
+            LoadStateDictConfig(
+                get_layout=(
+                    lambda name, param, source: (
+                        (mesh, Layout({0: [Segment(6, mesh_dim=0, source_length=5)]}))
+                        if name == "mlp.down_proj.weight"
+                        else None
+                    )
+                ),
+                load_in_place=load_in_place,
+            ),
+        )
+
+        self.assertNotIn("mlp.down_proj.weight", loading_info.missing_keys)
+        self.assertEqual(loaded["shape"], (3, 2))
+        torch.testing.assert_close(model.mlp.down_proj.weight, torch.cat([weight[3:5], weight.new_zeros(1, 2)]))
 
     def test_get_placements_shards_on_read_without_dtensors(self):
         """An engine whose params are plain tensors can describe their layout instead: `get_placements` gives the

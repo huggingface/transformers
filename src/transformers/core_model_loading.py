@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from .distributed.sharding_utils import DtensorShardOperation, _dtensor_from_local_like
+from .distributed.sharding_utils import DtensorShardOperation, LayoutShard, _dtensor_from_local_like
 from .distributed.utils import is_dtensor
 from .integrations.accelerate import get_device, offload_weight
 from .utils import is_env_variable_true
@@ -1962,12 +1962,17 @@ def convert_and_load_state_dict_in_model(
             # 4. Handle DTensor sharding or device_map placement
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
+            layout = (
+                load_config.get_layout(renamed_key, empty_param, source_pattern) if load_config.get_layout else None
+            )
             described = (
                 load_config.get_placements(renamed_key, empty_param, source_pattern)
-                if load_config.get_placements
+                if load_config.get_placements and layout is None
                 else None
             )
-            if described is not None:  # an engine describing its params' layout instead of holding DTensors
+            if layout is not None:  # an engine describing its param dims as segments (padding, replicas, round-robin)
+                sharding_op = LayoutShard(empty_param.shape, *layout)
+            elif described is not None:  # an engine describing its params' layout instead of holding DTensors
                 mesh, placements, shape = described
                 sharding_op = DtensorShardOperation(empty_param.shape if shape is None else shape, mesh, placements)
             elif load_config.get_sharding_op is not None:
