@@ -182,6 +182,10 @@ def _trtllm_bf16_shuffle_(weight: torch.Tensor, is_w13: bool, cache: dict) -> No
         expert.view(-1).copy_(scratch.view(-1))
 
 
+# [scratch] flashinfer's autotuner for the bf16 TRT-LLM MoE tactics, at load (PROTO_TRTLLM_BF16_AUTOTUNE=0: default ones)
+PROTO_TRTLLM_BF16_AUTOTUNE = os.environ.get("PROTO_TRTLLM_BF16_AUTOTUNE", "1") == "1"
+
+
 def trtllm_bf16_prepare_model(model) -> int:
     """Shuffles the experts of the `proto_decode` MoE layers of `model` for TRT-LLM's kernel (Blackwell, bf16, gated
     SiLU, no bias, not expert parallel). Returns the number of modules prepared."""
@@ -219,7 +223,25 @@ def trtllm_bf16_prepare_model(model) -> int:
         _trtllm_bf16_shuffle_(down, False, cache)
         module._proto_trtllm_bf16 = True
         prepared += 1
+        if PROTO_TRTLLM_BF16_AUTOTUNE and prepared == 1:  # every layer has the same shapes
+            _trtllm_bf16_autotune(gate_up, down, model.config.num_experts_per_tok, module._is_expert_parallel)
     return prepared
+
+
+def _trtllm_bf16_autotune(gate_up, down, top_k, expert_parallel):
+    """flashinfer's autotuner picks the TRT-LLM MoE tactics of every power-of-2 token count up to 8192, as vLLM does at
+    engine start (the calls pass `tune_max_num_tokens=8192` to look them up)."""
+    from flashinfer.autotuner import autotune
+
+    num_experts, hidden = gate_up.shape[0], gate_up.shape[2]
+    g = torch.Generator(device=gate_up.device).manual_seed(0)
+    x = torch.randn(8192, hidden, device=gate_up.device, dtype=torch.bfloat16, generator=g)
+    logits = torch.randn(8192, num_experts, device=gate_up.device, generator=g)
+    top_k_logits, top_k_index = torch.topk(logits, top_k, dim=-1)
+    top_k_weights = torch.softmax(top_k_logits, dim=-1)
+    with torch.no_grad(), autotune(True):
+        _trtllm_bf16_experts(gate_up, down, x, top_k_index, top_k_weights, expert_parallel)
+    torch.cuda.synchronize()
 
 
 def _trtllm_bf16_experts(gate_up, down, hidden_states, top_k_index, top_k_weights, expert_parallel):
@@ -241,7 +263,7 @@ def _trtllm_bf16_experts(gate_up, down, hidden_states, top_k_index, top_k_weight
         gemm2_weights=down.view(num_experts, two_i // 2 // 64, hidden, 64),
         num_experts=num_global, top_k=top_k_index.shape[-1], n_group=None, topk_group=None,
         intermediate_size=two_i // 2, local_expert_offset=offset, local_num_experts=num_experts, routing_method_type=1,
-        use_shuffled_weight=True, weight_layout=WeightLayout.BlockMajorK, do_finalize=True,
+        use_shuffled_weight=True, weight_layout=WeightLayout.BlockMajorK, do_finalize=True, tune_max_num_tokens=8192,
     )  # fmt: skip
     return out[0] if isinstance(out, (list, tuple)) else out
 
