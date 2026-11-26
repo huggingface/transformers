@@ -35,7 +35,6 @@ See [details on cl-tohoku repository](https://github.com/cl-tohoku/bert-japanese
 Example of using a model with MeCab and WordPiece tokenization:
 
 ```python
-import torch
 from transformers import AutoModel, AutoTokenizer
 
 bertjapanese = AutoModel.from_pretrained("cl-tohoku/bert-base-japanese", device_map="auto")
@@ -44,10 +43,10 @@ tokenizer = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese")
 ## Input Japanese Text
 line = "吾輩は猫である。"
 
-inputs = tokenizer(line, return_tensors="pt").to(model.device)
+inputs = tokenizer(line, return_tensors="pt").to(bertjapanese.device)
 
 print(tokenizer.decode(inputs["input_ids"][0]))
-[CLS] 吾輩 は 猫 で ある 。 [SEP]
+# [CLS] 吾輩 は 猫 で ある 。 [SEP]
 
 outputs = bertjapanese(**inputs)
 ```
@@ -55,16 +54,18 @@ outputs = bertjapanese(**inputs)
 Example of using a model with Character tokenization:
 
 ```python
+from transformers import AutoModel, AutoTokenizer
+
 bertjapanese = AutoModel.from_pretrained("cl-tohoku/bert-base-japanese-char", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese-char")
 
 ## Input Japanese Text
 line = "吾輩は猫である。"
 
-inputs = tokenizer(line, return_tensors="pt").to(model.device)
+inputs = tokenizer(line, return_tensors="pt").to(bertjapanese.device)
 
 print(tokenizer.decode(inputs["input_ids"][0]))
-[CLS] 吾 輩 は 猫 で あ る 。 [SEP]
+# [CLS] 吾 輩 は 猫 で あ る 。 [SEP]
 
 outputs = bertjapanese(**inputs)
 ```
