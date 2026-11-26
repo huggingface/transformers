@@ -377,7 +377,8 @@ class ResponseParser:
             return
         field = self._spec.fields[self._current]
         value = process_field(self._body, field, self._captures)
-        if self._tool_params:
+        # With `value_parser_by` the model's own output says how to read each value, which the tool schema must not undo
+        if self._tool_params and "value_parser_by" not in field.content_args:
             value = self._coerce_tool_calls(value, typed=field.content in TYPED_STRUCTURED_PARSERS)
         if field.join is not None:
             if not isinstance(value, str):

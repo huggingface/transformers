@@ -313,7 +313,7 @@ def suppress_kernels_logging(func=None, *, layers=None):
     def decorate(fn):
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
-            logger = logging.getLogger("kernels.layer.layer")
+            logger = logging.getLogger("kernels._internals.layer.layer")
 
             # 1. Ignore everything (no specific layers)
             if layers is None:

@@ -116,6 +116,7 @@ else:
             ("lfm3_vl", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("lighton_ocr", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
             ("llava_next_video", {"torchvision": "LlavaNextImageProcessor", "pil": "LlavaNextImageProcessorPil"}),
+            ("llava_onevision1_5", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("lw_detr", {"torchvision": "DeformableDetrImageProcessor", "pil": "DeformableDetrImageProcessorPil"}),
             ("metaclip_2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("mgp-str", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
@@ -736,7 +737,7 @@ class AutoImageProcessor:
 
         if has_remote_code and trust_remote_code and not explicit_local_code:
             image_processor_class = get_class_from_dynamic_module(
-                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
+                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs
             )
             image_processor_class.register_for_auto_class()
             return image_processor_class.from_dict(config_dict, *inputs, **kwargs)
