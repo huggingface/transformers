@@ -92,9 +92,21 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> dict[str, list[int]]:
         layer_counts[INDEXED_ATTENTION] = layer_counts[INDEXED_ATTENTION] + [config.num_hidden_layers]
     return layer_counts
 
-# PROTOTYPES of the engine work package (bench only, off by default), see PagedAttentionMemoryHandler
-_PROTO_NO_READBACK_BUDGET = os.environ.get("CB_PROTO_NO_READBACK_BUDGET", "0") == "1"
-_PROTO_VARLEN_PEAK_GB = float(os.environ.get("CB_PROTO_VARLEN_PEAK_GB", "0"))
+# PROTOTYPES of the engine work package (bench only), see PagedAttentionMemoryHandler. Unset, both follow the model:
+# on for the attention that reads MLA latents in place (below), off otherwise
+_PROTO_NO_READBACK_BUDGET = os.environ.get("CB_PROTO_NO_READBACK_BUDGET")
+_PROTO_VARLEN_PEAK_GB = os.environ.get("CB_PROTO_VARLEN_PEAK_GB")
+
+
+def _reads_latents_in_place(config) -> bool:
+    """[scratch] DeepSeek-V2 / V3's absorbed attention (PROTO_MLA_ABSORB) and GLM-5's sparse path attend on the cached
+    latents in place: no cache token is ever expanded to per-head keys and values. Budgeting that expansion for every
+    cache token held DeepSeek-V3.1 (B300 TP4) to 16.75 GiB of cache with 61 GiB left free: long prompts went in waves
+    of ~30 sequences (TTFT p50 16.2 s); budgeted as read in place, 49.3 GiB holds all 64 (8.5 s), 440 -> 587 tok/s."""
+    model_type = getattr(config, "model_type", None)
+    if model_type in ("deepseek_v2", "deepseek_v3"):
+        return os.environ.get("PROTO_MLA_ABSORB", "1") == "1"
+    return model_type == "glm_moe_dsa"
 
 
 class PagedAttentionCache:
@@ -1007,7 +1019,8 @@ class PagedAttentionMemoryHandler:
             return self.kv_heads_at_peak * find_head_dim(config)
         # PROTOTYPE (CB_PROTO_NO_READBACK_BUDGET=1): the prototype attention reads the latents in place, so the only
         # per-token read-back left is the indexer key of the packed context on varlen batches, one layer at a time
-        if _PROTO_NO_READBACK_BUDGET:
+        no_readback = _PROTO_NO_READBACK_BUDGET == "1" if _PROTO_NO_READBACK_BUDGET else _reads_latents_in_place(config)
+        if no_readback:
             return getattr(config, "index_head_dim", 0)
         # MLA layers read two latents back from the cache and expand them to heads: the projected keys and values,
         # the keys completed with their rotated part and, for flash, the values padded to the key head dimension
@@ -1075,7 +1088,9 @@ class PagedAttentionMemoryHandler:
         overhead = self.trash_bytes
         # PROTOTYPE (CB_PROTO_VARLEN_PEAK_GB=<float>): explicit reservation for the transient peak of the largest varlen
         # (prefill) forward and its graph pool, which the read-back term used to cover by accident
-        overhead += int(_PROTO_VARLEN_PEAK_GB * 1024**3)
+        # (8 GB by default where the read-back is not budgeted: the peak of an 8,192-token DeepSeek-V3.1 / GLM-5.3 prompt)
+        varlen_peak_gb = float(_PROTO_VARLEN_PEAK_GB) if _PROTO_VARLEN_PEAK_GB else 8.0 * _reads_latents_in_place(self.config)
+        overhead += int(varlen_peak_gb * 1024**3)
         if self.model_supports_logits_to_keep:
             a = self.activation_dtype.itemsize
             f = torch.float32.itemsize
