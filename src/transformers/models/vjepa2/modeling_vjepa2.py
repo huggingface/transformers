@@ -25,7 +25,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs, disable_output_capturing
 from .configuration_vjepa2 import VJEPA2Config
 
 
@@ -62,8 +62,9 @@ class VJEPA2WithMaskedInputPredictorOutput(ModelOutput):
 @dataclass
 class VJEPA2WithMaskedInputModelOutput(ModelOutput):
     r"""
-    masked_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `context_mask` is provided which is applied on VJEPA2Encoder outputs):
-        The masked hidden state of the model.
+    masked_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        The encoder output for the patches in `context_mask`, encoded without the other patches. Without
+        `context_mask`, this is `last_hidden_state`.
     predictor_output (`VJEPA2WithMaskedInputPredictorOutput`, *optional*):
         The output from the Predictor module.
     """
@@ -446,12 +447,19 @@ class VJEPA2Encoder(nn.Module):
     def forward(
         self,
         pixel_values_videos: torch.Tensor | None = None,
+        context_mask: list[torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         hidden_states = self.embeddings(pixel_values_videos)
 
+        # Drop the other patches before the layers, keeping the original positions for the rotary embeddings
+        position_mask = None
+        if context_mask is not None:
+            hidden_states = apply_masks(hidden_states, context_mask)
+            position_mask = torch.cat(context_mask, dim=0).to(hidden_states.device)
+
         for i, layer_module in enumerate(self.layer):
-            layer_outputs = layer_module(hidden_states, None, **kwargs)
+            layer_outputs = layer_module(hidden_states, position_mask, **kwargs)
             hidden_states = layer_outputs[0]
 
         hidden_states = self.layernorm(hidden_states)
@@ -603,9 +611,13 @@ class VJEPA2Predictor(nn.Module):
         target_mask: list[torch.Tensor],
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        # mask out the encoder hidden states
-        # this is implemented here as in VJEPA training a separate encoder is used for target
-        encoder_hidden_states = apply_masks(encoder_hidden_states, context_mask)
+        # `encoder_hidden_states` are the encoder outputs of the context patches only, see `VJEPA2Model.forward`
+        if encoder_hidden_states.size(1) != context_mask[0].size(1):
+            raise ValueError(
+                "The predictor expects the encoder outputs of the context patches only, with one token per entry of "
+                f"`context_mask`, but got {encoder_hidden_states.size(1)} tokens for {context_mask[0].size(1)} "
+                "context patches. Encode them with `encoder(pixel_values_videos, context_mask=context_mask)`."
+            )
         _, N_ctxt, D = encoder_hidden_states.shape
         hidden_states, position_masks = self.embeddings(encoder_hidden_states, context_mask, target_mask)
 
@@ -904,31 +916,50 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
     def forward(
         self,
         pixel_values_videos: torch.Tensor,
-        context_mask: list[torch.Tensor] | None = None,
-        target_mask: list[torch.Tensor] | None = None,
+        context_mask: torch.Tensor | list[torch.Tensor] | None = None,
+        target_mask: torch.Tensor | list[torch.Tensor] | None = None,
         skip_predictor: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> VJEPA2WithMaskedInputModelOutput:
         r"""
-        context_mask (`torch.Tensor` with shape `[batch_size, patch_size, 1]`, *optional*):
-            The mask position ids indicating which encoder output patches are going to be exposed to the predictor.
-            By default, this mask is created as torch.arange(N).unsqueeze(0).repeat(B,1), indicating full context
-            available to the predictor.
-        target_mask (`torch.Tensor` with shape `[batch_size, patch_size, 1]`, *optional*):
+        context_mask (`torch.Tensor` or `list[torch.Tensor]` of shape `(batch_size, num_context_patches)`, *optional*):
+            The mask position ids indicating which patches form the context given to the predictor. As in the original
+            implementation, the context patches are encoded on their own, so the context carries no information from
+            the other patches. If neither mask is given, this mask is created as
+            torch.arange(N).unsqueeze(0).repeat(B,1), indicating full context available to the predictor.
+        target_mask (`torch.Tensor` or `list[torch.Tensor]` of shape `(batch_size, num_target_patches)`, *optional*):
             The mask position ids indicating which encoder output patches are going to be used as a prediction target
-            for the predictor. By default, this mask is created as torch.arange(N).unsqueeze(0).repeat(B,1), indicating
-            that the predictor should predict all encoder patches.
+            for the predictor. If neither mask is given, this mask is created as
+            torch.arange(N).unsqueeze(0).repeat(B,1), indicating that the predictor should predict all encoder patches.
         skip_predictor (bool):
             flag to skip the predictor forward, useful if you just need the encoder outputs
         """
         if pixel_values_videos is None:
             raise ValueError("You have to specify pixel_values_videos")
+        if isinstance(context_mask, torch.Tensor):
+            context_mask = [context_mask]
+        if isinstance(target_mask, torch.Tensor):
+            target_mask = [target_mask]
 
         encoder_outputs: BaseModelOutput = self.encoder(
             pixel_values_videos=pixel_values_videos,
             **kwargs,
         )
         sequence_output = encoder_outputs.last_hidden_state
+
+        if context_mask is None:
+            context_hidden_states = sequence_output
+        elif len(context_mask) == 1 and context_mask[0].size(1) == sequence_output.size(1):
+            # The context holds every patch, so encoding it on its own gives `sequence_output`
+            context_hidden_states = apply_masks(sequence_output, context_mask)
+        else:
+            # As in the original implementation, encode the context on its own. Only the call above is recorded
+            with disable_output_capturing():
+                context_hidden_states = self.encoder(
+                    pixel_values_videos=pixel_values_videos,
+                    context_mask=context_mask,
+                    **kwargs,
+                ).last_hidden_state
 
         if context_mask is None and target_mask is None:
             B = pixel_values_videos.size(0)
@@ -938,7 +969,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
 
         if not skip_predictor:
             predictor_outputs: BaseModelOutput = self.predictor(
-                encoder_hidden_states=sequence_output,
+                encoder_hidden_states=context_hidden_states,
                 context_mask=context_mask,
                 target_mask=target_mask,
                 **kwargs,
@@ -954,7 +985,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
 
         encoder_output = VJEPA2WithMaskedInputModelOutput(
             last_hidden_state=sequence_output,
-            masked_hidden_state=apply_masks(sequence_output, context_mask),
+            masked_hidden_state=context_hidden_states,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             predictor_output=predictor_output,
