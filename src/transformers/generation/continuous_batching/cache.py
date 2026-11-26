@@ -309,7 +309,13 @@ class PagedAttentionCache:
             self.use_prefix_sharing = False
         # FA3 checks the new tokens of a whole step against the width of the block table, so it spans max_batch_tokens
         if self.use_varlen_block_table:
-            min_blocks = max(ceil(self.max_batch_tokens / ca.tokens_per_page) for ca in self.cache_allocators.values())
+            # [scratch] not the linear attention allocators: one block (its states) per request whatever the length. With
+            # their 1-token "pages", Granite-4.0-H's table was 8,192 wide: a 64 MiB upload and host reset every step
+            min_blocks = max(
+                ceil(self.max_batch_tokens / ca.tokens_per_page)
+                for ca in self.cache_allocators.values()
+                if not isinstance(ca, LinearAttentionCacheAllocator)
+            )
             self.max_blocks_per_request = max(self.max_blocks_per_request, min_blocks)
             self.max_decode_fast_path_length = self._infer_max_decode_fast_path_length()
         # Helper attribute for the input/output classes
