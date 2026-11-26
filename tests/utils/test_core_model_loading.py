@@ -1389,6 +1389,34 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             WeightConverter(["a", "b"], ["c", "d"], operations=[Concatenate(dim=0)])
         WeightConverter(["a", "b"], ["c", "d"], operations=[ErnieFuseAndSplitTextVisionExperts()])
 
+    def test_engine_param_class_is_kept(self):
+        """An engine owning its params (e.g. vLLM) passes its model, whose params are its own classes: the loader
+        keeps them, and their attributes, instead of downgrading them to `nn.Parameter`, and sets the loaded tensor
+        as is."""
+
+        class EngineParameter(nn.Parameter):
+            def __new__(cls, data=None, weight_loader=None, output_dim=None):
+                param = super().__new__(cls, data)
+                param.weight_loader, param.output_dim = weight_loader, output_dim
+                return param
+
+        with torch.device("meta"):  # like an engine's own model: built on meta, with its param classes
+            model = DummyRoot(PreTrainedConfig())
+        model.mlp.down_proj.weight = EngineParameter(model.mlp.down_proj.weight, "my_loader", output_dim=1)
+
+        weight = torch.arange(4.0).reshape(2, 2)
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model, {"mlp.down_proj.weight": weight}, LoadStateDictConfig()
+        )
+
+        self.assertNotIn("mlp.down_proj.weight", loading_info.missing_keys)
+        param = model.mlp.down_proj.weight
+        self.assertIs(type(param), EngineParameter)
+        self.assertEqual((param.weight_loader, param.output_dim), ("my_loader", 1))
+        self.assertEqual(param.device.type, "cpu")
+        self.assertIs(param, model.mlp.down_proj._parameters["weight"])
+        torch.testing.assert_close(param, weight)
+
     def test_copy_keeps_force_cpu(self):
         converter = WeightConverter("a", "b", operations=[Concatenate(dim=0)], force_cpu=True)
         self.assertTrue(converter.copy("c", "d", operations=converter.operations).force_cpu)
