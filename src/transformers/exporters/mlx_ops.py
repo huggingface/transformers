@@ -230,6 +230,19 @@ def _rms_norm(x, normalized_shape, weight=None, eps=None):
     return out if weight is None else out * weight
 
 
+def rope(x, positions, inv_freq, scaling):
+    """`mx.fast.rope`, which `mlx_fusions` writes in place of a rotary embedding's ops. Each token is its own row,
+    rotated at its own position (an offset per row): exact for any positions, padded or packed ones included."""
+    batch, heads, length, head_dim = x.shape
+    offsets = mx.broadcast_to(positions, (batch, length)).reshape(-1).astype(mx.int32)
+    rows = x.transpose(0, 2, 1, 3).reshape(batch * length, heads, 1, head_dim)
+    rows = mx.fast.rope(
+        rows, head_dim, traditional=False, base=None, scale=1.0, offset=offsets, freqs=1 / inv_freq.astype(mx.float32)
+    )
+    out = rows.reshape(batch, length, heads, head_dim).transpose(0, 2, 1, 3)
+    return out if scaling == 1.0 else out * scaling
+
+
 def _identity(x, *_, **__):
     return x
 
@@ -382,6 +395,7 @@ if is_mlx_available():
         # Fusions (`mlx_fusions`)
         "transformers.exporters.mlx_ops.rms_norm": rms_norm,
         "transformers.exporters.mlx_ops.swiglu": swiglu,
+        "transformers.exporters.mlx_ops.rope": rope,
     }
 
 

@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ..utils.import_utils import is_torch_available
-from .mlx_ops import rms_norm, swiglu
+from .mlx_ops import rms_norm, rope, swiglu
 
 
 if is_torch_available():
@@ -37,6 +37,7 @@ def fuse_for_mlx(graph: Graph) -> None:
         graph.erase_node(node)
     _fuse_rms_norm(graph)
     _fuse_swiglu(graph)
+    _fuse_rope(graph)
     _drop_repeat_kv(graph)
     graph.eliminate_dead_code()
 
@@ -122,3 +123,79 @@ def _drop_repeat_kv(graph: Graph) -> None:
                 continue
             args[index] = states
         sdpa.args = tuple(args)
+
+
+def _strip(node: Node, *targets) -> Node:
+    """`node` without the leading ops in `targets` (an `unsqueeze`, a cast) between it and what it computes."""
+    while isinstance(node, torch.fx.Node) and node.target in targets:
+        node = node.args[0]
+    return node
+
+
+def _rotary_angle(table: Node, function) -> tuple | None:
+    """`(angles, scaling)` for `table = function(angles) * scaling` (a rotary embedding's cos or sin), else `None`."""
+    aten = torch.ops.aten
+    table = _strip(table, aten.unsqueeze.default, aten._to_copy.default)
+    scaling = 1.0
+    if table.target == aten.mul.Tensor and isinstance(table.args[1], float):
+        table, scaling = table.args[0], table.args[1]
+    if table.target != function:
+        return None
+    return table.args[0], scaling
+
+
+def _fuse_rope(graph: Graph) -> None:
+    """`x * cos + rotate_half(x) * sin`, with `cos` and `sin` of `positions * inv_freq` (a rotary embedding over the
+    whole head), as one `mx.fast.rope`."""
+    aten = torch.ops.aten
+    for add in [node for node in graph.nodes if node.target == aten.add.Tensor]:
+        products = [arg for arg in add.args if isinstance(arg, torch.fx.Node) and arg.target == aten.mul.Tensor]
+        if len(products) != 2:
+            continue
+        rotated = next(
+            (p for p in products if any(getattr(a, "target", None) == aten.cat.default for a in p.args)), None
+        )
+        if rotated is None:
+            continue
+        direct = products[1] if rotated is products[0] else products[0]
+        halves = next(a for a in rotated.args if getattr(a, "target", None) == aten.cat.default)
+        sin_table = rotated.args[1] if rotated.args[0] is halves else rotated.args[0]
+        # rotate_half(x): cat(-x[..., h:], x[..., :h])
+        second, first = halves.args[0]
+        if second.target != aten.neg.default:
+            continue
+        second = second.args[0]
+        if (
+            second.target != aten.slice.Tensor
+            or first.target != aten.slice.Tensor
+            or second.args[0] is not first.args[0]
+        ):
+            continue
+        x = first.args[0]
+        if x not in direct.args:
+            continue
+        cos_table = direct.args[1] if direct.args[0] is x else direct.args[0]
+        cos_angle, sin_angle = _rotary_angle(cos_table, aten.cos.default), _rotary_angle(sin_table, aten.sin.default)
+        if cos_angle is None or sin_angle is None or cos_angle != sin_angle:
+            continue
+        angles, scaling = cos_angle
+        # angles = cat([f, f]), f = float(positions[..., None]) * inv_freq
+        if angles.target != aten.cat.default or len(set(angles.args[0])) != 1:
+            continue
+        frequencies = angles.args[0][0]
+        if frequencies.target != aten.mul.Tensor:
+            continue
+        inv_freq = next(
+            (a for a in frequencies.args if isinstance(a, torch.fx.Node) and a.meta["val"].dim() == 1), None
+        )
+        positions = next((a for a in frequencies.args if a is not inv_freq), None)
+        positions = _strip(positions, aten._to_copy.default)
+        if inv_freq is None or positions.target != aten.unsqueeze.default:
+            continue
+        positions = positions.args[0]
+        if positions.meta["val"].dim() != 2 or 2 * inv_freq.meta["val"].shape[0] != x.meta["val"].shape[-1]:
+            continue
+        with graph.inserting_before(add):
+            fused = graph.call_function(rope, (x, positions, inv_freq, scaling))
+        fused.meta = dict(add.meta)
+        add.replace_all_uses_with(fused)
