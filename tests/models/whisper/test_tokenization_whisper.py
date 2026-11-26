@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import tempfile
 import unittest
 
 import numpy as np
@@ -344,6 +346,18 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             encoded_input, skip_special_tokens=True, basic_normalize=True, remove_diacritics=True
         )
         self.assertEqual(decoded_output_diacritics, expected_output_diacritics)
+
+    def test_english_spelling_normalizer_survives_save_pretrained(self):
+        # `setUpClass` saved the hub tokenizer to `tmpdirname`, which `get_tokenizer` reloads.
+        tokenizer = self.get_tokenizer()
+        self.assertEqual(tokenizer.normalize("colour"), "color")
+
+    def test_save_vocabulary_without_english_spelling_normalizer(self):
+        tokenizer = self.get_tokenizer()
+        tokenizer.english_spelling_normalizer = None
+        with tempfile.TemporaryDirectory() as tmpdir:
+            saved_files = tokenizer.save_vocabulary(tmpdir)
+            self.assertTrue(all(os.path.isfile(path) for path in saved_files))
 
     def test_decode_asr_with_word_level_timestamps(self):
         # fmt: off
