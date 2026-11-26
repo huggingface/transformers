@@ -351,6 +351,8 @@ class ChatCompletionHandler(BaseHandler):
             usage (`CompletionUsage`, *optional*): Token usage: the chunk is then the usage chunk, the last one, with no
                 choices (``stream_options.include_usage``).
             reasoning_content (`str`, *optional*): Reasoning/thinking delta (OpenAI-compatible extension).
+            created (`int`, *optional*): When the stream started, in seconds since the epoch: the same for all its
+                chunks. Defaults to now.
 
         Returns:
             `str`: A formatted SSE event string.
