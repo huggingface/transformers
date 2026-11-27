@@ -253,7 +253,7 @@ class MobileNetV2PreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = False
-    _no_split_modules = []
+    _no_split_modules = ["MobileNetV2InvertedResidual", "MobileNetV2DeepLabV3Plus"]
 
 
 @auto_docstring

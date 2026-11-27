@@ -439,7 +439,7 @@ class SamHQPreTrainedModel(PreTrainedModel):
     base_model_prefix = "sam_hq"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["SamHQVisionLayer"]
+    _no_split_modules = ["SamHQVisionLayer", "SamHQTwoWayAttentionBlock"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
 
