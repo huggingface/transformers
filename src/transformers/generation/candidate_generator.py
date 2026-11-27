@@ -1157,6 +1157,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
 
         # In case we didn't find a match return the input sequence unchanged, reverts back to autoregressive decoding
         if not match_found or chosen_ids is None or len(chosen_ids) == 0:
+            # Keep track of the last drafted length to rollback the Cache
             self._last_length = input_ids.shape[-1]
             return input_ids, None
 
