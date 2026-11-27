@@ -244,7 +244,7 @@ class HYV4Indexer(DeepseekV32Indexer):
         k = groups.squeeze(2)
 
         if cache is not None:
-            k = cache.layers[self.layer_idx].update_compressed_states(k, attention_mask, seq_len)
+            k = cache.update_compressed_states(k, self.layer_idx, attention_mask, seq_len)
 
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
         scores = F.relu(scores)

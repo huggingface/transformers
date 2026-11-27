@@ -413,9 +413,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         batch_size, seq_length, _ = hidden_states.shape
         hidden_shape = (batch_size, seq_length, -1, self.index_head_dim)
         group_size = self.compress_ratio
-
-        cache_layer = cache.layers[self.layer_idx] if cache is not None else None
-        tail = cache_layer.compression_tails.get("indexer") if cache_layer is not None else None
+        tail = cache.get_compression_tail(self.layer_idx) if cache is not None else None
 
         cos, sin = position_embeddings
         qk = self.index_qk_proj(hidden_states)
@@ -442,8 +440,10 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
             k.unsqueeze(2), cos=cos_groups[:, :, 0], sin=sin_groups[:, :, 0], unsqueeze_dim=2
         ).squeeze(2)
 
-        if cache_layer is not None:
-            k = cache_layer.update_compressed_states(k, attention_mask, seq_length, group_size=group_size, tail=tail)
+        if cache is not None:
+            k = cache.update_compressed_states(
+                k, self.layer_idx, attention_mask, seq_length, group_size=group_size, tail=tail
+            )
 
         # Score groups of tokens
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))

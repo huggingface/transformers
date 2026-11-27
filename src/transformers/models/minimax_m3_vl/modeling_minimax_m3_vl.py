@@ -449,10 +449,8 @@ class MiniMaxM3VLIndexer(nn.Module):
         idx_q, idx_k = apply_rotary_pos_emb(idx_q, idx_k, cos[..., : self.head_dim], sin[..., : self.head_dim])
 
         if cache is not None:
-            idx_k = (
-                cache.layers[self.layer_idx]
-                .update_compressed_states(idx_k.squeeze(1), physical_counts, q_len)
-                .unsqueeze(1)
+            idx_k = cache.update_compressed_states(idx_k.squeeze(1), self.layer_idx, physical_counts, q_len).unsqueeze(
+                1
             )
 
         k_len = idx_k.shape[2]

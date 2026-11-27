@@ -920,9 +920,7 @@ class Glm5NextTextIndexer(nn.Module):
         """
         batch_size, seq_len, _ = hidden_states.shape
         group_size = self.index_kpool
-
-        cache_layer = cache.layers[self.layer_idx] if cache is not None else None
-        tail = cache_layer.compression_tails.get("indexer") if cache_layer is not None else None
+        tail = cache.get_compression_tail(self.layer_idx) if cache is not None else None
 
         q = self.wq_b(q_resid).view(batch_size, seq_len, self.n_heads, self.head_dim)
         k = self.k_norm(self.wk(hidden_states))
@@ -937,8 +935,10 @@ class Glm5NextTextIndexer(nn.Module):
         weights = (gates.float() + self.index_kpool_compress_ape.float()).softmax(dim=2)
         k = (weights.to(keys.dtype) * keys).sum(dim=2)
 
-        if cache_layer is not None:
-            k = cache_layer.update_compressed_states(k, attention_mask, seq_len, group_size=group_size, tail=tail)
+        if cache is not None:
+            k = cache.update_compressed_states(
+                k, self.layer_idx, attention_mask, seq_len, group_size=group_size, tail=tail
+            )
 
         # Score groups of tokens
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))

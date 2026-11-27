@@ -233,8 +233,7 @@ class DeepseekV4Indexer(nn.Module):
         cache: Cache | None = None,
     ) -> torch.LongTensor:
         batch, seq_length, _ = hidden_states.shape
-        cache_layer = cache.layers[self.layer_idx] if cache is not None else None
-        tail = cache_layer.compression_tails.get("indexer") if cache_layer is not None else None
+        tail = cache.get_compression_tail(self.layer_idx) if cache is not None else None
 
         kv, positions, tail = compress_kv(
             self.kv_proj(hidden_states),
@@ -248,9 +247,9 @@ class DeepseekV4Indexer(nn.Module):
         cos, sin = self.rotary_emb(kv, position_ids=positions, layer_type="compress")
         kv = apply_rotary_pos_emb(kv.unsqueeze(1), cos, sin).squeeze(1)
 
-        if cache_layer is not None:
-            kv = cache_layer.update_compressed_states(
-                kv, attention_mask, seq_length, group_size=self.compress_rate, name="indexer", tail=tail
+        if cache is not None:
+            kv = cache.update_compressed_states(
+                kv, self.layer_idx, attention_mask, seq_length, group_size=self.compress_rate, tail=tail
             )
 
         cos, sin = self.rotary_emb(hidden_states, position_ids=position_ids, layer_type="compress")
@@ -309,8 +308,7 @@ class DeepseekV4Compressor(nn.Module):
         cache: Cache | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         seq_length = hidden_states.shape[1]
-        cache_layer = cache.layers[self.layer_idx] if cache is not None else None
-        tail = cache_layer.compression_tails.get("compressor") if cache_layer is not None else None
+        tail = cache.get_compression_tail(self.layer_idx, name="compressor") if cache is not None else None
 
         kv, positions, tail = compress_kv(
             self.kv_proj(hidden_states),
@@ -324,9 +322,15 @@ class DeepseekV4Compressor(nn.Module):
         cos, sin = self.rotary_emb(kv, position_ids=positions, layer_type="compress")
         kv = apply_rotary_pos_emb(kv.unsqueeze(1), cos, sin).squeeze(1)
 
-        if cache_layer is not None:
-            kv = cache_layer.update_compressed_states(
-                kv, attention_mask, seq_length, group_size=self.compress_rate, name="compressor", tail=tail
+        if cache is not None:
+            kv = cache.update_compressed_states(
+                kv,
+                self.layer_idx,
+                attention_mask,
+                seq_length,
+                group_size=self.compress_rate,
+                name="compressor",
+                tail=tail,
             )
 
         if self.indexer is not None:

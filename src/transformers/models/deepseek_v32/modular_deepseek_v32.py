@@ -262,7 +262,7 @@ class DeepseekV32Indexer(nn.Module):
 
         # No compression, as each token is taken raw
         if cache is not None:
-            k = cache.layers[self.layer_idx].update_compressed_states(k, attention_mask, seq_len)
+            k = cache.update_compressed_states(k, self.layer_idx, attention_mask, seq_len)
 
         # Score each token
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
