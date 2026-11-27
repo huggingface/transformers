@@ -15,6 +15,7 @@
 
 import copy
 import json
+import numbers
 import os
 import warnings
 from abc import ABC, abstractmethod
@@ -1250,6 +1251,16 @@ class GenerationConfig(PushToHubMixin):
         if ignore_metadata:
             for metadata_field in METADATA_FIELDS:
                 config_dict.pop(metadata_field, None)
+
+        # JSON can't hold tuple keys: save a valid dict `sequence_bias` in its list format, sorted for `__eq__`/`__hash__`
+        sequence_bias = config_dict.get("sequence_bias")
+        if isinstance(sequence_bias, dict) and all(
+            isinstance(ids, tuple) and ids and all(isinstance(i, numbers.Integral) for i in ids)
+            for ids in sequence_bias
+        ):
+            config_dict["sequence_bias"] = [
+                [[int(i) for i in ids], bias] for ids, bias in sorted(sequence_bias.items())
+            ]
 
         def convert_keys_to_string(obj):
             if isinstance(obj, dict):
