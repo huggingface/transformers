@@ -4050,9 +4050,10 @@ class GenerationMixin(ContinuousMixin):
                 )
             else:
                 candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
-            candidate_input_ids = candidate_input_ids.to(self.device)
+            # Keep the candidates with `input_ids`: `prepare_inputs_for_generation` moves them to the model device
+            candidate_input_ids = candidate_input_ids.to(input_ids.device)
             if candidate_logits is not None:
-                candidate_logits = candidate_logits.to(self.device)
+                candidate_logits = candidate_logits.to(input_ids.device)
 
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
 
