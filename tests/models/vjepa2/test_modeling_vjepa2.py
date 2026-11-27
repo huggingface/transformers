@@ -174,6 +174,35 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_context_does_not_see_masked_out_patches(self):
+        # 6 frames with a tubelet size of 2 give 3 patches. Frames 0-3 are the context and frames 4-5 the target
+        model_tester = VJEPA2ModelTester(self, num_frames=6)
+        config, pixel_values_videos = model_tester.prepare_config_and_inputs()
+        model = VJEPA2Model(config).to(torch_device).eval()
+
+        batch_size = pixel_values_videos.shape[0]
+        positions = torch.arange(3, device=torch_device).repeat(batch_size, 1)
+        context_mask, target_mask = [positions[:, :2]], [positions[:, 2:]]
+        pixel_values_videos = pixel_values_videos.to(torch_device)
+        changed_pixel_values_videos = pixel_values_videos.clone()
+        changed_pixel_values_videos[:, 4:] = floats_tensor(changed_pixel_values_videos[:, 4:].shape).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(pixel_values_videos, context_mask=context_mask, target_mask=target_mask)
+            changed_outputs = model(changed_pixel_values_videos, context_mask=context_mask, target_mask=target_mask)
+            context_alone = model(pixel_values_videos[:, :4], skip_predictor=True)
+            reordered = model.encoder(pixel_values_videos, context_mask=[positions[:, [2, 0, 1]]])
+
+        # Changing the target frames must change neither the context nor the prediction made from it
+        torch.testing.assert_close(outputs.masked_hidden_state, changed_outputs.masked_hidden_state)
+        torch.testing.assert_close(
+            outputs.predictor_output.last_hidden_state, changed_outputs.predictor_output.last_hidden_state
+        )
+        # The context is encoded exactly as if the context frames were the whole clip
+        torch.testing.assert_close(outputs.masked_hidden_state, context_alone.last_hidden_state)
+        # Masked patches keep their positions, so reordering all patches only reorders the outputs
+        torch.testing.assert_close(reordered.last_hidden_state, outputs.last_hidden_state[:, [2, 0, 1]])
+
     @unittest.skip(reason="VJEPA2 does not support feedforward chunking yet")
     def test_feed_forward_chunking(self):
         pass

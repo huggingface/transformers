@@ -21,6 +21,7 @@ from __future__ import annotations
 import inspect
 import threading
 from collections.abc import Callable
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import wraps
@@ -115,6 +116,21 @@ class CompileableContextVar:
 
 # Thread/context-safe global variable
 _active_collector = CompileableContextVar("output_collector")
+
+
+@contextmanager
+def disable_output_capturing():
+    """Run the enclosed forward calls without recording their outputs, e.g. a second submodule call in a forward."""
+    previous_collector = _active_collector.get()
+    token = _active_collector.set(None)
+    try:
+        yield
+    finally:
+        # While compiling, the collector is a plain global variable and `set` returns no token
+        if token is None:
+            _active_collector.set(previous_collector)
+        else:
+            _active_collector.reset(token)
 
 
 def install_output_capuring_hook(

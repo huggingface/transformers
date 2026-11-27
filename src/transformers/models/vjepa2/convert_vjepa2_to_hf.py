@@ -25,7 +25,6 @@ from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import VJEPA2Config, VJEPA2Model, VJEPA2VideoProcessor
-from transformers.models.vjepa2.modeling_vjepa2 import apply_masks
 
 
 HUB_REPO = "https://github.com/facebookresearch/vjepa2"
@@ -289,7 +288,7 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         context_mask = [mask[:, :window_size].repeat((B, 1))]
         predictor_mask = [mask[:, window_size : window_size * 2].repeat((B, 1))]
         original_predictor_outputs = original_predictor(
-            apply_masks(original_encoder_outputs, context_mask),
+            original_encoder(pixel_values_videos.permute(0, 2, 1, 3, 4), masks=context_mask),
             context_mask,
             predictor_mask,
         )
