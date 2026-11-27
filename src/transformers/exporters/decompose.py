@@ -596,8 +596,18 @@ def decompose_multimodal(
         calls = captured_features.get(name) or recorded_features.get(name) or []
         if not calls:
             continue
+        # The getter's own names: `generate` passes what it precomputes prefixed with the modality (`image_cu_seqlens`),
+        # which the getter takes unprefixed when it has no parameter of that name (`accepts_precomputed_kwargs`)
+        prefix = spec.token_field.removesuffix("token_id")
+        parameters = inspect.signature(getattr(owner, getter)).parameters
         feature_inputs = {
-            ("grid_thw" if key == spec.grid_key else key): value
+            (
+                "grid_thw"
+                if key == spec.grid_key
+                else key.removeprefix(prefix)
+                if key.startswith(prefix) and key not in parameters
+                else key
+            ): value
             for key, value in calls[-1].items()
             if value is not None
         }
