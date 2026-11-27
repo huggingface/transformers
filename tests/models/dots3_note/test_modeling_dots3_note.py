@@ -83,6 +83,7 @@ class Dots3NoteTextModelTester(CausalLMModelTester):
 class Dots3NoteTextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Dots3NoteTextModelTester
     test_all_params_have_gradient = False  # The shared DSA indexer has no auxiliary training loss.
+    is_compression_based = True
 
     @unittest.skip("DSA/SWA require attention masks, which the Flash-only SDPA backend does not support.")
     def test_sdpa_can_dispatch_on_flash(self):
@@ -92,14 +93,6 @@ class Dots3NoteTextModelTest(CausalLMModelTest, unittest.TestCase):
         super().setUp()
         # DSA and SWA have different head counts, so no global num_attention_heads exists.
         self.config_tester.common_properties = ["hidden_size", "num_hidden_layers"]
-
-    @unittest.skip("DSA hard top-k selection is sensitive to sequence packing, as in GLM-MoE-DSA.")
-    def test_eager_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("DSA hard top-k selection is sensitive to sequence packing, as in GLM-MoE-DSA.")
-    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
-        pass
 
 
 @require_torch
@@ -246,6 +239,7 @@ class Dots3NoteAudio2TextModelTester(ALMModelTester):
 class Dots3NoteVision2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Dots3NoteVision2TextModelTester
     test_all_params_have_gradient = False
+    is_compression_based = True
     additional_model_inputs = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
     # TODO: Cover packed/variable-resolution feature shapes instead of batch-first assertions.
     skip_test_image_features_output_shape = True
@@ -277,6 +271,7 @@ class Dots3NoteVision2TextModelTest(VLMModelTest, unittest.TestCase):
 @require_torch
 class Dots3NoteAudio2TextModelTest(ALMModelTest, unittest.TestCase):
     model_tester_class = Dots3NoteAudio2TextModelTester
+    is_compression_based = True
     test_all_params_have_gradient = False
     additional_model_inputs = ["chunk_sample_lengths"]
 

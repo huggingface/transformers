@@ -209,18 +209,22 @@ class Step3p7TextConfig(PreTrainedConfig):
             if num_nextn_predict_layers:
                 self.mtp_layer_types = ["full_attention"] * num_nextn_predict_layers
 
+        # Legacy hub-config aliases for `mlp_layer_types`
+        moe_layers_enum = kwargs.pop("moe_layers_enum", None)
+        moe_layer_freq = kwargs.pop("moe_layer_freq", None)
         if self.mlp_layer_types is None:
-            # `moe_layers_enum` is the legacy hub-config alias for `mlp_layer_types`, read here only
-            # Derived over the padded range so the trailing MTP layers get an `mtp_mlp_layer_types` entry.
-            moe_layers_enum = kwargs.pop("moe_layers_enum", None)
             if moe_layers_enum is not None:
                 items = moe_layers_enum.split(",") if isinstance(moe_layers_enum, str) else moe_layers_enum
                 moe_set = {int(i) for i in items if str(i).strip()}
+                mlp_layer_types = ["sparse" if i in moe_set else "dense" for i in range(padded)]
+            elif moe_layer_freq is not None:
+                mlp_layer_types = ["sparse" if f else "dense" for f in moe_layer_freq]
             else:
                 moe_set = set(range(3, n))
-            mlp_layer_types = ["sparse" if i in moe_set else "dense" for i in range(padded)]
+                mlp_layer_types = ["sparse" if i in moe_set else "dense" for i in range(padded)]
+
             self.mlp_layer_types = mlp_layer_types[:n]
-            if num_nextn_predict_layers:
+            if num_nextn_predict_layers and len(mlp_layer_types) == padded:
                 self.mtp_mlp_layer_types = mlp_layer_types[n:padded]
 
         if self.num_sliding_attention_heads is None:
@@ -248,43 +252,16 @@ class Step3p7TextConfig(PreTrainedConfig):
             self.query_pre_attn_scalar = self.head_dim
 
         # `rope_theta`/`partial_rotary_factors` are per-layer (or `rope_theta` a single scalar shared
-        # by all layers). Pop before `super().__post_init__()`: its RoPE handling only supports one
+        # by all layers). Pop before `PreTrainedConfig.__post_init__()`: its RoPE handling only supports one
         # global scalar and would corrupt `self.rope_parameters` with a list.
         rope_theta = kwargs.pop("rope_theta", self.default_theta)
         partial_rotary_factors = kwargs.pop("partial_rotary_factors", None)
         rope_scaling = kwargs.pop("rope_scaling", None)
-        sparse_cfg = kwargs.pop("sparse_attention_config", None) or {}
-        moe_layer_freq = kwargs.pop("moe_layer_freq", None)
+
         super().__post_init__(**kwargs)
-        # Checkpoint declares "swigluoai", but the gate is computed inline from swiglu_alpha/limit; hidden_act
-        # is only the pointwise fallback and must be a real ACT2FN key, so normalize it to silu.
+
+        # Checkpoint declares "swigluoai", but the gate is computed inline, so normalize it to silu.
         self.hidden_act = "silu"
-
-        for flat, legacy in {
-            "index_n_heads": "sparse_num_index_heads",
-            "index_head_dim": "sparse_index_dim",
-            "index_block_size": "sparse_block_size",
-            "index_topk_blocks": "sparse_topk_blocks",
-            "index_local_blocks": "sparse_local_block",
-        }.items():
-            if legacy in sparse_cfg:
-                setattr(self, flat, sparse_cfg[legacy])
-
-        # `layer_types` is the canonical per-layer attention dispatch: it tells
-        # `DynamicCache(config=...)` which layers want the sparse cache and tells
-        # `Step3p7Attention` which layers build a sparse Lightning Indexer.
-        if self.layer_types is None and "sparse_attention_freq" in sparse_cfg:
-            self.layer_types = [
-                "minimax_m3_sparse" if f else "full_attention" for f in sparse_cfg["sparse_attention_freq"]
-            ]
-        if self.layer_types is None:
-            self.layer_types = ["full_attention"] * self.num_hidden_layers
-
-        # `mlp_layer_types` is the per-layer MLP dispatch read by `Step3p7DecoderLayer`:
-        if self.mlp_layer_types is None and moe_layer_freq is not None:
-            self.mlp_layer_types = ["sparse" if f else "dense" for f in moe_layer_freq]
-        if self.mlp_layer_types is None:
-            self.mlp_layer_types = ["sparse"] * self.num_hidden_layers
 
         # `DSV4Config` pattern: if `rope_parameters` is already resolved per type (reload), keep
         # only those sub-dicts. Otherwise build fresh, taking each type's value from any one of its layers (they all agree).
@@ -304,6 +281,10 @@ class Step3p7TextConfig(PreTrainedConfig):
                 self.rope_parameters[layer_type] = params
             if rope_scaling and "full_attention" in self.rope_parameters:
                 self.rope_parameters["full_attention"].update(rope_scaling)
+
+    @property
+    def index_group_size(self) -> int:
+        return 1
 
 
 @auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")

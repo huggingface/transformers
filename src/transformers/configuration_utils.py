@@ -71,7 +71,6 @@ ALLOWED_ATTN_LAYER_TYPES = (
     "indexed_attention",  # For indexer-based attentions
     "compressed_sparse_attention",  # CSA, used in deepseek_v4
     "heavily_compressed_attention",  # HCA, used in deepseek_v4
-    "minimax_m3_sparse",  # lightning-index sparse attention, used in minimax_m3_vl
     "conv",
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
     "hybrid",  # layers that combine attention + mamba/linear-attention-shaped states (zamba2, falcon_h1, zaya1)
@@ -96,6 +95,7 @@ _LEGACY_LAYER_TYPE_REMAP = {
     "attention": "full_attention",
     "deepseek_sparse_attention": "indexed_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32, ...)
     "qwen_sparse_attention": "indexed_attention",  # QSA with block-compressed indexer keys (Qwen4-Exp)
+    "minimax_m3_sparse": "indexed_attention",  # Minimax lightning indexer (minimax m3 vl)
 }
 
 

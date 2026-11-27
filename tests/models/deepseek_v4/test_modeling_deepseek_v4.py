@@ -16,6 +16,7 @@ import tempfile
 import unittest
 
 import pytest
+from parameterized import parameterized
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
@@ -32,6 +33,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...test_modeling_common import ids_tensor
+
 
 if is_torch_available():
     import torch
@@ -40,6 +43,7 @@ if is_torch_available():
         AutoConfig,
         AutoModelForCausalLM,
         AutoTokenizer,
+        DeepseekV4ForCausalLM,
         DeepseekV4Model,
         FineGrainedFP8Config,
     )
@@ -58,45 +62,44 @@ def _v4_chat(prompt: str) -> str:
 class DeepseekV4ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = DeepseekV4Model
+        causal_lm_class = DeepseekV4ForCausalLM
 
     small_config_overrides = {
-        # Overrides of the shared causal LM defaults.
         "hidden_size": 64,
         "num_attention_heads": 4,
         "num_key_value_heads": 1,
         "num_hidden_layers": 2,
-        "num_experts_per_tok": 2,
-        "moe_intermediate_size": 64,
         "max_position_embeddings": 64,
-        # V4-only knobs.
         "head_dim": 32,
-        # qk_rope_head_dim=8 / head_dim=32
         "partial_rotary_factor": 0.25,
         "q_lora_rank": 32,
         "o_groups": 2,
         "o_lora_rank": 16,
-        "n_routed_experts": 4,
-        "n_shared_experts": 1,
-        # All "moe" (no "hash_moe") so inputs_embeds-only generation tests in
-        # CausalLMModelTest exercise the model without hitting the hash router's
-        # input_ids requirement. A dedicated test covers the hash path.
-        "mlp_layer_types": ["moe", "moe"],
-        "layer_types": ["heavily_compressed_attention", "compressed_sparse_attention"],
-        "sliding_window": 8,
-        "hc_mult": 2,
-        "hc_sinkhorn_iters": 3,
-        "hc_eps": 1e-06,
-        "index_n_heads": 2,
-        "index_head_dim": 16,
-        "index_topk": 2,
-        "num_nextn_predict_layers": 0,
-        "scoring_func": "sqrtsoftplus",
-        "routed_scaling_factor": 1.5,
-        "swiglu_limit": 10.0,
         "rope_theta": 10000.0,
         "compress_rope_theta": 160000.0,
         "attention_bias": False,
         "attention_dropout": 0.0,
+        # MoE
+        "n_routed_experts": 4,
+        "n_shared_experts": 1,
+        "num_experts_per_tok": 2,
+        "moe_intermediate_size": 64,
+        "scoring_func": "sqrtsoftplus",
+        "routed_scaling_factor": 1.5,
+        "swiglu_limit": 10.0,
+        # Hash routing requires input_ids.
+        "mlp_layer_types": ["moe", "moe"],
+        # Compression
+        "layer_types": ["heavily_compressed_attention", "compressed_sparse_attention"],
+        "sliding_window": 8,
+        "index_n_heads": 2,
+        "index_head_dim": 16,
+        "index_topk": 2,
+        # mHC
+        "hc_mult": 2,
+        "hc_sinkhorn_iters": 3,
+        "hc_eps": 1e-06,
+        "num_nextn_predict_layers": 0,
     }
 
 
@@ -104,12 +107,10 @@ class DeepseekV4ModelTester(CausalLMModelTester):
 class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = DeepseekV4ModelTester
 
-    # Indexer parameters only influence the argmax over compressed positions (``topk``),
-    # which is non-differentiable — their gradients flow through a separate objective in
-    # the upstream training recipe, not the main causal-LM loss.
+    # Not every expert receives a gradient, and indexer selection is non-differentiable.
     test_all_params_have_gradient = False
+    is_compression_based = True
 
-    # No SequenceClassification / TokenClassification / QA heads on V4.
     def is_pipeline_test_to_skip(self, *args, **kwargs):
         return True
 
@@ -133,121 +134,208 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sample_generate_dict_output(self):
         super().test_sample_generate_dict_output()
 
-    @unittest.skip(
-        "V4's `DeepseekV4GroupedLinear` uses `torch.bmm` for the per-group matmul; "
-        "torchao's Float8Tensor only fast-paths `F.linear` (bmm needs the optional `mslk` "
-        "kernel) so the quantized-TP path fails. A custom V4 FP8 path will land later."
-    )
+    @unittest.skip("GroupedLinear uses torch.bmm, which requires optional mslk support for Float8Tensor.")
     def test_tp_generation_quantized(self):
+        pass
+
+    @unittest.skip(reason="DSV4 does not support packed sequences yet.")
+    def test_eager_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         pass
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
     ):
-        # V4 layers with a Compressor attend to extra pooled positions, so the KV
-        # length varies per layer. We only check the shape invariants: batched, same
-        # number-of-heads and query-length; the KV-length axis may differ across layers.
-        import torch  # noqa: PLC0415
-
+        # Compressed entries extend the KV axis by a different amount per layer.
         self.assertIsInstance(attentions, tuple)
-        self.assertEqual(len(attentions), (output_length - prompt_length))
-        for _, iter_attentions in enumerate(attentions):
+        self.assertEqual(len(attentions), output_length - prompt_length)
+
+        for iter_attentions in attentions:
             self.assertIsInstance(iter_attentions, tuple)
+            self.assertEqual(len(iter_attentions), config.num_hidden_layers)
             for layer_attention in iter_attentions:
                 self.assertIsInstance(layer_attention, torch.Tensor)
-                self.assertEqual(layer_attention.shape[0], batch_size)
-                self.assertEqual(layer_attention.shape[1], config.num_attention_heads)
-
-    def test_hidden_states_output(self):
-        # V4 layers emit a 4D ``[B, S, hc_mult, hidden]`` tensor — the hc_mult streams
-        # are only collapsed at the top of the model via ``hc_head``. The common
-        # ``test_hidden_states_output`` assumes ``(batch, seq, hidden)``; we re-run the
-        # same check but accept the extra HC axis, and we additionally assert the final
-        # (post-hc_head) ``last_hidden_state`` has the standard 3D shape.
-        import torch  # noqa: PLC0415
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device).eval()
-            with torch.no_grad():
-                outputs = model(**inputs_dict)
-            hidden_states = outputs.hidden_states if hasattr(outputs, "hidden_states") else outputs[-1]
-            self.assertIsNotNone(hidden_states)
-            self.assertEqual(len(hidden_states), config.num_hidden_layers + 1)
-            seq_len = inputs_dict["input_ids"].shape[1]
-            for layer_h in hidden_states:
-                # Accept either the collapsed (3D) post-head shape or the per-layer 4D shape.
-                if layer_h.ndim == 3:
-                    self.assertEqual(layer_h.shape, (inputs_dict["input_ids"].shape[0], seq_len, config.hidden_size))
-                else:
-                    self.assertEqual(
-                        layer_h.shape,
-                        (inputs_dict["input_ids"].shape[0], seq_len, config.hc_mult, config.hidden_size),
-                    )
+                self.assertEqual(layer_attention.shape[:2], (batch_size, config.num_attention_heads))
 
     def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
-        # Every V4 layer is sliding-window, so the cache is length-bounded to
-        # ``sliding_window`` instead of the full ``seq_length`` the parent tester expects.
-        # We also accept the compressed-segment positions that ``DeepseekV4Attention``
-        # appends on compress layers (they live beyond the window on the keys axis).
-        import torch  # noqa: PLC0415
+        # All layers store sliding-window KV; compressed entries live in separate streams.
+        for layer_idx, layer in enumerate(cache.layers):
+            self.assertEqual(layer.keys.shape, layer.values.shape)
+            self.assertEqual(layer.keys.shape[:2], (batch_size, config.num_key_value_heads))
+            self.assertEqual(layer.keys.shape[-1], config.head_dim)
+            self.assertLessEqual(layer.keys.shape[-2], config.sliding_window)
 
-        num_kv_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = config.head_dim
-        for layer in cache.layers:
-            keys, values = layer.keys, layer.values
-            self.assertIsInstance(keys, torch.Tensor)
-            self.assertEqual(keys.shape[0], batch_size)
-            self.assertEqual(keys.shape[1], num_kv_heads)
-            self.assertEqual(keys.shape[3], head_dim)
-            self.assertEqual(keys.shape, values.shape)
-
-    @unittest.skip(
-        reason=(
-            "V4's conversion mapping is two-pass: a structural prefix rename "
-            "(``layers.X.attn.`` → ``model.layers.X.self_attn.``) runs first, then specific in-prefix "
-            "renames operate on the already-prefixed HF-form keys (``model.layers.X.self_attn.compressor.norm.`` "
-            "→ ``...compressor.kv_norm.``). This split is load-bearing for save / load round-tripping — "
-            "any single-pass ordering loses information in either direction (the general prefix rule "
-            "and a specific in-prefix rule both want to match the same upstream key, and one of the "
-            "two directions ends up with the general rule stealing the match). The base "
-            "``test_reverse_loading_mapping`` checks every source pattern against the *upstream-form* "
-            "serialized keys, so the Pass 2 patterns (written in HF form) inherently can't satisfy "
-            "that invariant. The actual round-trip is exercised by ``test_save_load``."
-        )
-    )
-    def test_reverse_loading_mapping(self):
-        pass
-
-    @unittest.skip(
-        reason=(
-            "V4's compressor pools windows of ``compress_rate`` consecutive tokens *before* the "
-            "attention mask is applied — left-padding shifts the window boundaries so pad tokens "
-            "get folded into the pooled KV entries, and the resulting logits diverge from the "
-            "unpadded run by design (same fundamental limitation as RecurrentGemma)."
-        )
-    )
-    def test_left_padding_compatibility(self):
-        pass
+            layer_type = config.layer_types[layer_idx]
+            if layer_type != "sliding_attention":
+                self.assertIn("compressor", layer.compressed_states)
+                self.assertIn("compressor", layer.compression_tails)
+                if layer_type == "compressed_sparse_attention":
+                    self.assertIn("indexer", layer.compressed_states)
+                    self.assertIn("indexer", layer.compression_tails)
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
     ):
-        # V4's per-layer hidden states carry an extra ``hc_mult`` dim (Hyper-Connection
-        # parallel streams). We skip the exact seq-length assertion the base tester does,
-        # because assisted-decoding feeds arbitrary draft-token batches in, and just
-        # sanity-check batch / hidden dims.
-        import torch  # noqa: PLC0415
-
+        """Override to account for the difference in MHC and the final state shapes"""
         self.assertIsInstance(hidden_states, tuple)
+        self.assertListEqual(
+            [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
+            [True] * len(hidden_states),
+        )
         self.assertEqual(len(hidden_states), (output_length - prompt_length))
-        for iter_hidden_states in hidden_states:
-            self.assertIsInstance(iter_hidden_states, tuple)
-            for layer_hidden in iter_hidden_states:
-                self.assertIsInstance(layer_hidden, torch.Tensor)
-                self.assertEqual(layer_hidden.shape[0], batch_size)
-                self.assertEqual(layer_hidden.shape[-1], config.hidden_size)
+
+        # When `output_hidden_states=True`, each iteration of generate appends the hidden states corresponding to the
+        # new token(s)
+        # NOTE: `StaticCache` may have different lengths on different layers, if this test starts failing add more
+        # elaborate checks
+        for generated_length, iter_hidden_states in enumerate(hidden_states):
+            # regardless of using cache, the first forward pass will have the full prompt as input
+            if use_cache and generated_length > 0:
+                model_input_length = 1
+            else:
+                model_input_length = prompt_length + generated_length
+
+            # We have raw MHC shapes until the final one which is collapsed
+            mhc_shape = (batch_size, model_input_length, config.hc_mult, config.hidden_size)
+            final_shape = (batch_size, model_input_length, config.hidden_size)
+            expected_shapes = [mhc_shape] * (len(iter_hidden_states) - 1)
+            expected_shapes.append(final_shape)
+
+            # check hidden size
+            self.assertListEqual(
+                [state.shape for state in iter_hidden_states],
+                expected_shapes,
+            )
+
+    def test_attention_outputs(self):
+        """Override to account for the additional compressed KV entries."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        batch_size, seq_length = inputs_dict["input_ids"].shape
+
+        for model_class in self.all_model_classes:
+            for output_attentions in (False, True):
+                config.output_attentions = output_attentions
+                model = model_class(config).to(torch_device).eval()
+
+                inputs = self._prepare_for_class(inputs_dict, model_class)
+                inputs["use_cache"] = False
+                if not output_attentions:
+                    inputs["output_attentions"] = True
+
+                with torch.no_grad():
+                    outputs = model(**inputs)
+
+                self.assertEqual(len(outputs.attentions), config.num_hidden_layers)
+
+                for layer_type, attention in zip(config.layer_types, outputs.attentions):
+                    kv_length = seq_length
+                    if layer_type != "sliding_attention":
+                        group_size = config.compress_rates[layer_type]
+                        kv_length += (seq_length + group_size - 1) // group_size
+
+                    self.assertEqual(
+                        attention.shape,
+                        (batch_size, config.num_attention_heads, seq_length, kv_length),
+                    )
+
+    def test_hidden_states_output(self):
+        """Override to account for the difference in MHC and the final state shapes"""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            text_config = model.config.get_text_config()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+            self.assertIsNotNone(hidden_states)
+            self.assertEqual(len(hidden_states), text_config.num_hidden_layers + 1)
+
+            batch_size, seq_len = inputs_dict["input_ids"].shape
+
+            # Raw MHC shapes
+            for layer_hidden_states in hidden_states[:-1]:
+                self.assertEqual(
+                    layer_hidden_states.shape,
+                    (
+                        batch_size,
+                        seq_len,
+                        text_config.hc_mult,
+                        text_config.hidden_size,
+                    ),
+                )
+
+            # Final output is standard again
+            self.assertEqual(
+                hidden_states[-1].shape,
+                (
+                    batch_size,
+                    seq_len,
+                    text_config.hidden_size,
+                ),
+            )
+
+    @unittest.skip("Reverse loading mapping is broken for V4's two-pass weight renaming.")
+    def test_reverse_loading_mapping(self):
+        pass
+
+    def test_hash_routing(self):
+        """Check token-ID-based expert selection and normalized routing weights."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.mlp_layer_types = ["hash_moe", *config.mlp_layer_types[1:]]
+        model = DeepseekV4Model(config).to(torch_device).eval()
+        router = model.layers[0].mlp.gate
+
+        input_ids = inputs_dict["input_ids"]
+        expert_offsets = torch.arange(config.num_experts_per_tok, device=torch_device)
+        token_ids = torch.arange(config.vocab_size, device=torch_device)
+        expert_ids = (token_ids[:, None] + expert_offsets) % router.num_experts
+        expected_indices = expert_ids[input_ids.flatten()]
+
+        with torch.no_grad():
+            router.tid2eid.copy_(expert_ids)
+            _, weights, indices = router(model.embed_tokens(input_ids), input_ids)
+            outputs = model(input_ids=input_ids, use_cache=False)
+
+        torch.testing.assert_close(indices, expected_indices)
+        torch.testing.assert_close(weights.sum(-1), torch.full_like(weights[:, 0], config.routed_scaling_factor))
+        self.assertTrue(torch.isfinite(outputs.last_hidden_state).all())
+
+    @parameterized.expand(["heavily_compressed_attention", "compressed_sparse_attention"])
+    def test_compressed_attention_causality(self, layer_type):
+        """Check that compressed attention only attends to completed groups within its budget."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.layer_types = [layer_type] * config.num_hidden_layers
+
+        group_size = config.compress_rates[layer_type]
+        seq_length = (config.index_topk + 1) * group_size + 1
+        config.max_position_embeddings = max(config.max_position_embeddings, seq_length)
+
+        model = DeepseekV4Model(config).to(torch_device).eval()
+        input_ids = ids_tensor([1, seq_length], config.vocab_size).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids, output_attentions=True, use_cache=False)
+
+        completed_groups = torch.arange(1, seq_length + 1, device=torch_device) // group_size
+
+        for attention in outputs.attentions:
+            compressed = attention[..., seq_length:]
+            candidates = torch.arange(compressed.shape[-1], device=torch_device)
+
+            # Incomplete and future groups must be masked.
+            invalid = candidates >= completed_groups[:, None]
+            self.assertEqual(torch.count_nonzero(compressed.masked_select(invalid)).item(), 0)
+
+            # CSA restricts the number of visible groups.
+            expected_groups = completed_groups
+            if layer_type == "compressed_sparse_attention":
+                expected_groups = expected_groups.clamp(max=config.index_topk)
+
+            visible_groups = compressed.ne(0).sum(-1)
+            torch.testing.assert_close(visible_groups, expected_groups.expand_as(visible_groups))
 
 
 @require_torch

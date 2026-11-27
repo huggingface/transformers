@@ -313,91 +313,109 @@ class DynamicSlidingWindowLayer(DynamicLayer):
             self.cumulative_length = self.keys.shape[-2]
 
 
-class DynamicIndexedLayer(DynamicLayer):
+class DynamicCompressedLayer(DynamicLayer):
     """
-    A cache layer that extends `DynamicLayer` with an extra indexer key cache for Dynamic Sparse Attention (DSA)
-    models (e.g. GLM MoE DSA, DeepSeek V32).
+    Dynamic KV cache with compressed state streams. Note that a state is not necessarily only the key but
+    also anything needed to compress the groups afterwards, e.g. qwen4's RoPE cos/sin, glm 5 next's gates, etc.
 
-    The main K/V cache stores tensors of shape `[batch_size, num_heads, seq_len, head_dim]` (inherited).
-    The indexer key cache stores a tensor of shape `[batch_size, seq_len, index_head_dim]` (3D, single-head).
+    Each stream can have compressed states, and the remaining tail. On subsequent updates, the tail can become
+    new groups and we store the new tail.
+
+    Example with group_size=4:
+        Tokens:      A B C D E F
+        Compressed:  [pool(ABCD), pool(EF00)]
+        Tail:        [E, F, 0, 0]
+
+    With overlap_groups=1 (dsv4):
+        Tail:        [A, B, C, D, E, F, 0, 0]
+
+    Note that an incomplete pool as in the first case will not be selected at the end.
     """
+
+    is_croppable = False  # compression makes this impossible or we would need to track full raw states
 
     def __init__(self, **kwargs):
-        super().__init__()
-        self.indexer_keys: torch.Tensor | None = None
-        # Optional indexer positions, shaped [position_dims, batch_size, seq_len].
-        self.indexer_position_ids: torch.Tensor | None = None
-        self.is_indexer_initialized: bool = False
+        super().__init__(**kwargs)
+        self.compressed_states = {}
+        self.compression_tails = {}
 
-    def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
-        self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
-        self.indexer_keys = torch.tensor([], dtype=self.indexer_dtype, device=self.indexer_device)
-        self.is_indexer_initialized = True
-
-    def update_indexer(self, indexer_key_states: torch.Tensor) -> torch.Tensor:
+    def update_compressed_states(
+        self,
+        states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        query_length: int,
+        group_size: int = 1,
+        name: str = "indexer",
+        tail: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         """
-        Update the indexer key cache by concatenation, and return the full indexer keys.
+        Store compressed candidates after the previously completed groups and retain the new tail.
 
-        Args:
-            indexer_key_states (`torch.Tensor`): New indexer keys, shape `[batch_size, seq_len, index_head_dim]`.
+        Example with group_size=4:
+            Previous states: [pool(ABCD), pool(EF00)]
+            New candidates:  [pool(EFGH)]
+            Updated states:  [pool(ABCD), pool(EFGH), 0]
+            New tail:        [I, 0, 0, 0]
 
-        Returns:
-            `torch.Tensor`: The full cached indexer keys, shape `[batch_size, total_len, index_head_dim]`.
+        Note that incomplete groups can be overwritten, but completed groups are never overwritten.
+        If no tail is provided, the previous tail is left unchanged.
         """
-        if not self.is_indexer_initialized:
-            self.lazy_initialization_indexer(indexer_key_states)
-        self.indexer_keys = torch.cat([self.indexer_keys, indexer_key_states], dim=1)
-        return self.indexer_keys
 
-    def offload(self):
-        super().offload()
-        if self.is_indexer_initialized:
-            self.indexer_keys = self.indexer_keys.to("cpu", non_blocking=True)
+        if tail is not None:
+            self.compression_tails[name] = tail
 
-    def prefetch(self):
-        super().prefetch()
-        if self.is_indexer_initialized and self.indexer_keys.device != self.device:
-            self.indexer_keys = self.indexer_keys.to(self.device, non_blocking=True)
+        compressed = self.compressed_states.get(name)
 
-    def reset(self) -> None:
+        if compressed is None:
+            self.compressed_states[name] = states.contiguous()
+            self.device = states.device
+            return self.compressed_states[name]
+
+        capacity = (attention_mask.shape[1] + group_size - 2) // group_size
+
+        # Pre-allocate storage for next groups
+        if capacity > compressed.shape[1]:
+            compressed = torch.nn.functional.pad(compressed, (0, 0, 0, capacity - compressed.shape[1]))
+
+        past_groups = attention_mask[:, -(query_length + 1) : -query_length] // group_size
+
+        batch_indices = torch.arange(states.shape[0], device=states.device)[:, None]
+        group_indices = past_groups + torch.arange(states.shape[1], device=states.device)
+
+        compressed[batch_indices, group_indices] = states
+        self.compressed_states[name] = compressed
+
+        return compressed
+
+    def reset(self):
         super().reset()
-        # Dropped rather than zeroed, as `update_indexer` grows them by concatenation, like the main states
-        self.indexer_keys = None
-        self.indexer_position_ids = None
-        self.is_indexer_initialized = False
+        self.compressed_states.clear()
+        self.compression_tails.clear()
 
-    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+    def reorder_cache(self, beam_idx):
         super().reorder_cache(beam_idx)
-        if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
-            self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
-        if self.indexer_position_ids is not None:
-            self.indexer_position_ids = self.indexer_position_ids.index_select(
-                1, beam_idx.to(self.indexer_position_ids.device)
-            )
 
-    def crop(self, tokens_to_remove: int) -> None:
-        super().crop(tokens_to_remove)
-        if tokens_to_remove == 0:
-            return
-        if self.indexer_position_ids is not None:
-            self.indexer_position_ids = self.indexer_position_ids[..., : -abs(tokens_to_remove)]
-        if not self.is_indexer_initialized or self.indexer_keys.numel() == 0:
-            return
-        self.indexer_keys = self.indexer_keys[:, : -abs(tokens_to_remove), :]
+        for stream in (self.compressed_states, self.compression_tails):
+            for name, tensor in stream.items():
+                stream[name] = tensor.index_select(0, beam_idx.to(tensor.device))
 
-    def batch_repeat_interleave(self, repeats: int) -> None:
+    def batch_repeat_interleave(self, repeats):
         super().batch_repeat_interleave(repeats)
-        if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
-            self.indexer_keys = self.indexer_keys.repeat_interleave(repeats, dim=0)
-        if self.indexer_position_ids is not None:
-            self.indexer_position_ids = self.indexer_position_ids.repeat_interleave(repeats, dim=1)
 
-    def batch_select_indices(self, indices: torch.Tensor) -> None:
+        for stream in (self.compressed_states, self.compression_tails):
+            for name, tensor in stream.items():
+                stream[name] = tensor.repeat_interleave(repeats, dim=0)
+
+    def batch_select_indices(self, indices):
         super().batch_select_indices(indices)
-        if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
-            self.indexer_keys = self.indexer_keys[indices, ...]
-        if self.indexer_position_ids is not None:
-            self.indexer_position_ids = self.indexer_position_ids[:, indices, :]
+
+        for stream in (self.compressed_states, self.compression_tails):
+            for name, tensor in stream.items():
+                stream[name] = tensor[indices]
+
+
+class DynamicSlidingWindowCompressedLayer(DynamicCompressedLayer, DynamicSlidingWindowLayer):
+    """Sliding-window KV storage with full-context compressed streams."""
 
 
 class StaticLayer(CacheLayerMixin):
@@ -667,89 +685,110 @@ class StaticSlidingWindowLayer(StaticLayer):
         return self._is_croppable
 
 
-class StaticIndexedLayer(StaticLayer):
+class StaticCompressedLayer(StaticLayer):
     """
-    A `StaticLayer` with an additional statically-allocated indexer key cache for Dynamic Sparse
-    Attention (DSA) models (e.g. GLM MoE DSA, DeepSeek V32). This is the static, `torch.compile`-friendly
-    counterpart of `DynamicIndexedLayer`: the indexer key buffer is preallocated once and mutated in-place.
+    Static KV cache with compressed state streams. Note that a state is not necessarily only the key but
+    also anything needed to compress the groups afterwards, e.g. qwen4's RoPE cos/sin, glm 5 next's gates, etc.
 
-    The main K/V cache is inherited from `StaticLayer` (`[batch_size, num_heads, max_cache_len, head_dim]`).
-    The indexer key cache stores a tensor of shape `[batch_size, max_cache_len, index_head_dim]` (3D, single-head).
+    Each stream can have compressed states, and the remaining tail. On subsequent updates, the tail can become
+    new groups and we store the new tail.
+
+    Unlike the dynamic cache, compressed states and tails are allocated once and updated in-place to preserve
+    their storage addresses.
+
+    Example with capacity=128 and group_size=4:
+        Compressed capacity: 32
+        Tail capacity:       4
+
+    With overlap_groups=1 (dsv4):
+        Tail capacity:       8
+
+    Note that incomplete pools and unoccupied entries will not be selected at the end.
     """
 
-    def __init__(self, max_cache_len: int, **kwargs):
-        super().__init__(max_cache_len=max_cache_len)
-        self.indexer_keys: torch.Tensor | None = None
-        # Optional indexer positions, shaped [position_dims, batch_size, seq_len].
-        self.indexer_position_ids: torch.Tensor | None = None
-        self.indexer_cumulative_length: torch.Tensor | None = None
-        self.is_indexer_initialized: bool = False
+    is_croppable = False  # compression makes this impossible or we would need to track full raw states
 
-    def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
-        self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
-        batch_size, _, index_head_dim = indexer_key_states.shape
-        self.indexer_keys = torch.zeros(
-            (batch_size, self.max_cache_len, index_head_dim),
-            dtype=self.indexer_dtype,
-            device=self.indexer_device,
-        )
-        self.indexer_cumulative_length = torch.zeros((), dtype=torch.long, device=self.indexer_device)
-        # Tag as static addresses for cudagraphs / compile, mirroring the main K/V buffers.
-        if not is_torchdynamo_compiling():
-            torch._dynamo.mark_static_address(self.indexer_keys)
-            torch._dynamo.mark_static_address(self.indexer_cumulative_length)
-        self.is_indexer_initialized = True
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.compressed_states = {}
+        self.compression_tails = {}
 
-    def update_indexer(self, indexer_key_states: torch.Tensor) -> torch.Tensor:
+    def update_compressed_states(
+        self,
+        states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        query_length: int,
+        group_size: int = 1,
+        name: str = "indexer",
+        tail: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         """
-        Update the indexer key cache in-place at the current positions, and return the full static buffer.
+        Store compressed candidates after the previously completed groups and retain the new tail.
 
-        Args:
-            indexer_key_states (`torch.Tensor`): New indexer keys, shape `[batch_size, seq_len, index_head_dim]`.
+        Example with max_cache_len=16 and group_size=4:
+            Previous states: [pool(ABCD), pool(EF00), 0, 0]
+            New candidates:  [pool(EFGH)]
+            Updated states:  [pool(ABCD), pool(EFGH), 0, 0]
+            New tail:        [I, 0, 0, 0]
 
-        Returns:
-            `torch.Tensor`: The full static indexer key cache, shape `[batch_size, max_cache_len, index_head_dim]`.
-                Unfilled positions are masked out downstream by the indexer's attention mask, exactly as the
-                main `StaticLayer` returns its full preallocated K/V.
+        Both compressed states and tails are updated in-place once initialized to preserve static addresses.
+        If no tail is provided, the previous tail is left unchanged.
         """
-        if not self.is_indexer_initialized:
-            self.lazy_initialization_indexer(indexer_key_states)
 
-        seq_len = indexer_key_states.shape[1]
-        cache_position = torch.arange(seq_len, device=self.indexer_device) + self.indexer_cumulative_length
-        # In-place to preserve the static data pointer (required for cudagraphs).
-        self.indexer_cumulative_length.add_(seq_len)
-        try:
-            self.indexer_keys.index_copy_(1, cache_position, indexer_key_states)
-        except NotImplementedError:
-            # Fallback for devices like MPS where index_copy_ might not be supported.
-            self.indexer_keys[:, cache_position] = indexer_key_states
+        if tail is not None:
+            if name not in self.compression_tails:
+                self.compression_tails[name] = tail
 
-        return self.indexer_keys
+                if not is_torchdynamo_compiling():
+                    torch._dynamo.mark_static_address(tail)
+            else:
+                self.compression_tails[name].copy_(tail)
 
-    def crop(self, tokens_to_remove: int) -> None:
-        """
-        Remove `tokens_to_remove` tokens from the current cache layer.
-        """
-        super().crop(tokens_to_remove)
-        if self.is_indexer_initialized:
-            self.indexer_cumulative_length.sub_(abs(tokens_to_remove))
+        compressed = self.compressed_states.get(name)
 
-    def reset(self) -> None:
+        if compressed is None:
+            capacity = (attention_mask.shape[1] + group_size - 2) // group_size
+
+            # Pre-allocate storage for next groups
+            compressed = states.new_zeros(states.shape[0], capacity, states.shape[-1])
+            self.compressed_states[name] = compressed
+            self.device = states.device
+
+            if not is_torchdynamo_compiling():
+                torch._dynamo.mark_static_address(compressed)
+
+        past_groups = attention_mask[:, -(query_length + 1) : -query_length] // group_size
+
+        batch_indices = torch.arange(states.shape[0], device=states.device)[:, None]
+        group_indices = past_groups + torch.arange(states.shape[1], device=states.device)
+
+        compressed[batch_indices, group_indices] = states
+
+        return compressed
+
+    def reset(self):
         super().reset()
-        self.indexer_position_ids = None
-        if self.is_indexer_initialized:
-            self.indexer_keys.zero_()
-            self.indexer_cumulative_length.zero_()
 
-    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
-        super().reorder_cache(beam_idx)
-        if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
-            self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
-        if self.indexer_position_ids is not None:
-            self.indexer_position_ids = self.indexer_position_ids.index_select(
-                1, beam_idx.to(self.indexer_position_ids.device)
-            )
+        for stream in (self.compressed_states, self.compression_tails):
+            for tensor in stream.values():
+                tensor.zero_()
+
+    def reorder_cache(self, beam_idx):
+        if self.is_initialized:
+            self.keys.copy_(self.keys.index_select(0, beam_idx.to(self.keys.device)))
+            self.values.copy_(self.values.index_select(0, beam_idx.to(self.values.device)))
+
+        for stream in (self.compressed_states, self.compression_tails):
+            for tensor in stream.values():
+                tensor.copy_(tensor.index_select(0, beam_idx.to(tensor.device)))
+
+
+class StaticSlidingWindowCompressedLayer(StaticCompressedLayer, StaticSlidingWindowLayer):
+    """Fixed-capacity sliding KV and full-context compressed streams."""
+
+    def __init__(self, max_cache_len, **kwargs):
+        super().__init__(max_cache_len=max_cache_len, **kwargs)
+        self.max_compression_len = max_cache_len
 
 
 class BaseQuantizedLayer(DynamicLayer):
@@ -1147,6 +1186,20 @@ class LinearAttentionCacheLayerMixin(ABC):
             if self.is_recurrent_states_initialized[i]:
                 self.recurrent_states[i] = self.recurrent_states[i].index_select(0, beam_idx.to(self.device))
 
+    def batch_repeat_interleave(self, repeats: int):
+        """Repeat the cached states along the batch dimension."""
+        for states in (self.conv_states, self.recurrent_states):
+            for i, state in states.items():
+                if state is not None:
+                    states[i] = state.repeat_interleave(repeats, dim=0)
+
+    def batch_select_indices(self, indices: torch.Tensor):
+        """Select the cached states along the batch dimension."""
+        for states in (self.conv_states, self.recurrent_states):
+            for i, state in states.items():
+                if state is not None:
+                    states[i] = state.index_select(0, indices.to(state.device))
+
     @property
     def is_compileable(self) -> bool:
         """
@@ -1480,7 +1533,9 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     # From a cache point of view, sliding and chunked are the same in how they should behave, only the mask differs
     "sliding_attention": DynamicSlidingWindowLayer,
     "chunked_attention": DynamicSlidingWindowLayer,
-    "indexed_attention": DynamicIndexedLayer,
+    "indexed_attention": DynamicCompressedLayer,
+    "compressed_sparse_attention": DynamicSlidingWindowCompressedLayer,
+    "heavily_compressed_attention": DynamicSlidingWindowCompressedLayer,
     # Linear-attention-shaped placeholders (no per-token KV; recurrent state only).
     # "conv" reuses the same cache shape as linear attention but stores a conv state buffer rather than recurrent SSM state
     "conv": LinearAttentionLayer,
@@ -1497,7 +1552,9 @@ STATIC_LAYER_TYPE_MAPPING = {
     # From a cache point of view, sliding and chunked are the same in how they should behave, only the mask differs
     "sliding_attention": StaticSlidingWindowLayer,
     "chunked_attention": StaticSlidingWindowLayer,
-    "indexed_attention": StaticIndexedLayer,
+    "indexed_attention": StaticCompressedLayer,
+    "compressed_sparse_attention": StaticSlidingWindowCompressedLayer,
+    "heavily_compressed_attention": StaticSlidingWindowCompressedLayer,
     # LinearAttention layers are considered both static and dynamic (they are static, but are used as-is for any cache type)
     "conv": LinearAttentionLayer,
     "linear_attention": LinearAttentionLayer,
@@ -1633,6 +1690,29 @@ class Cache:
 
         return keys, values
 
+    def get_compression_tail(self, layer_idx: int, name: str = "indexer") -> torch.Tensor | None:
+        """Returns the compression tail for the given layer and stream, or None if not allocated."""
+        layer = self.layers[layer_idx]
+        if not isinstance(layer, (DynamicCompressedLayer, StaticCompressedLayer)):
+            raise ValueError(f"Cannot get compression tail for non-compressed layer {layer_idx}.")
+        return layer.compression_tails.get(name)
+
+    def update_compressed_states(
+        self,
+        states: torch.Tensor,
+        layer_idx: int,
+        attention_mask: torch.Tensor,
+        query_length: int,
+        group_size: int = 1,
+        name: str = "indexer",
+        tail: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Updates the compressed states and optional tail for the given layer and stream."""
+        layer = self.layers[layer_idx]
+        if not isinstance(layer, (DynamicCompressedLayer, StaticCompressedLayer)):
+            raise ValueError(f"Cannot update compressed states for non-compressed layer {layer_idx}.")
+        return layer.update_compressed_states(states, attention_mask, query_length, group_size, name, tail)
+
     def get_conv_state(self, layer_idx: int, state_idx: int = 0) -> torch.Tensor | None:
         """Returns the conv state `state_idx` for the layer `layer_idx`, or None if the layer is not initialized.
         Raises if the layer is not a linear attention layer."""
@@ -1704,26 +1784,6 @@ class Cache:
             raise ValueError("Cannot call `update_conv_state` on a non-LinearAttention layer!")
         recurrent_states = self.layers[layer_idx].update_recurrent_state(recurrent_states, state_idx, **kwargs)
         return recurrent_states
-
-    def update_indexer(self, indexer_key_states: torch.Tensor, layer_idx: int) -> torch.Tensor:
-        """
-        Updates the indexer key cache for layer `layer_idx`.
-
-        Parameters:
-            indexer_key_states (`torch.Tensor`):
-                The new indexer key states to cache, shape `[batch_size, seq_len, index_head_dim]`.
-            layer_idx (`int`):
-                The index of the layer to cache the states for.
-
-        Return:
-            `torch.Tensor`: The updated indexer key states (full cache).
-        """
-        if not hasattr(self.layers[layer_idx], "update_indexer"):
-            raise ValueError(
-                f"Cannot call `update_indexer` on layer {layer_idx} which is a {type(self.layers[layer_idx]).__name__}; it has no "
-                "indexer key cache (expected a `DynamicIndexedLayer` or `StaticIndexedLayer`)."
-            )
-        return self.layers[layer_idx].update_indexer(indexer_key_states)
 
     def early_initialization(
         self,
@@ -2014,13 +2074,16 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
     per_layer_kwargs = []
     for layer_type, layer_config in zip(layer_types, layer_configs):
         layer_kwargs = {}
-        if layer_type in ("sliding_attention", "hybrid_sliding", "reference_sliding_attention"):
+        if layer_type in (
+            "sliding_attention",
+            "hybrid_sliding",
+            "reference_sliding_attention",
+            "compressed_sparse_attention",
+            "heavily_compressed_attention",
+        ):
             layer_kwargs["sliding_window"] = layer_config.sliding_window
         elif layer_type == "chunked_attention":
             layer_kwargs["sliding_window"] = layer_config.attention_chunk_size
-        # In this case, we need to pass the config as well to properly __init__ the layer classes
-        elif layer_type in ("heavily_compressed_attention", "compressed_sparse_attention"):
-            layer_kwargs["config"] = layer_config
         # We may need more than 1 conv/recurrent state
         if layer_type in ("conv", "linear_attention", "hybrid", "hybrid_sliding"):
             layer_kwargs["number_of_states"] = getattr(layer_config, "number_of_conv_states", 1)

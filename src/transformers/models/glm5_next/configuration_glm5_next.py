@@ -199,6 +199,10 @@ class Glm5NextTextConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+    @property
+    def index_group_size(self) -> int:
+        return self.index_kpool
+
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.num_attention_heads != self.num_key_value_heads:

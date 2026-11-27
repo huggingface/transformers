@@ -50,9 +50,8 @@ if is_torch_available():
 
 
 class Qwen4ExpTextModelTester(CausalLMModelTester):
-    if is_torch_available():
-        base_model_class = Qwen4ExpTextModel
-        causal_lm_class = Qwen4ExpForCausalLM
+    base_model_class = Qwen4ExpTextModel
+    causal_lm_class = Qwen4ExpForCausalLM
 
     small_config_overrides = {
         "hidden_act": "silu",
@@ -90,7 +89,8 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.8, 0.9]
     # QSA indexer parameters are trained through a separate objective rather than the causal-LM loss.
     test_all_params_have_gradient = False
-    test_torch_exportable = False  # QSA index selection has data-dependent control flow
+    is_compression_based = True
+    test_torch_exportable = False  # TODO(vasqu): Needs investigation on what fails
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs = super().prepare_config_and_inputs_for_generate(batch_size)
@@ -175,14 +175,6 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
             with torch.no_grad():
                 hidden_states = model(**inputs_dict).hidden_states
             self.assertListEqual([state.shape for state in hidden_states], expected_shapes)
-
-    @unittest.skip("QSA index selection has data-dependent control flow")
-    def test_generate_compile_model_forward_fullgraph(self):
-        pass
-
-    @unittest.skip("QSA index selection has data-dependent control flow")
-    def test_generate_compilation_all_outputs(self):
-        pass
 
     @unittest.skip(
         "Cannot generate from random embeds since the ple embedding needs to revert them if input_ids are not provided"
@@ -343,9 +335,8 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 class Qwen4ExpVisionText2TextModelTester(VLMModelTester):
-    base_model_class = Qwen4ExpModel
     config_class = Qwen4ExpConfig
-
+    base_model_class = Qwen4ExpModel
     conditional_generation_class = Qwen4ExpForConditionalGeneration
 
     small_config_overrides = {
@@ -447,7 +438,8 @@ class Qwen4ExpVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Qwen4ExpVisionText2TextModelTester
     model_split_percents = [0.5, 0.8, 0.9]
     test_all_params_have_gradient = False
-    test_torch_exportable = False  # QSA index selection has data-dependent control flow
+    is_compression_based = True
+    test_torch_exportable = False  # TODO(vasqu): Needs investigation on what fails
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs = super().prepare_config_and_inputs_for_generate(batch_size)
@@ -522,14 +514,6 @@ class Qwen4ExpVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
                     output_hidden_states=True,
                 )
             self.assertListEqual([hidden_state.shape for hidden_state in outputs.hidden_states], expected_shapes)
-
-    @unittest.skip("QSA index selection has data-dependent control flow")
-    def test_generate_compile_model_forward_fullgraph(self):
-        pass
-
-    @unittest.skip("QSA index selection has data-dependent control flow")
-    def test_generate_compilation_all_outputs(self):
-        pass
 
     @unittest.skip(
         "Cannot generate from random embeds since the ple embedding needs to revert them if input_ids are not provided"

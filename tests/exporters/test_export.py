@@ -219,6 +219,12 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "TODO: make the capture branch-aware."
         ),
     },
+    # Generate path with dynamic shapes and a static cache
+    "generate.dynamic.static-cache": {
+        "DeepseekV4ForCausalLM": (
+            "Multi-token decode with a static cache produces mismatched KV and attention mask lengths."
+        ),
+    },
     # ONNX, every variant.
     "onnx": {
         "CHMv2ForDepthEstimation": (
@@ -847,6 +853,7 @@ class ExportTesterMixin:
         ``"all"`` always applies, ``"generate"`` only for generate tests, ``"dynamic"`` / ``"static"``
         for that shape variant on every backend, ``"generate.dynamic"`` for the multi-token decode path,
         ``"static-cache"`` for a variant whose ``generation_config`` requests a static cache,
+        ``"generate.dynamic.static-cache"`` for multi-token decode with a static cache,
         ``"<backend>"`` for that backend, and ``"<backend>.<variant>"`` (including
         ``"<backend>.static-cache"``) for the more-specific intersections.
         """
@@ -858,6 +865,8 @@ class ExportTesterMixin:
         scopes.append("dynamic" if dynamic else "static")
         if static_cache:
             scopes.append("static-cache")
+            if generate and dynamic:
+                scopes.append("generate.dynamic.static-cache")
         if backend:
             scopes.append(backend)
             if generate:

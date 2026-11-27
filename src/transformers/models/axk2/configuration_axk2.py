@@ -148,6 +148,10 @@ class AXK2Config(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+    @property
+    def index_group_size(self) -> int:
+        return 1
+
     def validate_architecture(self):
         super().validate_architecture()
         if self.q_lora_rank is None or self.q_lora_rank <= 0:

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from functools import partial
 
 import torch
 import torch.nn.functional as F
@@ -1552,15 +1551,116 @@ def create_recurrent_attention_mask(
     return attention_mask[:, -inputs_embeds.shape[1] :].contiguous()
 
 
+def _create_varlen_compression_mask(
+    inputs_embeds: torch.Tensor,
+    cu_seq_lens_q: torch.IntTensor,
+    group_size: int,
+) -> torch.Tensor:
+    """
+    Create cumulative valid-token counts aligned to compression group boundaries.
+
+    Example with group_size=4:
+        Packed tokens:   [A, B, C, D, E]
+        cu_seq_lens_q:   [0, 3, 5]
+        Cumulative mask: [-4, -3, -2, -1, 0, 1, 2, 3, 5, 6]
+
+    Each sequence starts at a new group, leaving at least one unused slot between
+    sequences so that sequence boundaries can be recovered from jumps in the counts.
+    Negative entries reserve additional capacity for alignment.
+    """
+    query_length = inputs_embeds.shape[1]
+    device = inputs_embeds.device
+
+    cu_seq_lens_q = cu_seq_lens_q.to(device=device, dtype=torch.long)
+    lengths = cu_seq_lens_q.diff()
+
+    # Align each sequence to the next compression group boundary
+    offsets = F.pad((lengths // group_size + 1).cumsum(0), (1, 0)) * group_size - cu_seq_lens_q
+
+    positions = torch.arange(query_length, device=device)
+    sequence_ids = torch.searchsorted(cu_seq_lens_q[1:], positions, right=True)
+    counts = positions + offsets[sequence_ids] + 1
+
+    # Each sequence boundary may introduce up to group_size unused slots
+    capacity = (cu_seq_lens_q.numel() - 2) * group_size
+    return torch.cat((torch.arange(-capacity, 1, device=device), counts))
+
+
+def create_compression_mask(
+    config: PreTrainedConfig,
+    inputs_embeds: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    cache: Cache | None = None,
+    layer_idx: int | None = None,
+    group_size: int | None = None,
+    cu_seq_lens_q: torch.IntTensor | None = None,
+    **kwargs,
+) -> torch.Tensor:
+    """
+    Create right-aligned cumulative valid-token counts.
+
+    Example with five tokens:
+        Padding mask: [0, 0, 1, 1, 1]
+        Dynamic:      [0, 0, 0, 1, 2, 3]
+        Static (8):   [-3, -2, -1, 0, 0, 0, 1, 2, 3]
+
+    The last query_length (+1) entries describe the current query boundaries.
+    NOTE: Negative entries represent unused static capacity.
+    """
+    if cu_seq_lens_q is not None:
+        group_size = config.get_text_config().index_group_size if group_size is None else group_size
+        return _create_varlen_compression_mask(inputs_embeds, cu_seq_lens_q, group_size)
+
+    batch_size, query_length = inputs_embeds.shape[:2]
+    device = inputs_embeds.device
+
+    q_offset = 0
+    kv_length = query_length
+    if cache is not None:
+        if layer_idx is None:
+            compressed_layer_types = [
+                "indexed_attention",
+                "compressed_sparse_attention",
+                "heavily_compressed_attention",
+            ]
+            layer_idx = next(
+                i
+                for i, layer_type in enumerate(config.get_text_config().layer_types)
+                if layer_type in compressed_layer_types
+            )
+
+        q_offset = cache.get_query_offset(layer_idx)
+        q_offset = q_offset.to(device) if isinstance(q_offset, torch.Tensor) else q_offset
+        kv_length, kv_offset = cache.get_mask_sizes(query_length, layer_idx)
+
+        # Compression requires the full history even for SWA
+        kv_length += kv_offset
+
+        if layer_idx < len(cache.layers):
+            kv_length = getattr(cache.layers[layer_idx], "max_compression_len", kv_length)
+
+    positions = torch.arange(-kv_length, 1, device=device) + q_offset + query_length
+
+    if attention_mask is None:
+        return positions.expand(batch_size, -1).contiguous()
+
+    prefix = F.pad(attention_mask.to(device=device).cumsum(-1, dtype=torch.long), (1, 0))
+    return torch.where(positions < 0, positions, prefix.index_select(1, positions.clamp_min(0)))
+
+
 LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "full_attention": create_causal_mask,
     "sliding_attention": create_sliding_window_causal_mask,
     "chunked_attention": create_chunked_causal_mask,
-    "compressed_sparse_attention": create_sliding_window_causal_mask,
-    "heavily_compressed_attention": create_sliding_window_causal_mask,
-    "minimax_m3_sparse": create_causal_mask,
-    # Indexers always needs to materialize the mask to account for causality (no SDPA `is_causal` shortcut)
-    "indexed_attention": partial(create_causal_mask, allow_is_causal_skip=False),
+    "compressed_sparse_attention": {
+        "sliding_attention": create_sliding_window_causal_mask,
+        "compression": create_compression_mask,
+    },
+    "heavily_compressed_attention": {
+        "sliding_attention": create_sliding_window_causal_mask,
+        "compression": create_compression_mask,
+    },
+    "indexed_attention": create_compression_mask,
     "linear_attention": create_recurrent_attention_mask,
     "conv": create_recurrent_attention_mask,
     "hybrid": {"full_attention": create_causal_mask, "linear_attention": create_recurrent_attention_mask},

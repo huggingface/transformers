@@ -28,9 +28,8 @@ if is_torch_available():
 
 
 class HYV4ModelTester(CausalLMModelTester):
-    if is_torch_available():
-        base_model_class = HYV4Model
-        causal_lm_class = HYV4ForCausalLM
+    base_model_class = HYV4Model
+    causal_lm_class = HYV4ForCausalLM
 
     small_config_overrides = {
         "n_routed_experts": 8,
@@ -56,6 +55,7 @@ class HYV4ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = HYV4ModelTester
     # HYV4 routes each token to a subset of experts, so not every expert receives a gradient.
     test_all_params_have_gradient = False
+    is_compression_based = True
     model_split_percents = [0.5, 0.8, 0.9]
 
     def _check_hidden_states_for_generate(
@@ -131,25 +131,3 @@ class HYV4ModelTest(CausalLMModelTest, unittest.TestCase):
                     text_config.hidden_size,
                 ),
             )
-
-    @unittest.skip("Fundamentally incompatible with indexer - indexer has no boundary offset telling sequences apart")
-    def test_eager_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip(
-        "mHC hidden states are wrongfully cropped, needs adjustments in `_split_model_outputs` in generation"
-    )
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip(
-        "mHC hidden states are wrongfully cropped, needs adjustments in `_split_model_outputs` in generation"
-    )
-    def test_assisted_decoding_matches_greedy_search_0_random(self):
-        pass
-
-    @unittest.skip(
-        "mHC hidden states are wrongfully cropped, needs adjustments in `_split_model_outputs` in generation"
-    )
-    def test_assisted_decoding_matches_greedy_search_1_same(self):
-        pass

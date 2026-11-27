@@ -133,6 +133,7 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = HYV4VLVisionText2TextModelTester
     # HYV4 routes each token to a subset of experts, so not every expert receives a gradient.
     test_all_params_have_gradient = False
+    is_compression_based = True
     # Packed vision features have a leading singleton dimension and one newline token per merged row
     skip_test_image_features_output_shape = True
     skip_test_video_features_output_shape = True
@@ -169,28 +170,6 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
 
     @unittest.skip("The text attention (sinks + DSA) is eager-only, so the top-level model cannot switch to SDPA")
     def test_can_set_attention_dynamically_composite_model(self):
-        pass
-
-    @unittest.skip("Fundamentally incompatible with indexer - indexer has no boundary offset telling sequences apart")
-    def test_eager_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip(
-        "mHC hidden states are wrongfully cropped, needs adjustments in `_split_model_outputs` in generation"
-    )
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip(
-        "mHC hidden states are wrongfully cropped, needs adjustments in `_split_model_outputs` in generation"
-    )
-    def test_assisted_decoding_matches_greedy_search_0_random(self):
-        pass
-
-    @unittest.skip(
-        "mHC hidden states are wrongfully cropped, needs adjustments in `_split_model_outputs` in generation"
-    )
-    def test_assisted_decoding_matches_greedy_search_1_same(self):
         pass
 
     @unittest.skip("Packed vision attention returns no attention matrix")

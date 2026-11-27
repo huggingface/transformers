@@ -705,6 +705,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         # - assisted_decoding does not support `use_cache = False`
         # - assisted_decoding does not support `batch_size > 1`
 
+        if self.is_compression_based:
+            self.skipTest(reason="Indexer support with assisted decoding is not supported for now")
+
         for model_class in self.all_generative_model_classes:
             # Set seed for deterministic test - ensures reproducible model initialization and inputs
             set_seed(42)
@@ -880,6 +883,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         # In this test we don't check assisted vs non-assisted output -- seeded assisted decoding with sample will not
         # match sample for the same seed, as the forward pass does not return the exact same logits (due to matmul with
         # different shapes, see https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535).
+
+        if self.is_compression_based:
+            self.skipTest(reason="Indexer support with assisted decoding is not supported for now")
+
         for model_class in self.all_generative_model_classes:
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
@@ -2281,6 +2288,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
+        is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
+        if not (fa_kwargs if self.is_compression_based else is_fa or not fa_kwargs):
+            self.skipTest(reason="Unsupported packed sequence metadata for this model/backend")
+
         max_new_tokens = 30
         support_flag = {
             "sdpa": "_supports_sdpa",
@@ -2410,8 +2421,14 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="eager")
 
+    def test_eager_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="eager", fa_kwargs=True)
+
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="sdpa")
+
+    def test_sdpa_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="sdpa", fa_kwargs=True)
 
     @require_flash_attn
     @require_torch_accelerator
@@ -2497,6 +2514,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
 
     def test_custom_4d_attention_mask(self):
+        if self.is_compression_based:
+            self.skipTest(reason="Model architecture does not support 4d masks")
+
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 

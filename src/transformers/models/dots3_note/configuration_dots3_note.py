@@ -331,6 +331,10 @@ class Dots3NoteTextConfig(PreTrainedConfig):
         )
         super().__post_init__(**kwargs)
 
+    @property
+    def index_group_size(self) -> int:
+        return 1
+
     def convert_rope_params_to_dict(self, **kwargs):
         """Convert legacy RoPE settings to separate DSA/SWA entries, using each layer type's rotary head fraction."""
         swa_rope_theta = kwargs.pop("swa_rope_theta", 50_000.0)

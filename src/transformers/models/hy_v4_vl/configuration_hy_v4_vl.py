@@ -192,6 +192,10 @@ class HYV4VLTextConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+    @property
+    def index_group_size(self) -> int:
+        return 1
+
     def convert_rope_params_to_dict(self, **kwargs):
         kwargs = super().convert_rope_params_to_dict(**kwargs)
         self.rope_parameters.setdefault("mrope_section", [12, 10, 10])

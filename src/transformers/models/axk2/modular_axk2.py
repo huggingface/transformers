@@ -23,6 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_compression_utils import build_attention_mask_from_topk
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -350,30 +351,21 @@ class AXK2Attention(DeepseekV32Attention):
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
 
-        # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
+        # The indexer handles padding and causality; no dense causal mask is needed.
         topk_indices = self.indexer(
-            hidden_states,
-            q_resid,
-            position_embeddings,
-            attention_mask[:, 0, :, :],
-            position_ids,  # Kept for BC
+            hidden_states=hidden_states,
+            q_resid=q_resid,
+            position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
             cache=cache,
         )
 
-        sparse_indices = None
-        if self.config._attn_implementation in ("eager", "sdpa"):
-            index_mask = (
-                topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
-                .scatter(-1, topk_indices.long(), False)
-                .unsqueeze(1)
-            )
-
-            if attention_mask.dtype == torch.bool:
-                attention_mask = attention_mask & ~index_mask
-            else:
-                attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
-        else:
-            sparse_indices = topk_indices
+        attention_mask = build_attention_mask_from_topk(
+            self.config,
+            topk_indices=topk_indices,
+            query_states=query_states,
+            kv_length=key_states.shape[2],
+        )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -386,7 +378,7 @@ class AXK2Attention(DeepseekV32Attention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            indices=sparse_indices,  # consumed by flash_mla_with_kvcache; ignored by eager / SDPA
+            indices=topk_indices,
             **kwargs,
         )
 
