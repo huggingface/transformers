@@ -1173,9 +1173,6 @@ class BevformerEncoder(nn.Module):
         self.bev_h = config.bev_height
         self.bev_w = config.bev_width
         self.embed_dims = config.d_model
-        self.rotate_prev_bev = config.rotate_prev_bev
-        self.use_shift = config.use_shift
-        self.use_can_bus = config.use_can_bus
         self.rotate_center = config.rotate_center
 
         self.layers = nn.ModuleList([BevformerEncoderLayer(config) for _ in range(self.num_layers)])
@@ -1288,12 +1285,7 @@ class BevformerEncoder(nn.Module):
         shift_y = translation_length * np.cos(bev_angle / 180.0 * np.pi) / grid_length_y / self.bev_h
         shift_x = translation_length * np.sin(bev_angle / 180.0 * np.pi) / grid_length_x / self.bev_w
 
-        if self.use_shift:
-            shift = bev_queries.new_tensor(np.stack([shift_x, shift_y], axis=-1))
-        else:
-            shift = bev_queries.new_zeros((can_bus.shape[0], 2))
-
-        return shift
+        return bev_queries.new_tensor(np.stack([shift_x, shift_y], axis=-1))
 
     def apply_prev_bev_rotation(self, prev_bev: torch.Tensor, can_bus: torch.Tensor) -> torch.Tensor:
         """Apply yaw rotation to previous BEV embeddings using the torchvision rotate quirk.
@@ -1308,7 +1300,7 @@ class BevformerEncoder(nn.Module):
             `torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`:
                 Rotated BEV embeddings.
         """
-        if not self.rotate_prev_bev or not is_torchvision_available():
+        if not is_torchvision_available():
             return prev_bev
 
         batch_size = prev_bev.shape[0]
@@ -1361,8 +1353,7 @@ class BevformerEncoder(nn.Module):
             can_bus = bev_queries.new_zeros((batch_size, 18))
 
         # 1. Inject CAN bus signals into BEV queries
-        if self.use_can_bus:
-            bev_queries = bev_queries + self.can_bus_mlp(can_bus)
+        bev_queries = bev_queries + self.can_bus_mlp(can_bus)
 
         # 2. Reference points in 3D and 2D
         z_height = self.pc_range[5] - self.pc_range[2]
@@ -1736,7 +1727,7 @@ class BevformerFor3DObjectDetection(BevformerPreTrainedModel):
             value=bev_embed,
             query_pos=query_pos,
             reference_points=reference_points,
-            reg_branches=self.reg_branches if self.config.with_box_refine else None,
+            reg_branches=self.reg_branches,
         )
 
         # 4. Box parameterization matching upstream BEVFormer head

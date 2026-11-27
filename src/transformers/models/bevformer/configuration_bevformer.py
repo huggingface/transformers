@@ -94,16 +94,6 @@ class BevformerConfig(PreTrainedConfig):
             Number of sampling points per attention head in the temporal self-attention of the encoder.
         decoder_n_points (`int`, *optional*, defaults to 4):
             Number of sampling points per attention head in the deformable attention of the decoder.
-        disable_custom_kernels (`bool`, *optional*, defaults to `False`):
-            Whether to disallow the use of a custom CUDA kernel for the multiscale deformable attention.
-        with_box_refine (`bool`, *optional*, defaults to `True`):
-            Whether to refine 3D bounding box references across decoder layers.
-        rotate_prev_bev (`bool`, *optional*, defaults to `True`):
-            Whether to rotate the previous BEV embeddings before temporal fusion.
-        use_shift (`bool`, *optional*, defaults to `True`):
-            Whether to shift the previous BEV embeddings before temporal fusion.
-        use_can_bus (`bool`, *optional*, defaults to `True`):
-            Whether to inject CAN bus ego motion signals into the BEV queries.
         can_bus_dim (`int`, *optional*, defaults to 18):
             Dimensionality of the CAN bus ego-motion features.
         can_bus_norm (`bool`, *optional*, defaults to `True`):
@@ -147,14 +137,9 @@ class BevformerConfig(PreTrainedConfig):
     num_queries: int = 900
     num_points_in_pillar: int = 4
     num_points_in_bev: int = 8
-    with_box_refine: bool = True
-    rotate_prev_bev: bool = True
-    use_shift: bool = True
-    use_can_bus: bool = True
     can_bus_dim: int = 18
     can_bus_norm: bool = True
     rotate_center: list[float] | None = None
-    disable_custom_kernels: bool = False
 
     def __post_init__(self, **kwargs):
         if self.point_cloud_range is None:

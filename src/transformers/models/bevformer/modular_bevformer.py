@@ -113,16 +113,6 @@ class BevformerConfig(PreTrainedConfig):
             Number of sampling points per attention head in the temporal self-attention of the encoder.
         decoder_n_points (`int`, *optional*, defaults to 4):
             Number of sampling points per attention head in the deformable attention of the decoder.
-        disable_custom_kernels (`bool`, *optional*, defaults to `False`):
-            Whether to disallow the use of a custom CUDA kernel for the multiscale deformable attention.
-        with_box_refine (`bool`, *optional*, defaults to `True`):
-            Whether to refine 3D bounding box references across decoder layers.
-        rotate_prev_bev (`bool`, *optional*, defaults to `True`):
-            Whether to rotate the previous BEV embeddings before temporal fusion.
-        use_shift (`bool`, *optional*, defaults to `True`):
-            Whether to shift the previous BEV embeddings before temporal fusion.
-        use_can_bus (`bool`, *optional*, defaults to `True`):
-            Whether to inject CAN bus ego motion signals into the BEV queries.
         can_bus_dim (`int`, *optional*, defaults to 18):
             Dimensionality of the CAN bus ego-motion features.
         can_bus_norm (`bool`, *optional*, defaults to `True`):
@@ -166,14 +156,9 @@ class BevformerConfig(PreTrainedConfig):
     num_queries: int = 900
     num_points_in_pillar: int = 4
     num_points_in_bev: int = 8
-    with_box_refine: bool = True
-    rotate_prev_bev: bool = True
-    use_shift: bool = True
-    use_can_bus: bool = True
     can_bus_dim: int = 18
     can_bus_norm: bool = True
     rotate_center: list[float] | None = None
-    disable_custom_kernels: bool = False
 
     def __post_init__(self, **kwargs):
         if self.point_cloud_range is None:
@@ -1705,9 +1690,6 @@ class BevformerEncoder(nn.Module):
         self.bev_h = config.bev_height
         self.bev_w = config.bev_width
         self.embed_dims = config.d_model
-        self.rotate_prev_bev = config.rotate_prev_bev
-        self.use_shift = config.use_shift
-        self.use_can_bus = config.use_can_bus
         self.rotate_center = config.rotate_center
 
         self.layers = nn.ModuleList([BevformerEncoderLayer(config) for _ in range(self.num_layers)])
@@ -1820,12 +1802,7 @@ class BevformerEncoder(nn.Module):
         shift_y = translation_length * np.cos(bev_angle / 180.0 * np.pi) / grid_length_y / self.bev_h
         shift_x = translation_length * np.sin(bev_angle / 180.0 * np.pi) / grid_length_x / self.bev_w
 
-        if self.use_shift:
-            shift = bev_queries.new_tensor(np.stack([shift_x, shift_y], axis=-1))
-        else:
-            shift = bev_queries.new_zeros((can_bus.shape[0], 2))
-
-        return shift
+        return bev_queries.new_tensor(np.stack([shift_x, shift_y], axis=-1))
 
     def apply_prev_bev_rotation(self, prev_bev: torch.Tensor, can_bus: torch.Tensor) -> torch.Tensor:
         """Apply yaw rotation to previous BEV embeddings using the torchvision rotate quirk.
@@ -1840,7 +1817,7 @@ class BevformerEncoder(nn.Module):
             `torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`:
                 Rotated BEV embeddings.
         """
-        if not self.rotate_prev_bev or not is_torchvision_available():
+        if not is_torchvision_available():
             return prev_bev
 
         batch_size = prev_bev.shape[0]
@@ -1893,8 +1870,7 @@ class BevformerEncoder(nn.Module):
             can_bus = bev_queries.new_zeros((batch_size, 18))
 
         # 1. Inject CAN bus signals into BEV queries
-        if self.use_can_bus:
-            bev_queries = bev_queries + self.can_bus_mlp(can_bus)
+        bev_queries = bev_queries + self.can_bus_mlp(can_bus)
 
         # 2. Reference points in 3D and 2D
         z_height = self.pc_range[5] - self.pc_range[2]
@@ -2268,7 +2244,7 @@ class BevformerFor3DObjectDetection(BevformerPreTrainedModel):
             value=bev_embed,
             query_pos=query_pos,
             reference_points=reference_points,
-            reg_branches=self.reg_branches if self.config.with_box_refine else None,
+            reg_branches=self.reg_branches,
         )
 
         # 4. Box parameterization matching upstream BEVFormer head
