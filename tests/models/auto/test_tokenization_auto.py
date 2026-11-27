@@ -22,6 +22,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 import transformers
@@ -79,6 +80,7 @@ from test_module.custom_tokenization import CustomTokenizer  # noqa E402
 
 if is_tokenizers_available():
     from test_module.custom_tokenization_fast import CustomTokenizerFast
+    from tokenizers import Tokenizer
 
 if is_mistral_common_available():
     from transformers.tokenization_mistral_common import MistralCommonBackend
@@ -183,6 +185,31 @@ class AutoTokenizerTest(unittest.TestCase):
     def test_tokenizer_from_type_incorrect_name(self):
         with pytest.raises(ValueError):
             AutoTokenizer.from_pretrained("./", tokenizer_type="xxx")
+
+    @require_tokenizers
+    @require_sentencepiece
+    @parameterized.expand(
+        [
+            ("sentencepiece", "google/umt5-small", "spiece.model"),
+            ("tiktoken", "NousResearch/Llama-3.2-1B", "original/tokenizer.model"),
+            ("tekken", "mistralai/Ministral-8B-Instruct-2410", "tekken.json"),
+        ]
+    )
+    def test_convert_from(self, convert_from, repo_id, vocab_file):
+        text = "Hello world,\tthis is  a test.\n"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # The checkpoint has both a vocabulary file and a `tokenizer.json`
+            vocab_file = shutil.copy(hf_hub_download(repo_id, vocab_file), tmp_dir)
+            tokenizer_file = shutil.copy(hf_hub_download(repo_id, "tokenizer.json"), tmp_dir)
+
+            # Without `convert_from`, the tokenizer is loaded from `tokenizer.json`
+            default_tokenizer = TokenizersBackend.from_pretrained(tmp_dir)
+            self.assertEqual(default_tokenizer.encode(text), Tokenizer.from_file(tokenizer_file).encode(text).ids)
+
+            # With `convert_from`, it's converted from the vocabulary file and `tokenizer.json` is ignored
+            tokenizer = TokenizersBackend.from_pretrained(tmp_dir, convert_from=convert_from)
+            self.assertEqual(tokenizer.vocab_file, vocab_file)
+            self.assertNotEqual(tokenizer.encode(text), default_tokenizer.encode(text))
 
     @require_tokenizers
     def test_tokenizer_identifier_with_correct_config(self):
