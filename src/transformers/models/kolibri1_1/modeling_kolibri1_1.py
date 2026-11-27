@@ -29,7 +29,12 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_compression_mask, create_sliding_window_causal_mask
+from ...modeling_compression_utils import (
+    build_attention_mask_from_topk,
+    build_selection_mask,
+    select_compression_indices,
+)
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -60,18 +65,14 @@ def nvfp4_fake_quantize(hidden_states: torch.Tensor) -> torch.Tensor:
 
 class Kolibri1_1Indexer(nn.Module):
     """
-    Selects the keys each query of a sparse layer attends to. It has no weights: keys and queries are scored by the
-    ReLU of the logits of the first `index_num_heads` query heads against key head 0, averaged over these heads, both
-    rounded to NVFP4 beforehand.
+    Two-stage sparse attention indexer that first selects a pool of candidate keys by scoring compressed key groups,
+    then selects the top-k individual keys within that pool. The candidate pool is shared across indexed attention
+    layers, while individual key selection is performed independently at each layer.
 
-    An indexer selects a pool of `index_pool_size` candidate keys for each query: all of them for short contexts,
-    otherwise the blocks of `index_compression` keys whose averaged key scores highest. Every sparse layer then
-    attends to the `index_topk` highest scoring keys of the pool of its indexer, plus the first
-    `index_num_sink_tokens` and the last `index_num_local_tokens` tokens. Queries that see no more keys than this
-    budget attend to all of them. Ties are broken towards earlier keys, as the radix selection of the reference kernels.
+    Uses NVFP4-rounded attention queries and keys directly, without additional learned projections.
+    Sink and local tokens are always selected outside the top-k budget.
 
-    The sink and local tokens of a query are counted from its first and up to its last visible key. Masked keys in
-    between keep their position, but are never selected and count as zeros in the average of their block.
+    NOTE: Assumes left-padded or unpadded sequences.
     """
 
     def __init__(self, config: Kolibri1_1Config, layer_idx: int):
@@ -84,91 +85,6 @@ class Kolibri1_1Indexer(nn.Module):
         self.num_local_tokens = config.index_num_local_tokens
         self.num_sink_tokens = config.index_num_sink_tokens
         self.head_weight = config.head_dim**-0.5 / config.index_num_heads
-        # Bounds the [queries, keys] float32 scores computed at once (256 MB, plus as much again for temporaries).
-        self.max_scores = 2**26
-
-    def score(self, queries: torch.Tensor, keys: torch.Tensor) -> torch.Tensor:
-        """Score `[num_heads, num_queries, head_dim]` queries against `[num_keys, head_dim]` keys."""
-        # Scoring is quadratic in the sequence length overall: this is a reference, not a fast implementation.
-        scores = queries.new_zeros(queries.shape[1], keys.shape[0])
-        for head_queries in queries:
-            scores += (head_queries @ keys.T).relu()
-        return scores * self.head_weight
-
-    @staticmethod
-    def top_k_mask(scores: torch.Tensor, k: int) -> torch.Tensor:
-        """Mask of the `k` highest finite scores of each row; ties go to the lowest indices."""
-        k = min(k, scores.shape[-1])
-        kth_score = scores.topk(k, dim=-1).values[..., -1:]
-        # Scores strictly above the k-th one are always kept
-        above = scores > kth_score
-        # Scores equal to the k-th one share the remaining slots, lowest indices first; `-inf` is never kept
-        tied = (scores == kth_score) & (kth_score > float("-inf"))
-        free_slots = k - above.sum(-1, keepdim=True)
-        tie_rank = tied.cumsum(-1, dtype=torch.int32)  # 1-based position of each tie within its row
-        return above | (tied & (tie_rank <= free_slots))
-
-    def query_groups(self, visible: torch.Tensor):
-        """Yield the batch index, first visible key, query rows and number of keys from the first to the last visible
-        one of each group of queries sharing their first visible key, split in chunks of at most `max_scores` scores."""
-        starts = visible.int().argmax(-1)
-        # Not the number of visible keys: masked keys in between count, so that later keys keep their position
-        ends = visible.shape[-1] - visible.flip(-1).int().argmax(-1)
-        lengths = (ends - starts) * visible.any(-1)
-        for batch_idx in range(visible.shape[0]):
-            for start in starts[batch_idx].unique().tolist():
-                rows = (starts[batch_idx] == start).nonzero().squeeze(-1)
-                for chunk in rows.split(max(1, self.max_scores // (visible.shape[-1] - start))):
-                    yield batch_idx, start, chunk, lengths[batch_idx, chunk, None]
-
-    def select_pool(self, queries: torch.Tensor, keys: torch.Tensor, visible: torch.Tensor) -> torch.Tensor:
-        pool = visible.clone()
-        compression = self.compression
-        # Keys that no query sees, e.g. masked tokens, must not leak into the average of their block
-        unseen = ~visible.any(1)
-        for batch_idx, start, rows, lengths in self.query_groups(visible):
-            long_rows = lengths.squeeze(-1) > self.pool_size
-            if not long_rows.any():
-                continue
-            rows, lengths = rows[long_rows], lengths[long_rows]
-            document_keys = keys[batch_idx, 0, start:].masked_fill(unseen[batch_idx, start:, None], 0.0)
-            num_blocks = document_keys.shape[0] // compression
-            blocks = document_keys[: num_blocks * compression].float().unflatten(0, (num_blocks, compression))
-            summaries = nvfp4_fake_quantize(blocks.sum(1) / compression)
-            routing_queries = nvfp4_fake_quantize(queries[batch_idx, : self.num_heads, rows]).float()
-            scores = self.score(routing_queries, summaries)
-            # The block of a query's newest tokens is only complete if their number is a multiple of `compression`.
-            # An incomplete block competes with a zero score, later blocks are not visible
-            scores = nn.functional.pad(scores, (0, 1))
-            blocks = torch.arange(num_blocks + 1, device=scores.device)
-            scores = torch.where(blocks < lengths // compression, scores, 0.0)
-            scores = scores.masked_fill(blocks >= (lengths + compression - 1) // compression, float("-inf"))
-            chosen = self.top_k_mask(scores, self.pool_size // compression)
-            chosen = chosen.repeat_interleave(compression, dim=-1)[:, : document_keys.shape[0]]
-            pool[batch_idx, rows, start:] = chosen & visible[batch_idx, rows, start:]
-        return pool
-
-    def select_tokens(
-        self, queries: torch.Tensor, keys: torch.Tensor, visible: torch.Tensor, pool: torch.Tensor
-    ) -> torch.Tensor:
-        selected = visible.clone()
-        budget = self.topk + self.num_local_tokens + self.num_sink_tokens
-        for batch_idx, start, rows, lengths in self.query_groups(visible):
-            long_rows = lengths.squeeze(-1) > budget
-            if not long_rows.any():
-                continue
-            rows, lengths = rows[long_rows], lengths[long_rows]
-            routing_keys = nvfp4_fake_quantize(keys[batch_idx, 0, start:]).float()
-            routing_queries = nvfp4_fake_quantize(queries[batch_idx, : self.num_heads, rows]).float()
-            scores = self.score(routing_queries, routing_keys)
-            positions = torch.arange(routing_keys.shape[0], device=scores.device)
-            sinks = positions < self.num_sink_tokens
-            local = (positions >= lengths - self.num_local_tokens) & (positions < lengths)
-            # Sinks and local tokens are always selected, so we only need to choose among the remaining candidates
-            candidates = pool[batch_idx, rows, start:] & ~sinks & (positions < lengths - self.num_local_tokens)
-            chosen = self.top_k_mask(scores.masked_fill(~candidates, float("-inf")), self.topk)
-            selected[batch_idx, rows, start:] = (chosen | sinks | local) & visible[batch_idx, rows, start:]
-        return selected
 
     @torch.no_grad()
     def forward(
@@ -177,13 +93,70 @@ class Kolibri1_1Indexer(nn.Module):
         key_states: torch.Tensor,
         attention_mask: torch.Tensor,
         index_pool: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Return the mask of the keys each query attends to, of the same shape as the 4D `attention_mask`, and the
-        pool it selected them from: a new one for indexers, otherwise `index_pool`, the one of the preceding indexer."""
-        visible = attention_mask[:, 0] if attention_mask.dtype == torch.bool else attention_mask[:, 0] == 0
-        if self.is_pool_source:
-            index_pool = self.select_pool(query_states, key_states, visible)
-        return self.select_tokens(query_states, key_states, visible, index_pool).unsqueeze(1), index_pool
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        seq_length = query_states.shape[-2]
+        kv_length = key_states.shape[-2]
+        group_size = self.compression
+        budget = self.topk + self.num_sink_tokens + self.num_local_tokens
+        positions = torch.arange(kv_length, device=key_states.device)
+        lengths = attention_mask[:, -seq_length:].unsqueeze(-1)
+
+        # Remove left padding, accounting for unused static cache capacity
+        start = kv_length + attention_mask[:, :1] - attention_mask[:, -1:]
+
+        if kv_length <= budget:
+            indices = start.unsqueeze(1) + positions
+            return indices.expand(-1, seq_length, -1).masked_fill(positions >= lengths, -1), None
+
+        q = nvfp4_fake_quantize(query_states[:, : self.num_heads]).transpose(1, 2).float()
+        k = key_states[:, 0]
+        k = k.gather(1, (start + positions).clamp_max(kv_length - 1).unsqueeze(-1).expand_as(k))
+
+        if self.is_pool_source and kv_length > self.pool_size:
+            # Mean compression
+            groups = nn.functional.pad(k.float(), (0, 0, 0, (-kv_length) % group_size))
+            summaries = nvfp4_fake_quantize(groups.unflatten(1, (-1, group_size)).mean(dim=2))
+
+            # Score groups of tokens
+            scores = torch.matmul(q, summaries.transpose(-1, -2).unsqueeze(1))
+            scores = scores.relu().sum(dim=-2) * self.head_weight
+
+            # Incomplete groups compete with a zero score
+            blocks = torch.arange(summaries.shape[1], device=k.device)
+            scores = scores.masked_fill(blocks >= lengths // group_size, 0)
+
+            pool_indices = select_compression_indices(
+                scores,
+                attention_mask,
+                self.pool_size // group_size,
+                group_size=group_size,
+                return_groups=True,
+                allow_partial_groups=True,
+                deterministic=True,
+            )
+            index_pool = build_selection_mask(pool_indices, summaries.shape[1])
+
+        # Score individual keys
+        k = nvfp4_fake_quantize(k).float()
+        scores = torch.matmul(q, k.transpose(-1, -2).unsqueeze(1))
+        scores = scores.relu().sum(dim=-2) * self.head_weight
+
+        # Restrict selection to the pool, except for short contexts
+        if index_pool is not None:
+            pool = index_pool.repeat_interleave(group_size, dim=-1)[..., :kv_length]
+            scores = scores.masked_fill(~pool & (lengths > budget), float("-inf"))
+
+        # Always select sink and local tokens
+        mandatory = (positions < self.num_sink_tokens) | (positions >= lengths - self.num_local_tokens)
+        scores = scores.masked_fill(mandatory, float("inf"))
+
+        indices = select_compression_indices(
+            scores,
+            attention_mask,
+            budget,
+            deterministic=True,
+        )
+        return indices, index_pool
 
 
 def rotate_half(x):
@@ -313,21 +286,19 @@ class Kolibri1_1Attention(nn.Module):
 
         if cache is not None and not self.is_kv_shared_layer:
             key_states, value_states = cache.update(key_states, value_states, self.layer_idx)
+
         if self.store_full_length_kv:
             shared_kv_states[str(self.layer_idx)] = key_states, value_states
 
         if self.indexer is not None:
-            if attention_mask is None:
-                raise ValueError(
-                    "Sparse attention layers need an explicit 4D attention mask to overlay their selection."
-                )
-            selected_mask, index_pool = self.indexer(query_states, key_states, attention_mask, index_pool)
-            if attention_mask.dtype == torch.bool:
-                # The selection only ever keeps visible keys
-                attention_mask = selected_mask
-            else:
-                # Adding minimum-finite values overflows to -inf and yields NaNs for fully masked queries.
-                attention_mask = attention_mask.masked_fill(~selected_mask, torch.finfo(attention_mask.dtype).min)
+            topk_indices, index_pool = self.indexer(query_states, key_states, attention_mask, index_pool)
+            attention_mask = build_attention_mask_from_topk(
+                self.config,
+                topk_indices=topk_indices,
+                query_states=query_states,
+                kv_length=key_states.shape[-2],
+            )
+
             # Sparse layers attend to NVFP4 keys and values, rounded with a straight-through gradient
             key_states = key_states + (nvfp4_fake_quantize(key_states) - key_states).detach()
             value_states = value_states + (nvfp4_fake_quantize(value_states) - value_states).detach()
@@ -544,8 +515,8 @@ class Kolibri1_1PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = True
     _supports_flex_attn = False
-    # Key selection has data-dependent control flow
-    _can_compile_fullgraph = False
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(Kolibri1_1TopKRouter, index=0),
@@ -667,17 +638,19 @@ class Kolibri1_1Model(Kolibri1_1PreTrainedModel):
                 "cache": cache,
                 "position_ids": position_ids,
             }
+            mask_functions = {
+                "indexed_attention": create_compression_mask,
+                "sliding_attention": create_sliding_window_causal_mask,
+            }
             causal_mask_mapping = {
-                # Indexers overlay their key selection on an explicit mask
-                "indexed_attention": create_causal_mask(**mask_kwargs, allow_is_causal_skip=False),
-                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+                layer_type: mask_functions[layer_type](**mask_kwargs) for layer_type in set(self.config.layer_types)
             }
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
         # Keys and values shared across layers, for the current forward only
         shared_kv_states = KVSharingDict()
-        # The candidate keys of the latest indexer, a `[batch_size, query_length, key_length]` mask
+        # The candidate group mask of the latest indexer
         index_pool = None
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):

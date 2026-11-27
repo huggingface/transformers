@@ -34,6 +34,8 @@ The sparse attention keys and values, as well as the routing queries and keys, a
 
 This is a reference implementation. Sparse layers apply their key selection as an explicit attention mask, so only the eager and SDPA attention implementations are supported, selecting keys costs time and memory quadratic in the prompt length, and every decoding step rescans the whole context. A prefill of about 50k tokens fits on two 180 GB GPUs; 128k tokens does not.
 
+> [!NOTE]
+> This model can only work with left padding and will produce wrong results on right padding!
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer

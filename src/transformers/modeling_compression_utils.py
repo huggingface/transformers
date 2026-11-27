@@ -17,21 +17,11 @@ import torch.nn.functional as F
 from .utils.generic import is_flash_attention_requested
 
 
-def build_attention_mask_from_topk(
-    config,
+def build_selection_mask(
     topk_indices: torch.Tensor,
-    query_states: torch.Tensor,
     kv_length: int,
-) -> torch.Tensor | None:
-    """
-    Convert topk_indices into the mask expected by the active backend.
-    SDPA and Eager return a full 4D mask while FA(4) can consume the indices directly (no mask).
-
-    NOTE: Causality and padding is accounted for by previous modules, e.g. an indexer.
-    """
-    if is_flash_attention_requested(config):
-        return None
-
+) -> torch.Tensor:
+    """Convert selected indices into a boolean mask, ignoring unavailable entries."""
     # -1 is invalid as per convention
     topk_valid = topk_indices.ge(0) & topk_indices.lt(kv_length)
 
@@ -48,7 +38,25 @@ def build_attention_mask_from_topk(
         selected_counts.scatter_add_(-1, safe_indices.long(), topk_valid.int())
 
     # Final mask 0 == False (not visible), 1 == True (visible)
-    mask = selected_counts.ne(0).unsqueeze(1)
+    return selected_counts.ne(0)
+
+
+def build_attention_mask_from_topk(
+    config,
+    topk_indices: torch.Tensor,
+    query_states: torch.Tensor,
+    kv_length: int,
+) -> torch.Tensor | None:
+    """
+    Convert topk_indices into the mask expected by the active backend.
+    SDPA and Eager return a full 4D mask while FA(4) can consume the indices directly (no mask).
+
+    NOTE: Causality and padding is accounted for by previous modules, e.g. an indexer.
+    """
+    if is_flash_attention_requested(config):
+        return None
+
+    mask = build_selection_mask(topk_indices, kv_length).unsqueeze(1)
 
     # SDPA
     if config._attn_implementation == "sdpa":
@@ -92,7 +100,7 @@ def prepare_compression_groups(
         - Tails `(batch_size, (1 + overlap_groups) * group_size, dim)`
 
     NOTE: We keep incomplete groups into uniform shapes across the batch (unused slots == 0).
-          They will be filtered out later on in `select_compression_indices`.
+          They will be filtered out later on in `select_compression_indices` by default.
     """
     batch_size, seq_length, dim = states.shape
     device = states.device
@@ -135,15 +143,19 @@ def select_compression_indices(
     group_size: int = 1,
     include_tail: bool = False,
     return_groups: bool = False,
+    allow_partial_groups: bool = False,
+    deterministic: bool = False,
 ) -> torch.Tensor:
     """
-    Select complete causal groups.
+    Select causal groups, excluding incomplete groups by default.
 
     By default, the budget counts tokens and selected groups are expanded into physical KV indices.
 
     With
-        - `return_groups=True`, the budget counts compressed entries instead (e.g. DSV4).
         - `include_tail=True`, up to `group_size-1` additional tokens are selected outside the token budget when `return_groups=False`.
+        - `return_groups=True`, the budget counts compressed entries instead (e.g. DSV4).
+        - `allow_partial_groups=True`, an incomplete group competes within the budget using its supplied score.
+        - `deterministic=True`, ties are broken towards earlier groups.
 
     Example with group_size=2 and budget=2:
         Tokens:            [PAD, A, B, PAD, C, D, E]
@@ -157,19 +169,25 @@ def select_compression_indices(
 
     Finally, we pad unavailable token selections with -1 to keep uniform shapes.
     """
+    if include_tail and allow_partial_groups:
+        raise ValueError("`include_tail` and `allow_partial_groups` are mutually exclusive.")
+
     counts = attention_mask[:, -(scores.shape[-2] + 1) :]
     query_counts = counts[:, 1:].masked_fill(counts.diff(dim=1) == 0, 0).unsqueeze(-1)
     complete_groups = query_counts // group_size
+    eligible_groups = (query_counts + group_size - 1) // group_size if allow_partial_groups else complete_groups
 
-    # Select only complete causal groups
-    invalid = torch.arange(scores.shape[-1], device=scores.device) >= complete_groups
+    # Select only eligible causal groups
+    invalid = torch.arange(scores.shape[-1], device=scores.device) >= eligible_groups
+    scores = scores.masked_fill(invalid, float("-inf"))
     k = min(budget if return_groups else budget // group_size, scores.shape[-1])
 
-    # NOTE: On tied scores, it's not deterministic which final selection is made
-    # top_scores, groups = scores.masked_fill(invalid, float("-inf")).topk(k, dim=-1)
-    # TODO: remove deterministic selection
-    top_scores, groups = scores.masked_fill(invalid, float("-inf")).sort(dim=-1, descending=True, stable=True)
-    top_scores, groups = top_scores[..., :k], groups[..., :k]
+    if deterministic:
+        top_scores, groups = scores.sort(dim=-1, descending=True, stable=True)
+        top_scores, groups = top_scores[..., :k], groups[..., :k]
+    else:
+        top_scores, groups = scores.topk(k, dim=-1)
+
     groups = groups.masked_fill(top_scores == float("-inf"), -1)
 
     if return_groups:
@@ -178,6 +196,9 @@ def select_compression_indices(
     # Expand groups into valid-token ranks, preserving -1 for invalid selections
     offsets = torch.arange(group_size, device=scores.device)
     indices = (groups[..., None] * group_size + offsets).flatten(-2).clamp_min(-1)
+
+    if allow_partial_groups:
+        indices = indices.masked_fill(indices >= query_counts, -1)
 
     if indices.shape[-1] < budget:
         indices = F.pad(indices, (0, budget - indices.shape[-1]), value=-1)
