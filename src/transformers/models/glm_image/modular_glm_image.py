@@ -1007,21 +1007,18 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             image_outputs=outputs.image_outputs,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, is_first_iteration=False, **kwargs):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids, is_first_iteration=is_first_iteration, **kwargs
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
+        # The M-RoPE positions: the prompt's from its token ids and image grids, then each decode step's from those, so
+        # forward never reads them from the model's state
+        model_inputs["position_ids"] = self.model.compute_3d_position_ids(
+            input_ids=model_inputs.get("input_ids"),
+            image_grid_thw=model_inputs.get("image_grid_thw"),
+            images_per_sample=model_inputs.get("images_per_sample"),
+            inputs_embeds=model_inputs.get("inputs_embeds"),
+            attention_mask=model_inputs.get("attention_mask"),
+            cache=model_inputs.get("cache"),
         )
-        # The prefill derives the positions from the image grids, and each decode step takes its own from them
-        model_inputs["position_ids"] = None
-        if not is_first_iteration and self.model.rope_deltas is not None:
-            model_inputs["position_ids"] = self.model.compute_3d_position_ids(
-                input_ids=model_inputs.get("input_ids"),
-                image_grid_thw=None,
-                images_per_sample=None,
-                inputs_embeds=model_inputs.get("inputs_embeds"),
-                attention_mask=None,
-                cache=model_inputs.get("cache"),
-            )
         return model_inputs
 
     def _prepare_multimodal_encoder_kwargs_for_generation(self, model_kwargs):
