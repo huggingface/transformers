@@ -319,10 +319,6 @@ else:
                 "LocalLayerRepository requires `kernels` to be installed. Run `pip install kernels."
             )
 
-    class FuncRepository:
-        def __init__(self, *args, **kwargs):
-            raise RuntimeError("FuncRepository requires `kernels` to be installed. Run `pip install kernels`.")
-
     def replace_kernel_forward_from_hub(*args, **kwargs):
         raise RuntimeError(
             "replace_kernel_forward_from_hub requires `kernels` to be installed. Run `pip install kernels`."

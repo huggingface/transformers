@@ -259,6 +259,7 @@ install_requires = [
     deps["typer"],  # CLI utilities. In practice, already a dependency of huggingface_hub but we use it as well
     deps["safetensors"],
     deps["tqdm"],  # progress bars in model download and training scripts
+    deps["kernels"],
 ]
 
 
