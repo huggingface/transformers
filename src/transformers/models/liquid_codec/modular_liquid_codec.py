@@ -25,14 +25,13 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
-from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..lfm3.configuration_lfm3 import Lfm3Config
-from ..lfm3.modeling_lfm3 import Lfm3Model, Lfm3PreTrainedModel, Lfm3RotaryEmbedding
+from ..lfm3.modeling_lfm3 import Lfm3Model, Lfm3PreTrainedModel
 from ..xcodec2.modeling_xcodec2 import Xcodec2FiniteScalarQuantization, Xcodec2ISTFTHead
 
 
@@ -529,21 +528,6 @@ class LiquidCodecISTFTHead(Xcodec2ISTFTHead):
 
         # Clamp as in Vocos: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/spectral_ops.py#L78
         return audio / window_envelope.clamp(min=1e-11)
-
-
-class LiquidCodecRotaryEmbedding(Lfm3RotaryEmbedding):
-    @dynamic_rope_update
-    def forward(self, x, position_ids, layer_type):
-        inv_freq = getattr(self, f"{layer_type}_inv_freq")
-        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
-
-        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        cos = emb.cos() * attention_scaling
-        sin = emb.sin() * attention_scaling
-
-        # diff -> as the original: cos / sin rounded to the model dtype, rotation in float32
-        return cos.to(x.dtype).float(), sin.to(x.dtype).float()
 
 
 @auto_docstring

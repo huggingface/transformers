@@ -472,6 +472,27 @@ class LiquidCodecISTFTHead(nn.Module):
         return audio / window_envelope.clamp(min=1e-11)
 
 
+@use_kernel_forward_from_hub("RMSNorm")
+class LiquidCodecRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        LiquidCodecRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
 class LiquidCodecRotaryEmbedding(nn.Module):
     def __init__(self, config: LiquidCodecConfig, device=None):
         super().__init__()
@@ -517,8 +538,9 @@ class LiquidCodecRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @dynamic_rope_update
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
+        # diff -> returns cos/sin in fp32 without casting to `x.dtype`
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
@@ -527,29 +549,7 @@ class LiquidCodecRotaryEmbedding(nn.Module):
         cos = emb.cos() * attention_scaling
         sin = emb.sin() * attention_scaling
 
-        # diff -> as the original: cos / sin rounded to the model dtype, rotation in float32
-        return cos.to(x.dtype).float(), sin.to(x.dtype).float()
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class LiquidCodecRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        LiquidCodecRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+        return cos, sin
 
 
 class LiquidCodecMLP(nn.Module):
