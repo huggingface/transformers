@@ -326,7 +326,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [3]  # [Temporary] baseline C
+        shard: [2]  # [Temporary] baseline C2
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       SHARD_ID: ${{ matrix.shard }}
@@ -645,6 +645,7 @@ jobs:
   # generation counterpart of `tests/models/transformers/` (run in `vllm-test-transformers`). One matrix entry per test
   # file (only ~12 tests in total, so `--num-shards` could leave a shard without tests).
   vllm-test-multimodal-generation:
+    if: false  # [Temporary] baseline C2
     permissions:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
