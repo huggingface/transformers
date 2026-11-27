@@ -203,7 +203,6 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         self.assertEqual(unpadded_gen_text[0], expected_output)
         self.assertEqual(padded_gen_text[0], expected_output)
 
-    @slow
     def test_falcon_alibi_sdpa_matches_eager(self):
         input_ids = torch.randint(0, 1000, (5, 20))
 

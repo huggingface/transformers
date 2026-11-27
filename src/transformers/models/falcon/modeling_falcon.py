@@ -391,8 +391,8 @@ class FalconAttention(nn.Module):
                 if input_dtype == torch.float16 or input_dtype == torch.bfloat16:
                     attention_scores = attention_scores.to(torch.float32)
 
-                attention_logits = attention_scores + alibi.view(batch_size, self.num_heads, 1, -1)
-                attention_logits *= self.inv_norm_factor
+                # `attention_mask` already carries the scaled ALiBi bias (see `FalconModel.forward`)
+                attention_logits = attention_scores * self.inv_norm_factor
                 attention_probs = F.softmax(attention_logits + attention_mask, dim=-1, dtype=hidden_states.dtype)
                 # [batch_size, num_heads, q_length, kv_length]
                 attention_probs = self.attention_dropout(attention_probs)
