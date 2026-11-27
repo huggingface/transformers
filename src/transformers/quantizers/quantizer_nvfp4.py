@@ -90,36 +90,20 @@ class NVFP4HfQuantizer(HfQuantizer):
         self.quantization_device = min(cuda_devices, key=lambda device: device.index or 0)
 
     def update_parallel_plan(self, model, parallel_plan):
-        from ..distributed.parallel_utils import replace_layer_number_by_wildcard
-        from ..integrations.nvfp4 import NVFP4Experts, NVFP4Linear
-
-        # The experts' scales shard like their weight, along the expert axis, the swizzled ones too
         super().update_parallel_plan(model, parallel_plan)
-        modules = {
-            replace_layer_number_by_wildcard(name): module
-            for name, module in model.named_modules()
-            if isinstance(module, (NVFP4Linear, NVFP4Experts))
-        }
 
-        # TODO: this is a bit weird, weights don't need to have _sf...
-        for key, style in list(parallel_plan.items()):
-            module_name, _, param = key.rpartition(".")
-            if isinstance(modules.get(module_name), NVFP4Experts) and hasattr(modules[module_name], f"{param}_sf"):
-                parallel_plan.setdefault(f"{key}_sf", style)
-
-        # Tensor parallelism would split the swizzled scales, which have no sharding plan yet. Expert parallelism takes
-        # the experts' rules, and shards them whole
+        # Tensor parallelism would split the swizzled scales, which have no sharding plan yet.
         distributed_config = getattr(model.config, "distributed_config", None)
         tp_size = getattr(distributed_config, "tp_size", None) or 1
-        ep_size = getattr(distributed_config, "ep_size", None) or 1
         if tp_size == 1:
             return
 
-        tp_sharded = (NVFP4Linear,) if ep_size > 1 else (NVFP4Linear, NVFP4Experts)
-        if any(isinstance(module, tp_sharded) for module in modules.values()):
+        from ..integrations.nvfp4 import NVFP4Linear
+
+        if any(isinstance(module, NVFP4Linear) for module in model.modules()):
             raise ValueError(
                 "NVFP4 quantization does not support tensor parallelism: its scale metadata does not have a "
-                "sharding plan. NVFP4 experts shard with expert parallelism, so only the experts may be NVFP4. You should use expert parallelism"
+                "sharding plan."
             )
 
     def param_needs_quantization(self, model: PreTrainedModel, param_name: str, **kwargs) -> bool:
@@ -134,22 +118,16 @@ class NVFP4HfQuantizer(HfQuantizer):
         )
 
     def quantized_module(self, name, module):
-        from ..integrations.moe import use_experts_implementation
-        from ..integrations.nvfp4 import ALL_NVFP4_EXPERTS_FUNCTIONS, NVFP4Experts, NVFP4Linear, is_nvfp4_compatible
+        from ..integrations.nvfp4 import NVFP4Linear, is_nvfp4_compatible
 
         if self.pre_quantized and self.quantization_config.dequantize:
             return None
-        weight_only = self.quantization_config.weight_only
-        if name.endswith(".experts") and self.pre_quantized and is_nvfp4_compatible(module):
-            # TODO: quantize experts from a full-precision checkpoint too
-            has_gate = getattr(module, "has_gate", True)
-            experts_class = use_experts_implementation(
-                experts_class=NVFP4Experts, experts_interface=ALL_NVFP4_EXPERTS_FUNCTIONS, has_gate=has_gate
-            )
-            return experts_class(module.config, has_gate=has_gate, weight_only=weight_only)
         if isinstance(module, nn.Linear) and is_nvfp4_compatible(module):
             return NVFP4Linear(
-                module.in_features, module.out_features, weight_only=weight_only, static_input_scale=self.pre_quantized
+                module.in_features,
+                module.out_features,
+                weight_only=self.quantization_config.weight_only,
+                static_input_scale=self.pre_quantized,
             )
         return None
 
@@ -158,15 +136,10 @@ class NVFP4HfQuantizer(HfQuantizer):
 
         return NVFP4Quantize(self.quantization_device)
 
-    # As ModelOpt saves them, and the fused experts' params they merge into (`w1.weight_scale` -> `gate_up_proj_scale`)
-    serialized_names = {
-        "weight": ["weight", "weight_scale", "weight_scale_2", "input_scale"],
-        "gate_up_proj": ["gate_up_proj", "gate_up_proj_scale", "gate_up_proj_scale_2", "gate_up_proj_input_scale"],
-        "down_proj": ["down_proj", "down_proj_scale", "down_proj_scale_2", "down_proj_input_scale"],
-    }
+    # As ModelOpt saves them
+    serialized_names = {"weight": ["weight", "weight_scale", "weight_scale_2", "input_scale"]}
 
-    # An expert's `input_scale`, named after its weight: the experts' converter takes it along
-    checkpoint_renames = {"experts.*.input_scale": "weight_input_scale"}
+    checkpoint_renames = {}
 
     def get_load_operations(self):
         from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Deserialize

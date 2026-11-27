@@ -1894,6 +1894,7 @@ def convert_and_load_state_dict_in_model(
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
         # 1. Rename the key according to all renaming and weight conversion patterns.
+        # The quantizer has per-layer specific renaming
         key = original_key if hf_quantizer is None else hf_quantizer.rename_layer(original_key)
         renamed_key, source_pattern = rename_source_key(
             key, renamings, converters, base_model_prefix, meta_model_state_dict
@@ -1915,7 +1916,6 @@ def convert_and_load_state_dict_in_model(
             else:
                 new_converter = WeightRenaming(original_key, renamed_key)
                 source_pattern = original_key
-            # each target key gets its own converter instance, with the ops of its quantizer
             if hf_quantizer is not None and renamed_key not in param_name_to_load:
                 new_converter = hf_quantizer.update_weight_transform(new_converter, model, renamed_key)
             mapping = param_name_to_load.setdefault(renamed_key, new_converter)

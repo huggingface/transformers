@@ -18,33 +18,26 @@ from unittest.mock import patch
 
 from parameterized import parameterized
 
-from transformers import MixtralConfig, MixtralForCausalLM, NVFP4Config, Qwen3_5MoeForCausalLM, Qwen3_5MoeTextConfig
-from transformers.distributed import DistributedConfig
+from transformers import NVFP4Config
 from transformers.integrations.mxfp4 import FP4_VALUES
 from transformers.integrations.nvfp4 import (
     NVFP4Dequantize,
     NVFP4Deserialize,
-    NVFP4Experts,
     NVFP4Linear,
     NVFP4Quantize,
     load_nvfp4_kernel,
     swizzle_sf,
     swizzled_sf_shape,
 )
-from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
-from transformers.testing_utils import is_expert_parallel_test, require_torch
+from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 from transformers.utils.quantization_config import QuantizationMethod
-
-from ...distributed_testing_utils import run_distributed
 
 
 if is_torch_available():
     import torch
-    from safetensors.torch import save_file
     from torch import nn
-    from torch.nn.functional import ScalingType
 
 
 def _unswizzle(sf, rows, columns):
@@ -105,24 +98,6 @@ def _fake_kernel():
         scaled_fp4_quant=scaled_fp4_quant,
         cutlass_scaled_fp4_mm=cutlass_scaled_fp4_mm,
     )
-
-
-def _fake_scaled_grouped_mm(mat_a, mat_b, scale_a, recipe_a, scale_b, recipe_b, swizzle_a, swizzle_b, offs, **_):
-    """`scaled_grouped_mm` for NVFP4 2D x 3D operands: each group's activation scales start on a 128-row tile. Rows past
-    the last group are left unwritten, NaN here. Like torch's, it needs each operand's global scale too (ones here)."""
-    if recipe_a != [ScalingType.BlockWise1x16, ScalingType.TensorWise] or recipe_b != recipe_a:
-        raise ValueError("No gemm implementation was found")
-    (scale_a, _), (scale_b, _) = scale_a, scale_b
-    a, b = mat_a.view(torch.uint8), mat_b.transpose(-2, -1).view(torch.uint8)  # (rows, k / 2), (groups, n, k / 2)
-    k_blocks = a.shape[1] // 8
-    a_sf = _unswizzle(scale_a, scale_a.numel() // (-(-k_blocks // 4) * 4), k_blocks)
-    output = a.new_full((a.shape[0], b.shape[1]), float("nan"), dtype=torch.float32)
-    start, padded_start = 0, 0
-    for group, end in enumerate(offs.tolist()):
-        input = _dequantize(a[start:end], a_sf[padded_start : padded_start + end - start])
-        output[start:end] = input @ _dequantize(b[group], _unswizzle(scale_b[group], b.shape[1], k_blocks)).T
-        start, padded_start = end, padded_start + -(-(end - start) // 128) * 128
-    return output.to(torch.bfloat16)
 
 
 def _modelopt_quantize(weight):

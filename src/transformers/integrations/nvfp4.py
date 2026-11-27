@@ -17,7 +17,6 @@ import functools
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps, _IdentityOp
 from ..utils import is_torch_available
 from ..utils.import_utils import (
@@ -26,7 +25,6 @@ from ..utils.import_utils import (
     is_kernels_available,
 )
 from .hub_kernels import lazy_load_kernel
-from .moe import ExpertsInterface
 from .mxfp4 import FP4_VALUES
 
 
@@ -236,7 +234,7 @@ class NVFP4Deserialize(ConversionOps):
         self.hf_quantizer = hf_quantizer
 
     def convert(self, input_dict, full_layer_name=None, **kwargs) -> dict[str, torch.Tensor]:
-        if len(input_dict) == 1:  # a param of its own, e.g. merged experts' `gate_up_proj_scale`: named by its target
+        if len(input_dict) == 1:  # a param of its own, named by its target
             input_dict = {full_layer_name: next(iter(input_dict.values()))}
         output = {}
         for key, value in input_dict.items():
@@ -287,10 +285,7 @@ class NVFP4Dequantize(ConversionOps):
 
 
 def is_nvfp4_compatible(module: nn.Module) -> bool:
-    if isinstance(module, nn.Linear):
-        weights = [module.weight] if module.bias is None else []
-    elif getattr(module, "has_bias", False) or getattr(module, "is_transposed", False):
-        weights = []
-    else:
-        weights = []
-    return bool(weights) and all(w.shape[-1] % SF_VEC_SIZE == 0 and w.shape[-2] % 16 == 0 for w in weights)
+    """A bias-free `nn.Linear` whose dims are 16-aligned."""
+    if not isinstance(module, nn.Linear) or module.bias is not None:
+        return False
+    return module.weight.shape[-1] % SF_VEC_SIZE == 0 and module.weight.shape[-2] % 16 == 0
