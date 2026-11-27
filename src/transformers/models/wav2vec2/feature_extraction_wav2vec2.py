@@ -192,13 +192,16 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         # convert into correct format for padding
         encoded_inputs = BatchFeature({"input_values": raw_speech})
 
+        return_attention_mask = (
+            return_attention_mask if return_attention_mask is not None else self.return_attention_mask
+        )
         padded_inputs = self.pad(
             encoded_inputs,
             padding=padding,
             max_length=max_length,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=return_attention_mask,
+            return_attention_mask=return_attention_mask or self.do_normalize,
         )
 
         # convert input values to correct format
@@ -219,16 +222,19 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         if attention_mask is not None:
             padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
 
-        # zero-mean and unit-variance normalization
+        # Normalize only valid samples, independently of padding side or mask output.
         if self.do_normalize:
-            attention_mask = (
-                attention_mask
-                if self._get_padding_strategies(padding, max_length=max_length) is not PaddingStrategy.DO_NOT_PAD
-                else None
-            )
-            padded_inputs["input_values"] = self.zero_mean_unit_var_norm(
-                padded_inputs["input_values"], attention_mask=attention_mask, padding_value=self.padding_value
-            )
+            normed_input_values = []
+            for vector, mask in zip(padded_inputs["input_values"], padded_inputs["attention_mask"]):
+                mask = mask.astype(bool)
+                normalized = self.zero_mean_unit_var_norm([vector[mask]], attention_mask=None)[0]
+                padded_vector = np.full(vector.shape, self.padding_value, dtype=normalized.dtype)
+                padded_vector[mask] = normalized
+                normed_input_values.append(padded_vector)
+            padded_inputs["input_values"] = normed_input_values
+
+        if not return_attention_mask:
+            padded_inputs.pop("attention_mask", None)
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

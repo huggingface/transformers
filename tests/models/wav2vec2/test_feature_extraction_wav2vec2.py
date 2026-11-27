@@ -113,6 +113,39 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+    def test_normalization_is_independent_of_return_attention_mask(self):
+        for dtype in [np.float32, np.int16, np.int64]:
+            speech_inputs = [np.asarray(x, dtype=dtype) for x in ([1, 2, 4], [3, 1, 5, 2, 4])]
+            for padding_side in ["left", "right"]:
+                feat_extract = self.feature_extraction_class(padding_side=padding_side)
+                for padding, max_length, truncation in [("longest", None, False), ("max_length", 4, True)]:
+                    expected = [
+                        feat_extract(x[:max_length], sampling_rate=16000).input_values[0] for x in speech_inputs
+                    ]
+                    for return_attention_mask in [None, False, True]:
+                        with self.subTest(
+                            dtype=dtype,
+                            padding_side=padding_side,
+                            padding=padding,
+                            return_attention_mask=return_attention_mask,
+                        ):
+                            processed = feat_extract(
+                                speech_inputs,
+                                sampling_rate=16000,
+                                padding=padding,
+                                max_length=max_length,
+                                truncation=truncation,
+                                return_attention_mask=return_attention_mask,
+                                return_tensors="np",
+                            )
+                            self.assertEqual("attention_mask" in processed, return_attention_mask is True)
+                            expected_dtype = np.float32 if dtype == np.float32 else np.float64
+                            self.assertEqual(processed.input_values.dtype, expected_dtype)
+                            for actual, normalized in zip(processed.input_values, expected):
+                                padding_length = len(actual) - len(normalized)
+                                pad_width = (padding_length, 0) if padding_side == "left" else (0, padding_length)
+                                np.testing.assert_allclose(actual, np.pad(normalized, pad_width), atol=1e-6)
+
     def test_zero_mean_unit_variance_normalization_np(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
