@@ -189,7 +189,9 @@ class HYV4VLRMSNorm(HunYuanVLRMSNorm):
 
 class HYV4VLVisionPatchEmbed(HunYuanVLVisionPatchEmbed):
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        patch_pos_embed = self.position_embedding.weight[1:, :].reshape(
+        # Read through the embedding rather than `.weight` directly so `device_map` offload hooks materialize it.
+        positions = torch.arange(1, self.position_edge**2 + 1, device=embeddings.device)
+        patch_pos_embed = self.position_embedding(positions).reshape(
             1, self.position_edge, self.position_edge, self.embed_dim
         )
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2).float()
@@ -262,6 +264,8 @@ class HYV4VLVisionModel(HunYuanVLVisionTransformer):
     # Only the text attention (sinks + DSA) is restricted to eager
     _supports_sdpa = True
     _supports_flash_attn = True
+    # Vision tower carries none of HYV4's text-only fp32 modules (`sinks`, `weights_proj`, `scale`, etc.).
+    _keep_in_fp32_modules_strict = None
 
 
 class HYV4VLRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
