@@ -765,6 +765,8 @@
         title: JEV
       - local: model_doc/jina_embeddings_v3
         title: jina_embeddings_v3
+      - local: model_doc/jina_embeddings_v5
+        title: JinaEmbeddingsV5
       - local: model_doc/kimi_linear
         title: KimiLinear
       - local: model_doc/kolibri1

@@ -92,6 +92,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "NougatConfig": ["decoder", "encoder"],
     "PI0Config": ["vlm_projection_dim"],
     "EuroBertConfig": ["is_causal"],  # not used directly, allows causal-bidirectional switch
+    "JinaEmbeddingsV5Config": ["mask_token_id", "task_names"],
     "EsmcConfig": ["expansion_ratio"],  # consumed in __post_init__ to derive intermediate_size
     "Ernie4_5_VL_MoeConfig": ["args"],  # BC Alias
     "Ernie4_5_VL_MoeTextConfig": ["args"],  # BC Alias
