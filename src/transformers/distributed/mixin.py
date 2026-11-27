@@ -36,14 +36,13 @@ from .expert_parallel import apply_expert_parallelism
 from .fsdp import ALL_FSDP_STYLES, _resolve_tied_embed_lm_head_plan, apply_fully_sharded_data_parallelism
 from .parallel_utils import ALL_PARALLEL_STYLES, _get_parameter_plan, replace_layer_number_by_wildcard
 from .pipeline_parallel import apply_pipeline_parallelism
-from .tensor_parallel import apply_tensor_parallelism, gather_state_dict_for_save
+from .tensor_parallel import apply_tensor_parallelism
 from .utils import (
     TransformersDeviceMesh,
     _check_distributed_checkpointing_available,
     _distributed_barrier,
     _get_torch_distributed_rank,
     _is_torch_distributed_initialized,
-    gather_full_state_dict,
     initialize_distributed_mesh,
 )
 
@@ -401,38 +400,6 @@ class DistributedMixin:
                     )
             finally:
                 _distributed_barrier()
-
-    def gather_sharded_state_dict_for_save(
-        self,
-        model_to_save,
-        state_dict: dict,
-        distributed_config: DistributedConfig | None,
-        *,
-        save_on_this_rank: bool = True,
-    ) -> dict:
-        """Gather TP- or FSDP-sharded weights to full CPU tensors for checkpoint writing."""
-        if distributed_config is None:
-            return state_dict
-
-        if distributed_config.dp_size > 1:
-            # Also covers the 2-D (fsdp, tp) mesh and token dispatch with expert replicas: every parameter is
-            # FSDP-managed, and the full state dict is only materialized on rank 0.
-            if not _is_torch_distributed_initialized():
-                raise ValueError(
-                    "Saving an FSDP-wrapped model requires torch.distributed to be initialized. "
-                    "Call save_pretrained from every rank after init_process_group."
-                )
-            return gather_full_state_dict(model_to_save)
-
-        if distributed_config.tp_size > 1:
-            state_dict = gather_state_dict_for_save(
-                state_dict, self._tp_plan, self._device_mesh, distributed_config.tp_size
-            )
-            if not save_on_this_rank:
-                state_dict = {}
-            return state_dict
-
-        return state_dict
 
     def barrier_after_gathered_checkpoint_save(self, distributed_config: DistributedConfig | None) -> None:
         """Barrier so non-writer ranks wait for rank 0 to finish gathered checkpoint writes."""
