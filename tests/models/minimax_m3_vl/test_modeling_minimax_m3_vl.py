@@ -37,15 +37,18 @@ from transformers.testing_utils import (
 )
 
 from ...test_image_processing_common import load_coco_image, load_test_image
-from ...test_modeling_common import floats_tensor, ids_tensor
+from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
     import torch
 
+    from transformers.masking_utils import create_compression_mask
     from transformers.models.minimax_m3_vl.configuration_minimax_m3_vl import MiniMaxM3VLVisionConfig
     from transformers.models.minimax_m3_vl.modeling_minimax_m3_vl import (
+        MiniMaxM3VLIndexer,
+        MiniMaxM3VLRotaryEmbedding,
         MiniMaxM3VLVisionRotaryEmbedding,
     )
     from transformers.vision_utils import get_vision_position_ids
@@ -85,7 +88,7 @@ class MiniMaxM3VLVisionText2TextModelTester(VLMModelTester):
         "num_experts": 4,
         "num_experts_per_tok": 2,
         "mlp_layer_types": ["dense", "sparse"],
-        "layer_types": ["full_attention", "minimax_m3_sparse"],
+        "layer_types": ["full_attention", "indexed_attention"],
         "routed_scaling_factor": 2.0,
         "swiglu_alpha": 1.702,
         "swiglu_limit": 7.0,
@@ -114,6 +117,23 @@ class MiniMaxM3VLVisionText2TextModelTester(VLMModelTester):
         batch_size = batch_size if batch_size is not None else self.batch_size
         return {"image_grid_thw": torch.tensor([[1, 2, 2]] * batch_size, device=torch_device)}
 
+    def prepare_config_and_inputs_for_video(self):
+        config, inputs_dict = self.prepare_config_and_inputs_for_common()
+
+        video_grid_thw = inputs_dict["image_grid_thw"].clone()
+        video_grid_thw[:, 0] *= 2
+
+        input_ids = inputs_dict["input_ids"].clone()
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
+        input_ids[:, : 2 * self.num_image_tokens] = self.video_token_id
+
+        return config, {
+            "input_ids": input_ids,
+            "attention_mask": torch.ones_like(input_ids),
+            "pixel_values_videos": self.create_pixel_values(batch_size=2 * input_ids.shape[0]),
+            "video_grid_thw": video_grid_thw,
+        }
+
 
 @require_torch
 class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
@@ -130,44 +150,6 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
 
     is_compression_based = True
-
-    def test_indexer_selects_blocks_per_head(self):
-        """The lightning indexer must select key blocks *per head* (one selection per KV / GQA group),
-        matching the deployment kernel -- not a single selection shared across all heads. This guards
-        against collapsing the indexer-head axis (e.g. a stray ``amax(dim=1)``). The divergence only
-        shows up once the context is long enough to be genuinely sparse
-        (``num_key_blocks > index_topk_blocks``); below that every block is selected regardless of head,
-        so the regular short tiny-config tests (and the short slow integration prompts) never trip it.
-        """
-        from transformers.models.minimax_m3_vl.modeling_minimax_m3_vl import (
-            MiniMaxM3VLIndexer,
-            MiniMaxM3VLRotaryEmbedding,
-        )
-
-        text_config = self.model_tester.get_config().text_config
-        # Force the sparse regime: 6 key blocks > index_topk_blocks (=4), with >1 indexer head.
-        seq_len = 6 * text_config.index_block_size
-        num_key_blocks = -(-seq_len // text_config.index_block_size)
-        topk = min(text_config.index_topk_blocks, num_key_blocks)
-        self.assertGreater(num_key_blocks, topk, "test config does not exercise the sparse path")
-        self.assertGreater(text_config.index_n_heads, 1, "need >1 indexer head to observe per-head selection")
-
-        torch.manual_seed(0)
-        indexer = MiniMaxM3VLIndexer(text_config, layer_idx=0).to(torch_device).eval()
-        rotary = MiniMaxM3VLRotaryEmbedding(text_config).to(torch_device)
-
-        hidden_states = torch.randn(1, seq_len, text_config.hidden_size, device=torch_device)
-        position_ids = torch.arange(seq_len, device=torch_device).unsqueeze(0)
-        position_embeddings = rotary(hidden_states, position_ids)
-        with torch.no_grad():
-            block_indices = indexer(hidden_states, position_embeddings, None, position_ids)
-
-        # Per-head axis is present -- a head-collapsed indexer would return [B, S_q, topk].
-        self.assertEqual(block_indices.shape, (1, text_config.index_n_heads, seq_len, topk))
-        # At least one query position selects a different block set across the indexer heads, which is
-        # impossible if the head axis had been max-collapsed into a single shared selection.
-        heads_differ = (block_indices[0, 0] != block_indices[0, 1]).any()
-        self.assertTrue(bool(heads_differ), "indexer heads selected identical blocks -- head axis was collapsed")
 
     def test_reverse_loading_mapping(self):
         # As in llava, the base model has no `model.` prefix to reverse the `^language_model\.model\.` rename onto
@@ -198,129 +180,99 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    def test_right_padding_does_not_leak(self):
-        """Right-padding must not change a sequence's real-token logits.
+    @unittest.skip(reason="Too complicated to support for now, revisit later")
+    def test_eager_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
 
-        Pad keys land on slots *after* every real token, so block-level causality drops them before
-        top-k selection and the indexer's folded mask zeroes the pad columns. The real tokens therefore
-        occupy the same slots and see the same key blocks as in an unpadded run -- unlike left-padding,
-        which shifts the slot-anchored block boundaries (see `test_left_padding_compatibility`).
+    @unittest.skip(reason="Too complicated to support for now, revisit later")
+    def test_sdpa_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    def test_indexer_selects_blocks_per_head(self):
         """
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.text_config._attn_implementation = "eager"
-        vocab = config.text_config.vocab_size
-        pad_id = config.text_config.pad_token_id
-        # Text-only inputs: keep ids clear of the image/video placeholder ids so no vision tower runs.
-        low = max(self.model_tester.image_token_id, self.model_tester.video_token_id) + 1
+        Verify that indexer heads select different blocks once the context exceeds
+        the selection budget, rather than sharing a single selection across heads.
+        """
+        config = self.model_tester.get_config().text_config
+        config._attn_implementation = "eager"
+        seq_len = (config.index_topk_blocks + 2) * config.index_block_size
+
         torch.manual_seed(0)
-        lengths = [self.model_tester.seq_length + 6, self.model_tester.seq_length + 1]
-        seqs = [torch.randint(low, vocab - 2, (n,), device=torch_device) for n in lengths]
-        max_len = max(lengths)
+        indexer = MiniMaxM3VLIndexer(config, layer_idx=0).to(torch_device).eval()
+        rotary = MiniMaxM3VLRotaryEmbedding(config).to(torch_device)
+
+        hidden_states = floats_tensor([1, seq_len, config.hidden_size])
+        position_ids = torch.arange(seq_len, device=torch_device).unsqueeze(0)
+        position_embeddings = rotary(hidden_states, position_ids)
+        attention_mask = create_compression_mask(config, hidden_states, attention_mask=None)
+
+        with torch.no_grad():
+            block_indices, topk_indices = indexer(hidden_states, position_embeddings, attention_mask)
+
+        self.assertEqual(block_indices.shape, (1, config.index_n_heads, seq_len, config.index_topk_blocks))
+        self.assertEqual(
+            topk_indices.shape,
+            (1, config.index_n_heads, seq_len, config.index_topk_blocks * config.index_block_size),
+        )
+
+        # Compare block membership independently of selection order.
+        selected_blocks = block_indices.sort(dim=-1).values
+        self.assertTrue((selected_blocks[:, 0] != selected_blocks[:, 1]).any().item())
+
+    def test_right_padding_does_not_leak(self):
+        """
+        Right-padding must not affect real-token logits, even in the sparse regime,
+        since it preserves physical block boundaries and causal visibility.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.text_config._attn_implementation = "eager"
+        config.text_config.index_block_size = 2
+        config.text_config.index_topk_blocks = 2
+
+        input_ids = inputs_dict["input_ids"]
+        attention_mask = torch.ones_like(input_ids)
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "pixel_values": inputs_dict["pixel_values"],
+            "image_grid_thw": inputs_dict["image_grid_thw"],
+        }
+        self.assertGreater(input_ids.shape[-1], 4)
 
         model = MiniMaxM3SparseForConditionalGeneration(config).to(torch_device).eval()
-
-        per_seq_logits = []
-        for seq in seqs:
-            with torch.no_grad():
-                out = model(
-                    input_ids=seq[None],
-                    attention_mask=torch.ones(1, len(seq), dtype=torch.long, device=torch_device),
-                )
-            per_seq_logits.append(out.logits[0, : len(seq)])
-
-        input_ids = torch.full((len(seqs), max_len), pad_id, device=torch_device)
-        attention_mask = torch.zeros(len(seqs), max_len, dtype=torch.long, device=torch_device)
-        for i, seq in enumerate(seqs):
-            input_ids[i, : len(seq)] = seq
-            attention_mask[i, : len(seq)] = 1
         with torch.no_grad():
-            batched_logits = model(input_ids=input_ids, attention_mask=attention_mask).logits
+            logits = model(**inputs).logits
 
-        for i, seq in enumerate(seqs):
-            torch.testing.assert_close(batched_logits[i, : len(seq)], per_seq_logits[i], rtol=1e-4, atol=1e-4)
+            inputs["input_ids"] = torch.nn.functional.pad(
+                input_ids, (0, 3), value=config.text_config.pad_token_id
+            )
+            inputs["attention_mask"] = torch.nn.functional.pad(attention_mask, (0, 3))
+            padded_logits = model(**inputs).logits
+
+        torch.testing.assert_close(logits, padded_logits[:, : input_ids.shape[1]], rtol=1e-4, atol=1e-4)
 
     def test_video_forward(self):
-        """Video frames flow through the same vision tower as images and scatter into the video-token slots."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        batch_size = self.model_tester.batch_size
-        num_channels = self.model_tester.num_channels
-        temporal_patch_size = self.model_tester.temporal_patch_size
-        patch_size = self.model_tester.patch_size
-        merge_size = self.model_tester.spatial_merge_size
-
-        num_frames = 4
-        grid_t = num_frames // temporal_patch_size
-        grid_h = self.model_tester.image_size // patch_size
-        grid_w = self.model_tester.image_size // patch_size
-        patches_per_video = grid_t * grid_h * grid_w
-        # ``patch_merge`` groups ``merge_size**2`` patches, so each video yields this many tokens.
-        tokens_per_video = patches_per_video // (merge_size**2)
-
-        patch_dim = num_channels * (patch_size**2) * temporal_patch_size
-        pixel_values_videos = floats_tensor([batch_size * patches_per_video, patch_dim])
-        video_grid_thw = torch.tensor([[grid_t, grid_h, grid_w]] * batch_size, device=torch_device)
-        # The vision tower consumes exactly ``grid_t * grid_h * grid_w`` patches per video.
-        self.assertEqual(pixel_values_videos.shape[0], int(video_grid_thw.prod(dim=1).sum()))
-
-        input_ids = ids_tensor([batch_size, self.model_tester.seq_length], config.text_config.vocab_size - 2) + 2
-        input_ids[input_ids == self.model_tester.image_token_id] = self.model_tester.pad_token_id
-        input_ids[input_ids == self.model_tester.video_token_id] = self.model_tester.pad_token_id
-        # Carve out one contiguous block of video-token slots per sequence.
-        self.assertLessEqual(tokens_per_video, self.model_tester.seq_length)
-        input_ids[:, :tokens_per_video] = self.model_tester.video_token_id
-        attention_mask = torch.ones_like(input_ids)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_video()
 
         for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
+            model = model_class(config).to(torch_device).eval()
             with torch.no_grad():
-                outputs = model(
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
-                    pixel_values_videos=pixel_values_videos,
-                    video_grid_thw=video_grid_thw,
-                )
-            self.assertIsNotNone(outputs)
-            self.assertIsNotNone(outputs.video_hidden_states)
-            self.assertEqual(torch.cat(outputs.video_hidden_states, dim=0).shape[0], batch_size * tokens_per_video)
+                outputs = model(**inputs_dict)
+
+            self.assertIsNotNone(outputs.video_outputs)
+            self.assertEqual(
+                torch.cat(outputs.video_outputs.pooler_output, dim=0).shape[0],
+                2 * self.model_tester.batch_size * self.model_tester.num_image_tokens,
+            )
 
     def test_mismatching_num_video_tokens(self):
-        """VLMs must raise when the number of videos doesn't match the number of video tokens in the text."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        batch_size = self.model_tester.batch_size
-        num_channels = self.model_tester.num_channels
-        temporal_patch_size = self.model_tester.temporal_patch_size
-        patch_size = self.model_tester.patch_size
-        merge_size = self.model_tester.spatial_merge_size
-
-        num_frames = 4
-        grid_t = num_frames // temporal_patch_size
-        grid_h = self.model_tester.image_size // patch_size
-        grid_w = self.model_tester.image_size // patch_size
-        patches_per_video = grid_t * grid_h * grid_w
-        tokens_per_video = patches_per_video // (merge_size**2)
-
-        patch_dim = num_channels * (patch_size**2) * temporal_patch_size
-        pixel_values_videos = floats_tensor([batch_size * patches_per_video, patch_dim])
-        video_grid_thw = torch.tensor([[grid_t, grid_h, grid_w]] * batch_size, device=torch_device)
-
-        input_ids = ids_tensor([batch_size, self.model_tester.seq_length], config.text_config.vocab_size - 2) + 2
-        input_ids[input_ids == self.model_tester.image_token_id] = self.model_tester.pad_token_id
-        input_ids[input_ids == self.model_tester.video_token_id] = self.model_tester.pad_token_id
-        # One fewer video-token slot than features -> mismatch.
-        input_ids[:, : tokens_per_video - 1] = self.model_tester.video_token_id
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_video()
+        inputs_dict["input_ids"][:, 0] = config.text_config.pad_token_id
 
         for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
+            model = model_class(config).to(torch_device).eval()
             with self.assertRaisesRegex(ValueError, "Video features and video tokens do not match"):
-                _ = model(
-                    input_ids=input_ids,
-                    pixel_values_videos=pixel_values_videos,
-                    video_grid_thw=video_grid_thw,
-                )
+                model(**inputs_dict)
 
     @parameterized.expand([(8, 2), (80, 26)])
     def test_three_axes_frequency_ladder(self, head_dim, axis_dim):
@@ -346,14 +298,6 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
 
         torch.testing.assert_close(cosine, angles.cos())
         torch.testing.assert_close(sine, angles.sin())
-
-    @unittest.skip(reason="Too complicated to support for now, revisit later")
-    def test_eager_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
-        pass
-
-    @unittest.skip(reason="Too complicated to support for now, revisit later")
-    def test_sdpa_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
-        pass
 
 
 @slow
