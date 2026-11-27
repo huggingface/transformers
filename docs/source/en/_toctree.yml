@@ -867,6 +867,8 @@
         title: NanoChat
       - local: model_doc/nemotron
         title: Nemotron
+      - local: model_doc/nemotron_labs_diffusion
+        title: Nemotron-Labs Diffusion
       - local: model_doc/nemotron_h
         title: NemotronH
       - local: model_doc/nemotron_h_omni

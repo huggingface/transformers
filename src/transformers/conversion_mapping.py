@@ -1358,6 +1358,10 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.mlp\.c_fc_1\.", ".mlp.up_proj."),
             WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.down_proj."),
         ],
+        "nemotron_labs_diffusion": [
+            WeightRenaming(r"^encoder\.", "model."),
+            WeightRenaming(r"^diffusion_head\.", "lm_head."),
+        ],
         "lara_mini": [
             WeightRenaming(source_patterns=r"linear_attn\.out_norm\.", target_patterns="linear_attn.norm."),
             # The checkpoints fuse the gated delta net input projections into one `in_proj`, rows `[q|k|v|z|b|a]`

@@ -511,6 +511,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingEncoderConfig"),
         ("nemotron_h", "NemotronHConfig"),
         ("nemotron_h_omni", "NemotronH_Omni_Reasoning_V3_Config"),
+        ("nemotron_labs_diffusion", "NemotronLabsDiffusionConfig"),
         ("neomme", "NeoMMEConfig"),
         ("neucodec", "NeuCodecConfig"),
         ("nllb-moe", "NllbMoeConfig"),
