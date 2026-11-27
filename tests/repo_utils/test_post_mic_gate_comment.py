@@ -76,17 +76,22 @@ class BlockedCasesTest(unittest.TestCase):
 class ModelNamesTest(unittest.TestCase):
     def test_uses_the_selecting_model_directory(self):
         cases = mod.blocked_cases({"decisions": [BLOCKED, CODEGEN, {**BLOCKED, "variant": "default"}]})
-        self.assertEqual(mod.model_names(cases, OBSERVATION), ["gptj", "codegen"])
+        self.assertEqual(mod.model_names(cases, OBSERVATION), (["gptj", "codegen"], ["gptj", "codegen"]))
 
     def test_falls_back_to_the_contract_name(self):
         cases = mod.blocked_cases({"decisions": [BLOCKED]})
-        self.assertEqual(mod.model_names(cases, None), ["GPT-J"])
-        self.assertEqual(mod.model_names(cases, {"selections": [{"GPT-J": "models/../x"}]}), ["GPT-J"])
+        self.assertEqual(mod.model_names(cases, None), (["GPT-J"], []))
+        self.assertEqual(mod.model_names(cases, {"selections": [{"GPT-J": "models/../x"}]}), (["GPT-J"], []))
+
+    def test_contract_names_are_left_out_of_run_mic(self):
+        cases = mod.blocked_cases({"decisions": [BLOCKED, {**CODEGEN, "contract": "Other"}]})
+        self.assertEqual(mod.model_names(cases, OBSERVATION), (["gptj", "Other"], ["gptj"]))
 
 
 class RenderTest(unittest.TestCase):
-    def render(self, enforced=True):
+    def render(self, enforced=True, observation=OBSERVATION, base_sha=None):
         cases = mod.blocked_cases({"decisions": [BLOCKED, CODEGEN]})
+        models, run_models = mod.model_names(cases, observation)
         return mod.render(
             cases,
             pr=51298,
@@ -95,7 +100,9 @@ class RenderTest(unittest.TestCase):
             run_id="45802675898",
             attempt="2",
             job_url="https://github.com/o/r/actions/runs/1/job/2",
-            models=mod.model_names(cases, OBSERVATION),
+            models=models,
+            run_models=run_models,
+            base_sha=base_sha,
         )
 
     def test_comment_has_errors_links_and_record_mic(self):
@@ -119,7 +126,25 @@ class RenderTest(unittest.TestCase):
         self.assertIn("can't merge", body)
 
     def test_shadow_mode_does_not_claim_the_pr_is_blocked_from_merging(self):
-        self.assertNotIn("can't merge", self.render(enforced=False))
+        body = self.render(enforced=False)
+        self.assertNotIn("can't merge", body)
+        self.assertIn("must be resolved before merge", body)
+
+    def test_shows_the_base_commit_when_known(self):
+        self.assertIn(f"(PR `{SHA[:10]}`)", self.render())
+        self.assertIn(f"(base `{'a' * 10}`, PR `{SHA[:10]}`)", self.render(base_sha="a" * 40))
+
+    def test_no_run_mic_without_model_directories(self):
+        body = self.render(observation=None)
+        self.assertNotIn("make run-mic", body)
+        self.assertIn("record-mic: GPT-J CodeGen2", body)
+
+
+class CleanShaTest(unittest.TestCase):
+    def test_accepts_only_hex(self):
+        self.assertEqual(mod.clean_sha(SHA), SHA)
+        for value in (None, 123, "", "main", SHA.upper(), "abc`def", SHA + "0"):
+            self.assertIsNone(mod.clean_sha(value))
 
 
 RECORD_REPLY = {
@@ -209,6 +234,12 @@ class MainTest(unittest.TestCase):
         self.assertEqual(method, "POST")
         self.assertTrue(url.endswith("/issues/51298/comments"))
         self.assertIn("record-mic: gptj", body)
+
+    def test_renders_the_base_commit_from_the_gate_report(self):
+        calls = self.run_main({"decisions": [BLOCKED], "base_sha": "b" * 40})
+        self.assertIn(f"(base `{'b' * 10}`, PR `{SHA[:10]}`)", calls[0][2])
+        calls = self.run_main({"decisions": [BLOCKED], "base_sha": "](https://evil.example)"})
+        self.assertIn(f"(PR `{SHA[:10]}`)", calls[0][2])
 
     def test_updates_the_existing_comment(self):
         existing = {"user": {"type": "Bot"}, "body": mod.MARKER + "\nold", "url": "https://api/c/9", "html_url": "h"}

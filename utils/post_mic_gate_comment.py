@@ -52,6 +52,7 @@ RECORD_BOT = "github-actions[bot]"
 RECORD_REPLY = re.compile(r"^\*\*record-mic\*\* \(asked by @([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))\): published\b")
 RECORD_ROW = re.compile(r"^\| ([A-Za-z0-9][A-Za-z0-9_.\-]{0,99}) \| ")
 SELECTED_BY = re.compile(r"^models/([a-z0-9_]{1,64})\b")
+SHA = re.compile(r"^[0-9a-f]{7,40}$")
 MAX_ROWS = 20
 MAX_ERROR = 200
 
@@ -82,20 +83,31 @@ def blocked_cases(gate):
 
 
 def model_names(cases, observation):
-    """What to name in `make run-mic` and `record-mic`: the `models/` directory that selected each
-    blocked contract (both accept it), else the contract name (only `record-mic` accepts that)."""
+    """`(record_names, run_names)`: what to name in `record-mic` and in `make run-mic`.
+
+    Each blocked contract is named by the `models/` directory that selected it, which both accept.
+    Without one it falls back to the contract name, which only `record-mic` accepts, so it is left
+    out of `run_names`.
+    """
     reasons = {}
     for selection in (observation or {}).get("selections") or []:
         if isinstance(selection, dict):
             reasons.update(selection)
-    names = []
+    record_names, run_names = [], []
     for contract, *_ in cases:
         reason = reasons.get(contract)
         match = SELECTED_BY.match(reason) if isinstance(reason, str) else None
         name = match.group(1) if match else contract
-        if name not in names:
-            names.append(name)
-    return names
+        if name not in record_names:
+            record_names.append(name)
+        if match and name not in run_names:
+            run_names.append(name)
+    return record_names, run_names
+
+
+def clean_sha(value):
+    """A commit SHA from the artifact, or None when it is not plain lowercase hex."""
+    return value if isinstance(value, str) and SHA.match(value) else None
 
 
 def run_url(pr, run_id, attempt):
@@ -106,7 +118,7 @@ def run_url(pr, run_id, attempt):
     return f"{DASHBOARD}/d/pytest-observability-by-run/pytest-observability-run?{query}"
 
 
-def render(cases, *, pr, sha, enforced, run_id, attempt, job_url, models):
+def render(cases, *, pr, sha, enforced, run_id, attempt, job_url, models, run_models, base_sha=None):
     models = " ".join(models)
     query = urllib.parse.urlencode({"scope": "prs", "group": "pr", "q": str(pr)})
     links = [
@@ -116,12 +128,17 @@ def render(cases, *, pr, sha, enforced, run_id, attempt, job_url, models):
     ]
     if job_url:
         links.append(f"[job log]({job_url})")
-    effect = "This PR can't merge until they are resolved." if enforced else "Reviewers treat them as failures."
+    effect = (
+        "This PR can't merge until they are resolved (see below)."
+        if enforced
+        else "CI doesn't fail on this yet, but they must be resolved before merge (see below)."
+    )
+    commits = f"base `{base_sha[:10]}`, PR `{sha[:10]}`" if base_sha else f"PR `{sha[:10]}`"
     lines = [
         MARKER,
         f"### ❌ Model integration contracts: {len(cases)} blocked case(s)",
         "",
-        f"These contracts are green on the base and red with this PR (commit {sha[:10]}). {effect}",
+        f"These contracts are green on the base and red with this PR ({commits}). {effect}",
         "",
         "| contract | target | variant | error |",
         "|---|---|---|---|",
@@ -133,21 +150,27 @@ def render(cases, *, pr, sha, enforced, run_id, attempt, job_url, models):
         "",
         " · ".join(links),
         "",
-        f'- **Regression**: fix it in this PR. Reproduce it with `make run-mic MODEL="{models}"`.',
-        "- **Intended change**: push your final changes and let the contracts job finish, then someone with "
-        "write access re-records the expected values for this PR only, either by commenting:",
+    ]
+    regression = "- If this is a regression, fix it in this PR."
+    if run_models:
+        regression += f' Reproduce it locally with `make run-mic MODEL="{" ".join(run_models)}"`.'
+    lines += [
+        "**PR author**",
         "",
-        "  ```text",
-        f"  record-mic: {models}",
-        "  ```",
+        regression,
+        "- If the change is intended, say so in the PR, push your final changes and wait for the contracts job "
+        "to finish. A maintainer will then re-record the expected values.",
         "",
-        "  or from any checkout of transformers, with `gh` logged in (same workflow, same checks):",
+        "**Maintainers** (write access): once you agree the change is intended, re-record the expected values "
+        "for this PR only, by commenting",
         "",
-        "  ```bash",
-        f'  make record-mic MODEL="{models}" PR={pr}',
-        "  ```",
+        "```text",
+        f"record-mic: {models}",
+        "```",
         "",
-        "  A bot replies here with the re-recorded values; the next contracts run uses them.",
+        f'or by running `make record-mic MODEL="{models}" PR={pr}` from any transformers checkout with `gh` '
+        "logged in (both start the same `record-mic` workflow; nothing is recorded locally). A bot replies "
+        "here with the re-recorded values, and the next contracts run uses them.",
         "",
         f"[What a blocked case is and what happens on merge]({DOCS})",
     ]
@@ -262,7 +285,7 @@ def main():
     existing = find_comment(comments)
     if cases:
         job_url = find_job_url(repo, os.environ["RUN_ID"], token)
-        models = model_names(cases, read_json(artifact / "contracts-observation.json"))
+        models, run_models = model_names(cases, read_json(artifact / "contracts-observation.json"))
         body = render(
             cases,
             pr=pr,
@@ -272,6 +295,8 @@ def main():
             attempt=os.environ.get("RUN_ATTEMPT", "1"),
             job_url=job_url,
             models=models,
+            run_models=run_models,
+            base_sha=clean_sha(gate.get("base_sha")),
         )
     elif existing:
         body = render_resolved(sha, record_replies(comments))
@@ -280,9 +305,11 @@ def main():
         return 0
 
     if existing:
-        if existing["body"] != body:
+        if existing["body"] == body:
+            print(f"#{pr}: comment unchanged {existing['html_url']}")
+        else:
             github_request(existing["url"], token=token, method="PATCH", payload={"body": body})
-        print(f"#{pr}: updated comment {existing['html_url']}")
+            print(f"#{pr}: updated comment {existing['html_url']}")
     else:
         comment = github_request(
             f"{GITHUB_API_URL}/repos/{repo}/issues/{pr}/comments", token=token, method="POST", payload={"body": body}
