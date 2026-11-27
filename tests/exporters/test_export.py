@@ -24,7 +24,7 @@ import torch
 from parameterized import parameterized
 
 from transformers import GenerationConfig, set_seed
-from transformers.exporters.decompose import decompose_multimodal, is_multimodal
+from transformers.exporters.decompose import _MODALITY_SPECS, decompose_multimodal, is_multimodal
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
@@ -976,8 +976,18 @@ class ExportTesterMixin:
 
     def _check_multimodal_runtime(self, exporter, exported, model, inputs, atol, rtol, check_exactness, check_device):
         """The components of a multimodal model, exported one by one, run end to end through the runtime like the
-        whole model."""
+        whole model: its modality features scattered into placeholder tokens, which a dual encoder (CLIP) has none of.
+        A modality's encoder outputs come back as its features alone (`pooler_output`): the export keeps no other
+        state of the encoder."""
         if "text_embeddings_model" not in exported or "language_model" not in exported:
+            return
+        if all(getattr(model.config, spec.token_field, None) is None for spec in _MODALITY_SPECS):
+            return
+        # A modality encoded inside the model's forward (Qwen2-Audio's audio) has no component to feed it
+        if any(
+            spec.component not in exported and any(inputs.get(key) is not None for key in spec.feature_keys)
+            for spec in _MODALITY_SPECS
+        ):
             return
         multimodal = ExportedMultimodalModel(
             {name: component.components["model"] for name, component in exported.items()},
@@ -991,9 +1001,16 @@ class ExportTesterMixin:
         outputs = multimodal(**copy.deepcopy(inputs))
         self.assertIs(type(outputs), type(expected))
         if check_exactness:
+            encoder_state = tuple(f"{spec.token_field.replace('_token_id', '_outputs')}." for spec in _MODALITY_SPECS)
+            expected = get_leaf_tensors(expected)
+            expected = {
+                key: value
+                for key, value in expected.items()
+                if not key.startswith(encoder_state) or key.endswith(".pooler_output")
+            }
             self._check_outputs_close(
                 get_leaf_tensors(outputs),
-                get_leaf_tensors(expected),
+                expected,
                 atol=atol,
                 rtol=rtol,
                 check_device=check_device,
