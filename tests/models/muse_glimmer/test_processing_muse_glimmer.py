@@ -46,6 +46,8 @@ VOCAB = {
 class MuseGlimmerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MuseGlimmerProcessor
     model_id = "meta-models/Muse-Glimmer-30B"
+    # MUSE has no `size`, so the count test checks the token budget it resizes to
+    num_image_tokens_images_kwargs = {"max_image_tokens": 10}
 
     @classmethod
     def _setup_image_processor(cls):

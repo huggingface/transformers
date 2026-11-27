@@ -55,21 +55,24 @@ class Ovis2_5Processor(ProcessorMixin):
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """Compute multimodal token counts without materializing pixel values."""
+        merged_kwargs = self._merge_kwargs(**kwargs)
         vision_data = {}
 
         if image_sizes is not None:
-            merge_size = kwargs.get("merge_size") or self.image_processor.merge_size
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(**merged_kwargs["images_kwargs"])
+            merge_size = images_kwargs["merge_size"]
             num_image_patches = [
-                self.image_processor.get_number_of_image_patches(height, width, kwargs)
+                self.image_processor.get_number_of_image_patches(height, width, images_kwargs)
                 for height, width in image_sizes
             ]
             vision_data["num_image_patches"] = num_image_patches
             vision_data["num_image_tokens"] = [num_patches // merge_size**2 for num_patches in num_image_patches]
 
         if video_sizes is not None:
-            merge_size = kwargs.get("merge_size") or self.video_processor.merge_size
+            videos_kwargs = self.video_processor._merge_and_standardize_kwargs(**merged_kwargs["videos_kwargs"])
+            merge_size = videos_kwargs["merge_size"]
             num_video_patches = [
-                self.video_processor.get_number_of_video_patches(num_frames, height, width, kwargs)
+                self.video_processor.get_number_of_video_patches(num_frames, height, width, videos_kwargs)
                 for num_frames, height, width in video_sizes
             ]
             vision_data["num_video_tokens"] = [num_patches // merge_size**2 for num_patches in num_video_patches]
