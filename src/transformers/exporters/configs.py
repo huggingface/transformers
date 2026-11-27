@@ -272,11 +272,11 @@ class OpenVINOConfig(DynamoConfig):
 @dataclass
 class MLXConfig(DynamoConfig):
     """
-    Configuration class for exporting models to an MLX function (`.mlxfn`), which MLX runs on Apple Silicon GPUs and
-    on CPU.
+    Configuration class for exporting models to MLX (a JSON graph and safetensors weights), which runs on Apple Silicon
+    GPUs, CUDA GPUs and CPUs.
 
-    Inherits all fields from [`DynamoConfig`]. A dynamic export is saved shapeless: MLX recomputes its shapes for new
-    inputs.
+    Inherits all fields from [`DynamoConfig`]. A dynamic export keeps its shape arithmetic: the runner compiles one
+    graph per input shape.
     """
 
     export_format: ExportFormat = ExportFormat.MLX
