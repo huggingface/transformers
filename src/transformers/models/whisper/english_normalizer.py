@@ -481,8 +481,10 @@ class EnglishNumberNormalizer:
         s = re.sub(r"([€£$])([0-9]+) (?:and )?¢([0-9]{1,2})\b", combine_cents, s)
         s = re.sub(r"[€£$]0.([0-9]{1,2})\b", extract_cents, s)
 
-        # write "one(s)" instead of "1(s)", just for the readability
-        s = re.sub(r"\b1(s?)\b", r"one\1", s)
+        # write "one(s)" instead of "1(s)", just for the readability;
+        # only when it stands alone, since `\b` would also match inside
+        # numbers like "$1", "1%", "1.5" and "3.1"
+        s = re.sub(r"(?<!\S)1(s?)(?!\S)", r"one\1", s)
 
         return s
 

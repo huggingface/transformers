@@ -345,6 +345,15 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         )
         self.assertEqual(decoded_output_diacritics, expected_output_diacritics)
 
+    def test_english_normalizer_keeps_numbers_containing_one(self):
+        tokenizer = self.get_tokenizer()
+
+        self.assertEqual(
+            tokenizer.normalize("The rate rose 1.5% to $1.25, version 3.1."), "the rate rose 1.5% to $1.25 version 3.1"
+        )
+        self.assertEqual(tokenizer.normalize("one point five"), "1.5")
+        self.assertEqual(tokenizer.normalize("the 1 and only"), "the one and only")
+
     def test_decode_asr_with_word_level_timestamps(self):
         # fmt: off
         model_outputs = [
