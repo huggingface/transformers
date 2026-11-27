@@ -50,6 +50,16 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=(42, 84))
             self.assertEqual(image_processor.size, {"height": 84, "width": 42})
 
+    def test_non_rgb_images_are_converted_to_rgb_by_default(self):
+        # Scanned documents are often grayscale, black-and-white, palette or RGBA images
+        image = Image.fromarray(np.random.randint(0, 256, (30, 20), dtype=np.uint8))
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            for mode in ("L", "1", "P", "RGBA"):
+                with self.subTest(image_processing_class=image_processing_class.__name__, mode=mode):
+                    encoded_images = image_processing(image.convert(mode), return_tensors="pt").pixel_values
+                    self.assertEqual(encoded_images.shape, (1, 3, 18, 20))
+
     def test_image_processor_preprocess_with_kwargs(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
