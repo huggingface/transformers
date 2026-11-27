@@ -78,6 +78,7 @@ def main():
     # Parse custom args (not TrainingArguments fields)
     model_name = _pop_custom_arg("--model_name") or "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
     loss_output_file = _pop_custom_arg("--loss_output_file")
+    grad_norm_output_file = _pop_custom_arg("--grad_norm_output_file")
     eval_output_file = _pop_custom_arg("--eval_output_file")
     model_dtype = _pop_custom_arg("--model_dtype")
     attn_impl = _pop_custom_arg("--attn_implementation")
@@ -160,6 +161,11 @@ def main():
         losses = [log["loss"] for log in trainer.state.log_history if "loss" in log]
         with open(loss_output_file, "w", encoding="utf-8") as f:
             json.dump(losses, f)
+
+    if training_args.do_train and grad_norm_output_file and training_args.process_index == 0:
+        grad_norms = [log["grad_norm"] for log in trainer.state.log_history if "grad_norm" in log]
+        with open(grad_norm_output_file, "w", encoding="utf-8") as f:
+            json.dump(grad_norms, f)
 
     # Destroy process groups before interpreter shutdown tears down CUDA.
     trainer.accelerator.end_training()
