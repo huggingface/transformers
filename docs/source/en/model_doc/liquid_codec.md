@@ -40,9 +40,8 @@ feature_extractor = AutoFeatureExtractor.from_pretrained(model_id, revision=revi
 
 url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
 audio = load_audio(url, sampling_rate=feature_extractor.sampling_rate)
-# spectrogram computed on the model's device, as the original implementation does
 inputs = feature_extractor(
-    audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt", device=model.device
+    audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
 ).to(model.device, model.dtype)
 
 audio_codes = model.encode(**inputs).audio_codes
@@ -82,7 +81,7 @@ audios = [
     for name in ("librispeech_mr_quilter.wav", "dude_where_is_my_car.wav")
 ]
 inputs = feature_extractor(
-    audio=audios, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt", device=model.device
+    audio=audios, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
 ).to(model.device, model.dtype)
 
 encoder_output = model.encode(**inputs)
@@ -121,7 +120,7 @@ feature_extractor = AutoFeatureExtractor.from_pretrained(model_id, revision=revi
 url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
 audio = load_audio(url, sampling_rate=feature_extractor.sampling_rate)
 inputs = feature_extractor(
-    audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt", device=model.device
+    audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
 ).to(model.device, model.dtype)
 audio_codes = model.encode(**inputs).audio_codes
 
