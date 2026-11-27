@@ -106,7 +106,6 @@ PRIVATE_MODELS = [
     "SeamlessM4Tv2CodeHifiGan",
     "SeamlessM4Tv2TextToUnitForConditionalGeneration",
     "Idefics2PerceiverResampler",
-    "Idefics2VisionTransformer",
     "Idefics3VisionTransformer",
     "Kosmos2_5TextModel",
     "Kosmos2_5TextForCausalLM",

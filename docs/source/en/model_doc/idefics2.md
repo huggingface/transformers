@@ -208,6 +208,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] Idefics2PerceiverConfig
 
+## Idefics2VisionTransformer
+
+[[autodoc]] Idefics2VisionTransformer
+    - forward
+
 ## Idefics2Model
 
 [[autodoc]] Idefics2Model
