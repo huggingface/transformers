@@ -21,6 +21,7 @@ import enum
 import json
 import os
 import threading
+import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from concurrent.futures import Future
@@ -60,6 +61,11 @@ logger = logging.get_logger(__name__)
 
 
 X_REQUEST_ID = "x-request-id"
+
+
+def _make_cb_request_id(request_id: str) -> str:
+    """Return a scheduler-only ID that cannot collide across client requests."""
+    return f"{request_id}:{uuid.uuid4().hex}"
 
 
 def split_model_id(model_id: str) -> tuple[str, str | None]:
@@ -973,7 +979,7 @@ class CBGenerateManager(BaseGenerateManager):
         input_ids = inputs["input_ids"]
         request_id = cb.add_request(
             input_ids,
-            request_id=request_id,
+            request_id=_make_cb_request_id(request_id),
             streaming=True,
             max_new_tokens=gen_config.max_new_tokens,
             eos_token_id=gen_config.eos_token_id,
@@ -1024,6 +1030,7 @@ class CBGenerateManager(BaseGenerateManager):
 
         input_ids = inputs["input_ids"]
         input_len = len(input_ids)
+        cb_request_id = _make_cb_request_id(request_id)
 
         # Register future BEFORE add_request to avoid race with fast completion
         loop = asyncio.get_running_loop()
@@ -1033,11 +1040,11 @@ class CBGenerateManager(BaseGenerateManager):
             if not future.done():
                 future.set_result(result)
 
-        cb.register_result_handler(request_id, _on_result)
+        cb.register_result_handler(cb_request_id, _on_result)
 
         cb.add_request(
             input_ids,
-            request_id=request_id,
+            request_id=cb_request_id,
             max_new_tokens=gen_config.max_new_tokens,
             streaming=False,
             eos_token_id=gen_config.eos_token_id,
