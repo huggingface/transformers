@@ -182,6 +182,24 @@ class TestDtensorShardOperation(unittest.TestCase):
             op = _make_dtensor_shard_op(mesh, [Shard(0), Shard(0)], param_shape=(8, 8), local_shape=(2, 8))
             torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
 
+    def test_2D_shard_replicate_kv_heads(self):
+        """A KV head replicated over several ranks (`unit_colwise`/`unit_rowwise`): the mesh is `(kv_heads, replicas)`,
+        so rank `r` holds KV head `r // replicas` and `[Shard(0), Replicate()]` reads exactly that head.
+
+        Only `num_key_value_heads > 1` pins the mapping down: at `num_key_value_heads == 1` the mesh is `(1, ranks)`,
+        every rank holds the same head, and any rank-to-head mapping passes.
+        """
+        heads, replicas, rows, cols = 2, 2, 3, 4  # 4 ranks, 2 KV heads: 2 ranks per head
+        tensor = torch.arange(heads * rows * cols).reshape(heads * rows, cols).float()
+        for rank in range(heads * replicas):
+            head = rank // replicas
+            mesh = FakeMesh(shape=(heads, replicas), rank=rank, dim_names=("tp", "unit_replicate"))
+            op = _make_dtensor_shard_op(
+                mesh, [Shard(0), Replicate()], param_shape=tensor.shape, local_shape=(rows, cols)
+            )
+            expected = tensor[head * rows : (head + 1) * rows]
+            torch.testing.assert_close(op.shard_tensor(tensor), expected, msg=f"rank {rank}, KV head {head}")
+
     def test_2D_strided_shard_same_dim(self):
         tensor = torch.arange(16).reshape(4, 4).float()
         expected = {
