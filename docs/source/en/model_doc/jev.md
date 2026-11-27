@@ -91,7 +91,7 @@ Using the model and request above, train on the first option of each question:
 model.train()
 for inputs, questions in config.prepare_inputs(request, tokenizer):
     targets = [[0.0, 1.0] + [0.0] * (len(question.options) - 1) for question in questions]
-    batch = model.prepare_decision_inputs([(inputs, questions)], targets=targets)
+    batch = model.prepare_inputs_for_decision([(inputs, questions)], targets=targets)
     outputs = model(**{name: tensor.to(model.device) for name, tensor in batch.items()})
     outputs.loss.backward()
 ```
@@ -111,4 +111,4 @@ different numbers of questions correctly. The standard `Trainer` averages the mi
 
 [[autodoc]] JevForDecision
     - forward
-    - prepare_decision_inputs
+    - prepare_inputs_for_decision

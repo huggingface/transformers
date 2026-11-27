@@ -97,7 +97,7 @@ class DecisionMixin:
         if kwargs.get("is_main_process", True):
             self.decision_config.save_pretrained(save_directory)
 
-    def prepare_decision_inputs(
+    def prepare_inputs_for_decision(
         self,
         prompts: Sequence[tuple[dict, list[Question]]],
         *,
@@ -157,7 +157,7 @@ class DecisionMixin:
         decision_config = decision_config or self.decision_config
         # Override any caller preference because we read `.logits` below.
         kwargs["return_dict"] = True
-        inputs = self.prepare_decision_inputs(
+        inputs = self.prepare_inputs_for_decision(
             [({"input_ids": input_ids, "marks": marks, **kwargs}, decision_questions)]
         )
         scores = self(

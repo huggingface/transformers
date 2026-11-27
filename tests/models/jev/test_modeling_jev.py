@@ -82,7 +82,7 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         ]
         prompt = {"input_ids": torch.tensor([[1, 2, 3, 4, 5, 6]]), "marks": torch.tensor([3, 6])}
         targets = [[0.0, 1.0, 0.0], [0.0, 0.25, 0.75, 0.0]]
-        batch = model.prepare_decision_inputs([(prompt, questions)], targets=targets)
+        batch = model.prepare_inputs_for_decision([(prompt, questions)], targets=targets)
         outputs = model(
             **batch,
             loss_weights=torch.tensor([[0.5, 2.0]]),
