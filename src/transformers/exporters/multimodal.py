@@ -99,7 +99,7 @@ class ExportedMultimodalModel(ExportedModel):
         # The model returns each modality's features too, which the language model never sees: as its encoder's
         # `pooler_output` (`image_outputs`, ...), or as `image_hidden_states` where a model still returns those.
         for spec in _MODALITY_SPECS:
-            modality_outputs = spec.token_field.replace("_token_id", "_outputs")
+            modality_outputs = f"{spec.modality}_outputs"
             if features.get(spec.component) is not None and modality_outputs in fields:
                 outputs[modality_outputs] = BaseModelOutputWithPooling(pooler_output=features[spec.component].clone())
         if features.get("vision_embeddings_model") is not None and "image_hidden_states" in fields:
