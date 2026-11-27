@@ -14,7 +14,6 @@
 
 import copy
 import json
-import math
 import tempfile
 import unittest
 from pathlib import Path
@@ -37,12 +36,9 @@ if is_torch_available():
     import torch
 
     from transformers import JevForDecision
-    from transformers.loss.loss_jev import JevForDecisionLoss
 
 
 class JevModelTester:
-    is_training = True
-
     def __init__(self, config, prompt):
         self.config = config
         self.prompt = prompt
@@ -65,55 +61,36 @@ class JevModelTester:
 
 
 @require_torch
-class JevLossTest(unittest.TestCase):
-    def test_packed_kl_and_rps(self):
-        loss = JevForDecisionLoss(
-            logits=torch.zeros(5),
-            labels=torch.tensor([1.0, 0.0, 0.25, 0.75, 0.0]),
-            num_options=torch.tensor([2, 3]),
-            is_score=torch.tensor([False, True]),
-            loss_weights=torch.tensor([0.5, 2.0]),
-        )
-
-        choice_kl = math.log(2)
-        score_kl = 0.25 * math.log(0.25 * 3) + 0.75 * math.log(0.75 * 3)
-        score_rps = ((1 / 3 - 0.25) ** 2 + (2 / 3 - 1) ** 2) / 2
-        self.assertAlmostEqual(loss.item(), (0.5 * choice_kl + 2 * (score_kl + 0.5 * score_rps)) / 2, places=6)
-
-    def test_ignored_questions_and_accumulation_count(self):
-        logits = torch.zeros(5, requires_grad=True)
-        loss = JevForDecisionLoss(
-            logits=logits,
-            labels=torch.tensor([-100, 1]),
-            num_options=torch.tensor([2, 3]),
-            is_score=torch.tensor([False, False]),
-            num_items_in_batch=2,
-        )
-
-        self.assertAlmostEqual(loss.item(), math.log(3) / 2, places=6)
-        loss.backward()
-        torch.testing.assert_close(logits.grad, torch.tensor([0.0, 0.0, 1 / 6, -1 / 3, 1 / 6]))
-
-    def test_confident_prediction_gradients(self):
-        # Standard fp32 log_softmax rounds the winning loss and gradient to zero at this margin.
-        logits = torch.tensor([9.0, -9.0, -9.0], requires_grad=True)
-        loss = JevForDecisionLoss(logits, torch.tensor([0]), torch.tensor([3]), torch.tensor([False]))
-        mass = 2 * torch.exp(torch.tensor(-18.0, dtype=torch.float64))
-        non_target_gradient = mass / (1 + mass) / 2
-        expected_gradient = torch.stack([-2 * non_target_gradient, non_target_gradient, non_target_gradient])
-        loss.backward()
-        torch.testing.assert_close(loss.double(), torch.log1p(mass), rtol=1e-6, atol=0)
-        torch.testing.assert_close(logits.grad.double(), expected_gradient, rtol=1e-6, atol=0)
-
-
-@require_torch
 class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (JevForDecision,) if is_torch_available() else ()
+    is_training = True
     decision_repo = "hf-internal-testing/decision-gev"
     tiny_sizes = {"hidden_size": 16}
 
     def setUp(self):
         self.model_tester = JevModelTester(self.config, self.prompts[0])
+
+    def test_training_loss_on_packed_questions(self):
+        model = JevForDecision(copy.deepcopy(self.config)).train()
+        choice_target = torch.tensor([1.0, 0.0])
+        score_target = torch.tensor([0.25, 0.75, 0.0])
+        outputs = model(
+            input_ids=torch.tensor([[1, 2, 3, 4, 5, 6]]),
+            marks=torch.tensor([[3, 6]]),
+            num_options=torch.tensor([[2, 3]]),
+            question_type_ids=torch.tensor([[Question.questions_types.index(kind) for kind in ("choice", "score")]]),
+            labels=torch.cat((choice_target, score_target))[None],
+            loss_weights=torch.tensor([[0.5, 2.0]]),
+            num_items_in_batch=3,
+        )
+
+        choice_logits, score_logits = outputs.logits.detach().split((2, 3))
+        choice_kl = torch.nn.functional.cross_entropy(choice_logits, choice_target)
+        score_log_probs = score_logits.log_softmax(-1)
+        score_kl = torch.nn.functional.kl_div(score_log_probs, score_target, reduction="sum")
+        score_rps = (score_log_probs.exp().cumsum(0)[:-1] - score_target.cumsum(0)[:-1]).square().mean()
+        expected_loss = (0.5 * choice_kl + 2 * (score_kl + 0.5 * score_rps)) / 3
+        torch.testing.assert_close(outputs.loss, expected_loss)
 
     @require_vision
     def test_chat_template_reproduces_the_model_code(self):

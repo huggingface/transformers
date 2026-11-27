@@ -78,10 +78,6 @@ class JevForDecision(DecisionMixin, JevPreTrainedModel):
             target distributions of shape `(1, total_num_options)`, concatenated in question order. Each distribution
             must sum to one over that question's active options.
         """
-        loss_kwargs = {
-            name: kwargs.pop(name) for name in ("loss_weights", "num_items_in_batch", "ignore_index") if name in kwargs
-        }
-
         # A batch of one prompt
         marks, num_options, question_type_ids = marks[0], num_options[0], question_type_ids[0]
         hidden_states = self.model(input_ids=input_ids, use_cache=False, **kwargs).last_hidden_state[0]
@@ -100,7 +96,7 @@ class JevForDecision(DecisionMixin, JevPreTrainedModel):
                 labels=labels,
                 num_options=num_options,
                 is_score=question_type_ids == Question.questions_types.index("score"),
-                **loss_kwargs,
+                **kwargs,
             )
         return JevDecisionOutput(loss=loss, logits=scores)
 
