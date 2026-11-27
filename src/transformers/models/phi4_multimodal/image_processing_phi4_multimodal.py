@@ -146,12 +146,13 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
         attention_mask_reshape = attention_mask_reshape.transpose(1, 2)
         attention_mask_reshape = attention_mask_reshape.reshape(-1, mask_size, mask_size).contiguous()
 
+        base_feat_size = mask_size // 2 + mask_size % 2
         downsample_attention_mask = attention_mask_reshape[:, 0::2, 0::2]
         downsample_attention_mask = downsample_attention_mask.reshape(
             mask_height // mask_size,
             mask_width // mask_size,
-            mask_size // 2 + mask_size % 2,
-            mask_size // 2 + mask_size % 2,
+            base_feat_size,
+            base_feat_size,
         )
         downsample_attention_mask = downsample_attention_mask.transpose(1, 2)
         downsample_attention_mask = downsample_attention_mask.reshape(
@@ -160,11 +161,11 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
         )
 
         return (
-            256
+            base_feat_size**2
             + 1
             + int(downsample_attention_mask.sum().item())
             + int(downsample_attention_mask[:, 0].sum().item())
-            + 16
+            + base_feat_size
         )
 
     def dynamic_preprocess(self, image, image_size, patch_size, mask_size, max_num=36, min_num=1):

@@ -47,20 +47,22 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         audio_embed_sizes = audio_inputs["audio_embed_sizes"][audio_idx]
         return self.audio_token * audio_embed_sizes
 
-    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+    def _get_num_multimodal_tokens(self, image_sizes=None, audio_lengths=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
             image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
+            audio_lengths (`list[int]`, *optional*):
+                The lengths of audio inputs in number of samples.
 
         Returns:
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
             input modalities, along with other useful data.
         """
 
-        vision_data = {}
+        mm_data = {}
         if image_sizes is not None:
             images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
             num_image_tokens = [
@@ -69,9 +71,15 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             ]
             # Each image's crops are stacked into a single row of `image_pixel_values`
             num_image_patches = [1] * len(image_sizes)
-            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+            mm_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
-        return MultiModalData(**vision_data)
+        if audio_lengths is not None:
+            num_audio_tokens = [
+                self.audio_processor.get_num_audio_tokens(int(audio_length)) for audio_length in audio_lengths
+            ]
+            mm_data.update({"num_audio_tokens": num_audio_tokens})
+
+        return MultiModalData(**mm_data)
 
     @property
     def unused_input_names(self) -> list[str]:

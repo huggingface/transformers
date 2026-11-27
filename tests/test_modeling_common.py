@@ -5630,7 +5630,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 last_hidden_state_shape = outputs.last_hidden_state.shape
                 batch_size = next(
                     inputs_dict[key].shape[0]
-                    for key in ("pixel_values", "pixel_values_images", "flattened_patches")
+                    for key in ("pixel_values", "pixel_values_images", "flattened_patches", "image_pixel_values")
                     if key in inputs_dict
                 )
                 self.assertEqual(
@@ -5872,6 +5872,8 @@ class ModelTesterMixin(ExportTesterMixin):
 
                 if "input_features" in inputs_dict:
                     batch_size = inputs_dict["input_features"].shape[0]
+                elif "audio_input_features" in inputs_dict:
+                    batch_size = inputs_dict["audio_input_features"].shape[0]
                 else:
                     batch_size = inputs_dict["input_values"].shape[0]
                 self.assertEqual(
