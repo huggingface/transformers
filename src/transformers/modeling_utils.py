@@ -68,7 +68,6 @@ from .integrations.accelerate import (
     accelerate_disk_offload,
     accelerate_dispatch,
     check_and_set_device_map,
-    device_map_uses_accelerator,
     expand_device_map,
     get_device,
     load_offloaded_parameter,
@@ -4461,12 +4460,6 @@ class PreTrainedModel(
         # Prepare the full device map
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
-
-            if not use_kernels and device_map_uses_accelerator(device_map):
-                logger.warning_once(
-                    "We detected the usage of an accelerator (e.g. cuda) but kernels is turned off (`use_kernels=False`). "
-                    "Consider turning on kernels to gain maximum speedups!"
-                )
 
         # Finalize model weight initialization
         load_config = LoadStateDictConfig(
