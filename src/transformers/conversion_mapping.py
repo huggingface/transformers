@@ -2322,6 +2322,11 @@ def _build_checkpoint_conversion_mapping():
 
     mapping["kimi_k25"] += mapping["qwen2_moe"].copy()
 
+    mapping["minicpm5_moe"] = mapping["qwen2_moe"].copy()
+    mapping["minicpm5_moe"].append(
+        WeightRenaming(source_patterns="self_attn.q_proj", target_patterns="self_attn.q_gate_proj")
+    )
+
     # The pp_doclayout_v4-specific reading order renames are defined in the mapping literal above; it also
     # inherits the shared RT-DETR renames, like its PP-DocLayoutV2/V3 siblings.
     mapping["pp_doclayout_v4"] += mapping["rt_detr"].copy()

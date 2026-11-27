@@ -403,12 +403,35 @@ class SequentialLlama4TextExperts(ModuleList):
         return routed_out
 
 
+class SequentialMiniCPM5MoeExperts(ModuleList):
+    """Expose the individual expert linears for prequantized AWQ checkpoints."""
+
+    def __init__(self, config):
+        from ..models.minicpm5_moe.modeling_minicpm5_moe import MiniCPM5MoeMLP
+
+        super().__init__(
+            [MiniCPM5MoeMLP(config, config.moe_intermediate_size) for _ in range(config.num_local_experts)]
+        )
+
+    def forward(self, hidden_states, top_k_index, top_k_weights):
+        output = torch.zeros_like(hidden_states, dtype=top_k_weights.dtype)
+        for expert_id in top_k_index.unique().tolist():
+            tokens, slots = torch.where(top_k_index == expert_id)
+            expert_output = self[expert_id](hidden_states[tokens])
+            output.index_add_(0, tokens, expert_output * top_k_weights[tokens, slots, None])
+        return output.to(hidden_states.dtype)
+
+
 MODULES_TO_PATCH_FOR_QUANTIZATION = {
+    "MiniCPM5MoeExperts": {
+        "module_name": SequentialMiniCPM5MoeExperts,
+        "quantization_methods": [QuantizationMethod.AWQ],
+    },
     "Llama4TextExperts": {
         "module_name": SequentialLlama4TextExperts,
         "quantization_methods": [
             QuantizationMethod.COMPRESSED_TENSORS,
             QuantizationMethod.BITS_AND_BYTES,
         ],
-    }
+    },
 }
