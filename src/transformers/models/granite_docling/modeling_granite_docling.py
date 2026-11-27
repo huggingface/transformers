@@ -93,10 +93,14 @@ class GraniteDoclingImageFeaturesOutput(BaseModelOutputWithPooling):
         entry is split per sample, with the same layout as `pooler_output`.
     router_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
         Logits of the density router, one per sample. Returned when the model has a router.
+    fine_route_mask (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
+        The connector path that the density router chose for each sample, `True` for the fine path. Returned with
+        `auto_fine_route`.
     """
 
     deepstack_features: list[torch.FloatTensor] | None = None
     router_logits: torch.FloatTensor | None = None
+    fine_route_mask: torch.BoolTensor | None = None
 
 
 def rotate_half(x):
@@ -1041,6 +1045,7 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel):
         pixel_values: torch.FloatTensor,
         pixel_attention_mask: torch.BoolTensor,
         tile_fine_mask: torch.BoolTensor | None = None,
+        auto_fine_route: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GraniteDoclingImageFeaturesOutput:
         r"""
@@ -1051,10 +1056,16 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel):
         tile_fine_mask (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
             Requires processor called with `fine_route=True`: the batch takes the fine connector
             path, which yields four times as many image tokens per tile.
+        auto_fine_route (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
+            Requires processor called with `fine_route="auto"`: the density router chooses the connector path of
+            each sample from the vision encoder output, which is computed once. `fine_route_mask` of the output
+            holds the choice.
         """
         batch_size = pixel_values.shape[0]
-        fine = tile_fine_mask is not None
         tiles_per_sample = pixel_attention_mask.sum(-1)
+        if auto_fine_route is not None:
+            return self._get_routed_image_features(pixel_values[pixel_attention_mask], tiles_per_sample)
+        fine = tile_fine_mask is not None
         image_outputs = self.vision_model(
             pixel_values=pixel_values[pixel_attention_mask].to(self.dtype), fine=fine, return_dict=True, **kwargs
         )
@@ -1092,6 +1103,7 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         tile_fine_mask: torch.BoolTensor | None = None,
+        auto_fine_route: torch.BoolTensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
         mm_encoder_outputs: dict | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1100,6 +1112,10 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel):
         tile_fine_mask (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
             All True when the processor is called with `fine_route=True`: the batch takes the fine connector path,
             which yields four times as many image tokens per tile.
+        auto_fine_route (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
+            All True when the processor is called with `fine_route="auto"`: the density router chooses the connector
+            path of each sample. Only `generate` resolves it, because the fine path changes the number of image
+            tokens in the prompt.
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_tiles)`, *optional*):
             Real tiles, as returned by the processor. Padding tiles are false. Required with `pixel_values`.
         """
@@ -1111,6 +1127,12 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel):
 
         if pixel_values is not None and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+        if auto_fine_route is not None:
+            raise ValueError(
+                '`fine_route="auto"` changes the number of image tokens in the prompt, so only `generate` resolves '
+                "it. For a forward pass, choose the path with `predict_fine_route` and call the processor with "
+                "`fine_route=True` for the samples that need the fine path."
+            )
         if mm_encoder_outputs is not None and not isinstance(mm_encoder_outputs, dict):
             raise ValueError("mm_encoder_outputs must be a dict of cached encoder outputs.")
 
@@ -1175,12 +1197,54 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel):
         )
         return special_image_mask.to(inputs_embeds.device)
 
+    def _get_routed_image_features(
+        self, tiles: torch.FloatTensor, tiles_per_sample: torch.LongTensor
+    ) -> GraniteDoclingImageFeaturesOutput:
+        """Image features on the connector path that the density router chooses for each sample."""
+        if self.density_router is None:
+            raise ValueError(
+                '`fine_route="auto"` needs a density router, set `density_router_hidden_size` in the config.'
+            )
+        batch_size = tiles_per_sample.shape[0]
+        last_hidden_state, deepstack_hidden_states = self.vision_model.encode(tiles.to(self.dtype))
+        tile_sample_index = torch.arange(batch_size, device=tiles.device).repeat_interleave(tiles_per_sample)
+        router_logits = self.density_router(last_hidden_state, tile_sample_index, batch_size)
+        fine_route_mask = torch.sigmoid(router_logits) >= self.config.density_router_threshold
+
+        # The samples of a path go through the connector together, then each sample gets its own image tokens
+        tile_fine_mask = fine_route_mask[tile_sample_index]
+        image_features = [None] * batch_size
+        deepstack_features = [[None] * batch_size for _ in deepstack_hidden_states]
+        for fine in (False, True):
+            sample_indices = (fine_route_mask == fine).nonzero().flatten().tolist()
+            if not sample_indices:
+                continue
+            path_tiles = tile_fine_mask == fine
+            path_features, path_deepstack_features = self.vision_model.connector(
+                last_hidden_state[path_tiles], [hidden[path_tiles] for hidden in deepstack_hidden_states], fine=fine
+            )
+            tokens_per_tile = self.image_seq_len * 4 if fine else self.image_seq_len
+            split_sizes = (tiles_per_sample[fine_route_mask == fine] * tokens_per_tile).tolist()
+            for sample_idx, features in zip(sample_indices, torch.split(path_features, split_sizes)):
+                image_features[sample_idx] = features
+            for layer_features, path_layer_features in zip(deepstack_features, path_deepstack_features):
+                for sample_idx, features in zip(sample_indices, torch.split(path_layer_features, split_sizes)):
+                    layer_features[sample_idx] = features
+        return GraniteDoclingImageFeaturesOutput(
+            last_hidden_state=last_hidden_state,
+            pooler_output=tuple(image_features),
+            deepstack_features=[tuple(layer_features) for layer_features in deepstack_features],
+            router_logits=router_logits,
+            fine_route_mask=fine_route_mask,
+        )
+
     def predict_fine_route(
         self, pixel_values: torch.FloatTensor, pixel_attention_mask: torch.BoolTensor
     ) -> torch.BoolTensor:
         r"""
         Predicts with the density router which samples need the fine connector path. Route them by calling the
-        processor again with `fine_route=True`.
+        processor again with `fine_route=True`, or call the processor with `fine_route="auto"` to let `generate`
+        route them from a single pass of the vision encoder.
 
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_tiles, num_channels, image_size, image_size)`):
@@ -1258,6 +1322,7 @@ class GraniteDoclingForConditionalGeneration(GraniteDoclingPreTrainedModel, Gene
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         tile_fine_mask: torch.BoolTensor | None = None,
+        auto_fine_route: torch.BoolTensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
         mm_encoder_outputs: dict | None = None,
         labels: torch.LongTensor | None = None,
@@ -1270,6 +1335,10 @@ class GraniteDoclingForConditionalGeneration(GraniteDoclingPreTrainedModel, Gene
         tile_fine_mask (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
             All True when the processor is called with `fine_route=True`: the batch takes the fine connector path,
             which yields four times as many image tokens per tile.
+        auto_fine_route (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
+            All True when the processor is called with `fine_route="auto"`: the density router chooses the connector
+            path of each sample. Only `generate` resolves it, because the fine path changes the number of image
+            tokens in the prompt.
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_tiles)`, *optional*):
             Real tiles, as returned by the processor. Padding tiles are false. Required with `pixel_values`.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1315,6 +1384,7 @@ class GraniteDoclingForConditionalGeneration(GraniteDoclingPreTrainedModel, Gene
             inputs_embeds=inputs_embeds,
             pixel_values=pixel_values,
             tile_fine_mask=tile_fine_mask,
+            auto_fine_route=auto_fine_route,
             pixel_attention_mask=pixel_attention_mask,
             mm_encoder_outputs=mm_encoder_outputs,
             use_cache=use_cache,
@@ -1351,6 +1421,73 @@ class GraniteDoclingForConditionalGeneration(GraniteDoclingPreTrainedModel, Gene
             image_outputs=outputs.image_outputs,
             router_logits=router_logits,  # for BC
         )
+
+    def _expand_fine_image_tokens(
+        self, input_ids: torch.LongTensor, attention_mask: torch.Tensor, fine_route_mask: torch.BoolTensor
+    ) -> tuple[torch.LongTensor, torch.Tensor]:
+        """Gives the samples on the fine connector path four image tokens for each image token of the prompt."""
+        is_image_token = input_ids == self.config.image_token_id
+        repeats = torch.where(is_image_token & fine_route_mask.to(input_ids.device)[:, None], 4, 1)
+        lengths = repeats.sum(-1)
+        max_length = int(lengths.max())
+        # Keep the padding side of the prompts
+        pad_left = bool((attention_mask[:, 0] == 0).any()) or not bool((attention_mask[:, -1] == 0).any())
+        pad_token_id = self.generation_config.pad_token_id
+        if pad_token_id is None:
+            pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else 0
+        expanded_ids = input_ids.new_full((input_ids.shape[0], max_length), pad_token_id)
+        expanded_mask = attention_mask.new_zeros((input_ids.shape[0], max_length))
+        for sample_idx, sample_repeats in enumerate(repeats):
+            length = int(lengths[sample_idx])
+            positions = slice(max_length - length, max_length) if pad_left else slice(0, length)
+            expanded_ids[sample_idx, positions] = input_ids[sample_idx].repeat_interleave(sample_repeats)
+            expanded_mask[sample_idx, positions] = attention_mask[sample_idx].repeat_interleave(sample_repeats)
+        return expanded_ids, expanded_mask
+
+    @torch.no_grad()
+    def generate(self, inputs: torch.Tensor | None = None, auto_fine_route: torch.BoolTensor | None = None, **kwargs):
+        r"""
+        auto_fine_route (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
+            Returned by the processor called with `fine_route="auto"`. The vision encoder runs once, the density
+            router chooses the connector path of each sample from its output, and the samples on the fine path get
+            their image tokens in the prompt. The returned sequences start with the prompt as it was passed, so
+            the new tokens start at `input_ids.shape[1]` as usual.
+        """
+        if auto_fine_route is None:
+            return super().generate(inputs, **kwargs)
+
+        input_ids = kwargs.pop("input_ids", inputs)
+        pixel_values = kwargs.pop("pixel_values", None)
+        pixel_attention_mask = kwargs.pop("pixel_attention_mask", None)
+        if input_ids is None or pixel_values is None or pixel_attention_mask is None:
+            raise ValueError(
+                '`fine_route="auto"` needs the `input_ids`, `pixel_values` and `pixel_attention_mask` of the processor.'
+            )
+        if kwargs.pop("tile_fine_mask", None) is not None:
+            raise ValueError("Pass either `tile_fine_mask` (`fine_route=True`) or `auto_fine_route`, not both.")
+        attention_mask = kwargs.pop("attention_mask", None)
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
+
+        # One pass of the vision encoder gives the router decision and the image features of the chosen path
+        image_outputs = self.model.get_image_features(
+            pixel_values, pixel_attention_mask, auto_fine_route=auto_fine_route, return_dict=True
+        )
+        expanded_ids, expanded_mask = self._expand_fine_image_tokens(
+            input_ids, attention_mask, image_outputs.fine_route_mask
+        )
+        outputs = super().generate(
+            input_ids=expanded_ids, attention_mask=expanded_mask, mm_encoder_outputs={"image": image_outputs}, **kwargs
+        )
+
+        # Return the prompt as it was passed, followed by the new tokens
+        sequences = outputs if isinstance(outputs, torch.Tensor) else outputs.sequences
+        prompts = input_ids.repeat_interleave(sequences.shape[0] // input_ids.shape[0], dim=0)
+        sequences = torch.cat([prompts.to(sequences.device), sequences[:, expanded_ids.shape[1] :]], dim=-1)
+        if isinstance(outputs, torch.Tensor):
+            return sequences
+        outputs.sequences = sequences
+        return outputs
 
 
 __all__ = [

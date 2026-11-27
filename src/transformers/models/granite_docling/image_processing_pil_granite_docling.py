@@ -63,16 +63,17 @@ class GraniteDoclingImageProcessorKwargs(ImagesKwargs, total=False):
     dense_max_aspect (`float`, *optional*, defaults to 0.0):
         Width/height ratio a page may not exceed to get `dense_max_patches`, which keeps strips such as single
         formula lines on `max_patches`. 0 means no upper bound.
-    fine_route (`bool`, *optional*, defaults to `False`):
+    fine_route (`bool` or `"auto"`, *optional*, defaults to `False`):
         Whether the pages take the fine connector path, which yields four times as many image tokens per tile.
-        Returned as `tile_fine_mask`, one value per sample.
+        Returned as `tile_fine_mask`, one value per sample. With `"auto"`, the density router of the model chooses
+        the path of each page during `generate` (returned as `auto_fine_route`, one value per sample).
     """
 
     crop_to_patches: bool
     min_patches: int
     max_patches: int
 
-    fine_route: bool
+    fine_route: bool | str
     dense_max_patches: int
     dense_max_scale: float
     dense_min_aspect: float
@@ -116,6 +117,15 @@ def get_optimal_tiled_canvas(
                 best_grid = grid
 
     return best_grid
+
+
+def fine_route_key(fine_route: bool | str) -> str | None:
+    """The model input that carries `fine_route`: `tile_fine_mask`, `auto_fine_route` (`"auto"`) or none."""
+    if isinstance(fine_route, str):
+        if fine_route != "auto":
+            raise ValueError(f'`fine_route` must be `True`, `False` or `"auto"`, got {fine_route!r}.')
+        return "auto_fine_route"
+    return "tile_fine_mask" if fine_route else None
 
 
 @lru_cache(maxsize=10)
@@ -344,7 +354,7 @@ class GraniteDoclingImageProcessorPil(PilBackend):
         crop_to_patches: bool = True,
         min_patches: int = 1,
         max_patches: int = 32,
-        fine_route: bool = False,
+        fine_route: bool | str = False,
         dense_max_patches: int = 0,
         dense_max_scale: float = 0.0,
         dense_min_aspect: float = 0.0,
@@ -390,8 +400,9 @@ class GraniteDoclingImageProcessorPil(PilBackend):
         for index, sample_tiles in enumerate(tiles):
             pixel_attention_mask[index, : len(sample_tiles)] = True
         data = {"pixel_values": pixel_values, "pixel_attention_mask": pixel_attention_mask}
-        if fine_route:
-            data["tile_fine_mask"] = np.ones(len(tiles), dtype=bool)
+        route_key = fine_route_key(fine_route)
+        if route_key is not None:
+            data[route_key] = np.ones(len(tiles), dtype=bool)
         # The tile grids are lists of different lengths, only the processor reads them to build the prompt
         data["rows"] = rows
         data["cols"] = cols

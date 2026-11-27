@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch GraniteDocling model."""
 
 import unittest
+from unittest import mock
 
 from huggingface_hub import hf_hub_download
 
@@ -189,6 +190,118 @@ class GraniteDoclingModelTest(VLMModelTest, unittest.TestCase):
         outputs = model(**inputs_dict, labels=inputs_dict["input_ids"])
         self.assertIsNone(outputs.router_logits)
         self.assertTrue(torch.isfinite(outputs.loss))
+
+    def _auto_fine_route_inputs(self, config):
+        # Three one-tile samples; the prompt has the image tokens of the coarse path, as the processor returns it
+        tester = self.model_tester
+        tile_tokens = tester.num_image_tokens
+        seq_length = tile_tokens + 5
+        input_ids = ids_tensor([3, seq_length], config.text_config.vocab_size - 4) + 4
+        input_ids[input_ids == config.image_token_id] = tester.bos_token_id
+        input_ids[:, 1 : 1 + tile_tokens] = config.image_token_id
+        pixel_values = floats_tensor([3, 1, tester.num_channels, tester.image_size, tester.image_size], scale=1.0)
+        pixel_attention_mask = torch.ones((3, 1), dtype=torch.bool, device=torch_device)
+        return input_ids, pixel_values, pixel_attention_mask
+
+    def test_auto_fine_route_generate(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = GraniteDoclingForConditionalGeneration(config).to(torch_device).eval()
+        input_ids, pixel_values, pixel_attention_mask = self._auto_fine_route_inputs(config)
+        seq_length = input_ids.shape[1]
+        generate_kwargs = {"max_new_tokens": 4, "min_new_tokens": 4, "pad_token_id": config.text_config.pad_token_id}
+        # The router sends the first and the last sample to the fine path
+        fine_route_mask = [True, False, True]
+        router_logits = torch.tensor([8.0, -8.0, 8.0], device=torch_device)
+        auto_fine_route = torch.ones(3, dtype=torch.bool, device=torch_device)
+
+        with (
+            mock.patch.object(model.model.density_router, "forward", return_value=router_logits),
+            mock.patch.object(
+                model.model.vision_model, "encode", wraps=model.model.vision_model.encode
+            ) as vision_encoder,
+            torch.no_grad(),
+        ):
+            routed = model.generate(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                pixel_attention_mask=pixel_attention_mask,
+                auto_fine_route=auto_fine_route,
+                **generate_kwargs,
+            )
+            # The router decision and the image features come from one pass of the vision encoder
+            self.assertEqual(vision_encoder.call_count, 1)
+
+            # The prompt comes back as it was passed, also for the samples that got more image tokens
+            self.assertEqual(routed.shape, (3, seq_length + 4))
+            torch.testing.assert_close(routed[:, :seq_length], input_ids)
+
+            # Each sample generates what it generates alone on the path the router chose
+            for sample_idx, fine in enumerate(fine_route_mask):
+                sample_ids = input_ids[sample_idx : sample_idx + 1]
+                inputs = {}
+                if fine:
+                    repeats = torch.where(sample_ids[0] == config.image_token_id, 4, 1)
+                    sample_ids = sample_ids[0].repeat_interleave(repeats)[None]
+                    inputs["tile_fine_mask"] = torch.ones(1, dtype=torch.bool, device=torch_device)
+                alone = model.generate(
+                    input_ids=sample_ids,
+                    pixel_values=pixel_values[sample_idx : sample_idx + 1],
+                    pixel_attention_mask=pixel_attention_mask[sample_idx : sample_idx + 1],
+                    **inputs,
+                    **generate_kwargs,
+                )
+                torch.testing.assert_close(routed[sample_idx, seq_length:], alone[0, sample_ids.shape[1] :])
+
+            dict_outputs = model.generate(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                pixel_attention_mask=pixel_attention_mask,
+                auto_fine_route=auto_fine_route,
+                return_dict_in_generate=True,
+                **generate_kwargs,
+            )
+            torch.testing.assert_close(dict_outputs.sequences, routed)
+
+    def test_auto_fine_route_image_features(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = GraniteDoclingModel(config).to(torch_device).eval()
+        _, pixel_values, pixel_attention_mask = self._auto_fine_route_inputs(config)
+        router_logits = torch.tensor([8.0, -8.0, 8.0], device=torch_device)
+
+        with mock.patch.object(model.density_router, "forward", return_value=router_logits), torch.no_grad():
+            routed = model.get_image_features(
+                pixel_values, pixel_attention_mask, auto_fine_route=torch.ones(3, dtype=torch.bool)
+            )
+            coarse = model.get_image_features(pixel_values, pixel_attention_mask)
+            fine = model.get_image_features(
+                pixel_values, pixel_attention_mask, tile_fine_mask=torch.ones(3, dtype=torch.bool)
+            )
+
+        self.assertEqual(routed.fine_route_mask.tolist(), [True, False, True])
+        # Each sample has the image features of its own path
+        for sample_idx, expected in enumerate([fine, coarse, fine]):
+            torch.testing.assert_close(routed.pooler_output[sample_idx], expected.pooler_output[sample_idx])
+            for routed_features, expected_features in zip(routed.deepstack_features, expected.deepstack_features):
+                torch.testing.assert_close(routed_features[sample_idx], expected_features[sample_idx])
+
+    def test_auto_fine_route_is_resolved_in_generate_only(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = GraniteDoclingForConditionalGeneration(config).to(torch_device).eval()
+        input_ids, pixel_values, pixel_attention_mask = self._auto_fine_route_inputs(config)
+        inputs = {
+            "input_ids": input_ids,
+            "pixel_values": pixel_values,
+            "pixel_attention_mask": pixel_attention_mask,
+            "auto_fine_route": torch.ones(3, dtype=torch.bool, device=torch_device),
+        }
+        with self.assertRaisesRegex(ValueError, "only `generate` resolves"):
+            model(**inputs)
+
+        # A model without a density router cannot choose the path
+        config.density_router_hidden_size = None
+        model = GraniteDoclingForConditionalGeneration(config).to(torch_device).eval()
+        with self.assertRaisesRegex(ValueError, "needs a density router"):
+            model.generate(**inputs, max_new_tokens=2)
 
     def test_beam_search_expands_per_sample_image_features(self):
         # Generation repeats each sample's image features once per beam, which needs one feature tensor per sample.

@@ -98,6 +98,27 @@ class GraniteDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["tile_fine_mask"].tolist(), [True])
 
     @require_torch
+    def test_auto_fine_route(self):
+        processor = self.small_processor()
+        text = f"{processor.image_token}<doclang>"
+        inputs = processor(text=text, images=self.prepare_page_image(), return_tensors="pt", fine_route="auto")
+
+        # The prompt has the image tokens of the coarse path; `generate` adds those of the fine path
+        expected_text = self.expected_image_prompt(processor, num_rows=2, num_cols=1) + "<doclang>"
+        expected_ids = processor.tokenizer(expected_text, return_tensors="pt")["input_ids"]
+        self.assertEqual(inputs["input_ids"].tolist(), expected_ids.tolist())
+        self.assertEqual(inputs["auto_fine_route"].tolist(), [True])
+        self.assertNotIn("tile_fine_mask", inputs)
+
+        self.assertEqual(
+            processor._get_num_multimodal_tokens(image_sizes=[(64, 32)], fine_route="auto")["num_image_tokens"],
+            processor._get_num_multimodal_tokens(image_sizes=[(64, 32)], fine_route=False)["num_image_tokens"],
+        )
+
+        with self.assertRaisesRegex(ValueError, "`fine_route` must be"):
+            processor(text=text, images=self.prepare_page_image(), return_tensors="pt", fine_route="always")
+
+    @require_torch
     def test_batched_images_are_padded(self):
         processor = self.small_processor()
         text = [f"{processor.image_token}Page one.", f"{processor.image_token}Page two."]
