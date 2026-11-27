@@ -771,7 +771,7 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel):
             mask_functions = {
                 "full_attention": lambda: create_causal_mask(**mask_kwargs),
                 "sliding_attention": lambda: create_sliding_window_causal_mask(**mask_kwargs),
-                "indexed_attention": lambda: create_compression_mask(**mask_kwargs),
+                "indexed_attention": lambda: create_compression_mask(**mask_kwargs, **kwargs),
             }
             causal_masks = {layer_type: mask_functions[layer_type]() for layer_type in set(self.config.layer_types)}
 

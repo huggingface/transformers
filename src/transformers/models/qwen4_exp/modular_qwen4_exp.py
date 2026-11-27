@@ -1002,7 +1002,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
             }
 
             causal_mask_mapping = {
-                "indexed_attention": create_compression_mask(**mask_kwargs),
+                "indexed_attention": create_compression_mask(**mask_kwargs, **kwargs),
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 

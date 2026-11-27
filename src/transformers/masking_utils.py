@@ -1551,12 +1551,35 @@ def create_recurrent_attention_mask(
     return attention_mask[:, -inputs_embeds.shape[1] :].contiguous()
 
 
+def _create_varlen_compression_mask(
+    cu_seq_lens_q: torch.IntTensor,
+    query_length: int,
+    device: torch.device,
+) -> torch.Tensor:
+    """
+    Create cumulative valid-token counts for packed sequences, inserting one separator between consecutive sequences.
+
+    Example with cu_seq_lens_q=[0, 3, 5]:
+        Tokens:          [A, B, C, D, E]
+        Virtual tokens:  [A, B, C, PAD, D, E]
+        Cumulative mask: [0, 1, 2, 3, 3, 4, 5]
+    """
+    cu_seq_lens_q = cu_seq_lens_q.to(device=device, dtype=torch.long)
+    positions = torch.arange(query_length, device=device)
+    sequence_ids = torch.searchsorted(cu_seq_lens_q[1:], positions, right=True)
+
+    mask = torch.zeros(query_length + cu_seq_lens_q.numel() - 2, device=device, dtype=torch.long)
+    mask.scatter_(0, positions + sequence_ids, 1)
+    return F.pad(mask.cumsum(0), (1, 0))
+
+
 def create_compression_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
     cache: Cache | None = None,
     layer_idx: int | None = None,
+    cu_seq_lens_q: torch.IntTensor | None = None,
     **kwargs,
 ) -> torch.Tensor:
     """
@@ -1572,6 +1595,9 @@ def create_compression_mask(
     """
     batch_size, query_length = inputs_embeds.shape[:2]
     device = inputs_embeds.device
+
+    if cu_seq_lens_q is not None:
+        return _create_varlen_compression_mask(cu_seq_lens_q, query_length, device)
 
     q_offset = 0
     kv_length = query_length
@@ -1602,9 +1628,6 @@ def create_compression_mask(
 
     if attention_mask is None:
         return positions.expand(batch_size, -1).contiguous()
-
-    if attention_mask.ndim != 2:
-        raise ValueError("Expected a full-history 2D binary padding mask.")
 
     prefix = F.pad(attention_mask.to(device=device).cumsum(-1, dtype=torch.long), (1, 0))
     return torch.where(positions < 0, positions, prefix.index_select(1, positions.clamp_min(0)))

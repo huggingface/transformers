@@ -705,6 +705,7 @@ class DeepseekV32Model(DeepseekV32PreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 cache=cache,
+                **kwargs,
             )
 
             causal_mask_mapping = {"indexed_attention": attention_mask}
