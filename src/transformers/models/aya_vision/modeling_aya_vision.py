@@ -26,8 +26,10 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -137,7 +139,7 @@ class AyaVisionModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     The AyaVision model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class AyaVisionModel(AyaVisionPreTrainedModel):
+class AyaVisionModel(AyaVisionPreTrainedModel, MultimodalMixin):
     def __init__(self, config: AyaVisionConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -152,13 +154,13 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_tower(
             pixel_values,
             return_dict=True,
@@ -179,11 +181,10 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
             selected_image_feature = torch.cat(hs_pool, dim=-1)
 
         pooler_output = self.multi_modal_projector(selected_image_feature)
-        image_outputs.pooler_output = pooler_output.reshape(
-            selected_image_feature.shape[0], -1, self.config.text_config.hidden_size
-        )
-
-        return image_outputs
+        features = pooler_output.reshape(selected_image_feature.shape[0], -1, self.config.text_config.hidden_size)
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs.pooler_output = features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -212,6 +213,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -237,7 +239,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
@@ -269,7 +271,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
     The AYA_VISION model which consists of a vision backbone and a language model.
     """
 )
-class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixin):
+class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -281,21 +283,6 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
-            **kwargs,
-        )
 
     @can_return_tuple
     @auto_docstring

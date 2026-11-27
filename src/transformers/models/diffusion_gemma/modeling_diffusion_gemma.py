@@ -38,10 +38,12 @@ from ...masking_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     CausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -995,7 +997,7 @@ def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: tor
     assumes the MoE code path in the inner layers.
     """
 )
-class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
+class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, MultimodalMixin):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
     _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
@@ -1018,12 +1020,12 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
@@ -1035,7 +1037,10 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
         )
         last_hidden_state = vision_outputs.last_hidden_state
         vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
-        return vision_outputs
+        output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
+        k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
+        split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -1064,6 +1069,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
+    @merge_mm_encoder_outputs
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -1094,7 +1100,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values,
                 image_position_ids,
                 return_dict=True,

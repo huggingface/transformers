@@ -29,9 +29,11 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     CausalLMOutputWithPast,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
@@ -368,32 +370,30 @@ class Apertus1p5VisionTokenizerEncoderOutput(ModelOutput):
 
 @auto_docstring
 @dataclass
-class Apertus1p5VisionTokenizerModelOutput(BaseModelOutputWithPooling):
+class Apertus1p5VisionTokenizerModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
-    pooler_output (`tuple[torch.Tensor]`):
-        One `(num_tokens, hidden_size)` tensor of embedded image tokens per input image.
+    pooler_output (`torch.Tensor` of shape `(num_image_tokens, hidden_size)`):
+        The embedded image tokens of every input image, concatenated.
     image_tokens (`list[torch.LongTensor]`):
         One flat tensor of shared-vocabulary token ids per input image: its `(height // factor) * (width // factor)`
         codes in row-major order, offset by `config.image_token_offset`, where `factor` is the vision tokenizer's
         `spatial_scale_factor` (16 by default).
     """
 
-    pooler_output: tuple[torch.Tensor] | None = None
     image_tokens: list[torch.LongTensor] | None = None
 
 
 @auto_docstring
 @dataclass
-class Apertus1p5AudioTokenizerModelOutput(BaseModelOutputWithPooling):
+class Apertus1p5AudioTokenizerModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
-    pooler_output (`tuple[torch.Tensor]`):
-        One `(num_tokens, hidden_size)` tensor of embedded audio tokens per input clip.
+    pooler_output (`torch.Tensor` of shape `(num_audio_tokens, hidden_size)`):
+        The embedded audio tokens of every input clip, concatenated.
     audio_tokens (`list[torch.LongTensor]`):
         One tensor of `ceil(num_valid_samples / hop_length)` shared-vocabulary token ids per input clip, offset by
         `config.audio_token_offset`.
     """
 
-    pooler_output: tuple[torch.Tensor] | None = None
     audio_tokens: list[torch.LongTensor] | None = None
 
 
@@ -651,7 +651,7 @@ class Apertus1p5TextForCausalLM(ApertusForCausalLM):
 
 
 @auto_docstring
-class Apertus1p5Model(Apertus1p5PreTrainedModel):
+class Apertus1p5Model(Apertus1p5PreTrainedModel, MultimodalMixin):
     def __init__(self, config: Apertus1p5Config):
         super().__init__(config)
         self.language_model = Apertus1p5TextModel(config.text_config)
@@ -682,15 +682,18 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Tokenizes images and embeds their token ids with the text embedding layer.")
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Apertus1p5VisionTokenizerModelOutput:
         image_tokens = self.get_image_tokens(pixel_values, image_sizes)
-        image_features = tuple(self.get_input_embeddings()(tokens) for tokens in image_tokens)
-        return Apertus1p5VisionTokenizerModelOutput(image_tokens=image_tokens, pooler_output=image_features)
+        image_features = self.get_input_embeddings()(torch.cat(image_tokens))
+        split_sizes = torch.tensor([len(tokens) for tokens in image_tokens], device=image_features.device)
+        return Apertus1p5VisionTokenizerModelOutput(
+            image_tokens=image_tokens, pooler_output=image_features, split_sizes=split_sizes
+        )
 
     def get_audio_tokens(self, input_values: torch.Tensor, padding_mask: torch.Tensor) -> list[torch.LongTensor]:
         """
@@ -725,7 +728,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Tokenizes audio and embeds its token ids with the text embedding layer.")
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_values: torch.Tensor,
         padding_mask: torch.Tensor,
@@ -736,8 +739,11 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
             Mask with 1 for valid samples and 0 for padding, as returned by the feature extractor.
         """
         audio_tokens = self.get_audio_tokens(input_values, padding_mask)
-        audio_features = tuple(self.get_input_embeddings()(tokens) for tokens in audio_tokens)
-        return Apertus1p5AudioTokenizerModelOutput(audio_tokens=audio_tokens, pooler_output=audio_features)
+        audio_features = self.get_input_embeddings()(torch.cat(audio_tokens))
+        split_sizes = torch.tensor([len(tokens) for tokens in audio_tokens], device=audio_features.device)
+        return Apertus1p5AudioTokenizerModelOutput(
+            audio_tokens=audio_tokens, pooler_output=audio_features, split_sizes=split_sizes
+        )
 
     def get_placeholder_mask(
         self,
@@ -783,6 +789,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -816,15 +823,13 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         audio_outputs = None
         image_features = audio_features = None
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_sizes, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_sizes, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
         if input_values is not None:
-            audio_outputs = self.get_audio_features(input_values, padding_mask, return_dict=True)
-            audio_features = torch.cat(audio_outputs.pooler_output, dim=0)
+            audio_outputs = self.get_audio_embeddings(input_values, padding_mask, return_dict=True)
+            audio_features = audio_outputs.pooler_output
 
         if mm_encoder_outputs.get("image") is not None or input_values is not None:
             special_image_mask, special_audio_mask = self.get_placeholder_mask(
@@ -849,7 +854,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
 
 
 @auto_docstring
-class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMixin):
+class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -863,28 +868,6 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         )
 
         self.post_init()
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_sizes: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Apertus1p5VisionTokenizerModelOutput:
-        return self.model.get_image_features(pixel_values, image_sizes, **kwargs)
-
-    @auto_docstring
-    def get_audio_features(
-        self,
-        input_values: torch.Tensor,
-        padding_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Apertus1p5AudioTokenizerModelOutput:
-        r"""
-        padding_mask (`torch.Tensor` of shape `(num_clips, max_length)`):
-            Mask with 1 for valid samples and 0 for padding, as returned by the feature extractor.
-        """
-        return self.model.get_audio_features(input_values, padding_mask, **kwargs)
 
     @can_return_tuple
     @auto_docstring

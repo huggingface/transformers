@@ -171,6 +171,7 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     """
 
     model_tester_class = PerceptionLMVisionText2TextModelTester
+    skip_test_video_features_output_shape = True
 
     all_model_classes = (
         (
@@ -320,9 +321,16 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_get_image_features_attentions(self):
         pass
 
+    @unittest.skip("Cannot set output_attentions on timm models.")
+    def test_get_video_features_attentions(self):
+        pass
+
     def _image_features_get_expected_num_hidden_states(self, model_tester=None):
         # For models that rely on timm for their vision backend, it's hard to infer how many layers the model has
         # from the timm config alone. So, we're just hardcoding the expected number of hidden states here.
+        return 2
+
+    def _video_features_get_expected_num_hidden_states(self, model_tester=None):
         return 2
 
 

@@ -30,7 +30,12 @@ from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MultimodalBaseModelOutputWithPast
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    MultimodalBaseModelOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -598,7 +603,7 @@ class EmbeddingGemma2MultimodalEmbedder(nn.Module):
 
 @auto_docstring
 @dataclass
-class EmbeddingGemma2AudioModelOutput(BaseModelOutputWithPooling):
+class EmbeddingGemma2AudioModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     attention_mask (`torch.BoolTensor`, *optional*):
         A torch.BoolTensor of shape `(batch_size, num_frames)`. True for valid positions, False for padding.
@@ -634,7 +639,7 @@ class EmbeddingGemma2ModelOutput(MultimodalBaseModelOutputWithPast):
     mean pooling and normalization.
     """
 )
-class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
+class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel, MultimodalMixin):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
 
@@ -667,12 +672,12 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
@@ -688,14 +693,11 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
             **kwargs,
         )
         last_hidden_state = vision_outputs.last_hidden_state
-        pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
-
+        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
         k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
-        non_pad_mask = (image_position_ids != -1).all(dim=-1)
-        split_sizes = (non_pad_mask.sum(dim=-1) // k_squared).tolist()
-        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
-        return vision_outputs
+        split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -746,6 +748,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -788,11 +791,9 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
 
         # Merge text and images
         if pixel_values is not None:
-            image_outputs = self.get_image_features(pixel_values, image_position_ids, return_dict=True)
+            image_outputs = self.get_image_embeddings(pixel_values, image_position_ids, return_dict=True)
             mm_encoder_outputs["image"] = image_outputs
-            image_features = torch.cat(image_outputs.pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -808,13 +809,11 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
             )
 
         if pixel_values_videos is not None:
-            video_outputs = self.get_video_features(
+            video_outputs = self.get_video_embeddings(
                 pixel_values_videos, video_position_ids, num_frames_per_video, return_dict=True
             )
             mm_encoder_outputs["video"] = video_outputs
-            video_features = torch.cat(video_outputs.pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            video_features = video_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -831,13 +830,9 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
 
         # Merge text and audio
         if input_features is not None and input_features_mask is not None:
-            audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
+            audio_output = self.get_audio_embeddings(input_features, input_features_mask, return_dict=True)
             mm_encoder_outputs["audio"] = audio_output
             audio_features = audio_output.pooler_output
-            audio_mask_from_encoder = audio_output.attention_mask  # True = valid
-
-            # Keep only real audio soft tokens, mirroring the vision encoder's padding stripping.
-            audio_features = audio_features[audio_mask_from_encoder.to(audio_features.device)]
 
             n_audio_tokens = audio_mask.sum()
             audio_mask = audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
@@ -865,7 +860,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
@@ -884,19 +879,22 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
             )
 
         audio_outputs = self.audio_tower(input_features, input_features_mask, return_dict=True, **kwargs)
-        audio_outputs.pooler_output = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
-
+        audio_embeds = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
+        # Only the real audio soft tokens, the ones `attention_mask` is True on, as the image getter drops padding too
+        valid_mask = audio_outputs.attention_mask.to(audio_embeds.device)
+        audio_outputs.pooler_output = audio_embeds[valid_mask]
+        audio_outputs.split_sizes = valid_mask.sum(-1)
         return audio_outputs
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_position_ids: torch.LongTensor | None = None,
         num_frames_per_video: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
             The frames of every video in the batch, concatenated along the frame axis rather than stacked
@@ -925,18 +923,13 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
             **kwargs,
         )
         last_hidden_state = vision_outputs.last_hidden_state
-        pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
-
+        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         k_squared = self.config.vision_config.pooling_kernel_size**2
-        non_pad_mask = (video_position_ids != -1).all(dim=-1)  # (total_num_frames, max_patches)
-        num_tokens_per_frame = non_pad_mask.sum(dim=-1) // k_squared
-        split_sizes = [
-            int(video_frames.sum())
-            for video_frames in torch.split(num_tokens_per_frame, num_frames_per_video.tolist())
-        ]
-
-        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
-        return vision_outputs
+        # Each video's tokens are the sum of its frames', read at each video's last frame
+        tokens_per_frame = (video_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        video_ends = tokens_per_frame.cumsum(0)[num_frames_per_video.to(tokens_per_frame.device).cumsum(0) - 1]
+        split_sizes = video_ends.diff(prepend=video_ends.new_zeros(1))
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
 
 __all__ = ["EmbeddingGemma2Model", "EmbeddingGemma2PreTrainedModel", "EmbeddingGemma2TextModel"]

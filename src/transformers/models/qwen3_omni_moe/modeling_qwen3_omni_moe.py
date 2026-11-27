@@ -37,9 +37,11 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     CausalLMOutputWithPast,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
@@ -82,7 +84,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @dataclass
-class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
+class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     deepstack_features (`List[torch.Tensor]`, *optional*):
         List of hidden-states (feature maps) from deepstack layers.
@@ -1749,7 +1751,7 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3OmniMoePreTrainedModel):
     The Qwen2.5OmniThinker model which consists of an audio backbone and a language model.
     """
 )
-class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGeneration):
+class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGeneration, MultimodalMixin):
     config: Qwen3OmniMoeThinkerConfig
     _keys_to_ignore_on_load_unexpected = [r"^talker", r"^code2wav"]
     _no_split_modules = [
@@ -1776,7 +1778,7 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
@@ -1784,17 +1786,13 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
-        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.deepstack_features = [
-            torch.split(feat, split_sizes) for feat in vision_outputs.deepstack_features
-        ]
+        vision_outputs.split_sizes = video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
@@ -1802,23 +1800,19 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.deepstack_features = [
-            torch.split(feat, split_sizes) for feat in vision_outputs.deepstack_features
-        ]
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="audio")
     @can_return_tuple
     @auto_docstring
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         feature_attention_mask: torch.LongTensor | None = None,
         audio_feature_lengths: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_features (`torch.Tensor`):
             The tensors corresponding to the input audios.
@@ -1835,8 +1829,8 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
 
         feature_lens = audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
         audio_outputs = self.audio_tower(input_features, feature_lens=feature_lens, return_dict=True, **kwargs)
-
-        return audio_outputs
+        split_sizes = _get_feat_extract_output_lengths(feature_lens, self.audio_tower.n_window)
+        return BaseModelOutputWithPoolingAndSplitSizes(**audio_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -1935,6 +1929,7 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
 
     @can_return_tuple
     @auto_docstring
+    @merge_mm_encoder_outputs
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -1988,26 +1983,26 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
         image_mask, video_mask = None, None
         # 2. Merge text , audios , image and video
         if input_features is not None:
-            audio_features = self.get_audio_features(
+            audio_features = self.get_audio_embeddings(
                 input_features, feature_attention_mask, audio_feature_lengths, return_dict=True, **kwargs
-            ).last_hidden_state
+            ).pooler_output
             audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"]: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
+            mm_encoder_outputs["image"]: BaseModelOutputWithDeepstackFeatures = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"]: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
+            mm_encoder_outputs["video"]: BaseModelOutputWithDeepstackFeatures = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0)
+            image_embeds = mm_encoder_outputs["image"].pooler_output
             image_embeds_multiscale = mm_encoder_outputs["image"].deepstack_features
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _, _ = self.get_placeholder_mask(
@@ -2016,7 +2011,7 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0)
+            video_embeds = mm_encoder_outputs["video"].pooler_output
             video_embeds_multiscale = mm_encoder_outputs["video"].deepstack_features
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask, _ = self.get_placeholder_mask(
@@ -2032,8 +2027,6 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
             image_mask_joint = image_mask[visual_pos_masks]
             video_mask_joint = video_mask[visual_pos_masks]
             for img_embed, vid_embed in zip(image_embeds_multiscale, video_embeds_multiscale):
-                img_embed = torch.cat(img_embed, dim=0)
-                vid_embed = torch.cat(vid_embed, dim=0)
                 embed_joint = img_embed.new_zeros(visual_pos_masks.sum(), img_embed.shape[-1])
 
                 embed_joint[image_mask_joint, :] = img_embed
@@ -2042,11 +2035,11 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
             visual_embeds_multiscale = visual_embeds_multiscale_joint
         elif image_mask is not None:
             image_mask = image_mask[..., 0]
-            visual_embeds_multiscale = [torch.cat(feat, dim=0) for feat in image_embeds_multiscale]
+            visual_embeds_multiscale = image_embeds_multiscale
             visual_pos_masks = image_mask
         elif video_mask is not None:
             video_mask = video_mask[..., 0]
-            visual_embeds_multiscale = [torch.cat(feat, dim=0) for feat in video_embeds_multiscale]
+            visual_embeds_multiscale = video_embeds_multiscale
             visual_pos_masks = video_mask
 
         if feature_attention_mask is not None:
@@ -2155,7 +2148,7 @@ def load_balancing_loss_func(
 
 
 class Qwen3OmniMoeThinkerForConditionalGeneration(
-    Qwen3OmniMoePreTrainedModelForConditionalGeneration, GenerationMixin
+    Qwen3OmniMoePreTrainedModelForConditionalGeneration, MultimodalMixin, GenerationMixin
 ):
     config: Qwen3OmniMoeThinkerConfig
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
@@ -2172,50 +2165,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
         self.post_init()
-
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_audio_features(
-        self,
-        input_features: torch.Tensor,
-        feature_attention_mask: torch.LongTensor | None = None,
-        audio_feature_lengths: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        input_features (`torch.Tensor`):
-            The tensors corresponding to the input audios.
-        feature_attention_mask (`torch.LongTensor`, *optional*):
-            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
-        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-            The length of feature shape of each audio in LLM.
-        """
-        return self.model.get_audio_features(input_features, feature_attention_mask, audio_feature_lengths, **kwargs)
 
     @can_return_tuple
     @auto_docstring

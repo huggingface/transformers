@@ -32,7 +32,13 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GenericForTokenClassification, GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_multimodal_utils import MultimodalMixin
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    ModelOutput,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
@@ -471,7 +477,7 @@ class Qwen3ASRModelOutputWithPast(BaseModelOutputWithPast):
     without a language modeling head.
     """
 )
-class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
+class Qwen3ASRModel(Qwen3ASRPreTrainedModel, MultimodalMixin):
     _tp_plan = None
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
@@ -487,12 +493,12 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
     @auto_docstring(
         custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram)."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`):
             1 for valid mel frames and 0 for padding.
@@ -503,7 +509,8 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
             **kwargs,
         )
         audio_output.pooler_output = self.multi_modal_projector(audio_output.last_hidden_state)
-        return audio_output
+        split_sizes = _get_feat_extract_output_lengths(input_features_mask.sum(-1), self.audio_tower.n_window)
+        return BaseModelOutputWithPoolingAndSplitSizes(**audio_output, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, audio_features: torch.Tensor
@@ -553,7 +560,9 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
 
         audio_embeds = None
         if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features, input_features_mask, return_dict=True).pooler_output
+            audio_embeds = self.get_audio_embeddings(
+                input_features, input_features_mask, return_dict=True
+            ).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
             special_audio_mask = self.get_placeholder_mask(
@@ -612,7 +621,7 @@ class Qwen3ASRCausalLMOutputWithPast(ModelOutput):
     The Qwen3ASR model which consists of an audio encoder and a language model.
     """
 )
-class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin):
+class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -621,9 +630,6 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
         self.model = Qwen3ASRModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_audio_features(self, input_features, input_features_mask, **kwargs):
-        return self.model.get_audio_features(input_features, input_features_mask, **kwargs)
 
     @can_return_tuple
     @auto_docstring

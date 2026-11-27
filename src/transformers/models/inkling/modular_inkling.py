@@ -30,7 +30,12 @@ from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    MoeModelOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
@@ -1104,7 +1109,7 @@ class InklingVisionModel(InklingPreTrainedModel):
     The Base Inkling model which consists of a vision backbone and a language model without language modeling head.,
     """
 )
-class InklingModel(InklingPreTrainedModel):
+class InklingModel(InklingPreTrainedModel, MultimodalMixin):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
     input_modalities = ("image", "text", "audio")
@@ -1119,18 +1124,22 @@ class InklingModel(InklingPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
-    def get_image_features(
+    def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.vision_tower(pixel_values=pixel_values, **kwargs)
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
+        image_outputs = self.vision_tower(pixel_values=pixel_values, **kwargs)
+        features = image_outputs.pooler_output
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs.pooler_output = features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects discretized dMel bin tokens into the language model space.")
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         audio_input_ids: torch.LongTensor,
         audio_input_ids_mask: torch.Tensor | None = None,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         audio_input_ids (`torch.LongTensor` of shape `(num_audios, max_num_frames, n_mel_bins)`):
             Batch of (padded) dMel bin tokens produced by [`InklingProcessor`].
@@ -1140,9 +1149,14 @@ class InklingModel(InklingPreTrainedModel):
         """
         if audio_input_ids_mask is not None:
             audio_input_ids = audio_input_ids[audio_input_ids_mask.bool()]
+            split_sizes = audio_input_ids_mask.sum(-1)
         else:
-            audio_input_ids = audio_input_ids.reshape(-1, audio_input_ids.shape[-1])
-        return self.audio_tower(audio_input_ids)
+            split_sizes = torch.full(
+                audio_input_ids.shape[:1], audio_input_ids.shape[1], device=audio_input_ids.device
+            )
+            audio_input_ids = audio_input_ids.flatten(0, 1)
+        audio_outputs = self.audio_tower(audio_input_ids)
+        return BaseModelOutputWithPoolingAndSplitSizes(**audio_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -1174,6 +1188,7 @@ class InklingModel(InklingPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1229,7 +1244,7 @@ class InklingModel(InklingPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, return_dict=True, **kwargs)
 
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
@@ -1241,7 +1256,7 @@ class InklingModel(InklingPreTrainedModel):
         # Merge text and audio
         audio_features = None
         if audio_input_ids is not None:
-            audio_features = self.get_audio_features(audio_input_ids, audio_input_ids_mask).last_hidden_state
+            audio_features = self.get_audio_embeddings(audio_input_ids, audio_input_ids_mask).pooler_output
             audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, audio_features, self.config.audio_token_id
@@ -1281,7 +1296,7 @@ class InklingModel(InklingPreTrainedModel):
     The Base Inkling model which consists of a vision backbone and a language model without language modeling head.,
     """
 )
-class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
+class InklingForConditionalGeneration(InklingPreTrainedModel, MultimodalMixin, GenerationMixin):
     # `embed` and `unembed` are separate tensors in the checkpoints, never tied
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "rowwise_split_input"}
@@ -1297,10 +1312,6 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         # unpadded_vocab_size in forward, like sglang
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    @auto_docstring
-    def get_image_features(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
-        return self.model.get_image_features(pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring

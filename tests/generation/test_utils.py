@@ -119,6 +119,7 @@ if is_torch_available():
     )
     from transformers.generation.utils import ALL_CACHE_NAMES, DeferredStopCheck, _speculative_sampling
     from transformers.modeling_layers import MtpModel
+    from transformers.modeling_multimodal_utils import split_modality_outputs
 
 from unittest.mock import patch
 
@@ -1593,6 +1594,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if "blip" in model_class.__name__.lower():
                 self.skipTest(reason="Won't fix: old model that adds image placeholders during `forward`")
 
+            # TODO: audio too, once audio models' forwards read pre-encoded `mm_encoder_outputs["audio"]` and generate
+            # encodes it with `get_audio_embeddings` (https://github.com/huggingface/transformers/issues/50946)
             if not any(
                 modality in model_class.input_modalities and hasattr(model_class, f"get_{modality}_features")
                 for modality in ["image", "video"]
@@ -1616,6 +1619,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             # Passing both, pre-computed inputs and raw pixels will raise an error
             inputs_dict_with_encoded_outputs = model._prepare_multimodal_encoder_kwargs_for_generation(inputs_dict)
             mm_encoder_outputs = inputs_dict_with_encoded_outputs.pop("mm_encoder_outputs")
+            if not mm_encoder_outputs:
+                self.skipTest(reason="The tester's inputs give no multimodal outputs")
             with self.assertRaisesRegex(ValueError, "You cannot pass both: raw pixels and pre-computed embeddings"):
                 model.generate(
                     **original_inputs_dict,
@@ -1625,6 +1630,55 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
             # We still can pass inputs with no multimodal data at all - raw or precomputed
             model.generate(**inputs_dict_with_encoded_outputs, **generation_kwargs)
+
+    @pytest.mark.generate
+    def test_forward_with_per_item_multimodal_encoder_outputs(self):
+        """Tests that the deprecated per-item `mm_encoder_outputs` give the forward of the flat ones, which only holds
+        with `@merge_mm_encoder_outputs` on the forward."""
+        for model_class in self.all_generative_model_classes:
+            if not any(modality in model_class.input_modalities for modality in ["image", "video"]):
+                self.skipTest("Model takes no images or videos")
+            if "blip" in model_class.__name__.lower():
+                self.skipTest(reason="Won't fix: old model whose forward requires `pixel_values`")
+
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if config.is_encoder_decoder:
+                self.skipTest(reason="This model is encoder-decoder VLM which is usually different per model arch")
+            model = model_class(config).to(torch_device).eval()
+            if not model._supports_mm_encoder_outputs():
+                self.skipTest(reason=f"{model_class.__name__}.forward does not accept `mm_encoder_outputs`")
+            with torch.no_grad():
+                inputs_dict = model._prepare_multimodal_encoder_kwargs_for_generation(inputs_dict)
+                flat = inputs_dict.pop("mm_encoder_outputs")
+                if not flat:
+                    self.skipTest(reason="The tester's inputs give no multimodal outputs")
+                per_item = {modality: split_modality_outputs(outputs) for modality, outputs in flat.items()}
+                expected = model(**inputs_dict, mm_encoder_outputs=flat).logits
+                logits = model(**inputs_dict, mm_encoder_outputs=per_item).logits
+            torch.testing.assert_close(logits, expected)
+
+    @pytest.mark.generate
+    @require_torch_accelerator
+    def test_expand_multimodal_encoder_outputs_across_devices(self):
+        """Tests that beam expansion handles `mm_encoder_outputs` on another device than the text, as with `device_map`."""
+        for model_class in self.all_generative_model_classes:
+            if not any(modality in model_class.input_modalities for modality in ["image", "video"]):
+                self.skipTest("Model takes no images or videos")
+
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if config.is_encoder_decoder or "input_ids" not in inputs_dict:
+                self.skipTest(reason="Placeholders are counted on decoder-only `input_ids`")
+
+            model = model_class(config).to(torch_device).eval()
+            with torch.no_grad():
+                inputs_dict = model._prepare_multimodal_encoder_kwargs_for_generation(inputs_dict)
+            if not inputs_dict["mm_encoder_outputs"]:
+                self.skipTest(reason="The tester's inputs give no multimodal outputs")
+            model._expand_inputs_for_generation(
+                expand_size=2,
+                input_ids=inputs_dict["input_ids"].cpu(),
+                mm_encoder_outputs=inputs_dict["mm_encoder_outputs"],
+            )
 
     @pytest.mark.generate
     def test_generate_with_static_cache(self):

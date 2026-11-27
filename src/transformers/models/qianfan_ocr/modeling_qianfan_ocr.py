@@ -31,8 +31,10 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -531,7 +533,7 @@ class QianfanOCRModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     The QianfanOCR model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class QianfanOCRModel(QianfanOCRPreTrainedModel):
+class QianfanOCRModel(QianfanOCRPreTrainedModel, MultimodalMixin):
     def __init__(self, config: QianfanOCRConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -546,13 +548,13 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`)
             The tensors corresponding to the input images.
@@ -586,9 +588,9 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
 
         # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
-        vision_outputs.pooler_output = vision_features
-
-        return vision_outputs
+        split_sizes = torch.full(vision_features.shape[:1], vision_features.shape[1], device=vision_features.device)
+        vision_outputs.pooler_output = vision_features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -617,6 +619,7 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -641,7 +644,7 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
@@ -701,6 +704,19 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
 
         return vision_features
 
+    @can_return_tuple
+    @auto_docstring
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(num_frames, channels, height, width)`):
+            The frames of the input videos, encoded like images.
+        """
+        return self.get_image_embeddings(pixel_values_videos, return_dict=True, **kwargs)
+
 
 @auto_docstring
 @dataclass
@@ -719,7 +735,7 @@ class QianfanOCRCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     The QIANFAN_OCR model which consists of a vision backbone and a language model.
     """
 )
-class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMixin):
+class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -731,21 +747,6 @@ class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMi
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
-            **kwargs,
-        )
 
     @can_return_tuple
     @auto_docstring

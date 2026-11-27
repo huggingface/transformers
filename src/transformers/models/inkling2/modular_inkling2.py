@@ -37,7 +37,12 @@ from ...masking_utils import (
     find_first_full_attention_index,
 )
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    MoeModelOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -1413,20 +1418,21 @@ class Inkling2Model(InklingModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Encodes images into language model embeddings, one per image token.")
-    def get_image_features(
+    def get_image_embeddings(
         self, pixel_values: torch.Tensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_grid_thw = image_grid_thw.cpu()
         image_outputs = self.vision_tower(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
-        image_outputs.pooler_output = image_outputs.pooler_output.split(image_grid_thw.prod(-1).tolist())
-        return image_outputs
+        split_sizes = image_grid_thw.prod(-1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
-    def get_audio_features(self):
+    def get_audio_embeddings(self):
         raise AttributeError("Not needed for Inkling2")
 
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1491,11 +1497,11 @@ class Inkling2Model(InklingModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True)
 
         image_embeds = None
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output)
+            image_embeds = mm_encoder_outputs["image"].pooler_output
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, image_embeds, self.config.image_token_id
@@ -1528,12 +1534,6 @@ class Inkling2ForConditionalGeneration(InklingForConditionalGeneration):
         super().__init__(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.unpadded_vocab_size, bias=False)
         self.logit_softcap = Inkling2Softcap(config.text_config.final_logit_softcapping)
-
-    @auto_docstring
-    def get_image_features(
-        self, pixel_values: torch.Tensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
-    ):
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring

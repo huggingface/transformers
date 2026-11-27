@@ -293,4 +293,4 @@ class LlavaOnevision15IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertFalse(info["mismatched_keys"], info)
         self.assertFalse(info["error_msgs"], info)
         vision_output = vision(inputs.pixel_values, inputs.image_grid_thw)
-        torch.testing.assert_close(vision_output.pooler_output, torch.cat(output.image_outputs.pooler_output))
+        torch.testing.assert_close(vision_output.pooler_output, output.image_outputs.pooler_output)

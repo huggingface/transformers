@@ -24,7 +24,12 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling, MultimodalBaseModelOutputWithPast
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    MultimodalBaseModelOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
@@ -540,12 +545,12 @@ class Ovis2_5Model(PerceptionLMModel):
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring(custom_intro="Encodes images into Ovis2.5 visual embeddings.")
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or -1
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
@@ -554,22 +559,23 @@ class Ovis2_5Model(PerceptionLMModel):
             **kwargs,
         )
         visual_features = self.multi_modal_projector(vision_outputs.hidden_states[-1])
-        split_sizes = (image_grid_thw.prod(dim=1) // self.vision_tower.config.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(visual_features, split_sizes)
-        return vision_outputs
+        split_sizes = image_grid_thw.prod(dim=1) // self.vision_tower.config.spatial_merge_size**2
+        vision_outputs.pooler_output = visual_features
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring(custom_intro="Encodes videos into Ovis2.5 visual embeddings.")
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.get_image_features(
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
+        return self.get_image_embeddings(
             pixel_values=pixel_values_videos,
             image_grid_thw=video_grid_thw,
+            return_dict=True,
             **kwargs,
         )
 
@@ -577,7 +583,7 @@ class Ovis2_5Model(PerceptionLMModel):
         self,
         input_ids: torch.LongTensor | None,
         inputs_embeds: torch.Tensor,
-        visual_features: torch.Tensor,
+        visual_outputs: BaseModelOutputWithPoolingAndSplitSizes,
         is_video: bool,
     ) -> torch.Tensor:
         """Replace visual placeholders and start/end tokens with their visual embeddings."""
@@ -588,8 +594,8 @@ class Ovis2_5Model(PerceptionLMModel):
             boundary_token_ids = (self.config.image_start_token_id, self.config.image_end_token_id)
             first_indicator_index = 0
 
-        num_visual_inputs = len(visual_features)
-        visual_features = torch.cat(visual_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+        num_visual_inputs = visual_outputs.split_sizes.shape[0]
+        visual_features = visual_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
         image_mask, video_mask = self.get_placeholder_mask(
             input_ids,
             inputs_embeds=inputs_embeds,
@@ -629,6 +635,7 @@ class Ovis2_5Model(PerceptionLMModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -659,14 +666,14 @@ class Ovis2_5Model(PerceptionLMModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
                 return_dict=True,
                 **kwargs,
             )
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos=pixel_values_videos,
                 video_grid_thw=video_grid_thw,
                 return_dict=True,
@@ -685,7 +692,7 @@ class Ovis2_5Model(PerceptionLMModel):
             inputs_embeds = self._merge_visual_features(
                 input_ids,
                 inputs_embeds,
-                mm_encoder_outputs["image"].pooler_output,
+                mm_encoder_outputs["image"],
                 is_video=False,
             )
 
@@ -693,7 +700,7 @@ class Ovis2_5Model(PerceptionLMModel):
             inputs_embeds = self._merge_visual_features(
                 input_ids,
                 inputs_embeds,
-                mm_encoder_outputs["video"].pooler_output,
+                mm_encoder_outputs["video"],
                 is_video=True,
             )
 

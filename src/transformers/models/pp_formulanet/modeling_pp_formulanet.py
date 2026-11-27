@@ -34,9 +34,11 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
@@ -960,7 +962,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
     return prev_output_tokens
 
 
-class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
+class PPFormulaNetModel(PPFormulaNetPreTrainedModel, MultimodalMixin):
     def __init__(self, config: PPFormulaNetConfig):
         super().__init__(config)
 
@@ -968,6 +970,17 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
         self.encoder = PPFormulaNetVisionModel(config=config.vision_config)
 
         self.post_init()
+
+    @can_return_tuple
+    @auto_docstring(custom_intro="Encodes images into the features the decoder cross-attends to.")
+    def get_image_embeddings(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
+        image_outputs = self.encoder(pixel_values=pixel_values, **kwargs)
+        features = image_outputs.pooler_output
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs.pooler_output = features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring
@@ -1030,7 +1043,7 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 
 
 @auto_docstring
-class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, GenerationMixin):
+class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 

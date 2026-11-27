@@ -31,8 +31,10 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -56,7 +58,7 @@ logger = logging.get_logger(__name__)
     """
 )
 @dataclass
-class GotOcr2VisionEncoderOutput(BaseModelOutputWithPooling):
+class GotOcr2VisionEncoderOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     image_embeds (`torch.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The image embeddings obtained by applying the projection layer to the pooler_output.
@@ -509,7 +511,7 @@ class GotOcr2ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     The GotOcr2 model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class GotOcr2Model(GotOcr2PreTrainedModel):
+class GotOcr2Model(GotOcr2PreTrainedModel, MultimodalMixin):
     def __init__(self, config: GotOcr2Config):
         super().__init__(config)
         self.vision_tower = GotOcr2VisionEncoder(config.vision_config)
@@ -522,15 +524,16 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         last_hidden_state = image_outputs.last_hidden_state
-        image_outputs.pooler_output = self.multi_modal_projector(last_hidden_state)
-
+        features = self.multi_modal_projector(last_hidden_state)
+        image_outputs.split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs.pooler_output = features.flatten(0, 1)
         return image_outputs
 
     def get_placeholder_mask(
@@ -560,6 +563,7 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -583,7 +587,7 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values.to(inputs_embeds.dtype), return_dict=True
             )
 
@@ -612,7 +616,7 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
     The GOT_OCR2 model which consists of a vision backbone and a language model.
     """
 )
-class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
+class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -624,12 +628,6 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    @auto_docstring
-    def get_image_features(
-        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring

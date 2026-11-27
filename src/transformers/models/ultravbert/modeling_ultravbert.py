@@ -28,8 +28,10 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
+from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalModelOutput,
     SequenceClassifierOutput,
@@ -182,7 +184,7 @@ class UltraVBertPreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-class UltraVBertModel(UltraVBertPreTrainedModel):
+class UltraVBertModel(UltraVBertPreTrainedModel, MultimodalMixin):
     def __init__(self, config: UltraVBertConfig):
         super().__init__(config)
         self.padding_idx = self.config.text_config.pad_token_id
@@ -211,12 +213,12 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
     @auto_docstring(
         custom_intro="Encodes images into continuous embeddings that can be forwarded to the language model."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         pixel_attention_mask: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
@@ -233,7 +235,6 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
 
         # If no images, leave one empty image.
         real_images_inds[0] |= ~torch.any(real_images_inds)
-        num_real_images_per_batch = real_images_inds.view(batch_size, num_images).sum(dim=1)
 
         pixel_values = pixel_values[real_images_inds].contiguous()
         # Handle the vision attention mask
@@ -260,11 +261,9 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
-        image_outputs.pooler_output = [
-            f.reshape(-1, f.shape[-1]) for f in image_features.split(num_real_images_per_batch.tolist())
-        ]
-
-        return image_outputs
+        split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
+        image_outputs.pooler_output = image_features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring(checkpoint="athrael-soju/UltraVBERT")
@@ -292,14 +291,13 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
         # Images processing
         image_outputs = None
         if pixel_values is not None:
-            image_outputs = self.get_image_features(
+            image_outputs = self.get_image_embeddings(
                 pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask, return_dict=True
             )
             image_hidden_states = image_outputs.pooler_output
 
         # Merge image and text embeddings
         if image_hidden_states is not None:
-            image_hidden_states = torch.cat(image_hidden_states, dim=0)
             image_hidden_states = image_hidden_states.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_hidden_states

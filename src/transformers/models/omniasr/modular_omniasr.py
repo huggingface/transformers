@@ -20,7 +20,11 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    CausalLMOutputWithPast,
+)
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -30,7 +34,7 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..parakeet.modeling_parakeet import ParakeetEncoderModelOutput, ParakeetPreTrainedModel
+from ..parakeet.modeling_parakeet import ParakeetPreTrainedModel
 from ..voxtral.modeling_voxtral import VoxtralForConditionalGeneration, VoxtralModel
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Attention,
@@ -133,8 +137,24 @@ class OmniASRPreTrainedModel(ParakeetPreTrainedModel):
         return lengths
 
 
-class OmniASREncoderModelOutput(ParakeetEncoderModelOutput):
-    pass
+@auto_docstring(
+    custom_intro="""
+    Extends [~modeling_outputs.BaseModelOutputWithPoolingAndSplitSizes] to include the output attention mask since sequence
+    length is not preserved in the model's forward.
+    """
+)
+@dataclass
+class OmniASREncoderModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
+    r"""
+    attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Mask to avoid performing attention on padding token indices after sequence compression. Returned because the
+        sequence length may differ from the input sequence length. Mask values selected in `[0, 1]`:
+
+        - 1 for tokens that are **not masked**,
+        - 0 for tokens that are **masked**.
+    """
+
+    attention_mask: torch.Tensor | None = None
 
 
 # NOTE: similar to `Wav2Vec2Model` but with latest naming conventions like in `ParakeetEncoder`
@@ -246,12 +266,12 @@ class OmniASRModel(VoxtralModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Encode audio into embeddings that can be used by the language model.")
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_values: torch.FloatTensor,
         padding_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, 1, num_samples)`):
             Float values of the raw audio waveform, as produced by [`OmniASRFeatureExtractor`].
@@ -263,10 +283,13 @@ class OmniASRModel(VoxtralModel):
         audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
         frames_mask = audio_output.attention_mask
         if frames_mask is None:
+            split_sizes = torch.full(audio_embeds.shape[:1], audio_embeds.shape[1], device=audio_embeds.device)
             audio_embeds = audio_embeds.flatten(0, 1)
         else:
-            audio_embeds = audio_embeds[frames_mask.to(audio_embeds.device).bool()]
+            frames_mask = frames_mask.to(audio_embeds.device).bool()
+            audio_embeds, split_sizes = audio_embeds[frames_mask], frames_mask.sum(-1)
         audio_output.pooler_output = audio_embeds
+        audio_output.split_sizes = split_sizes
         return audio_output
 
     @can_return_tuple
@@ -288,7 +311,7 @@ class OmniASRModel(VoxtralModel):
 
         audio_features = None
         if input_values is not None:
-            audio_outputs = self.get_audio_features(input_values, padding_mask)
+            audio_outputs = self.get_audio_embeddings(input_values, padding_mask)
             audio_embeds = audio_outputs.pooler_output
             audio_features = audio_outputs.last_hidden_state
 

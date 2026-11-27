@@ -29,7 +29,8 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput
+from ...modeling_multimodal_utils import MultimodalMixin
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPoolingAndSplitSizes, MaskedLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -488,7 +489,7 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
     The bare NeoMME model. It encodes text tokens and image patches with one bidirectional Transformer encoder.
     """
 )
-class NeoMMEModel(NeoMMEPreTrainedModel):
+class NeoMMEModel(NeoMMEPreTrainedModel, MultimodalMixin):
     def __init__(self, config: NeoMMEConfig):
         super().__init__(config)
         self.embed_tokens = NeoMMEEmbeddings(config)
@@ -508,16 +509,20 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects flattened image patches into the model hidden space.")
-    def get_image_features(
+    def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         if pixel_values.shape[-1] != self.config.patch_dim:  # trf-ignore: TRF041
             raise ValueError(
                 f"pixel_values has patch width {pixel_values.shape[-1]} but the model expects "
                 f"{self.config.patch_dim} (= 3 * patch_size ** 2 with patch_size={self.config.patch_size})"
             )
         image_features = self.patch_embeddings(pixel_values.to(self.patch_embeddings.norm.weight.dtype))
-        return BaseModelOutputWithPooling(last_hidden_state=image_features, pooler_output=image_features)
+        # Every image's patches in one list, placed by the ids alone: one item
+        split_sizes = torch.full((1,), image_features.shape[0], device=image_features.device)
+        return BaseModelOutputWithPoolingAndSplitSizes(
+            last_hidden_state=image_features, pooler_output=image_features, split_sizes=split_sizes
+        )
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, image_features: torch.Tensor) -> torch.BoolTensor:
         """Find patch placeholders and validate that every image feature has a destination."""
@@ -551,7 +556,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         """
         hidden_states = self.embed_tokens(input_ids)
         if pixel_values is not None:
-            image_outputs = self.get_image_features(pixel_values, return_dict=True)
+            image_outputs = self.get_image_embeddings(pixel_values, return_dict=True)
             image_mask = self.get_placeholder_mask(input_ids, image_outputs.pooler_output)
             hidden_states = hidden_states.masked_scatter(image_mask, image_outputs.pooler_output)
 

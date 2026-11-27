@@ -26,11 +26,13 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndCrossAttentions,
+    BaseModelOutputWithPoolingAndSplitSizes,
     CausalLMOutputWithPast,
     Seq2SeqLMOutput,
 )
@@ -49,7 +51,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @dataclass
-class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPooling):
+class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     vision_outputs (`BaseModelOutputWithPooling`):
         Outputs of the vision encoder.
@@ -1024,7 +1026,7 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
     the prompt. Otherwise, the language model starts generating text from the [BOS] (beginning-of-sequence) token.
     """
 )
-class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, GenerationMixin):
+class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, MultimodalMixin, GenerationMixin):
     config: InstructBlipConfig
     main_input_name = "pixel_values"
 
@@ -1089,7 +1091,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         qformer_input_ids: torch.LongTensor,
@@ -1151,8 +1153,10 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
 
         # step 3: use the language model, conditioned on the query outputs and the prompt
         image_features = self.language_projection(query_output)
-        vision_outputs.pooler_output = image_features
-
+        vision_outputs.split_sizes = torch.full(
+            image_features.shape[:1], image_features.shape[1], device=image_features.device
+        )
+        vision_outputs.pooler_output = image_features.flatten(0, 1)
         return vision_outputs
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor):
@@ -1172,6 +1176,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
 
     @can_return_tuple
     @auto_docstring
+    @merge_mm_encoder_outputs
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -1254,7 +1259,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None:
-            mm_encoder_outputs["image"]: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
+            mm_encoder_outputs["image"]: BaseModelOutputWithVisionQformerOutputs = self.get_image_embeddings(
                 pixel_values,
                 qformer_input_ids=qformer_input_ids,
                 qformer_attention_mask=qformer_attention_mask,
@@ -1348,7 +1353,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             self._preprocess_accelerate()
 
         batch_size = pixel_values.shape[0]
-        image_features: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
+        image_features: BaseModelOutputWithVisionQformerOutputs = self.get_image_embeddings(
             pixel_values,
             qformer_input_ids=qformer_input_ids,
             qformer_attention_mask=qformer_attention_mask,

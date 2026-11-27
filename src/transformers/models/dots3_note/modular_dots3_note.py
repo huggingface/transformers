@@ -29,8 +29,10 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
@@ -824,9 +826,13 @@ class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
                 **kwargs,
             )
         hidden_states = self.layer_norm(hidden_states)
-        pooled_output = self.adapter(hidden_states[padding_mask.to(hidden_states.device)])
+        padding_mask = padding_mask.to(hidden_states.device)
+        pooled_output = self.adapter(hidden_states[padding_mask])
 
-        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=pooled_output)
+        split_sizes = padding_mask.sum(-1)
+        return BaseModelOutputWithPoolingAndSplitSizes(
+            last_hidden_state=hidden_states, pooler_output=pooled_output, split_sizes=split_sizes
+        )
 
 
 class Dots3NoteAudioAdapter(EvollaFeedForward):
@@ -979,7 +985,7 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel, Qwen2VisionTransforme
 
 # Unified multimodal model
 @auto_docstring
-class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel):
+class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel, MultimodalMixin):
     config: Dots3NoteConfig
     input_modalities = ("image", "video", "audio", "text")
 
@@ -993,12 +999,12 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel):
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.Tensor,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         outputs = self.vision_tower(
             pixel_values,
             grid_thw=image_grid_thw,
@@ -1006,29 +1012,28 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel):
             **kwargs,
         )
 
-        split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
-        outputs.pooler_output = outputs.pooler_output.split(split_sizes)
-        return outputs
+        split_sizes = image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**outputs, split_sizes=split_sizes)
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.Tensor,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
-        return self.get_image_features(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     @can_return_tuple
     @auto_docstring
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         chunk_sample_lengths: torch.Tensor,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         chunk_sample_lengths (`torch.Tensor`):
             Number of waveform samples represented by each feature chunk.
@@ -1043,6 +1048,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1073,29 +1079,29 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
         if mm_encoder_outputs.get("image") is not None:
-            image_embeddings = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0)
+            image_embeddings = mm_encoder_outputs["image"].pooler_output
             image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, image_embeddings, self.config.image_token_id
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeddings.to(inputs_embeds))
 
         if pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
         if mm_encoder_outputs.get("video") is not None:
-            video_embeddings = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0)
+            video_embeddings = mm_encoder_outputs["video"].pooler_output
             video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, video_embeddings, self.config.video_token_id
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeddings.to(inputs_embeds))
 
         if input_features is not None:
-            audio_embeddings = self.get_audio_features(
+            audio_embeddings = self.get_audio_embeddings(
                 input_features, chunk_sample_lengths, return_dict=True
             ).pooler_output
             audio_mask = self.get_placeholder_mask(

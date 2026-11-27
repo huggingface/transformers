@@ -76,7 +76,9 @@ This model was contributed by [Raushan Turganbay](https://huggingface.co/Raushan
 
 [[autodoc]] Glm4vMoeModel
     - forward
+    - get_video_embeddings
     - get_video_features
+    - get_image_embeddings
     - get_image_features
 
 ## Glm4vMoeForConditionalGeneration

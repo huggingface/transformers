@@ -22,7 +22,8 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -150,7 +151,7 @@ class GotOcr2Config(PreTrainedConfig):
     """
 )
 @dataclass
-class GotOcr2VisionEncoderOutput(BaseModelOutputWithPooling):
+class GotOcr2VisionEncoderOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     image_embeds (`torch.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The image embeddings obtained by applying the projection layer to the pooler_output.
@@ -240,20 +241,22 @@ class GotOcr2Model(LlavaModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         last_hidden_state = image_outputs.last_hidden_state
-        image_outputs.pooler_output = self.multi_modal_projector(last_hidden_state)
-
+        features = self.multi_modal_projector(last_hidden_state)
+        image_outputs.split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs.pooler_output = features.flatten(0, 1)
         return image_outputs
 
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -277,7 +280,7 @@ class GotOcr2Model(LlavaModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values.to(inputs_embeds.dtype), return_dict=True
             )
 
@@ -382,12 +385,6 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
         )
-
-    @auto_docstring
-    def get_image_features(
-        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
 
 __all__ = [

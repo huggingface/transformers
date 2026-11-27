@@ -25,7 +25,6 @@ from transformers import (
     is_torch_available,
 )
 from transformers.image_utils import load_image
-from transformers.modeling_outputs import BaseModelOutputWithPooling
 from transformers.testing_utils import (
     Expectations,
     get_tests_dir,
@@ -151,7 +150,8 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         modality_key = f"{modality}_outputs"
         with torch.no_grad():
             raw_outputs = model(**inputs)
-            pooler_output = getattr(raw_outputs, modality_key).pooler_output
+            encoder_outputs = getattr(raw_outputs, modality_key)
+            pooler_output = encoder_outputs.pooler_output
             feature_keys = (
                 ("pixel_values", "image_grid_thw")
                 if modality == "image"
@@ -159,7 +159,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             )
             for key in feature_keys:
                 inputs.pop(key)
-            inputs["mm_encoder_outputs"] = {modality: BaseModelOutputWithPooling(pooler_output=pooler_output)}
+            inputs["mm_encoder_outputs"] = {modality: encoder_outputs}
             outputs = model(**inputs)
             inputs["inputs_embeds"] = model.get_input_embeddings()(inputs.pop("input_ids"))
             embedded_outputs = model(**inputs)
@@ -190,7 +190,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
 
         self.assertEqual(outputs.logits.shape[:2], inputs["input_ids"].shape)
         self.assertTrue(torch.isfinite(outputs.logits).all())
-        self.assertEqual(len(outputs.video_outputs.pooler_output), self.model_tester.batch_size)
+        self.assertEqual(len(outputs.video_outputs.split_sizes), self.model_tester.batch_size)
 
 
 @slow

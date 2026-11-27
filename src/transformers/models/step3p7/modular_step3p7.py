@@ -27,7 +27,11 @@ from ...image_transforms import divide_to_patches, group_images_by_shape, reorde
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MoeModelOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    MoeModelOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessorMixin, Unpack
@@ -1054,13 +1058,13 @@ class Step3p7Model(DeepseekOcr2Model):
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         pixel_values_local: torch.Tensor | None = None,
         num_local_patches: list[int] | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         vision_output = self.vision_model(pixel_values, **kwargs)
         image_features = self.multi_modal_projector(vision_output.last_hidden_state)
         patch_image_features = (
@@ -1084,9 +1088,12 @@ class Step3p7Model(DeepseekOcr2Model):
             cur_feature.append(image_features[i].view(-1, image_features.shape[-1]))
             cur_patch_idx += num_patch
             merged.append(torch.cat(cur_feature) if len(cur_feature) > 1 else cur_feature[0])
-        return BaseModelOutputWithPooling(
+        pooler_output = torch.cat(merged, dim=0)
+        split_sizes = torch.tensor([len(features) for features in merged], device=merged[0].device)
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=vision_output.last_hidden_state,
-            pooler_output=merged,
+            pooler_output=pooler_output,
+            split_sizes=split_sizes,
             hidden_states=vision_output.hidden_states,
             attentions=vision_output.attentions,
         )

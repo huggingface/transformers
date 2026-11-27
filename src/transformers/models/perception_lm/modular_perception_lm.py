@@ -19,7 +19,8 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
@@ -152,19 +153,32 @@ class PerceptionLMModel(LlavaModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_tower(pixel_values.flatten(0, 1), return_dict=True, **kwargs)
         last_hidden_state = image_outputs.last_hidden_state
         if self.config.vision_use_cls_token:
             last_hidden_state = last_hidden_state[:, 1:, :]
         image_features = self.multi_modal_projector(last_hidden_state)
-        image_outputs.pooler_output = image_features
+        split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
+        image_outputs.pooler_output = image_features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
-        return image_outputs
+    @can_return_tuple
+    @auto_docstring
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
+        r"""
+        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_frames, channels, height, width)`):
+            The tensors corresponding to the input videos.
+        """
+        return self.get_image_embeddings(pixel_values_videos, return_dict=True, **kwargs)
 
     def get_placeholder_mask(
         self,
@@ -210,6 +224,7 @@ class PerceptionLMModel(LlavaModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -232,12 +247,11 @@ class PerceptionLMModel(LlavaModel):
         image_features = None
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values=pixel_values, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values=pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output.to(
-                inputs_embeds.device, dtype=inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output
+            image_features = image_features.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -245,12 +259,11 @@ class PerceptionLMModel(LlavaModel):
 
         video_features = None
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_image_features(pixel_values=pixel_values_videos, return_dict=True)
+            mm_encoder_outputs["video"] = self.get_video_embeddings(pixel_values_videos, return_dict=True)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_features = mm_encoder_outputs["video"].pooler_output.to(
-                inputs_embeds.device, dtype=inputs_embeds.dtype
-            )
+            video_features = mm_encoder_outputs["video"].pooler_output
+            video_features = video_features.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
             )
@@ -365,9 +378,6 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
         )
-
-    def get_image_features(self, **kwargs):
-        raise AttributeError("Not needed for PerceptionLM")
 
 
 __all__ = [

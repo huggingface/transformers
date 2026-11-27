@@ -212,6 +212,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] Idefics2Model
     - forward
+    - get_image_embeddings
     - get_image_features
 
 ## Idefics2ForConditionalGeneration

@@ -32,6 +32,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -721,23 +722,22 @@ class PaddleOCRVLModel(Qwen2VLModel):
 
         self.post_init()
 
-    def get_video_features(self):
+    def get_video_embeddings(self):
         raise AttributeError("PaddleOCRVLModel does not support video.")
 
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         pixel_values = pixel_values.type(self.visual.dtype).unsqueeze(0)
         vision_outputs = self.visual(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = vision_outputs.last_hidden_state
         image_embeds = self.projector(image_embeds, image_grid_thw)
-        split_sizes = (image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
-
-        return vision_outputs
+        vision_outputs.pooler_output = image_embeds
+        split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -786,12 +786,12 @@ class PaddleOCRVLModel(Qwen2VLModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0)
+            image_embeds = mm_encoder_outputs["image"].pooler_output
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
@@ -821,9 +821,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
 
 class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
-
-    def get_video_features(self):
-        raise AttributeError("PaddleOCRVLForConditionalGeneration does not support video.")
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(

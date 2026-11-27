@@ -34,8 +34,10 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeModelOutputWithPast,
     MultimodalBaseModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
@@ -627,7 +629,7 @@ class Qwen3VLMoeVisionBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 @dataclass
-class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
+class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     deepstack_features (`List[torch.Tensor]`, *optional*):
         List of hidden-states (feature maps) from deepstack layers.
@@ -969,7 +971,7 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
 
 
 @auto_docstring
-class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
+class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1128,22 +1130,10 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
-    @accepts_precomputed_kwargs(modality="video")
-    @can_return_tuple
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        # Same implementation as for images
-        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
-
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
@@ -1153,13 +1143,19 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         vision_output: BaseModelOutputWithDeepstackFeatures = self.visual(
             pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs
         )
-        image_embeds = vision_output.pooler_output
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_output.pooler_output = torch.split(image_embeds, split_sizes)
-        vision_output.deepstack_features = [
-            torch.split(feat, split_sizes) for feat in vision_output.deepstack_features
-        ]
+        vision_output.split_sizes = image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
         return vision_output
+
+    @accepts_precomputed_kwargs(modality="video")
+    @can_return_tuple
+    @auto_docstring
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     def get_placeholder_mask(
         self,
@@ -1254,6 +1250,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @merge_mm_encoder_outputs
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -1286,19 +1283,19 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"]: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
+            mm_encoder_outputs["image"]: BaseModelOutputWithDeepstackFeatures = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"]: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
+            mm_encoder_outputs["video"]: BaseModelOutputWithDeepstackFeatures = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = mm_encoder_outputs["image"].pooler_output
             deepstack_image_embeds = mm_encoder_outputs["image"].deepstack_features
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
@@ -1307,7 +1304,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         if mm_encoder_outputs.get("video") is not None:
             video_embeds = mm_encoder_outputs["video"].pooler_output
             deepstack_video_embeds = mm_encoder_outputs["video"].deepstack_features
-            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -1324,8 +1321,6 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
             image_mask_joint = image_mask[visual_pos_masks]
             video_mask_joint = video_mask[visual_pos_masks]
             for img_embed, vid_embed in zip(deepstack_image_embeds, deepstack_video_embeds):
-                img_embed = torch.cat(img_embed, dim=0)
-                vid_embed = torch.cat(vid_embed, dim=0)
                 embed_joint = img_embed.new_zeros(visual_pos_masks.sum(), img_embed.shape[-1])
 
                 embed_joint[image_mask_joint, :] = img_embed
@@ -1334,11 +1329,11 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         elif image_mask is not None:
             image_mask = image_mask[..., 0]
             visual_pos_masks = image_mask
-            deepstack_visual_embeds = [torch.cat(feat, dim=0) for feat in deepstack_image_embeds]
+            deepstack_visual_embeds = deepstack_image_embeds
         elif video_mask is not None:
             video_mask = video_mask[..., 0]
             visual_pos_masks = video_mask
-            deepstack_visual_embeds = [torch.cat(feat, dim=0) for feat in deepstack_video_embeds]
+            deepstack_visual_embeds = deepstack_video_embeds
 
         if position_ids is None:
             position_ids = self.compute_3d_position_ids(
@@ -1439,7 +1434,7 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
-class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMixin):
+class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
@@ -1451,32 +1446,6 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
-
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring

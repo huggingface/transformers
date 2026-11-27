@@ -30,6 +30,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
@@ -571,28 +572,18 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         self.visual = Cosmos3EdgeVisionModel._from_config(config.vision_config)
         self.projector = Cosmos3EdgePatchMerger(config)
 
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         image_embeds = self.projector(vision_outputs.last_hidden_state)
-        split_sizes = (image_grid_thw.prod(-1) // self.projector.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
-
-        return vision_outputs
-
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        # Video frames use the same vision tower and projector path as images.
-        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
+        vision_outputs.pooler_output = image_embeds
+        split_sizes = image_grid_thw.prod(-1) // self.projector.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_rope_index(
         self,

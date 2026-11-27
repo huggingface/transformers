@@ -26,9 +26,11 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -113,7 +115,7 @@ class VipLlavaPreTrainedModel(PreTrainedModel):
     The VipLlava model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class VipLlavaModel(VipLlavaPreTrainedModel):
+class VipLlavaModel(VipLlavaPreTrainedModel, MultimodalMixin):
     def __init__(self, config: VipLlavaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -129,12 +131,12 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
@@ -156,9 +158,9 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
             image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layer]
             image_features = torch.cat(image_features, dim=-1)
         image_features = self.multi_modal_projector(image_features)
-        image_outputs.pooler_output = image_features
-
-        return image_outputs
+        split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
+        image_outputs.pooler_output = image_features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -188,6 +190,7 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -221,7 +224,7 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values, vision_feature_layer=vision_feature_layer
             )
 
@@ -249,7 +252,7 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
     The VIPLLAVA model which consists of a vision backbone and a language model.
     """
 )
-class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin):
+class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -261,25 +264,6 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    @deprecate_kwarg("vision_feature_layers", version="v5.25", new_name="vision_feature_layer")
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        vision_feature_layer: int | list[int] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
-            The tensors corresponding to the input images.
-        vision_feature_layer (`Union[int, list[int]]`, *optional*):
-            The vision feature layer, or the list of indexes of the layers to select
-            the vision feature.
-        """
-        return self.model.get_image_features(
-            pixel_values=pixel_values, vision_feature_layer=vision_feature_layer, **kwargs
-        )
 
     @deprecate_kwarg("vision_feature_layers", version="v5.25", new_name="vision_feature_layer")
     @can_return_tuple

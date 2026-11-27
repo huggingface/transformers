@@ -26,7 +26,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
-from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes, ModelOutput
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
@@ -522,14 +522,17 @@ class Gemma4UnifiedConfig(Gemma4Config):
 @dataclass
 class Gemma4UnifiedAudioModelOutput(ModelOutput):
     r"""
-    pooler_output (`torch.Tensor` of shape `(batch_size, ..., hidden_size)`):
-        Last hidden state that went through the audio specific multimodal projectors.
+    pooler_output (`torch.Tensor` of shape `(num_audio_tokens, hidden_size)`):
+        The real (non-padding) audio soft tokens of every input audio, concatenated, after the audio projector.
     attention_mask (`torch.BoolTensor`, *optional*):
         A torch.BoolTensor of shape `(batch_size, num_frames)`. True for valid positions, False for padding.
+    split_sizes (`torch.LongTensor` of shape `(num_audios,)`, *optional*):
+        The number of `pooler_output` rows of each audio.
     """
 
-    pooler_output: torch.Tensor | None = None
+    pooler_output: torch.Tensor | tuple[torch.Tensor, ...] | None = None
     attention_mask: torch.BoolTensor | None = None
+    split_sizes: torch.LongTensor | None = None
 
 
 class Gemma4UnifiedTextModelOutputWithPast(Gemma4TextModelOutputWithPast):
@@ -1008,12 +1011,12 @@ class Gemma4UnifiedModel(Gemma4Model):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects raw pixel patches into language model space via the unified pipeline.")
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
@@ -1027,20 +1030,19 @@ class Gemma4UnifiedModel(Gemma4Model):
 
         # Flatten valid patches: keep only non-padding patches across the batch
         # The final output shape is (total_valid_patches, text_hidden_size)
-        pooler_output = vision_outputs.pooler_output[non_pad_mask]
-        split_sizes = non_pad_mask.sum(dim=-1).tolist()
-        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
-        return vision_outputs
+        vision_outputs.pooler_output = vision_outputs.pooler_output[non_pad_mask]
+        split_sizes = non_pad_mask.sum(dim=-1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects video frames into language model space via the unified pipeline.")
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_position_ids: torch.LongTensor | None = None,
         num_frames_per_video: torch.LongTensor | None = None,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
             The frames of every video in the batch, concatenated along the frame axis rather than stacked
@@ -1063,21 +1065,19 @@ class Gemma4UnifiedModel(Gemma4Model):
         non_pad_mask = (video_position_ids != -1).all(dim=-1).to(vision_outputs.pooler_output.device)
 
         # Flatten valid patches: keep only non-padding patches across all frames
-        pooler_output = vision_outputs.pooler_output[non_pad_mask]  # (total_valid_patches, text_hidden_size)
-
-        num_tokens_per_frame = non_pad_mask.sum(dim=-1)
-        split_sizes = [
-            int(video_frames.sum())
-            for video_frames in torch.split(num_tokens_per_frame, num_frames_per_video.tolist())
-        ]
-        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
-        return vision_outputs
+        vision_outputs.pooler_output = vision_outputs.pooler_output[
+            non_pad_mask
+        ]  # (total_valid_patches, text_hidden_size)
+        # Each video's tokens are the sum of its frames', read at each video's last frame
+        video_ends = non_pad_mask.sum(dim=-1).cumsum(0)[num_frames_per_video.to(non_pad_mask.device).cumsum(0) - 1]
+        split_sizes = video_ends.diff(prepend=video_ends.new_zeros(1))
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring(
         custom_intro="Projects raw audio waveform features directly into language model space (no audio tower)."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor | None = None,
@@ -1096,11 +1096,16 @@ class Gemma4UnifiedModel(Gemma4Model):
                 "Cannot process audio without an audio embedder."
             )
 
-        audio_outputs = self.embed_audio(inputs_embeds=input_features)
-
+        audio_embeds = self.embed_audio(inputs_embeds=input_features)
+        # Only the real audio soft tokens, as the image getter drops padding too
+        if input_features_mask is not None:
+            input_features_mask = input_features_mask.to(audio_embeds.device)
+            pooler_output, split_sizes = audio_embeds[input_features_mask], input_features_mask.sum(-1)
+        else:
+            split_sizes = torch.full(audio_embeds.shape[:1], audio_embeds.shape[1], device=audio_embeds.device)
+            pooler_output = audio_embeds.flatten(0, 1)
         return Gemma4UnifiedAudioModelOutput(
-            pooler_output=audio_outputs,
-            attention_mask=input_features_mask.to(audio_outputs.device) if input_features_mask is not None else None,
+            pooler_output=pooler_output, attention_mask=input_features_mask, split_sizes=split_sizes
         )
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -1157,12 +1162,10 @@ class Gemma4UnifiedModel(Gemma4Model):
         # Merge text and images
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_position_ids, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_position_ids, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -1178,14 +1181,12 @@ class Gemma4UnifiedModel(Gemma4Model):
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos, video_position_ids, num_frames_per_video=num_frames_per_video, return_dict=True
             )
 
         if mm_encoder_outputs.get("video") is not None:
-            video_features = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            video_features = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -1203,14 +1204,8 @@ class Gemma4UnifiedModel(Gemma4Model):
         # Merge text and audio
         audio_outputs = None
         if input_features is not None and input_features_mask is not None:
-            audio_outputs = self.get_audio_features(input_features, input_features_mask, return_dict=True)
+            audio_outputs = self.get_audio_embeddings(input_features, input_features_mask, return_dict=True)
             audio_features = audio_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
-            audio_mask_from_encoder = audio_outputs.attention_mask  # True = valid
-
-            # Strip padding tokens: only keep real (non-padding) audio soft tokens.
-            # audio_mask_from_encoder is True for valid positions, False for padding tokens.
-            # This mirrors the vision encoder's padding stripping (see Gemma4UnifiedVisionEncoder.forward).
-            audio_features = audio_features[audio_mask_from_encoder.to(audio_features.device)]
 
             n_audio_tokens = audio_mask.sum()
             audio_mask = audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)

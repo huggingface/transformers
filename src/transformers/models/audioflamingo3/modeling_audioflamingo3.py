@@ -32,7 +32,13 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_multimodal_utils import MultimodalMixin
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    ModelOutput,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
@@ -403,7 +409,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         hidden_states = self.avg_pooler(hidden_states).permute(0, 2, 1)
         hidden_states = self.layer_norm(hidden_states)
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=hidden_states,
         )
 
@@ -446,7 +452,7 @@ class AudioFlamingo3MultiModalProjector(nn.Module):
     without a language modeling head.
     """
 )
-class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
+class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel, MultimodalMixin):
     _tp_plan = None
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
@@ -462,12 +468,12 @@ class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
     @auto_docstring(
         custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_features (`torch.Tensor`):
             Float values of mel features extracted from the raw speech waveform.
@@ -485,6 +491,7 @@ class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
         _, post_lengths = self.audio_tower._get_feat_extract_output_lengths(input_lengths)
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_output.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
+        audio_output.split_sizes = post_lengths
 
         return audio_output
 
@@ -536,7 +543,9 @@ class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
 
         audio_embeds = None
         if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features, input_features_mask, return_dict=True).pooler_output
+            audio_embeds = self.get_audio_embeddings(
+                input_features, input_features_mask, return_dict=True
+            ).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
             special_audio_mask = self.get_placeholder_mask(
@@ -569,7 +578,7 @@ class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
     The AudioFlamingo3 model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Qwen2 language model.
     """
 )
-class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, GenerationMixin):
+class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = None
 
     def __init__(self, config: AudioFlamingo3Config):
@@ -577,9 +586,6 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         self.model = AudioFlamingo3Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_audio_features(self, input_features, input_features_mask, **kwargs):
-        return self.model.get_audio_features(input_features, input_features_mask, **kwargs)
 
     @can_return_tuple
     @auto_docstring

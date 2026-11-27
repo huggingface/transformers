@@ -30,7 +30,7 @@ from transformers.models.got_ocr2.image_processing_got_ocr2 import GotOcr2ImageP
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -98,17 +98,16 @@ class Cohere2VisionModel(AyaVisionModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         selected_image_feature = image_outputs.last_hidden_state
         pooler_output = self.multi_modal_projector(selected_image_feature)
-        image_outputs.pooler_output = pooler_output.reshape(
-            selected_image_feature.shape[0], -1, self.config.text_config.hidden_size
-        )
-
-        return image_outputs
+        features = pooler_output.reshape(selected_image_feature.shape[0], -1, self.config.text_config.hidden_size)
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs.pooler_output = features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -134,7 +133,7 @@ class Cohere2VisionModel(AyaVisionModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
@@ -157,12 +156,6 @@ class Cohere2VisionModel(AyaVisionModel):
 
 
 class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
-    @auto_docstring
-    def get_image_features(
-        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
-
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,

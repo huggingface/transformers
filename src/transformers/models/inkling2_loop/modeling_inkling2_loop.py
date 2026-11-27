@@ -45,8 +45,10 @@ from ...masking_utils import (
     find_first_full_attention_index,
 )
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeModelOutputWithPast,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
@@ -1610,7 +1612,7 @@ class Inkling2LoopModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     The Base Inkling2Loop model which consists of a vision backbone and a language model without language modeling head.,
     """
 )
-class Inkling2LoopModel(Inkling2LoopPreTrainedModel):
+class Inkling2LoopModel(Inkling2LoopPreTrainedModel, MultimodalMixin):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
     input_modalities = ("image", "text")
@@ -1623,13 +1625,13 @@ class Inkling2LoopModel(Inkling2LoopPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Encodes images into language model embeddings, one per image token.")
-    def get_image_features(
+    def get_image_embeddings(
         self, pixel_values: torch.Tensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_grid_thw = image_grid_thw.cpu()
         image_outputs = self.vision_tower(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
-        image_outputs.pooler_output = image_outputs.pooler_output.split(image_grid_thw.prod(-1).tolist())
-        return image_outputs
+        split_sizes = image_grid_thw.prod(-1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -1661,6 +1663,7 @@ class Inkling2LoopModel(Inkling2LoopPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1725,11 +1728,11 @@ class Inkling2LoopModel(Inkling2LoopPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True)
 
         image_embeds = None
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output)
+            image_embeds = mm_encoder_outputs["image"].pooler_output
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, image_embeds, self.config.image_token_id
@@ -1760,7 +1763,7 @@ class Inkling2LoopModel(Inkling2LoopPreTrainedModel):
     The Base Inkling2Loop model which consists of a vision backbone and a language model without language modeling head.,
     """
 )
-class Inkling2LoopForConditionalGeneration(Inkling2LoopPreTrainedModel, GenerationMixin):
+class Inkling2LoopForConditionalGeneration(Inkling2LoopPreTrainedModel, MultimodalMixin, GenerationMixin):
     # `embed` and `unembed` are separate tensors in the checkpoints, never tied
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "rowwise_split_input"}
@@ -1775,12 +1778,6 @@ class Inkling2LoopForConditionalGeneration(Inkling2LoopPreTrainedModel, Generati
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.unpadded_vocab_size, bias=False)
         self.logit_softcap = Inkling2LoopSoftcap(config.text_config.final_logit_softcapping)
         self.post_init()
-
-    @auto_docstring
-    def get_image_features(
-        self, pixel_values: torch.Tensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
-    ):
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring

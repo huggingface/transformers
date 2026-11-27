@@ -33,7 +33,8 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, Unpack
 from ...utils import (
@@ -104,7 +105,7 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
 
 @auto_docstring
 @dataclass
-class BaseModelOutputWithHighResVisionEncodings(BaseModelOutputWithPooling):
+class BaseModelOutputWithHighResVisionEncodings(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     high_res_vision_last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the high resolution vision model.
@@ -257,7 +258,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
 
     @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         high_res_pixel_values: torch.Tensor,
@@ -266,10 +267,12 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         low_res_outputs = self.get_low_res_image_features(pixel_values, **kwargs)
         high_res_outputs = self.get_high_res_image_features(high_res_pixel_values, **kwargs)
         image_features = self.aligner(low_res_outputs.last_hidden_state, high_res_outputs.last_hidden_state)
-
+        split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
+        pooler_output = image_features.flatten(0, 1)
         return BaseModelOutputWithHighResVisionEncodings(
             last_hidden_state=low_res_outputs.last_hidden_state,
-            pooler_output=image_features,
+            pooler_output=pooler_output,
+            split_sizes=split_sizes,
             hidden_states=low_res_outputs.hidden_states,
             attentions=low_res_outputs.attentions,
             high_res_vision_last_hidden_state=high_res_outputs.last_hidden_state,
@@ -280,6 +283,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
     @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -309,12 +313,12 @@ class DeepseekVLHybridModel(DeepseekVLModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, high_res_pixel_values, return_dict=True
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output.reshape(-1, inputs_embeds.shape[-1])
+            image_features = mm_encoder_outputs["image"].pooler_output
             image_attention_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_attention_mask = image_attention_mask.to(inputs_embeds.device)
