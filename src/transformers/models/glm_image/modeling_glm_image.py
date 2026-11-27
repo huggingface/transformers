@@ -1223,12 +1223,13 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
         # to recompute from). Skip when input_ids is provided without cache to avoid shape
         # mismatches from stale rope_deltas (e.g., training forward pass after generation).
         elif self.rope_deltas is not None and (cache_length > 0 or input_ids is None):
-            batch_size, seq_length, _ = inputs_embeds.shape
+            tokens = inputs_embeds if inputs_embeds is not None else input_ids
+            batch_size, seq_length = tokens.shape[:2]
             if self._cached_decode_position_ids is not None:
                 step = cache_length - self._prefill_len
                 position_ids = self._cached_decode_position_ids[:, :, step : step + seq_length].permute(1, 0, 2)
             else:
-                position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + cache_length
+                position_ids = torch.arange(seq_length, device=tokens.device) + cache_length
                 position_ids = position_ids.view(1, 1, -1).repeat(3, batch_size, 1)
         else:
             # Can't build correct 3D positions. Let the model infer it
@@ -1479,7 +1480,16 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
         model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
-        model_inputs["position_ids"] = None
+        # The M-RoPE positions: the prompt's from its token ids and image grids, then each decode step's from those, so
+        # forward never reads them from the model's state
+        model_inputs["position_ids"] = self.model.compute_3d_position_ids(
+            input_ids=model_inputs.get("input_ids"),
+            image_grid_thw=model_inputs.get("image_grid_thw"),
+            images_per_sample=model_inputs.get("images_per_sample"),
+            inputs_embeds=model_inputs.get("inputs_embeds"),
+            attention_mask=model_inputs.get("attention_mask"),
+            cache=model_inputs.get("cache"),
+        )
         return model_inputs
 
     def _prepare_multimodal_encoder_kwargs_for_generation(self, model_kwargs):

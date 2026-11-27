@@ -54,18 +54,7 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
-
-    try:
-        from torch._prims_common import is_contiguous_or_false
-    except ImportError:  # `is_contiguous_or_false` was added in torch 2.9
-        from torch.fx.experimental.symbolic_shapes import GuardOnDataDependentSymNode
-
-        def is_contiguous_or_false(a: torch.Tensor) -> bool:
-            # Like torch>=2.9's version, answer False instead of raising on data-dependent shapes.
-            try:
-                return bool(a.is_contiguous())
-            except GuardOnDataDependentSymNode:
-                return False
+    from torch._prims_common import is_contiguous_or_false
 
     from .. import masking_utils
     from ..modeling_utils import PreTrainedModel
@@ -635,6 +624,7 @@ def _merge_decode_calls(decode_calls: list[dict]) -> dict:
 
     concat_along("input_ids", 1)
     concat_along("inputs_embeds", 1)
+    concat_along("token_type_ids", 1)
     # Continuous Audio Language models (PocketTTS, GradiumPhononTTS) feed one `audio_latents` frame
     # `[batch, 1, latent_dim]` per decode step, one per placeholder token, so they grow along the same
     # axis as `input_ids`.

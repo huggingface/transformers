@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import copy
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -82,7 +82,7 @@ class ExportConfigMixin:
             `str`: String containing all the attributes that make up this configuration instance in JSON format.
         """
         values = {name: value for name, value in self.__dict__.items() if name != "quantizer"}
-        return json.dumps(values, indent=2, sort_keys=True, default=repr)
+        return json.dumps(values, indent=2, sort_keys=True, default=lambda v: vars(v) if is_dataclass(v) else repr(v))
 
     def __iter__(self):
         yield from self.__dict__.items()
@@ -130,6 +130,41 @@ class DynamoConfig(ExportConfigMixin):
     quantizer: ExportQuantizer | None = None
 
 
+ORT_PROVIDERS = ("cpu", "cuda", "webgpu", "dml")
+
+
+@dataclass
+class OrtFusionConfig:
+    """
+    Which of ONNX Runtime's fusions `OnnxConfig(ort_fusions=...)` applies. onnxscript's norm, attention and GELU
+    fusions always do.
+
+    Args:
+        provider (`str`):
+            The execution provider the fused graph runs on: `"cpu"`, `"cuda"`, `"webgpu"` or `"dml"`.
+        rotary_embeddings (`bool`, *optional*, defaults to `True`):
+            Fuse rotary embeddings into `RotaryEmbedding`, folded into `GroupQueryAttention` where it takes them.
+        group_query_attention (`bool`, *optional*, defaults to `True`):
+            Fuse attentions reading a key-value cache into `GroupQueryAttention` (DirectML keeps `MultiHeadAttention`).
+        mixture_of_experts (`bool`, *optional*, defaults to `False`):
+            Fuse mixture-of-experts blocks into `MoE` (CUDA only), whose kernels need a Hopper or newer GPU.
+        packed_projections (`bool`, *optional*, defaults to `True`):
+            Pack the projections reading one input (query, key and value; gate and up) into one `MatMul`.
+    """
+
+    provider: Literal["cpu", "cuda", "webgpu", "dml"]
+    rotary_embeddings: bool = True
+    group_query_attention: bool = True
+    mixture_of_experts: bool = False
+    packed_projections: bool = True
+
+    def __post_init__(self):
+        if self.provider not in ORT_PROVIDERS:
+            raise ValueError(f"`provider` must be one of {ORT_PROVIDERS}, got {self.provider!r}")
+        if self.mixture_of_experts and self.provider != "cuda":
+            raise ValueError("`mixture_of_experts` fuses ONNX Runtime's CUDA `MoE`: it needs `provider='cuda'`.")
+
+
 @dataclass
 class OnnxConfig(DynamoConfig):
     """
@@ -140,26 +175,31 @@ class OnnxConfig(DynamoConfig):
 
     Args:
         opset_version (`int`, *optional*):
-            ONNX opset version to target. Defaults to the latest opset
-            supported by the installed `onnxscript` version.
+            ONNX opset version to target. Defaults to 23, which exports SDPA, RMS norms and rotary embeddings as
+            single ops (`Attention`, `RMSNormalization`, `RotaryEmbedding`); to 20 with `ort_fusions` or a
+            `quantizer`, which work on their decompositions. ONNX Runtime's TensorRT provider takes 22 at most.
         optimize (`bool`, *optional*, defaults to `True`):
             Run `onnxscript` optimisation passes (constant folding, dead-code
             elimination, …) on the exported graph. Disable for models that
             hit upstream `onnxscript` optimiser bugs.
-        ort_fusions (`str`, *optional*):
+        ort_fusions (`str` or [`OrtFusionConfig`], *optional*):
             Fuse the graph into ONNX Runtime's ops for the execution provider it runs on: `"cpu"`, `"cuda"`,
-            `"webgpu"` or `"dml"`. The fused graph only runs on ONNX Runtime. Requires `optimize=True`.
+            `"webgpu"` or `"dml"` for its default fusions, or an [`OrtFusionConfig`] picking them. The fused graph only
+            runs on ONNX Runtime. Requires `optimize=True`.
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
 
     opset_version: int | None = None
     optimize: bool = True
-    ort_fusions: Literal["cpu", "cuda", "webgpu", "dml"] | None = None
+    ort_fusions: Literal["cpu", "cuda", "webgpu", "dml"] | OrtFusionConfig | None = None
 
     def __post_init__(self):
-        if self.ort_fusions not in (None, "cpu", "cuda", "webgpu", "dml"):
-            raise ValueError(f"`ort_fusions` must be None, 'cpu', 'cuda', 'webgpu' or 'dml', got {self.ort_fusions!r}")
+        # A provider for its default fusions; a dict as saved with an export.
+        if isinstance(self.ort_fusions, str):
+            self.ort_fusions = OrtFusionConfig(provider=self.ort_fusions)
+        elif isinstance(self.ort_fusions, dict):
+            self.ort_fusions = OrtFusionConfig(**self.ort_fusions)
         if self.ort_fusions is not None and not self.optimize:
             raise ValueError("`ort_fusions` requires `optimize=True`.")
 
@@ -179,26 +219,32 @@ class ExecutorchConfig(DynamoConfig):
             - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
             - `"mlx"` — GPU inference via the ExecuTorch MLX backend on Apple Silicon.
-        alloc_graph_input (`bool`, *optional*, defaults to `True`):
+        alloc_graph_input (`bool`, *optional*):
             Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,
             the runtime uses the caller-provided input buffers directly instead of copying into the
             arena — so an in-place `USER_INPUT_MUTATION` (e.g. a `StaticCache` write) lands in the
-            caller's tensor rather than an arena copy.
-        alloc_graph_output (`bool`, *optional*, defaults to `True`):
+            caller's tensor rather than an arena copy. Defaults to `False` for a program writing into an input
+            when ExecuTorch writes it in place (1.7, or a nightly from 2026-11-17), else `True`.
+        run_reinplace_pass (`bool`, *optional*):
+            Whether ExecuTorch rewrites ops in place where safe, so a program writing into its cache writes there
+            instead of into a copy it plans and returns. Defaults to `True` where `alloc_graph_input` defaults to
+            `False`.
+        alloc_graph_output (`bool`, *optional*):
             Whether the memory-planning pass reserves arena memory for graph outputs. When `False`,
-            the caller must bind output buffers at runtime (`Method::set_output_data_ptr`); binding an
-            output to its mutated input's buffer avoids the copy-out roundtrip.
-        alloc_mutable_buffers (`bool`, *optional*, defaults to `True`):
+            the caller binds every output to its own buffer (`Method.set_output`), which [`ExportedModel`] doesn't.
+            Defaults to `True`.
+        alloc_mutable_buffers (`bool`, *optional*):
             Whether the memory-planning pass reserves arena memory for mutable buffers (model-resident
-            state). Passed through to the `MemoryPlanningPass`.
+            state). Defaults to `True`.
     """
 
     export_format: ExportFormat = ExportFormat.EXECUTORCH
 
     backend: str = "xnnpack"
-    alloc_graph_input: bool = True
-    alloc_graph_output: bool = True
-    alloc_mutable_buffers: bool = True
+    alloc_graph_input: bool | None = None
+    run_reinplace_pass: bool | None = None
+    alloc_graph_output: bool | None = None
+    alloc_mutable_buffers: bool | None = None
 
 
 @dataclass
