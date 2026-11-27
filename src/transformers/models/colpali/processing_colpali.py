@@ -129,6 +129,8 @@ class ColPaliProcessor(ProcessorMixin):
         suffix = output_kwargs["text_kwargs"].pop("suffix", suffix)
 
         if text is not None:
+            if isinstance(text, str):
+                text = [text]
             text = [f"{self.tokenizer.bos_token}{self.query_prefix}{sample}{suffix}\n" for sample in text]
             if output_kwargs["text_kwargs"].get("max_length", None) is not None:
                 output_kwargs["text_kwargs"]["max_length"] += self.image_seq_length

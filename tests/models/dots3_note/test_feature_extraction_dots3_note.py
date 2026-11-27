@@ -70,6 +70,7 @@ class Dots3NoteFeatureExtractorTest(unittest.TestCase):
             {
                 ("cpu", None): [1.4883524179, 1.3922336102, 0.7106180191, 0.5591694713, 0.1503863335, -1.5],
                 ("cuda", None): [1.4883524179, 1.3922336102, 0.7106180191, 0.5591694713, 0.1503863335, -1.5],
+                ("xpu", None): [1.4883524179, 1.3922336102, 0.7106180191, 0.5591696501, 0.1503863335, -1.5],
             }
         ).get_expectation()
         torch.testing.assert_close(selected, torch.tensor(expected, device=torch_device), rtol=1e-5, atol=1e-6)

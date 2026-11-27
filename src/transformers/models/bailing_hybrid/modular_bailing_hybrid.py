@@ -41,8 +41,6 @@ from ...models.deepseek_v3.modeling_deepseek_v3 import (
 from ...models.glm5_next.modeling_glm5_next import (
     Glm5NextTextLinearAttention,
     Glm5NextTextRMSNormGated,
-    causal_conv1d_fn,
-    causal_conv1d_update,
     chunk_kimi_delta_attention,
     recurrent_kimi_delta_attention,
 )
@@ -57,6 +55,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
+from ..mamba.modeling_mamba import causal_conv1d_forward
 
 
 @auto_docstring(checkpoint="inclusionAI/Ling-3.0-Flash")
@@ -323,33 +322,20 @@ class BailingHybridDeltaAttention(Glm5NextTextLinearAttention):
             [self.q_proj(hidden_states), self.k_proj(hidden_states), self.v_proj(hidden_states)], dim=-1
         ).transpose(1, 2)
 
-        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
+        # Retrieve the recurrent state if there is a cache. It may be None if the layer is not initialized.
         if cache is not None:
-            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
             recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
-            conv_state, recurrent_state = None, None
+            recurrent_state = None
 
-        if conv_state is not None and seq_len == 1:
-            mixed_qkv = causal_conv1d_update(
-                mixed_qkv,
-                conv_state,
-                weight=self.conv1d.weight.squeeze(1),
-                bias=self.conv1d.bias,
-                activation=self.activation,
-            )
-        else:
-            if cache is not None:
-                mixed_qkv = cache.update_conv_state(mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size)
-            mixed_qkv = causal_conv1d_fn(
-                mixed_qkv,
-                weight=self.conv1d.weight.squeeze(1),
-                bias=self.conv1d.bias,
-                activation=self.activation,
-                **kwargs,
-            )
-            if cache is not None:
-                mixed_qkv = mixed_qkv[:, :, -seq_len:]
+        mixed_qkv = causal_conv1d_forward(
+            self.conv1d,
+            mixed_qkv,
+            cache,
+            self.layer_idx,
+            activation=self.activation,
+            **kwargs,
+        )
 
         query, key, value = torch.split(mixed_qkv.transpose(1, 2), [self.qkv_dim] * 3, dim=-1)
         query, key, value = [states.view(hidden_shape) for states in (query, key, value)]
@@ -369,20 +355,67 @@ class BailingHybridDeltaAttention(Glm5NextTextLinearAttention):
                 **kwargs,
             )
         else:
-            output, last_recurrent_state = chunk_kimi_delta_attention(
-                query,
-                key,
-                value,
-                g=decay,
-                beta=beta,
+            num_intermediate_recurrent_states = (
+                cache.get_recurrent_states_to_keep(self.layer_idx) if cache is not None else 0
+            )
+            # Cannot be more than the number of tokens
+            num_intermediate_recurrent_states = min(num_intermediate_recurrent_states, seq_len)
+            # Since we want the last num_intermediate_recurrent_states, we need to artifically remove them from the chunks, and split the inputs
+            effective_sequence_length = seq_len - num_intermediate_recurrent_states
+            chunked_query, sequential_query = torch.tensor_split(query, [effective_sequence_length], dim=1)
+            chunked_key, sequential_key = torch.tensor_split(key, [effective_sequence_length], dim=1)
+            chunked_value, sequential_value = torch.tensor_split(value, [effective_sequence_length], dim=1)
+            chunked_beta, sequential_beta = torch.tensor_split(beta, [effective_sequence_length], dim=1)
+            chunked_decay, sequential_decay = torch.tensor_split(decay, [effective_sequence_length], dim=1)
+
+            all_outputs = []
+            # First, perform the fast chunked computation
+            chunked_attn_out, chunked_last_recurrent_state = chunk_kimi_delta_attention(
+                chunked_query,
+                chunked_key,
+                chunked_value,
+                g=chunked_decay,
+                beta=chunked_beta,
                 initial_state=recurrent_state,
                 output_final_state=cache is not None,
                 use_qk_l2norm_in_kernel=True,
                 **kwargs,
             )
+            chunked_last_recurrent_state = (
+                chunked_last_recurrent_state.to(torch.float32) if chunked_last_recurrent_state is not None else None
+            )
+            all_outputs.append(chunked_attn_out)
+            # If we need to return intermediate recurrent state, we now do it sequentially after the chunked part
+            intermediate_recurrent_states = []
+            last_recurrent_state = chunked_last_recurrent_state
+            for i in range(num_intermediate_recurrent_states):
+                local_attn_out, last_recurrent_state = recurrent_kimi_delta_attention(
+                    sequential_query[:, i : i + 1, ...],
+                    sequential_key[:, i : i + 1, ...],
+                    sequential_value[:, i : i + 1, ...],
+                    g=sequential_decay[:, i : i + 1, ...],
+                    beta=sequential_beta[:, i : i + 1, ...],
+                    initial_state=last_recurrent_state,
+                    output_final_state=True,
+                    use_qk_l2norm_in_kernel=True,
+                    **kwargs,
+                )
+                # Combine them
+                all_outputs.append(local_attn_out)
+                intermediate_recurrent_states.append(last_recurrent_state.to(torch.float32))
+
+            # Cat all outputs
+            output = torch.cat(all_outputs, dim=1)
+
+            # In case we needed intermediate states, we return them, otherwise the last one is the chunked one
+            last_recurrent_state = (
+                intermediate_recurrent_states
+                if len(intermediate_recurrent_states) > 0
+                else chunked_last_recurrent_state
+            )
 
         if cache is not None:
-            cache.update_recurrent_state(last_recurrent_state.to(torch.float32), self.layer_idx)
+            cache.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         output_gate = self.g_proj(hidden_states)
         output = self.o_norm(output, output_gate.view(hidden_shape)).reshape(batch_size, seq_len, -1)

@@ -30,14 +30,13 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessorMixin, Unpack
 from ...utils import (
     TensorType,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     logging,
-    no_inherit_decorator,
     torch_int,
 )
 from ...utils.deprecation import deprecate_kwarg
@@ -47,6 +46,7 @@ from ...vision_utils import get_vision_position_ids
 from ..clip.modeling_clip import CLIPAttention
 from ..deepseek_ocr2.modeling_deepseek_ocr2 import DeepseekOcr2ForConditionalGeneration, DeepseekOcr2Model
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma3.modeling_gemma3 import Gemma3TextModel, _bidirectional_window_overlay
 from ..kimi_k25.modeling_kimi_k25 import Kimi_K25VisionRotaryEmbedding
 from ..laguna.modeling_laguna import (
@@ -58,7 +58,6 @@ from ..laguna.modeling_laguna import (
 )
 from ..minimax_m3_vl.configuration_minimax_m3_vl import MiniMaxM3VLTextConfig
 from ..minimax_m3_vl.modeling_minimax_m3_vl import (
-    MiniMaxM3VLRMSNorm,
     MiniMaxM3VLSparseMoeBlock,
     MiniMaxM3VLTopKRouter,
     MiniMaxM3VLVisionMLP,
@@ -461,10 +460,10 @@ class Step3p7ImageProcessor(TorchvisionBackend):
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
         """Return the number of local patches for an image of the given size."""
-        images_kwargs = images_kwargs or {}
-        size = images_kwargs.get("size", self.size)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        size = images_kwargs["size"]
         image_size = size["height"]
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        patch_size = images_kwargs["patch_size"]
         num_patches_x, num_patches_y = self._plan_patches(width, height, image_size, patch_size)[3:5]
         return num_patches_x * num_patches_y
 
@@ -818,7 +817,7 @@ class Step3p7RotaryEmbedding(LagunaRotaryEmbedding):
     pass
 
 
-class Step3p7RMSNorm(MiniMaxM3VLRMSNorm):
+class Step3p7RMSNorm(GemmaRMSNorm):
     pass
 
 
@@ -836,10 +835,7 @@ class Step3p7MLP(DeepseekV4MLP):
         return self.down_proj(gate * up)
 
 
-@no_inherit_decorator
 class Step3p7Experts(DeepseekV4Experts):
-    _fp8_experts_clamp_after_activation = True
-
     def __init__(self, config, swiglu_limit=None):
         super().__init__(config)
         self.intermediate_dim = config.moe_intermediate_size
@@ -1139,3 +1135,34 @@ class Step3p7Processor(ProcessorMixin):
                 repl += "<patch_newline>"
         repl += f"<im_start>{self.image_feature_placeholder}<im_end>"
         return repl
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+
+            num_local_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [
+                self.num_image_feature_size + num_patches * self.num_patch_feature_size
+                for num_patches in num_local_patches
+            ]
+            # `pixel_values` holds one global view per image, local patches go to `pixel_values_local`
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)

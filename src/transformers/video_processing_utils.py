@@ -105,10 +105,7 @@ class VideoProcessorMixin(BaseImageProcessor):
         # Perform type validation on received kwargs
         validate_typed_dict(self.valid_kwargs, kwargs)
 
-        # Set default kwargs from self. This ensures that if a kwarg is not provided
-        # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.valid_kwargs.__annotations__:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
+        kwargs = self._merge_and_standardize_kwargs(**kwargs)
 
         input_data_format = kwargs.pop("input_data_format")
         do_convert_rgb = kwargs.pop("do_convert_rgb")
@@ -127,7 +124,6 @@ class VideoProcessorMixin(BaseImageProcessor):
             videos=videos, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
 
-        kwargs = self._standardize_kwargs(**kwargs)
         self._validate_preprocess_kwargs(**kwargs)
 
         # Pop kwargs that are not needed in _preprocess
@@ -447,7 +443,8 @@ class VideoProcessorMixin(BaseImageProcessor):
         """
         video_processor_dict = video_processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
-        video_processor_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
+        valid_keys = cls.valid_kwargs.__annotations__.keys()
+        video_processor_dict.update({k: v for k, v in kwargs.items() if k in valid_keys})
         video_processor = cls(**video_processor_dict)
 
         # Apply extra kwargs to instance (BC for remote code, e.g. phi4_multimodal)

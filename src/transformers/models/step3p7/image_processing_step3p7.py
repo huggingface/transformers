@@ -141,10 +141,10 @@ class Step3p7ImageProcessor(TorchvisionBackend):
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
         """Return the number of local patches for an image of the given size."""
-        images_kwargs = images_kwargs or {}
-        size = images_kwargs.get("size", self.size)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        size = images_kwargs["size"]
         image_size = size["height"]
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        patch_size = images_kwargs["patch_size"]
         num_patches_x, num_patches_y = self._plan_patches(width, height, image_size, patch_size)[3:5]
         return num_patches_x * num_patches_y
 

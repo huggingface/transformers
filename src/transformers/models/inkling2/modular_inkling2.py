@@ -62,9 +62,12 @@ from ..inkling.modeling_inkling import (
 )
 from ..llama.modeling_llama import repeat_kv
 from ..llava.modeling_llava import LlavaMultiModalProjector
+from ..mamba.modeling_mamba import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ..olmo2.modeling_olmo2 import Olmo2RMSNorm
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
-from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causal_conv1d_fn, causal_conv1d_update
+from ..qwen3_next.modeling_qwen3_next import (
+    apply_mask_to_padding_states,
+)
 from ..sam3.modeling_sam3 import Sam3ViTRotaryEmbedding
 from ..step3p7.configuration_step3p7 import Step3p7VisionConfig
 from ..step3p7.modeling_step3p7 import Step3p7VisionEncoderLayer
@@ -262,7 +265,9 @@ class Inkling2UnweightedRMSNorm(DeepseekV4UnweightedRMSNorm):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.float()
-        hidden_states = hidden_states * torch.rsqrt(hidden_states.square().mean(-1, keepdim=True) + self.eps)
+        hidden_states = hidden_states * torch.rsqrt(
+            hidden_states.square().mean(-1, keepdim=True) + self.variance_epsilon
+        )
         return hidden_states.to(input_dtype)
 
 
@@ -385,7 +390,7 @@ class Inkling2RelativePositionBias(nn.Module):
         return position_bias.masked_fill((relative_distance < 0) | (relative_distance >= self.rel_extent), 0.0)
 
 
-@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_forward, causal_conv1d_fn])
 class Inkling2ShortConvolution(InklingShortConvolution):
     @force_accelerate_hooks("conv1d")
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -410,27 +415,16 @@ class Inkling2ShortConvolution(InklingShortConvolution):
 
         residual = hidden_states
         hidden_states = apply_mask_to_padding_states(hidden_states, conv_mask)
-        seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
-        conv_state = None if cache is None else cache.get_conv_state(cache_layer_idx, state_idx=self.conv_idx)
-
-        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(cache_layer_idx):
-            hidden_states = causal_conv1d_update(
-                hidden_states, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias
-            )
-        else:
-            if cache is not None:
-                hidden_states = cache.update_conv_state(
-                    hidden_states, cache_layer_idx, state_idx=self.conv_idx, conv_kernel_size=self.conv_kernel_size
-                )
-
-            hidden_states = causal_conv1d_fn(
-                hidden_states, self.conv1d.weight.squeeze(1), self.conv1d.bias, seq_idx=kwargs.get("seq_idx")
-            )
-
-            if cache is not None:
-                hidden_states = hidden_states[:, :, -seq_len:]
+        hidden_states = causal_conv1d_forward(
+            self.conv1d,
+            hidden_states,
+            cache,
+            cache_layer_idx,
+            state_idx=self.conv_idx,
+            **kwargs,
+        )
 
         hidden_states = hidden_states.transpose(1, 2)
         # Different from Inkling which has no output scale

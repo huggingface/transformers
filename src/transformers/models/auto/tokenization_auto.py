@@ -188,6 +188,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("led", "LEDTokenizer" if is_tokenizers_available() else None),
         ("lighton_ocr", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("lilt", "RobertaTokenizer" if is_tokenizers_available() else None),
+        ("llava_onevision1_5", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("longformer", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("luke", "LukeTokenizer"),
         ("lxmert", "LxmertTokenizer" if is_tokenizers_available() else None),
@@ -428,7 +429,6 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "step3_vl",
     "vipllava",
     "cohere_asr",
-    "camembertv2-base",
     "siglip2",
     "smolvlm",
 }

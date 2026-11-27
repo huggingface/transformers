@@ -639,6 +639,7 @@ class ErnieModel(ErniePreTrainedModel):
             embedding_output=embedding_output,
             encoder_hidden_states=encoder_hidden_states,
             cache=cache,
+            position_ids=position_ids,
         )
 
         encoder_outputs = self.encoder(
@@ -667,6 +668,7 @@ class ErnieModel(ErniePreTrainedModel):
         embedding_output,
         encoder_hidden_states,
         cache,
+        position_ids,
     ):
         if self.config.is_decoder:
             attention_mask = create_causal_mask(
@@ -674,12 +676,14 @@ class ErnieModel(ErniePreTrainedModel):
                 inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
                 cache=cache,
+                position_ids=position_ids,
             )
         else:
             attention_mask = create_bidirectional_mask(
                 config=self.config,
                 inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
+                position_ids=position_ids,
             )
 
         if encoder_attention_mask is not None:

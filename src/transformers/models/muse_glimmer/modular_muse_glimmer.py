@@ -47,18 +47,18 @@ from ...vision_utils import (
     get_vision_window_index,
 )
 from ..afmoe.modeling_afmoe import AfmoeAttention
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2DecoderLayer,
     Gemma2MLP,
     Gemma2Model,
     Gemma2PreTrainedModel,
-    Gemma2RMSNorm,
     Gemma2RotaryEmbedding,
     apply_rotary_pos_emb,
 )
 from ..gemma3.modeling_gemma3 import Gemma3CausalLMOutputWithPast, Gemma3ModelOutputWithPast
-from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
+from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..kimi_k25.configuration_kimi_k25 import Kimi_K25VisionConfig
 from ..kimi_k25.modeling_kimi_k25 import (
@@ -278,9 +278,10 @@ class MuseGlimmerImageProcessor(Glm4vImageProcessor):
         Returns:
             `int`: Number of image patches per image.
         """
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        merge_size = images_kwargs.get("merge_size", self.merge_size)
-        max_image_tokens = images_kwargs.get("max_image_tokens", self.max_image_tokens)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        patch_size = images_kwargs["patch_size"]
+        merge_size = images_kwargs["merge_size"]
+        max_image_tokens = images_kwargs["max_image_tokens"]
 
         resized_height, resized_width = smart_resize(
             height=height,
@@ -695,12 +696,12 @@ class MuseGlimmerConfig(PreTrainedConfig):
     projector_hidden_act: str = "gelu"
 
 
-class MuseGlimmerRMSNorm(Gemma4RMSNorm):
-    def __init__(self, dim: int | None = None, eps: float = 1e-6, with_scale: bool = True):
-        super().__init__(dim, eps, with_scale)
+class MuseGlimmerRMSNorm(Gemma3nRMSNorm):
+    def __init__(self, hidden_size: int | None = None, eps: float = 1e-6, with_scale: bool = True):
+        super().__init__(hidden_size, eps, with_scale)
 
 
-class MuseGlimmerTextCenteredRMSNorm(Gemma2RMSNorm):
+class MuseGlimmerTextCenteredRMSNorm(GemmaRMSNorm):
     pass
 
 
