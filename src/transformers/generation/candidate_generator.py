@@ -1165,8 +1165,6 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         chosen_ids = chosen_ids.unsqueeze(0)
         candidate_input_ids = torch.cat((input_ids, chosen_ids), dim=1)
 
-        # Keep track of the last drafted length to rollback the Cache
-        self._last_length = candidate_input_ids.shape[-1]
         # assisted_generation expects logits as well, but we don't have those here, so returning None
         return candidate_input_ids, None
 
