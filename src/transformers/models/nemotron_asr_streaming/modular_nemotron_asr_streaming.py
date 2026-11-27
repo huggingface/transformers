@@ -595,6 +595,19 @@ class NemotronAsrStreamingEncoderConvolutionModule(FastSpeech2ConformerConvoluti
         all_masked_rows: torch.Tensor | None = None,
         padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None,
     ):
+        """
+        Compute convolution module.
+
+        Args:
+            hidden_states (`torch.Tensor` of shape `(batch, time, channels)`): Input tensor.
+            all_masked_rows (`torch.Tensor`, *optional*): Mask of fully padded frames, zeroed before the convolution.
+            padding_cache (`NemotronAsrStreamingEncoderCausalConvPaddingCache`, *optional*): Convolution cache for
+                streaming inference.
+
+        Returns:
+            `torch.Tensor`: Output tensor of shape `(batch, time, channels)`.
+
+        """
         hidden_states = hidden_states.transpose(1, 2)  # (B, C, T)
 
         # GLU mechanism

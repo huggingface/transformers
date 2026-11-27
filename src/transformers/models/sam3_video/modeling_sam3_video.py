@@ -1039,7 +1039,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         Args:
             frame_idx (int): The current frame index.
             tracker_low_res_masks_global (Tensor): The low-resolution masks for the current frame.
-            tracker_metadata_prev (Dict[str, Any]): The metadata from the previous frame.
             tracker_metadata_new (Dict[str, Any]): The metadata for the current frame.
             obj_ids_newly_removed (Set[int]): The object IDs that have been removed.
         Return:

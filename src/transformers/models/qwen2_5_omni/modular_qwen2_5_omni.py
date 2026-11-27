@@ -762,16 +762,16 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
         Splits token index list into chunks based on token value ranges.
 
         Given a list of token indices, returns a list of (start, end) index tuples representing
-        slices of the list where the token values fall within successive ranges of `t_ntoken_per_chunk`.
+        slices of the list where the token values fall within successive ranges of `tokens_per_chunk`.
 
-        For example, if `t_ntoken_per_chunk` is 1000, the function will create chunks such that:
+        For example, if `tokens_per_chunk` is 1000, the function will create chunks such that:
         - the first chunk contains token values < 1000,
         - the second chunk contains values >= 1000 and < 2000, and so on.
 
         Parameters:
             token_indices (`torch.Tensor` of shape `(seq_len, )`): A monotonically increasing list of
                                 token index values.
-            t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
+            tokens_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
             remove_index (`int`) An index id to subtract from `token_indices` before chunking
 
         Returns:

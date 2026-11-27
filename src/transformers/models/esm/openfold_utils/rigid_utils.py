@@ -824,7 +824,7 @@ class Rigid:
 
         Args:
             index: A standard torch tensor index. E.g. 8, (10, None, 3),
-            or (3, slice(0, 1, None))
+                or (3, slice(0, 1, None))
         Returns:
             The indexed tensor
         """
@@ -910,7 +910,7 @@ class Rigid:
         represent the x, y, and z values of a quaternion of form (1, x, y, z) followed by a 3D translation.
 
         Args:
-            q_vec: The quaternion update vector.
+            q_update_vec: The quaternion update vector.
         Returns:
             The composed transformation.
         """

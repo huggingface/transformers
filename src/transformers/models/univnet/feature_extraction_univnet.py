@@ -238,12 +238,8 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         [`UnivNetModel.forward`].
 
         Args:
-            spectrogram_length (`int`):
-                The length (dim 0) of the generated noise.
-            model_in_channels (`int`, *optional*, defaults to `None`):
-                The number of features (dim 1) of the generated noise. This should correspond to the
-                `model_in_channels` of the [`UnivNetGan`] model. If not set, this will default to
-                `self.config.model_in_channels`.
+            noise_length (`int`):
+                The length (dim 0) of the generated noise. The number of features (dim 1) is `self.model_in_channels`.
             generator (`numpy.random.Generator`, *optional*, defaults to `None`)
                 An optional `numpy.random.Generator` random number generator to control noise generation. If not set, a
                 new generator with fresh entropy will be created.

@@ -409,8 +409,8 @@ class Cosmos3EdgeVisionEmbeddings(nn.Module):
         Args:
             pixel_values (`torch.Tensor`):
                 Pixel values of shape (batch_size, max_num_patches, num_channels * patch_size * patch_size)
-            spatial_shapes (`list[tuple[int, int]]`):
-                Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
+            grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
+                Temporal, height, and width patch-grid dimensions for every packed image or video.
         """
         # Apply patch embeddings to already patchified pixel values.
         target_dtype = self.patch_embedding.weight.dtype

@@ -518,9 +518,8 @@ class GroupViTStage(nn.Module):
         """
         Args:
             hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.Tensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-                `(config.encoder_attention_heads,)`.
+            prev_group_token (`torch.Tensor`, *optional*):
+                Group tokens output by the previous stage, projected and added to this stage's group tokens.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the grouping tensors of Grouping block.
         """

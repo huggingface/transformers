@@ -161,7 +161,9 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
         symbols are ignored. This is modified from fairseq's `utils.make_positions`.
 
         Args:
-            x: torch.Tensor x:
+            input_ids (`torch.Tensor`): Indices of input sequence tokens.
+            padding_idx (`int`): Index of the padding token.
+            cache_length (`int`, *optional*, defaults to 0): Number of cached tokens to offset positions by.
         Returns: torch.Tensor
         """
         # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.

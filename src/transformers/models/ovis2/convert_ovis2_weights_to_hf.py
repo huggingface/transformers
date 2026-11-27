@@ -280,7 +280,6 @@ def convert_model(model_name_or_path):
 
     Args:
         model_name_or_path: Path to the original model
-        save_dir: Directory to save the converted model
 
     Returns:
         The converted model

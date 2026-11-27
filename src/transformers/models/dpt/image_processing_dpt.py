@@ -341,8 +341,8 @@ class DPTImageProcessor(TorchvisionBackend):
                 Image to resize.
             size (`SizeDict`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
-                `InterpolationMode` filter to use when resizing the image e.g. `InterpolationMode.BICUBIC`.
+            resample (`PILImageResampling | tvF.InterpolationMode | int | None`):
+                Resampling filter to use when resizing the image, e.g. `PILImageResampling.BICUBIC`.
             antialias (`bool`, *optional*, defaults to `True`):
                 Whether to use antialiasing when resizing the image
             ensure_multiple_of (`int`, *optional*):

@@ -161,10 +161,8 @@ class FastSpeech2ConformerDurationPredictor(nn.Module):
     def forward(self, encoder_hidden_states):
         """
         Args:
-            hidden_states (`torch.Tensor` of shape `(batch_size, max_text_length, input_dim)`):
+            encoder_hidden_states (`torch.Tensor` of shape `(batch_size, max_text_length, input_dim)`):
                 Batch of input sequences.
-            padding_masks (`torch.ByteTensor` of shape `(batch_size, max_text_length)`, *optional*):
-                Batch of masks indicating padded part.
 
         Returns:
             `torch.Tensor`: Batch of predicted durations in log domain `(batch_size, max_text_length)`.
@@ -285,7 +283,7 @@ class FastSpeech2ConformerVariancePredictor(nn.Module):
         Initialize variance predictor module.
 
         Args:
-            input_dim (`int`): Input dimension.
+            config ([`FastSpeech2ConformerConfig`]): Model configuration; `config.hidden_size` is the input dimension.
             num_layers (`int`, *optional*, defaults to 2): Number of convolutional layers.
             num_chans (`int`, *optional*, defaults to 384): Number of channels of convolutional layers.
             kernel_size (`int`, *optional*, defaults to 3): Kernel size of convolutional layers.
@@ -810,7 +808,7 @@ class FastSpeech2ConformerEncoder(nn.Module):
     ):
         """
         Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            input_tensor (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 

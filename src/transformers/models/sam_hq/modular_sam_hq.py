@@ -242,7 +242,7 @@ class SamHQMaskDecoder(nn.Module):
         Args:
             image_embeddings (`torch.Tensor`):
                 The embeddings from the image encoder.
-            image_positional_embedding (`torch.Tensor`):
+            image_positional_embeddings (`torch.Tensor`):
                 Positional encoding with the shape of image_embeddings.
             sparse_prompt_embeddings (`torch.Tensor`):
                 The embeddings of the points and boxes.

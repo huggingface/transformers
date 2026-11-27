@@ -77,11 +77,10 @@ def build_relative_position(query_layer, key_layer, bucket_size: int = -1, max_p
     P_k\\)
 
     Args:
-        query_size (int): the length of query
-        key_size (int): the length of key
+        query_layer (`torch.Tensor`): the query states; its second-to-last dimension is the query length
+        key_layer (`torch.Tensor`): the key states; its second-to-last dimension is the key length
         bucket_size (int): the size of position bucket
         max_position (int): the maximum allowed absolute position
-        device (`torch.device`): the device on which tensors will be created.
 
     Return:
         `torch.LongTensor`: A tensor with shape [1, query_size, key_size]

@@ -976,7 +976,8 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
     are ignored. This is modified from fairseq's `utils.make_positions`.
 
     Args:
-        x: torch.Tensor x:
+        input_ids (`torch.Tensor`): Indices of input sequence tokens.
+        padding_idx (`int`): Index of the padding token.
 
     Returns: torch.Tensor
     """

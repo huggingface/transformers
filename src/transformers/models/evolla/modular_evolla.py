@@ -242,7 +242,7 @@ class EvollaSequenceCompressorAttention(nn.Module):
         Args:
             x (torch.Tensor): image features
                 shape (b, n1, D)
-            latent (torch.Tensor): latent features
+            latents (torch.Tensor): latent features
                 shape (b, n2, D);  n2: num of latent tokens
         """
         x = self.norm_media(x)

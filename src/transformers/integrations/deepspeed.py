@@ -614,15 +614,10 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
     """
     Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
 
-    If `resume_from_checkpoint` was passed then an attempt to resume from a previously saved checkpoint will be made.
-
     Args:
         trainer: Trainer object
         num_training_steps: per single gpu
-        resume_from_checkpoint: path to a checkpoint if to resume from after normal DeepSpeedEngine load
         inference: launch in inference mode (no optimizer and no lr scheduler)
-        auto_find_batch_size: whether to ignore the `train_micro_batch_size_per_gpu` argument as it's being
-            set automatically by the auto batch size finder
 
     Returns: optimizer, lr_scheduler
 

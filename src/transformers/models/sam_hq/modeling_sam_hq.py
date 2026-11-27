@@ -930,7 +930,7 @@ class SamHQMaskDecoder(nn.Module):
         Args:
             image_embeddings (`torch.Tensor`):
                 The embeddings from the image encoder.
-            image_positional_embedding (`torch.Tensor`):
+            image_positional_embeddings (`torch.Tensor`):
                 Positional encoding with the shape of image_embeddings.
             sparse_prompt_embeddings (`torch.Tensor`):
                 The embeddings of the points and boxes.
@@ -1193,11 +1193,13 @@ class SamHQPromptEncoder(nn.Module):
         Embeds different types of prompts, returning both sparse and dense embeddings.
 
         Args:
-            points (`torch.Tensor`, *optional*):
-                point coordinates and labels to embed.
-            boxes (`torch.Tensor`, *optional*):
+            input_points (`torch.Tensor`, *optional*):
+                point coordinates to embed.
+            input_labels (`torch.Tensor`, *optional*):
+                labels of the points to embed.
+            input_boxes (`torch.Tensor`, *optional*):
                 boxes to embed
-            masks (`torch.Tensor`, *optional*):
+            input_masks (`torch.Tensor`, *optional*):
                 masks to embed
         """
         sparse_embeddings = None

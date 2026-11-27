@@ -1083,7 +1083,7 @@ def adaptive_enc_mask(x_len, chunk_start_idx, left_window=0, right_window=0):
     """
     The function is very important for Transformer Transducer Streaming mode
     Args:
-        xs_len (int): sequence length
+        x_len (int): sequence length
         chunk_start_idx (list): first idx of each chunk, such as [0,18,36,48]. It also supports adaptive chunk size [0,10,15,45]
         left_window (int): how many left chunks can be seen
         right_window (int): how many right chunks can be seen. It is used for chunk overlap model.

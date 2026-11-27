@@ -352,10 +352,8 @@ class MllamaVisionEncoder(nn.Module):
     ) -> BaseModelOutput:
         r"""
         Args:
-            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
+            hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Embedded patches to encode.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 

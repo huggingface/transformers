@@ -2132,9 +2132,6 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         Args:
             num_samples (int, *optional*):
                 Number of audio samples to unconditionally generate.
-            max_new_tokens (int, *optional*):
-                Number of tokens to generate for each sample. More tokens means longer audio samples, at the expense of
-                longer inference (since more audio tokens need to be generated per sample).
 
         Example:
         ```python

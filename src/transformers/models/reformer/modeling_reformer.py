@@ -93,20 +93,20 @@ class ReformerDynamicCache:
         cache_kwargs: dict[str, Any] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
+        Updates the cache with the new `buckets` and `states` for the layer `layer_idx`.
 
         Parameters:
-            key_states (`torch.Tensor`):
-                The new key states to cache.
-            value_states (`torch.Tensor`):
-                The new value states to cache.
+            buckets (`torch.Tensor`):
+                The new buckets to cache, or `None` for layers that use no buckets.
+            states (`torch.Tensor`):
+                The new states to cache.
             layer_idx (`int`):
                 The index of the layer to cache the states for.
             cache_kwargs (`Dict[str, Any]`, `optional`):
                 Additional arguments for the cache subclass. No additional arguments are used in `ReformerDynamicCache`.
 
         Return:
-            A tuple containing the updated key and value states.
+            A tuple containing the updated buckets and states.
         """
         # Update the number of seen tokens
         if layer_idx == 0:

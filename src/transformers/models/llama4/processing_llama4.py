@@ -91,7 +91,8 @@ class Llama4Processor(ProcessorMixin):
         Create a structured string representation of image tokens
 
         Args:
-           num_patches: Number of patches in the image
+            aspect_ratio (`tuple[int, int]`): Number of tiles along the height and width of the image
+            num_patches_per_chunk (`int`): Number of patch tokens per tile
 
         Returns:
             String with appropriate image tokens
