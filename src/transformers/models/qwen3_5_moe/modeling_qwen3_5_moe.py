@@ -1106,7 +1106,6 @@ class Qwen3_5MoePreTrainedModel(PreTrainedModel):
         "hidden_states": Qwen3_5MoeDecoderLayer,
         "attentions": Qwen3_5MoeAttention,
     }
-    _is_stateful = True
     _can_compile_fullgraph = True
 
     def _init_weights(self, module):

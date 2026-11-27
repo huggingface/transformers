@@ -50,7 +50,6 @@ class Ministral3ModelTester(CausalLMModelTester):
 
 @require_torch
 class Ministral3ModelTest(CausalLMModelTest, unittest.TestCase):
-    _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = Ministral3ModelTester
 
