@@ -80,6 +80,22 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_subprocessor_defaults(self, modality):
         pass
 
+    def test_padding_side_with_images(self):
+        """A per-call padding side also applies to the multimodal inputs."""
+        processor = self.get_processor()
+        processor.tokenizer.padding_side = "right"
+        images = self.prepare_images_inputs(batch_size=2)
+        text = ["An image.", "Describe this picture in detail."]
+
+        single = processor(images=images[0], text=text[0])
+        batch = processor(images=images, text=text, padding=True, padding_side="left")
+        num_padding_tokens = len(batch.input_ids[0]) - len(single.input_ids)
+
+        self.assertGreater(num_padding_tokens, 0)
+        self.assertEqual(batch.attention_mask[0][:num_padding_tokens], [0] * num_padding_tokens)
+        for key in ("input_ids", "attention_mask", "image_embeds_position_mask"):
+            self.assertEqual(batch[key][0][num_padding_tokens:], single[key])
+
     def test_image_processor_load_save_reload(self):
         # make sure load from Hub repo. -> save -> reload locally work
         image_processor = CLIPImageProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
