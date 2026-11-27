@@ -2609,3 +2609,39 @@ class CacheCroppingTests(unittest.TestCase):
         self.assertEqual(kv_length, sliding_window)
         self.assertEqual(returned_keys.shape[-2], kv_length)
         self.assertEqual(returned_keys[0, 0, :, 0].tolist(), [2.0, 3.0, 4.0, 5.0])
+
+    def test_crop_uninitialized_sliding_window_layer(self):
+        """Regression test for #51292: crop on uninitialized DynamicSlidingWindowLayer should be a no-op."""
+        layer = DynamicSlidingWindowLayer(sliding_window=4)
+        layer.crop(-1)
+        self.assertFalse(layer.is_initialized)
+        self.assertIsNone(layer.keys)
+        self.assertEqual(layer.cumulative_length, 0)
+
+        layer.crop(0)
+        self.assertFalse(layer.is_initialized)
+        self.assertIsNone(layer.keys)
+        self.assertEqual(layer.cumulative_length, 0)
+
+        with self.assertRaisesRegex(ValueError, "Calling `crop` with a positive value"):
+            layer.crop(1)
+
+        # Also test on a fresh DynamicCache with sliding attention layers
+        from transformers import Gemma3TextConfig
+
+        cfg = Gemma3TextConfig(
+            vocab_size=50,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=8,
+            sliding_window=4,
+            layer_types=["sliding_attention", "full_attention"],
+            max_position_embeddings=64,
+        )
+        cache = DynamicCache(config=cfg)
+        cache.crop(-1)
+        cache.crop(0)
+        self.assertEqual(cache.get_seq_length(), 0)
