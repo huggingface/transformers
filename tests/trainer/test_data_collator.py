@@ -1039,6 +1039,24 @@ class TestDataCollatorForLanguageModeling(DataCollatorTestMixin, unittest.TestCa
 
         np.testing.assert_array_equal(output, expected)
 
+    def test_whole_word_mask_matches_pairwise_reference(self):
+        """The linear implementation must give the same output as the old pairwise implementation."""
+
+        def pairwise_reference(word_ids, mask):
+            valid_ids = word_ids != -1
+            same_word = (word_ids[:, :, None] == word_ids[:, None, :]) & valid_ids[:, :, None] & valid_ids[:, None, :]
+            return np.any(same_word & mask[:, None, :], axis=2)
+
+        rng = np.random.default_rng(0)
+        for _ in range(100):
+            batch_size = int(rng.integers(1, 5))
+            length = int(rng.integers(1, 40))
+            word_ids = rng.integers(-1, 8, size=(batch_size, length))
+            mask = rng.random((batch_size, length)) < 0.3
+
+            output = DataCollatorForLanguageModeling._whole_word_mask(word_ids, mask)
+            np.testing.assert_array_equal(output, pairwise_reference(word_ids, mask))
+
 
 # =============================================================================
 # DataCollatorForLanguageModeling with whole word masking tests
