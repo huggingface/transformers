@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-*This paper was published on Hugging Face Papers on 2026-05-25.*
+*This model was published in HF papers on 2026-05-25 and contributed to Hugging Face Transformers on 2026-11-27.*
 
 # LLaVA-OneVision-2
 
