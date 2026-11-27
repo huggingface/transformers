@@ -23,10 +23,12 @@ from ...generation.configuration_utils import ContinuousBatchingConfig
 from ...utils.generic import is_flash_attention_requested
 from .cache_allocators import (
     FULL_ATTENTION,
+    INDEXED_ATTENTION,
     SLIDING_ATTENTION,
     CacheAllocator,
     CachePool,
     FullAttentionCacheAllocator,
+    IndexedMLACacheAllocator,
     MLACacheAllocator,
     SlidingAttentionCacheAllocator,
 )
@@ -39,6 +41,7 @@ from .utils import find_head_dim, find_num_key_value_heads, get_device_and_memor
 ATTN_TYPE_TO_ALLOCATOR = {
     FULL_ATTENTION: FullAttentionCacheAllocator,
     SLIDING_ATTENTION: SlidingAttentionCacheAllocator,
+    INDEXED_ATTENTION: IndexedMLACacheAllocator,
 }
 
 
@@ -447,6 +450,16 @@ class PagedAttentionCache:
 
         return key_states, value_states
 
+    def update_indexer(
+        self,
+        indexer_key_states: torch.Tensor,  # shape [1, seqlen_q, index_head_dim]
+        layer_idx: int,
+    ) -> torch.Tensor:  # shape [1, seqlen_q + past_length, index_head_dim]
+        """Updates the indexer key cache of an indexed attention layer, at the indices of its last `update`, and returns
+        the complete indexer keys."""
+        indexer_key_states = self.layer_to_allocator[layer_idx].update_indexer(indexer_key_states[0], layer_idx)  # type: ignore
+        return indexer_key_states.unsqueeze(0)
+
     def reset(self) -> None:
         """Frees the cache of all requests and returns all sectors to the global pool."""
         self.free_all_requests(clear_ledgers=True)
@@ -620,7 +633,11 @@ class PagedAttentionMemoryHandler:
         expanded_dim = config.qk_nope_head_dim + config.v_head_dim + qk_head_dim
         if is_flash_attention_requested(config) and config.v_head_dim != qk_head_dim:
             expanded_dim += qk_head_dim
-        return config.kv_lora_rank + config.qk_rope_head_dim + config.num_attention_heads * expanded_dim
+        # Indexed MLA layers also read back the indexer key of each token
+        index_head_dim = getattr(config, "index_head_dim", 0)
+        return (
+            config.kv_lora_rank + config.qk_rope_head_dim + index_head_dim + config.num_attention_heads * expanded_dim
+        )
 
     @property
     def bytes_per_batch_token(self) -> int:
