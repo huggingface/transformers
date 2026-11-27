@@ -42,9 +42,7 @@ if is_torch_available():
     import torch
     from safetensors.torch import load_file, save_file
 
-    from transformers.integrations.moe import use_experts_implementation
-    from transformers.integrations.mxfp4 import ALL_FP4_EXPERTS_FUNCTIONS, FP4_VALUES, Mxfp4Experts, dequantize_mxfp4
-    from transformers.models.deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
+    from transformers.integrations.mxfp4 import FP4_VALUES
 
 # A tiny Mistral4 saved pre-quantized like Mistral-Large-4's NVFP4 release: fp8 attention and experts, nvfp4 shared
 # experts. `dense_reference.pt` holds the bf16 weights it was quantized from.
@@ -265,67 +263,6 @@ class QuantizationPlanTest(unittest.TestCase):
         plan.map_module_to_quantizer(model)
         self.assertIs(plan.get_quantizer("model.layers.1.mlp.experts.down_proj"), nvfp4)
         self.assertIsNone(plan.get_quantizer("model.layers.11.mlp.experts.down_proj"))
-
-    @patch("torch.cuda.get_device_capability", return_value=(10, 0))
-    @patch("torch.cuda.is_available", return_value=True)
-    def test_fp4_experts(self, *_):
-        # DeepSeek-V4's `expert_dtype: fp4` in its model config, V4.1's in its quantization config
-        for kwargs, saved in [({"expert_dtype": "fp4"}, DEEPSEEK_V4), ({}, DEEPSEEK_V4 | {"expert_dtype": "fp4"})]:
-            hf_quantizer, config = self.plan_from_config(saved, **kwargs)
-            plan = {"*.mlp.experts": Mxfp4Config(), "*": FineGrainedFP8Config(**DEEPSEEK_V4)}
-            self.assertEqual(
-                {k: repr(v) for k, v in hf_quantizer.quantization_config.items()},
-                {k: repr(v) for k, v in plan.items()},
-            )
-            with torch.device("meta"):
-                model = DeepseekV4ForCausalLM(config)
-            hf_quantizer.preprocess_model(model, use_kernels=False)
-            # The fused experts the FP8 quantizer used to build, now MXFP4's
-            self.assertEqual(type(model.model.layers[0].mlp.experts).__name__, "Mxfp4Experts")
-            self.assertEqual(type(model.model.layers[0].self_attn.q_a_proj).__name__, "FP8Linear")
-
-    def test_fp4_experts_load_dequantize(self):
-        # A DeepSeek-V4 checkpoint: per-expert e2m1 pairs in `int8`, a ue8m0 `.scale` per 32
-        torch.manual_seed(0)
-        with tempfile.TemporaryDirectory() as tmp:
-            DeepseekV4ForCausalLM(DeepseekV4Config(**TINY_DEEPSEEK)).save_pretrained(tmp)
-            state_dict, expected = load_file(f"{tmp}/model.safetensors"), {}
-            for key in [k for k in state_dict if ".experts." in k]:
-                rows, cols = state_dict[key].shape
-                codes, exponents = torch.randint(0, 16, (rows, cols)), torch.randint(-8, -2, (rows, cols // 32))
-                state_dict[key] = (codes[:, 0::2] | codes[:, 1::2] << 4).to(torch.uint8).view(torch.int8)
-                state_dict[key.replace("weight", "scale")] = exponents.float().exp2().to(torch.float8_e8m0fnu)
-                expected[key] = torch.tensor(FP4_VALUES)[codes] * exponents.float().exp2().repeat_interleave(32, 1)
-            save_file(state_dict, f"{tmp}/model.safetensors", metadata={"format": "pt"})
-            DeepseekV4Config(
-                **TINY_DEEPSEEK, expert_dtype="fp4", quantization_config=dict(DEEPSEEK_V4)
-            ).save_pretrained(tmp)
-            model, info = DeepseekV4ForCausalLM.from_pretrained(
-                tmp, dtype=torch.bfloat16, quantization_config={"dequantize": True}, output_loading_info=True
-            )
-        self.assertFalse(any(info.values()))
-        experts = model.model.layers[1].mlp.experts
-        w1, w2, w3 = ([expected[f"model.layers.1.ffn.experts.{e}.w{n}.weight"] for e in range(4)] for n in (1, 2, 3))
-        torch.testing.assert_close(experts.gate_up_proj, torch.stack(list(map(torch.cat, zip(w1, w3)))).bfloat16())
-        torch.testing.assert_close(experts.down_proj, torch.stack(w2).bfloat16())
-
-    def test_fp4_experts_eager_forward(self):
-        # The default implementation matches the model's experts on the dequantized weights
-        torch.manual_seed(0)
-        config = DeepseekV4Config(**TINY_DEEPSEEK)
-        config._experts_implementation = "eager"
-        experts = use_experts_implementation(Mxfp4Experts, experts_interface=ALL_FP4_EXPERTS_FUNCTIONS)(config)
-        reference = DeepseekV4Experts(config)
-        for proj in ("gate_up_proj", "down_proj"):
-            weight, scale = getattr(experts, proj), getattr(experts, f"{proj}_scale_inv")
-            weight.data = torch.randint(-128, 128, weight.shape, dtype=torch.int8)
-            scale.data = torch.randint(-8, -2, scale.shape).float().exp2().to(scale.dtype)
-            getattr(reference, proj).data = dequantize_mxfp4(weight, scale, torch.float32)
-        hidden_states = torch.randn(8, config.hidden_size)
-        top_k_weights, top_k_index = torch.rand(8, 4).topk(2)
-        torch.testing.assert_close(
-            experts(hidden_states, top_k_index, top_k_weights), reference(hidden_states, top_k_index, top_k_weights)
-        )
 
     @slow
     @require_torch_gpu

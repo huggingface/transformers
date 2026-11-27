@@ -101,6 +101,7 @@ class NVFP4HfQuantizer(HfQuantizer):
             if isinstance(module, (NVFP4Linear, NVFP4Experts))
         }
 
+        # TODO: this is a bit weird, weights don't need to have _sf...
         for key, style in list(parallel_plan.items()):
             module_name, _, param = key.rpartition(".")
             if isinstance(modules.get(module_name), NVFP4Experts) and hasattr(modules[module_name], f"{param}_sf"):
@@ -117,8 +118,8 @@ class NVFP4HfQuantizer(HfQuantizer):
         tp_sharded = (NVFP4Linear,) if ep_size > 1 else (NVFP4Linear, NVFP4Experts)
         if any(isinstance(module, tp_sharded) for module in modules.values()):
             raise ValueError(
-                "NVFP4 quantization does not support tensor parallelism yet: its scale metadata does not have a "
-                "sharding plan. NVFP4 experts shard with expert parallelism, so only the experts may be NVFP4."
+                "NVFP4 quantization does not support tensor parallelism: its scale metadata does not have a "
+                "sharding plan. NVFP4 experts shard with expert parallelism, so only the experts may be NVFP4. You should use expert parallelism"
             )
 
     def param_needs_quantization(self, model: PreTrainedModel, param_name: str, **kwargs) -> bool:

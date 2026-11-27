@@ -25,7 +25,7 @@ load a new format through an existing quantizer such as fine-grained FP8.
 |---|---|---|
 | Config | `utils/quantization_config.py` | [`NVFP4Config`] |
 | Quantizer | `quantizers/quantizer_<format>.py` | `NVFP4HfQuantizer`, `Mxfp4HfQuantizer` |
-| Modules, kernels, load ops | `integrations/<format>.py` | `NVFP4Linear`, `NVFP4Experts`, `NVFP4Deserialize` |
+| Modules, kernels, load ops | `integrations/<format>.py` | `NVFP4Linear`, `NVFP4Deserialize` |
 | Checkpoint scheme reader (optional) | `quantizers/schema_readers.py` | `modelopt_plan`, `fp4_experts_plan` |
 
 See [Contribute](./contribute) for the config, registration and tests. This page covers the format itself.
@@ -37,25 +37,21 @@ See [Contribute](./contribute) for the config, registration and tests. This page
 
 ## 1. The quantizer: what the checkpoint stores
 
-DeepSeek-V4 stores its routed experts in MXFP4: two e2m1 values per byte, with a ue8m0 scale per 32. The MXFP4
-quantizer says which modules become `Mxfp4Experts` and what the checkpoint stores (simplified):
+The quantizer declares what the checkpoint stores for each parameter and how those tensors are loaded. A simplified
+NVFP4 quantizer looks like this:
 
 ```py
-class Mxfp4HfQuantizer(HfQuantizer):
-    # what each param is stored as: a linear's `weight`, and the fused experts' params
-    serialized_names = {
-        "weight": ["weight", "weight_scale_inv"],
-        "gate_up_proj": ["gate_up_proj", "gate_up_proj_scale_inv"],
-        "down_proj": ["down_proj", "down_proj_scale_inv"],
-    }
-    checkpoint_renames = {"scale": "weight_scale_inv"}  # DeepSeek-V4 saves `.scale`
+class NVFP4HfQuantizer(HfQuantizer):
+    # what each param is stored as: a linear's `weight`, plus its scales
+    serialized_names = {"weight": ["weight", "weight_scale", "weight_scale_2", "input_scale"]}
+    checkpoint_renames = {"experts.*.input_scale": "weight_input_scale"}
 
     def get_load_operations(self):
-        return {"deserialize": Mxfp4Deserialize, "dequantize": Mxfp4Dequantize}
+        return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize}
 
     def quantized_module(self, name, module):
-        if name.endswith(".experts"):
-            return Mxfp4Experts(module.config)
+        if isinstance(module, torch.nn.Linear):
+            return NVFP4Linear(module.in_features, module.out_features)
 ```
 
 - `serialized_names` lists the tensors a param is stored as. They load together, with the same ops.
@@ -63,37 +59,15 @@ class Mxfp4HfQuantizer(HfQuantizer):
   (`rename_layer`), before anything else, so the rest of loading only sees our names. A glob can look further up the
   key, e.g. NVFP4's `{"experts.*.input_scale": "weight_input_scale"}` renames only the experts' `input_scale`.
 - `get_load_operations` returns the op classes for `"deserialize"` and `"dequantize"`. `get_load_operation()` picks the
-  one for the config (`dequantize=True` or not). Here `Mxfp4Deserialize` passes DeepSeek-V4's tensors through as is,
-  since `Mxfp4Experts` stores them as the checkpoint does.
+  one for the config (`dequantize=True` or not). Here `NVFP4Deserialize` turns the checkpoint's packed weights and
+  scales into the swizzled layout that `NVFP4Linear` runs.
 - `quantized_module` is called on meta for each module the plan gives the quantizer; returning `None` keeps the module.
   All quantizers of a plan swap their modules in one pass, so a quantizer never walks the model itself. Only formats
   that swap modules this way can be mixed with others in a plan.
 
 ## 2. The modules and kernels
 
-The module holds the tensors under the checkpoint's names and runs the format's kernel. `Mxfp4Experts` allocates
-e2m1 pairs in `int8` and their ue8m0 scales, and dispatches its forward through its own experts interface,
-`ALL_FP4_EXPERTS_FUNCTIONS` (`grouped_mm`, `batched_mm`, `deepgemm`, ...), with a default that dequantizes each routed
-expert (simplified):
-
-```py
-class Mxfp4Experts(nn.Module):
-    def __init__(self, config, has_bias=False, has_gate=True):
-        super().__init__()
-        self.num_experts, self.hidden_dim = config.num_experts, config.hidden_size
-        self.intermediate_dim = config.moe_intermediate_size
-        self._alloc_proj("gate_up_proj", 2 * self.intermediate_dim, self.hidden_dim)
-        self._alloc_proj("down_proj", self.hidden_dim, self.intermediate_dim)
-
-    def _alloc_proj(self, proj, out_dim, in_dim):
-        "Two e2m1 values per `int8`, a ue8m0 scale per 32 of them"
-        weight = torch.empty(self.num_experts, out_dim, in_dim // 2, dtype=torch.int8)
-        scale = torch.empty(self.num_experts, out_dim, in_dim // 32, dtype=torch.float8_e8m0fnu)
-        self.register_parameter(proj, nn.Parameter(weight, requires_grad=False))
-        self.register_parameter(f"{proj}_scale_inv", nn.Parameter(scale, requires_grad=False))
-```
-
-A kernel comes from the Hub, like any [kernels](https://huggingface.co/docs/kernels) kernel. Add it to
+The module holds the tensors under the checkpoint's names and runs the format's kernel. Add it to
 `_HUB_KERNEL_MAPPING` in `integrations/hub_kernels.py`, then load it lazily where the module needs it:
 
 ```py
