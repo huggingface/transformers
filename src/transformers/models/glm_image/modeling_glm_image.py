@@ -1121,10 +1121,13 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            Each image's grid, each sample's target image last: the target grids are dropped, as `pixel_values` holds
+            the source images only.
         images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            The number of image inputs per each sample in the batch, the target images' grids included.
+            The number of images per sample, its target image included. Without it, the batch is one sample.
         """
-        image_grid_thw = self.source_image_grids(image_grid_thw, images_per_sample)
+        image_grid_thw = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         split_sizes = image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
@@ -1227,9 +1230,8 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
             mm_encoder_outputs["image"] = self.get_image_embeddings(
-                pixel_values, source_grids, return_dict=True, **kwargs
+                pixel_values, image_grid_thw, images_per_sample, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
@@ -1286,18 +1288,6 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
         # The tokenizer reads each position alone (a 1x1 conv, then the nearest code): every image in one call
         vqmodel_outputs: GlmImageVQVAEModelOutput = self.vqmodel.encode(hidden_states.T[None, :, :, None])
         return vqmodel_outputs.image_tokens
-
-    def source_image_grids(
-        self, image_grid_thw: torch.LongTensor | None, images_per_sample: torch.Tensor | None
-    ) -> torch.LongTensor | None:
-        """The grids of the source images, when `image_grid_thw` holds each sample's target grid too."""
-        if (
-            images_per_sample is not None
-            and image_grid_thw is not None
-            and sum(images_per_sample) == len(image_grid_thw)
-        ):
-            return self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
-        return image_grid_thw
 
     def get_image_grids_for_generation(
         self,
