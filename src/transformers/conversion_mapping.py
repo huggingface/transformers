@@ -1769,6 +1769,30 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "hyperclovax_vision": [
+            WeightRenaming(r"^language_model\.lm_head\.", "lm_head."),
+            WeightRenaming(r"^language_model\.model\.", "model.language_model."),
+            WeightRenaming(r"^vision_model\.", "model.vision_tower."),
+            WeightRenaming(r"^image_newline", "model.image_newline"),
+            WeightRenaming(r"^mm_projector\.pos_emb", "model.multi_modal_projector.position_embedding"),
+            WeightRenaming(r"^mm_projector\.readout\.0\.", "model.multi_modal_projector.linear_1."),
+            WeightRenaming(r"^mm_projector\.readout\.2\.", "model.multi_modal_projector.linear_2."),
+            # C-Abstractor blocks `net.{0,2}.b{1,2,3}` -> `stage{1,2}.{0,1,2}`, where `conv{i}.bn` -> `norm{i}` and
+            # `conv{i}.conv` -> `conv{i}`
+            *[
+                WeightRenaming(
+                    rf"^mm_projector\.net\.{net_idx}\.b{block_idx + 1}\.{source}",
+                    f"model.multi_modal_projector.stage{stage}.{block_idx}.{target}",
+                )
+                for stage, net_idx in ((1, 0), (2, 2))
+                for block_idx in range(3)
+                for source, target in (
+                    (r"conv(\d)\.bn\.", r"norm\1."),
+                    (r"(conv\d)\.conv\.", r"\1."),
+                    (r"se\.", "se."),
+                )
+            ],
+        ],
         "hyperclovax_vision_v2": [
             WeightRenaming(r"^model.language_model.lm_head", r"lm_head"),
             WeightRenaming(r"^model.vision_projector", r"model.projector"),
