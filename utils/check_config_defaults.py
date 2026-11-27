@@ -50,23 +50,9 @@ CHECKER_CONFIG = {
     "fix_args": None,
 }
 
-IGNORE_KEYS = {
-    "model_type",
-    "architectures",
-    "transformers_version",
-    "_name_or_path",
-    "_commit_hash",
-    "auto_map",
-    "torch_dtype",
-    "dtype",
-    "id2label",
-    "label2id",
-    "problem_type",
-}
-
 ROOT = os.getcwd().split("utils")[0]
 DOCS_PATH = os.path.join(ROOT, "docs/source/en/model_doc")
-CUTOFF = datetime.date(2026, 11, 15)
+CUTOFF = datetime.date(2026, 11, 27)
 
 MODEL_NAME_TO_DOC_MAPPING = {
     "dinov3_convnext": "dinov3",
@@ -104,8 +90,21 @@ MODEL_NAME_TO_DOC_MAPPING = {
     "xlm_roberta_xl": "xlm-roberta-xl",
 }
 
-_re_contribution_date = "contributed to Hugging Face Transformers on "
-_re_date = re.compile(re.escape(_re_contribution_date) + r"(\d{4}-\d{2}-\d{2})")
+IGNORE_KEYS = {
+    "model_type",
+    "architectures",
+    "transformers_version",
+    "_name_or_path",
+    "_commit_hash",
+    "auto_map",
+    "torch_dtype",
+    "dtype",
+    "id2label",
+    "label2id",
+    "problem_type",
+}
+
+_re_date = re.compile(re.escape("contributed to Hugging Face Transformers on ") + r"(\d{4}-\d{2}-\d{2})")
 
 
 class CheckStatus(str, Enum):
