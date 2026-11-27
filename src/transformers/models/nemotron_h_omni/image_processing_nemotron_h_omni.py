@@ -207,16 +207,16 @@ class NemotronH_Omni_Reasoning_V3ImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of patches per image.
         """
-        images_kwargs = images_kwargs or {}
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        merge_size = round(1 / images_kwargs.get("downsample_ratio", self.downsample_ratio))
-        min_num_patches = images_kwargs.get("min_num_patches", self.min_num_patches)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        patch_size = images_kwargs["patch_size"]
+        merge_size = round(1 / images_kwargs["downsample_ratio"])
+        min_num_patches = images_kwargs["min_num_patches"]
         num_patches = get_num_patches_budget(
             num_images,
             merge_size,
             min_num_patches,
-            images_kwargs.get("max_num_patches", self.max_num_patches),
-            images_kwargs.get("max_model_len", self.max_model_len),
+            images_kwargs["max_num_patches"],
+            images_kwargs["max_model_len"],
         )
         grid_height, grid_width = get_patch_grid_size(
             height, width, patch_size, merge_size, min_num_patches, num_patches
