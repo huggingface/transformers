@@ -5948,6 +5948,36 @@ class GenerationIntegrationTests(unittest.TestCase):
                 f"Unexpected warning when input_ids are provided: {warn_msgs}",
             )
 
+    def test_beam_search_fills_finished_sequences_with_pad_token_id_zero(self):
+        config = AutoConfig.for_model(
+            "gpt2",
+            vocab_size=16,
+            n_positions=16,
+            n_embd=16,
+            n_layer=1,
+            n_head=2,
+            bos_token_id=2,
+            eos_token_id=1,
+            pad_token_id=0,
+        )
+        model = GPT2LMHeadModel(config).to(torch_device).eval()
+        input_ids = torch.tensor([[5, 6], [7, 8]], device=torch_device)
+
+        def allowed_tokens(batch_id, tokens):
+            # Finish the second item earlier, leaving padding after its EOS.
+            stop_length = 5 if batch_id == 0 else 3
+            return [config.eos_token_id] if len(tokens) >= stop_length else [3]
+
+        outputs = model.generate(
+            input_ids,
+            num_beams=2,
+            max_new_tokens=4,
+            do_sample=False,
+            prefix_allowed_tokens_fn=allowed_tokens,
+        )
+        self.assertEqual(outputs[0].tolist(), [5, 6, 3, 3, 3, 1])
+        self.assertEqual(outputs[1].tolist(), [7, 8, 3, 1, 0, 0])
+
 
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):
