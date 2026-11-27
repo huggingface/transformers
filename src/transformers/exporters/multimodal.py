@@ -63,6 +63,12 @@ class ExportedMultimodalModel(ExportedModel):
             given = [key for key in spec.feature_keys if kwargs.get(key) is not None]
             if not given:
                 continue
+            # GLM-Image, Chameleon, ...: their image features become token ids, scattered before the embedding
+            if spec.modality == "image" and getattr(self.config, "vq_config", None) is not None:
+                raise NotImplementedError(
+                    f"{self.config.model_type} fills its image placeholders with VQ token ids, not features, which "
+                    "this runtime doesn't assemble yet: run the export's components yourself."
+                )
             runner = self.runners.get(spec.component)
             if runner is None:
                 raise ValueError(

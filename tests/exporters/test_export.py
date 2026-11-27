@@ -1032,6 +1032,9 @@ class ExportTesterMixin:
             return
         if all(getattr(model.config, spec.token_field, None) is None for spec in _MODALITY_SPECS):
             return
+        # Image features turned into VQ token ids (GLM-Image), which the runtime refuses to assemble
+        if getattr(model.config, "vq_config", None) is not None:
+            return
         # A modality encoded inside the model's forward (Qwen2-Audio's audio) has no component to feed it
         if any(
             spec.component not in exported and any(inputs.get(key) is not None for key in spec.feature_keys)
