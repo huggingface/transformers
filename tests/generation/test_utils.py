@@ -4266,6 +4266,18 @@ class GenerationIntegrationTests(unittest.TestCase):
             )
             self.assertEqual(len(warning_list), 0)
 
+    def test_assisted_generation_no_generation_config_deprecation_warning(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        input_ids = tokenizer(["Hello world"], return_tensors="pt").input_ids.to(torch_device)
+
+        logger = logging.get_logger("transformers.generation.utils")
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as cl:
+            model.generate(input_ids, assistant_model=assistant, max_new_tokens=10, output_hidden_states=True)
+        self.assertNotIn("Passing `generation_config` together with", cl.out)
+
     def test_generated_length_assisted_generation(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)

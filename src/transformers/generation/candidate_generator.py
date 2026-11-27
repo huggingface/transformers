@@ -124,7 +124,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Prepare the kwargs for the assistant model
         assistant_kwargs = {}
         for key, value in model_kwargs.items():  # deepcopy crashes if we attempt to copy encoder outputs with grads
-            if key not in ("encoder_outputs", "cache"):
+            # `use_cache` and `output_*` also live in `generation_config`, and passing them to `generate` next to it
+            # triggers a deprecation warning
+            if key not in ("encoder_outputs", "cache") and not hasattr(generation_config, key):
                 assistant_kwargs[key] = (
                     value.detach().to(device) if isinstance(value, torch.Tensor) else copy.deepcopy(value)
                 )
@@ -310,11 +312,12 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
     def _prepare_generation_args(self, input_ids: torch.LongTensor, min_new_tokens: int, max_new_tokens: int) -> dict:
         """Prepare arguments for the generation call."""
+        generation_config = copy.copy(self.generation_config)
+        generation_config.min_new_tokens = min_new_tokens
+        generation_config.max_new_tokens = max_new_tokens
         return {
             self.input_ids_key: input_ids,
-            "min_new_tokens": min_new_tokens,
-            "max_new_tokens": max_new_tokens,
-            "generation_config": self.generation_config,
+            "generation_config": generation_config,
             "logits_processor": self.logits_processor,
         }
 
