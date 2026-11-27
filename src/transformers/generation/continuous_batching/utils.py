@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import queue
 import re
 import threading
@@ -84,8 +85,30 @@ class ThreadLocalCounter(threading.local):
         self.value = 0
 
 
+# PROTOTYPE of the engine work package (bench only, off by default). CB_PROTO_NO_MASK=1: no attention mask is allocated,
+# budgeted or passed for MLA models. Only valid when no batch reads the mask: the block table decode path plus a
+# per-request indexer on every varlen batch (the GLM prototype with PROTO_PER_QUERY_INDEXER=1).
+_PROTO_NO_MASK = os.environ.get("CB_PROTO_NO_MASK", "0") == "1"
+
+
+# [scratch] Latent attention (DeepSeek-V2 / V3 absorbed MLA): block table steps with at least this many (padded) query
+# tokens hold prompts. They run eagerly, and their prompts attend through flash attention on decompressed keys and
+# values, as vLLM's MLA prefill does (see `integrations/_proto_mla_absorbed.py`)
+MLA_PREFILL_MIN_TOKENS = int(os.environ.get("PROTO_MLA_PREFILL_MIN_TOKENS", 2048))
+
+
+def proto_no_mask(config: PreTrainedConfig) -> bool:
+    """PROTOTYPE: True when CB_PROTO_NO_MASK=1 and the model caches MLA latents, and by default for GLM-5.x
+    (glm_moe_dsa), whose per-request indexer (on by default) and block table decode never read the mask."""
+    if getattr(config, "model_type", None) == "glm_moe_dsa":
+        return True
+    return _PROTO_NO_MASK and getattr(config, "kv_lora_rank", None) is not None
+
+
 def attn_mask_is_needed(config: PreTrainedConfig) -> bool:
     """Checks if attention mask is needed for the given (config)."""
+    if proto_no_mask(config):
+        return False
     return config._attn_implementation in ["paged|eager", "sdpa"]
 
 
@@ -102,6 +125,13 @@ def pad_to_pow2(value: int, max_value: int, min_value: int = 0) -> int:
     least padded to that value."""
     value = max(value, max(1, min_value))
     padded = 2 ** int(ceil(log2(value)))
+    return min(padded, max_value)
+
+
+def pad_to_token_bucket(value: int, max_value: int) -> int:
+    """Return the token bucket of (value), capped at (max_value): the next power of 2 up to 512, then the next multiple
+    of 512, so large steps waste at most 511 padded tokens."""
+    padded = pad_to_pow2(value, 512) if value <= 512 else 512 * ceil(value / 512)
     return min(padded, max_value)
 
 

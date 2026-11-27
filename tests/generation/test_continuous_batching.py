@@ -37,6 +37,8 @@ from transformers import (
     AutoTokenizer,
     CompileConfig,
     ContinuousBatchingConfig,
+    DeepseekV3ForCausalLM,
+    DeepseekV32ForCausalLM,
     GenerationConfig,
     GenerationMixin,
     StaticCache,
@@ -50,6 +52,8 @@ from transformers.generation.continuous_batching.cache_allocators import (
     CacheAllocator,
     CachePool,
     FullAttentionCacheAllocator,
+    MLACacheAllocator,
+    LinearAttentionCacheAllocator,
     SlidingAttentionCacheAllocator,
 )
 from transformers.generation.continuous_batching.continuous_api import (
@@ -71,6 +75,7 @@ from transformers.generation.continuous_batching.utils import (
     _get_numa_nodes_memory,
     get_device_and_memory_breakdown,
 )
+from transformers.integrations.linear_attention_paged import causal_conv1d_varlen
 from transformers.testing_utils import (
     Expectations,
     backend_empty_cache,
@@ -78,6 +83,7 @@ from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_flash_attn,
     require_flash_attn_3,
+    require_flash_linear_attention,
     require_torch_accelerator,
     require_torch_multi_accelerator,
     slow,
@@ -93,6 +99,8 @@ from transformers.utils import (
 from transformers.utils.generic import is_flash_attention_requested
 
 from ..distributed_testing_utils import run_distributed
+from ..models.deepseek_v3.test_modeling_deepseek_v3 import DeepseekV3ModelTester
+from ..models.deepseek_v32.test_modeling_deepseek_v32 import DeepseekV32ModelTester
 
 
 # Constants for tests
@@ -293,6 +301,26 @@ def _make_allocator(
     )
 
 
+def _make_linear_allocator(
+    layer_indices: list[int] | None = None, index: int = 0, block_alignment: int = 1
+) -> LinearAttentionCacheAllocator:
+    """Builds a linear attention allocator holding, per layer, a conv state of shape [32, 2] in float16 and a
+    recurrent state of shape [4, 4, 4] in float32, as a gated delta net with 2 key heads and 4 value heads of
+    dimension 4 and a convolution of width 3 would declare."""
+    states = [((32, 2), torch.float16), ((4, 4, 4), torch.float32)]
+    return LinearAttentionCacheAllocator(
+        index=index,
+        config=None,  # type: ignore
+        num_key_value_heads=1,
+        cache_dtype=torch.float16,
+        page_size=4,
+        layer_indices=layer_indices if layer_indices is not None else [0],
+        allow_block_sharing=False,
+        states=states,
+        block_alignment=block_alignment,
+    )
+
+
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
     def test_generation_outputs_are_snapshots(self):
@@ -316,6 +344,29 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         self.assertEqual(second_output.generated_tokens, [101, 102])
         self.assertEqual(second_output.logprobs, [-1.01, -1.02])
         self.assertEqual(len(second_output.timestamps), 2)
+
+    def test_mla_allocator_returns_contiguous_latents(self):
+        """The latents read back from the cache go through the projections of the model, and some linear layers
+        (the fp8 ones for instance) only accept contiguous inputs."""
+        config = SimpleNamespace(kv_lora_rank=6, qk_rope_head_dim=2)
+        allocator = MLACacheAllocator(
+            index=0,
+            config=config,  # type: ignore
+            num_key_value_heads=1,
+            cache_dtype=torch.float16,
+            page_size=4,
+            layer_indices=[0, 1],
+            allow_block_sharing=True,
+        )
+        _setup_cache_pool([allocator], num_sectors=2)
+        kv_latent = torch.randn(3, 1, 6, dtype=torch.float16)
+        rotated_key = torch.randn(3, 1, 2, dtype=torch.float16)
+        index = 2 * allocator.write_trash_index + torch.arange(3)  # the first rows after the two trash sectors
+        for layer_idx in (0, 1):
+            cached_kv_latent, cached_rotated_key = allocator.update(kv_latent, rotated_key, layer_idx, index, index)
+            self.assertTrue(cached_kv_latent.is_contiguous() and cached_rotated_key.is_contiguous())
+            torch.testing.assert_close(cached_kv_latent, kv_latent)
+            torch.testing.assert_close(cached_rotated_key, rotated_key)
 
     def test_streaming_output_after_soft_reset_does_not_shorten_generation(self):
         state = RequestState(request_id="r", initial_tokens=[10, 11], max_new_tokens=5, streaming=True)
@@ -352,6 +403,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             ("ssfssf", 4096, {"f": [2, 5], "s": [0, 1, 3, 4]}),
             ("ssssf", 4096, {"f": [4], "s": [0, 1, 2, 3]}),
             ("fffsffs", 4096, {"f": [0, 1, 2, 4, 5], "s": [3, 6]}),
+            ("lllflllf", None, {"l": [0, 1, 2, 4, 5, 6], "f": [3, 7]}),
             # No layer_types attribute: falls back on the presence of a sliding window
             (None, None, {"f": [0, 1, 2, 3]}),
             (None, 4096, {"s": [0, 1, 2, 3]}),
@@ -364,7 +416,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         expected_groups: dict[str, list[int]],
     ) -> None:
         """Test the layer grouping: one group per attention type, holding the indices of its layers in order."""
-        letter_to_type = {"f": "full_attention", "s": "sliding_attention"}
+        letter_to_type = {"f": "full_attention", "s": "sliding_attention", "l": "linear_attention"}
 
         # Take a config and change the layer_types attribute to the mix we want
         config = AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
@@ -425,6 +477,150 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                 f"Expected mask:\n{str_expected_mask}\n"
                 f"Actual mask:\n{str_mask}"
             )
+
+    def test_linear_attention_blocks_and_indices(self) -> None:
+        """A request of a linear attention allocator owns one block, allocated with its first tokens and kept for its
+        whole life. It reads its states from the zeroed trash block while it has no past and from its block after,
+        and always writes them to its block. Each index list holds one entry per request, not one per token."""
+        allocator = _make_linear_allocator(layer_indices=[0, 2])
+        pool = _setup_cache_pool([allocator], num_sectors=2)
+        pool.allocate_sector(allocator.index)
+
+        self.assertEqual(allocator.needs_new_blocks("req", 0, 5), 1)
+        allocator.allocate_cache_to_request("req", 0, 5)
+        block = allocator.block_table["req"]
+        self.assertEqual(len(block), 1)
+        self.assertEqual(allocator.needs_new_blocks("req", 5, 1), 0)
+        self.assertEqual(allocator.needs_new_blocks("req", 5, 100), 0)
+
+        self.assertEqual(allocator.get_read_indices("req", 0, 5), [allocator.read_trash_index])
+        self.assertEqual(allocator.get_read_indices("req", 5, 1), block)
+        self.assertEqual(allocator.get_write_indices("req", 0, 5), block)
+        self.assertEqual(allocator.get_write_indices("req", 5, 1), block)
+        # The trash blocks are in the reserved sectors, which the pool never hands out
+        self.assertNotEqual(allocator.read_trash_index, allocator.write_trash_index)
+        self.assertNotIn(block[0], (allocator.read_trash_index, allocator.write_trash_index))
+
+        # The block goes back to the pool when the request is freed
+        free_blocks = pool.count_free_blocks(allocator.index)
+        allocator.free_blocks("req")
+        self.assertEqual(pool.count_free_blocks(allocator.index), free_blocks + 1)
+
+    def test_cache_states_are_declared_by_the_layers(self) -> None:
+        """The paged cache sizes the states from what the linear attention layers declare: a layer that declares none
+        is refused with a readable error, and all layers of the group have to declare the same states."""
+        states = [((32, 2), torch.float16), ((4, 4, 4), torch.float32)]
+        self.assertEqual(PagedAttentionCache._get_cache_states([0, 2], {0: states, 2: states}), states)
+        with self.assertRaisesRegex(ValueError, "Layer 2 is a linear attention layer that declares no states"):
+            PagedAttentionCache._get_cache_states([0, 2], {0: states})
+        other_states = [((32, 2), torch.float16)]
+        with self.assertRaisesRegex(ValueError, "declare different states"):
+            PagedAttentionCache._get_cache_states([0, 2], {0: states, 2: other_states})
+
+    def test_linear_attention_block_alignment(self) -> None:
+        """The block is sized to a multiple of the alignment, which the paged cache sets to the other allocators'
+        block sizes so the sectors stay small, with pages of equal size."""
+        allocator = _make_linear_allocator(layer_indices=[0, 1, 2], block_alignment=1000)
+        self.assertEqual(allocator.bytes_per_block % 1000, 0)
+        self.assertEqual(allocator.bytes_per_block, 3 * allocator.bytes_per_page)
+        # Each state starts on a 128-byte boundary, after the previous one
+        self.assertEqual(allocator.state_offsets[0], 0)
+        self.assertEqual(allocator.state_offsets[1] % 128, 0)
+        self.assertGreaterEqual(allocator.state_offsets[1], 32 * 2 * torch.float16.itemsize)
+
+    def test_cache_states_round_trip(self) -> None:
+        """The paged cache reads and writes the states of the batch's sequences through the allocator's views, from
+        the index storages on the varlen path and from the block table on the decode fast path, and sends padding
+        sequences to the trash blocks. Forks copy blocks, states included."""
+        allocator = _make_linear_allocator(layer_indices=[0, 2])
+        # A sector holds one block here, so three requests (a, b and a fork) need three sectors
+        pool = _setup_cache_pool([allocator], num_sectors=3)
+        cache = PagedAttentionCache.__new__(PagedAttentionCache)
+        cache.pool = pool
+        cache.cache_allocators = {"linear_attention": allocator}
+        cache.layer_to_allocator = {0: allocator, 2: allocator}
+        for _ in range(2):
+            pool.allocate_sector(allocator.index)
+        for request_id in ("a", "b"):
+            allocator.allocate_cache_to_request(request_id, 0, 1)
+        blocks = [allocator.block_table["a"][0], allocator.block_table["b"][0]]
+
+        torch.manual_seed(0)
+        conv_states = torch.randn(2, 32, 2)
+        recurrent_states = torch.randn(2, 4, 4, 4)
+
+        # Varlen path: the requests have no past, so they read zeros and write their block
+        kwargs = {"read_index": [torch.tensor([0, 0])], "write_index": [torch.tensor(blocks)], "block_table": None}
+        read_conv, read_recurrent = cache.read_cache_states(0, kwargs)
+        self.assertEqual(read_conv.shape, conv_states.shape)
+        self.assertEqual(read_recurrent.shape, recurrent_states.shape)
+        self.assertTrue((read_conv == 0).all() and (read_recurrent == 0).all())
+        cache.write_cache_states(0, (conv_states, recurrent_states), kwargs)
+
+        # Then they read what they wrote, in the cache dtypes, and the other layer is untouched
+        kwargs["read_index"] = [torch.tensor(blocks)]
+        read_conv, read_recurrent = cache.read_cache_states(0, kwargs)
+        torch.testing.assert_close(read_conv, conv_states.to(torch.float16))
+        torch.testing.assert_close(read_recurrent, recurrent_states)
+        read_conv, read_recurrent = cache.read_cache_states(2, kwargs)
+        self.assertTrue((read_conv == 0).all() and (read_recurrent == 0).all())
+
+        # Decode fast path: the block table gives the blocks, and its padding rows (-1) go to the trash blocks
+        block_table = torch.tensor([[[blocks[1], -1], [-1, -1], [blocks[0], -1]]], dtype=torch.int32)
+        kwargs = {"block_table": block_table}
+        read_conv, read_recurrent = cache.read_cache_states(0, kwargs)
+        torch.testing.assert_close(read_conv[[0, 2]], conv_states[[1, 0]].to(torch.float16))
+        torch.testing.assert_close(read_recurrent[[0, 2]], recurrent_states[[1, 0]])
+        self.assertTrue((read_conv[1] == 0).all() and (read_recurrent[1] == 0).all())
+        cache.write_cache_states(0, (read_conv + 1, read_recurrent + 1), kwargs)
+        read_conv, read_recurrent = cache.read_cache_states(0, kwargs)
+        torch.testing.assert_close(read_conv[[0, 2]], conv_states[[1, 0]].to(torch.float16) + 1)
+        torch.testing.assert_close(read_recurrent[[0, 2]], recurrent_states[[1, 0]] + 1)
+        # The padding row wrote to the write trash, so the read trash still reads zeros
+        self.assertTrue((read_conv[1] == 0).all() and (read_recurrent[1] == 0).all())
+
+        # A fork copies the block, states included
+        pool.allocate_sector(allocator.index)
+        allocator.allocate_cache_to_request("c", 0, 1)
+        fork = allocator.block_table["c"][0]
+        allocator.copy_blocks([blocks[0]], [fork])
+        kwargs = {"read_index": [torch.tensor([fork])], "write_index": [torch.tensor([fork])], "block_table": None}
+        read_conv, read_recurrent = cache.read_cache_states(0, kwargs)
+        torch.testing.assert_close(read_conv[0], conv_states[0].to(torch.float16) + 1)
+        torch.testing.assert_close(read_recurrent[0], recurrent_states[0] + 1)
+
+    @parameterized.expand(
+        [
+            # (sequence lengths, convolution width)
+            ([3, 1, 5], 2),
+            ([3, 1, 5], 4),
+            ([1, 1, 1], 4),  # all decode tokens
+            ([0, 4, 2, 0], 3),  # empty padding sequences
+            ([6], 7),  # a sequence shorter than the window
+        ]
+    )
+    def test_causal_conv1d_varlen(self, lengths: list[int], width: int) -> None:
+        """Each packed sequence is convolved from its own conv state and leaves its next state behind, as if it had
+        been convolved alone after that state."""
+        torch.manual_seed(0)
+        dim, state_len = 6, width - 1
+        weight, bias = torch.randn(dim, width), torch.randn(dim)
+        conv_states = torch.randn(len(lengths), dim, state_len)
+        inputs = torch.randn(1, dim, sum(lengths))
+        cu_seqlens = torch.tensor([0] + list(itertools.accumulate(lengths)), dtype=torch.int32)
+
+        output, next_states = causal_conv1d_varlen(inputs, conv_states, cu_seqlens, weight, bias, "silu")
+
+        self.assertEqual(output.shape, inputs.shape)
+        self.assertEqual(next_states.shape, conv_states.shape)
+        for i, (start, end) in enumerate(zip(cu_seqlens[:-1].tolist(), cu_seqlens[1:].tolist())):
+            # Reference: the sequence is convolved after its state, without padding. An empty sequence has no output
+            # and keeps its state.
+            state_and_inputs = torch.cat([conv_states[i], inputs[0, :, start:end]], dim=-1).unsqueeze(0)
+            if end > start:
+                expected = torch.nn.functional.conv1d(state_and_inputs, weight.unsqueeze(1), bias, groups=dim)
+                torch.testing.assert_close(output[:, :, start:end], torch.nn.functional.silu(expected))
+            torch.testing.assert_close(next_states[i], state_and_inputs[0, :, -state_len:])
 
     def test_continuous_batching_can_store_request_tokens(self) -> None:
         """Tests the allocation check on a hybrid full + sliding cache: the sliding allocator caps its need at the
@@ -919,6 +1115,53 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             for check in cached_availability_checks:
                 check.cache_clear()
 
+    @parameterized.expand(
+        [
+            (f"{name}_{attn_implementation}", tester_class, tester_kwargs, model_class, attn_implementation)
+            for name, tester_class, tester_kwargs, model_class in [
+                # The default tester config has latents of the same shape, so we make them ragged like real checkpoints
+                ("mla", DeepseekV3ModelTester, {"qk_rope_head_dim": 8}, DeepseekV3ForCausalLM),
+                # MLA layers with a sparse attention indexer, which also cache the indexer keys
+                ("indexed_mla", DeepseekV32ModelTester, {}, DeepseekV32ForCausalLM),
+            ]
+            for attn_implementation in ("eager", "sdpa")
+        ]
+    )
+    def test_continuous_batching_mla(
+        self, _, tester_class, tester_kwargs: dict, model_class, attn_implementation: str
+    ) -> None:
+        """Test continuous batching on models with MLA layers: they cache two latents of different shapes rather than
+        keys and values of shape [num_key_value_heads, head_dim], plus the indexer keys for indexed layers."""
+        torch.manual_seed(0)
+        config = tester_class(self, **tester_kwargs).get_config()
+        model = model_class(config).to(torch_device).eval()
+        model.set_attn_implementation(attn_implementation)
+        generation_config = GenerationConfig(max_new_tokens=10, do_sample=False, pad_token_id=config.pad_token_id)
+        # Prompts both shorter and longer than max_batch_tokens, so the prefill of the long one reads from the cache
+        input_ids = [torch.randint(1, config.vocab_size, (length,)).tolist() for length in (5, 23, 70)]
+
+        continuous_batching_config = ContinuousBatchingConfig(
+            auto_switch_to_flash=False, page_size=16, num_blocks=64, max_batch_tokens=64, return_logprobs=True
+        )
+        outputs = model.generate_batch(
+            inputs=input_ids,
+            generation_config=generation_config,
+            continuous_batching_config=continuous_batching_config,
+        )
+
+        # The logprobs of the generated tokens have to match those of a plain forward over each whole sequence. Greedy
+        # tokens alone tell little on a tiny random model: a lost cache row can leave the argmax unchanged
+        self.assertEqual(len(outputs), len(input_ids))
+        for output in outputs.values():
+            self.assertIsNone(output.error)
+            self.assertEqual(len(output.generated_tokens), generation_config.max_new_tokens)
+            sequence = torch.tensor([output.prompt_ids + output.generated_tokens], device=torch_device)
+            with torch.no_grad():
+                logprobs = model(sequence).logits[0].float().log_softmax(dim=-1)
+            generated = torch.tensor(output.generated_tokens, device=torch_device)
+            expected = logprobs[len(output.prompt_ids) - 1 : -1].gather(-1, generated[:, None])[:, 0]
+            torch.testing.assert_close(torch.tensor(output.logprobs, device=torch_device), expected, rtol=0, atol=1e-4)
+
     def test_output_router_deliver_to_queue(self):
         """Test that OutputRouter.deliver places outputs on the queue when no handler is registered."""
         router = OutputRouter()
@@ -1275,6 +1518,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         max_new_tokens: int = 20,
         num_repeat_prompts: int = 1,
         upcast_lm_head: bool = False,
+        dtype: torch.dtype | str | None = None,
     ) -> None:
         """Tests the parity between continuous batching and non-continuous batching generation."""
 
@@ -1296,7 +1540,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # Eager and SDPA implementations get a precision boost to account for the fact that an attention mask is used in
         # continuous batching but not in generate
         is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
-        dtype = "auto" if is_fa else torch.float32
+        if dtype is None:
+            dtype = "auto" if is_fa else torch.float32
         # Disable auto-switch to flash: if requested by the test, we keep SDPA or eager
         continuous_batching_config.auto_switch_to_flash = False
 
@@ -1424,6 +1669,56 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             attn_implementation=attn_implementation,
             upcast_lm_head=is_flash_attention_requested(requested_attention_implementation=attn_implementation),
         )
+
+    @parameterized.expand([("sdpa", False), ("flash_attention_2", False), ("flash_attention_2", True)])
+    @require_flash_linear_attention
+    @slow
+    def test_continuous_batching_linear_attention_parity(self, attn_implementation: str, use_cuda_graph: bool) -> None:
+        """A hybrid model with linear attention layers carries their conv and recurrent states in the paged cache."""
+        continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=use_cuda_graph, default_compile_level=0)
+        # The tiny model is stored in float32, which flash attention does not take
+        is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
+        self._test_continuous_batching_parity(
+            model_id="hf-tiny-v2/tiny-random-Qwen3_5ForCausalLM",
+            continuous_batching_config=continuous_batching_config,
+            attn_implementation=attn_implementation,
+            dtype=torch.bfloat16 if is_fa else None,
+        )
+
+    @require_flash_linear_attention
+    @slow
+    def test_continuous_batching_linear_attention_layers_get_the_engine_mask(self) -> None:
+        """Under sdpa, the attention layers of a hybrid model get the engine's mask, over all the keys each batch
+        reads from the cache, and not a mask the model would build from the new tokens alone."""
+        tokenizer, model = get_tokenizer_and_model(
+            "hf-tiny-v2/tiny-random-Qwen3_5ForCausalLM", "sdpa", torch_device, torch.float32
+        )
+        seen = []
+
+        def record_mask(module, args, kwargs):
+            num_keys = int(kwargs["cu_seq_lens_k"]["full_attention"][-1])
+            seen.append((kwargs["attention_mask"], kwargs["hidden_states"].shape[1], num_keys))
+
+        hooks = [
+            layer.self_attn.register_forward_pre_hook(record_mask, with_kwargs=True)
+            for layer, layer_type in zip(model.model.layers, model.config.layer_types)
+            if layer_type == "full_attention"
+        ]
+        model.generation_config.max_new_tokens = 3
+        model.generation_config.do_sample = False
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES[:2], tokenizer, for_continuous_batching=True)
+        model.generate_batch(
+            inputs=input_ids,
+            generation_config=model.generation_config,
+            continuous_batching_config=ContinuousBatchingConfig(auto_switch_to_flash=False),
+        )
+        for hook in hooks:
+            hook.remove()
+
+        self.assertGreater(len(seen), 0)
+        for attention_mask, num_queries, num_keys in seen:
+            self.assertIsInstance(attention_mask, torch.Tensor)
+            self.assertEqual(tuple(attention_mask.shape[-2:]), (num_queries, num_keys))
 
     @parameterized.expand(
         [
@@ -2054,10 +2349,100 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         )
         self.assertEqual(len(outputs), num_requests, "some requests did not complete")
 
+    @parameterized.expand([("eager", False, False), ("cuda_graphs", True, False), ("async", True, True)])
+    @with_flush_memory
+    def test_release_memory_during_generation(self, _, use_cuda_graph: bool, use_async_batching: bool) -> None:
+        """Frees the KV cache while requests are in flight, like a trainer that needs the memory for its step would,
+        then brings it back. The memory must really be freed, and every request must finish with the tokens it gets
+        without the release, since its cache went to host memory and back."""
+        tokenizer, model = get_tokenizer_and_model("TinyLlama/TinyLlama-1.1B-Chat-v1.0", "sdpa", torch_device)
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
+        cb_config = ContinuousBatchingConfig(
+            use_cuda_graph=use_cuda_graph,
+            use_async_batching=use_async_batching,
+            auto_switch_to_flash=False,
+            max_memory_percent=0.3,  # the cache is copied to host memory, keep it small
+        )
+
+        def generate(release: bool) -> list[list[int]]:
+            manager = model.init_continuous_batching(continuous_batching_config=cb_config)
+            manager.logit_processor.clear()
+            manager.warmup()
+            manager.start()
+            request_ids = [manager.add_request(ids, max_new_tokens=100) for ids in input_ids]
+            try:
+                if release:
+                    self._wait_until_generating(manager)
+                    with self.assertRaises(RuntimeError):  # the loop is running
+                        manager.release_memory()
+                    with manager.pause():
+                        self.assertTrue(manager.batch_processor.scheduler.active_requests, "no request in flight")
+                        allocated = backend_memory_allocated(torch_device)
+                        released_bytes = manager.release_memory()
+                        self.assertGreater(released_bytes, 0)
+                        self.assertGreaterEqual(allocated - backend_memory_allocated(torch_device), released_bytes)
+                        manager.restore_memory()
+                outputs = self._collect_finished(manager, len(input_ids))
+            finally:
+                manager.stop(block=True)
+            self.assertEqual(len(outputs), len(input_ids), "some requests did not complete")
+            return [outputs[request_id].generated_tokens for request_id in request_ids]
+
+        self.assertEqual(generate(release=True), generate(release=False))
+
     def test_prefix_sharing(self) -> None:
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         input_msg = "What is the Transformers library known for?"
         return self._test_block_sharing(model_id, {"full_attention"}, input_msg)
+
+    def test_reset_prefix_cache_after_weight_update(self) -> None:
+        """A prompt generated before a weight update reuses its cached blocks unless `reset_prefix_cache` is called in
+        the pause: after the reset it matches no prefix and generates what a fresh manager generates with the new
+        weights."""
+        tokenizer, model = get_tokenizer_and_model(
+            "Qwen/Qwen2.5-0.5B-Instruct", "sdpa", torch_device, dtype=torch.float32
+        )
+        model.generation_config.max_new_tokens = 8
+        model.generation_config.do_sample = False
+        model.generation_config.repetition_penalty = None
+        inputs = get_generation_inputs(
+            ["What is the Transformers library known for?"], tokenizer, for_continuous_batching=True
+        )[0]
+        self.assertGreaterEqual(len(inputs), 33, "the prompt must hold a complete block of 32 tokens")
+
+        # Spy on prefix matching to observe how many prompt tokens get matched
+        matched_tokens: list[int] = []
+        original_search = PagedAttentionCache.search_prefix_match
+
+        def spy_search(cache_self, request_id, prompt_ids):
+            matched = original_search(cache_self, request_id, prompt_ids)
+            matched_tokens.append(matched)
+            return matched
+
+        def generate(manager) -> list[int]:
+            request_id = manager.add_request(inputs, max_new_tokens=8)
+            return next(manager.request_id_iter(request_id)).generated_tokens
+
+        cb_config = ContinuousBatchingConfig(page_size=32)
+        with patch.object(PagedAttentionCache, "search_prefix_match", autospec=True, side_effect=spy_search):
+            with model.continuous_batching_context_manager(
+                generation_config=model.generation_config, continuous_batching_config=cb_config
+            ) as manager:
+                generate(manager)  # leaves the prompt's first block hashed
+                with self.assertRaises(RuntimeError):
+                    manager.reset_prefix_cache()  # outside the pause
+                with manager.pause():
+                    with torch.no_grad():
+                        model.model.layers[0].self_attn.k_proj.weight.mul_(2.0)
+                    manager.reset_prefix_cache()
+                tokens_after_update = generate(manager)
+            self.assertEqual(matched_tokens, [0, 0], "the prompt reused blocks computed before the weight update")
+
+            with model.continuous_batching_context_manager(
+                generation_config=model.generation_config, continuous_batching_config=cb_config
+            ) as manager:
+                expected_tokens = generate(manager)
+        self.assertEqual(tokens_after_update, expected_tokens)
 
     def test_block_sharing_with_hybrid_model(self) -> None:
         model_id = "google/gemma-3-1b-it"
@@ -2508,8 +2893,8 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
 
     For each configuration we allocate tensors at the *idealized* sizes modeled by the handler (same shapes, same
     dtypes, no alignment padding) and compare the CUDA memory delta to the handler's prediction. The handler reserves
-    the largest of the two M-proportional activation peaks (LM head and attention) and always accounts for the cache
-    reads (N-proportional), so we allocate the dominant M peak plus the cache read tensors.
+    the largest of the M-proportional activation peaks (LM head, attention and, for MoE models, experts) and always
+    accounts for the cache reads (N-proportional), so we allocate the dominant M peak plus the cache read tensors.
     """
 
     NUM_BLOCKS = 4
@@ -2517,13 +2902,17 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
 
     # Each tuple fully specifies a synthetic model config plus the CB knobs; block_size = head_dim * num_kv_heads.
     # fmt: off
-    # (block_size, head_dim, num_kv_heads, num_attention_heads, hidden_size, vocab_size, group_types, group_size, attn_impl, max_bpr, logprobs, dtype, use_async)
+    # (block_size, head_dim, num_kv_heads, num_attention_heads, hidden_size, vocab_size, group_types, group_size, attn_impl, max_bpr, logprobs, dtype, use_async, logits_to_keep, do_sample, num_experts_per_tok)
     CONFIGS = [
-        (32, 64, 4, 8, 512, 32000, ["full_attention"], 22, "sdpa", 0, False, torch.float16, False),  # sdpa-like, 1 mask
-        (256, 64, 4, 8, 512, 32000, ["full_attention"], 22, "flash_attention_2", 0, False, torch.float16, False),  # flash-like, no mask
-        (32, 64, 4, 8, 512, 32000, ["full_attention", "sliding_attention"], 14, "sdpa", 0, False, torch.bfloat16, False),  # hybrid, 2 groups + 2 masks
-        (32, 64, 2, 8, 512, 32000, ["full_attention"], 16, "sdpa", 8, True, torch.float16, False),  # block_table + logprobs
-        (32, 64, 2, 8, 512, 32000, ["full_attention"], 16, "sdpa", 8, True, torch.float16, True),  # block_table + logprobs + async
+        (32, 64, 4, 8, 512, 32000, ["full_attention"], 22, "sdpa", 0, False, torch.float16, False, False, False, None),  # sdpa-like, 1 mask
+        (256, 64, 4, 8, 512, 32000, ["full_attention"], 22, "flash_attention_2", 0, False, torch.float16, False, False, False, None),  # flash-like, no mask
+        (32, 64, 4, 8, 512, 32000, ["full_attention", "sliding_attention"], 14, "sdpa", 0, False, torch.bfloat16, False, False, False, None),  # hybrid, 2 groups + 2 masks
+        (32, 64, 2, 8, 512, 32000, ["full_attention"], 16, "sdpa", 8, True, torch.float16, False, False, False, None),  # block_table + logprobs
+        (32, 64, 2, 8, 512, 32000, ["full_attention"], 16, "sdpa", 8, True, torch.float16, True, False, False, None),  # block_table + logprobs + async
+        (256, 64, 4, 8, 512, 32000, ["full_attention"], 22, "flash_attention_2", 0, False, torch.bfloat16, False, True, False, None),  # logit rows, greedy
+        (256, 64, 4, 8, 512, 32000, ["full_attention"], 22, "flash_attention_2", 0, True, torch.bfloat16, False, True, False, None),  # logit rows, greedy + logprobs
+        (256, 64, 4, 8, 512, 32000, ["full_attention"], 22, "flash_attention_2", 0, False, torch.bfloat16, False, True, True, None),  # logit rows, sampling
+        (256, 64, 4, 8, 512, 1000, ["full_attention"], 22, "flash_attention_2", 0, False, torch.bfloat16, False, False, False, 8),  # MoE, experts peak dominates
     ]
     # fmt: on
 
@@ -2585,6 +2974,9 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         logprobs: bool,
         dtype: torch.dtype,
         use_async: bool,
+        logits_to_keep: bool,
+        do_sample: bool,
+        num_experts_per_tok: int | None,
     ) -> None:
         config = SimpleNamespace(  # rather than creating a full config that we would only use for the namespace
             head_dim=head_dim,
@@ -2592,6 +2984,7 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             num_attention_heads=num_attention_heads,
             hidden_size=hidden_size,
             vocab_size=vocab_size,
+            num_experts_per_tok=num_experts_per_tok,
             _attn_implementation=attn_impl,
         )
         cb_config = ContinuousBatchingConfig(
@@ -2618,6 +3011,8 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             tokens_per_sector=tokens_per_sector,
             bytes_per_block=bytes_per_model_block,
             attn_types=group_types,
+            model_supports_logits_to_keep=logits_to_keep,
+            do_sample=do_sample,
         )
 
         num_groups = len(group_types)
@@ -2649,7 +3044,7 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         fixed.append(torch.empty((num_sectors + 2) * bytes_per_sector, dtype=torch.uint8, device=device))
         # IO tensors below are allocated k times (once per IO instance)
         for _ in range(k):
-            fixed.append(torch.empty((7, M), dtype=torch.int32, device=device))  # bulk_input
+            fixed.append(torch.empty((8, M), dtype=torch.int32, device=device))  # bulk_input
             fixed.append(torch.empty((num_output_rows, M), dtype=torch.int32, device=device))  # output_ids
             for _ in range(num_attn_masks):  # attention_mask: [1, 1, M, N + M] per mask type
                 fixed.append(torch.empty((1, 1, M, N + M), dtype=dtype, device=device))
@@ -2660,6 +3055,15 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
 
         # Old K/V read from the whole readable cache: always reserved along with the sectors (not scaled by k)
         fixed.append(torch.empty((N, elems_per_kv_read_token), dtype=dtype, device=device))
+
+        # Logit rows of the requests (1024 by default) when the model slices hidden states before the LM head: their
+        # peak is the cast to fp32 (logits in both dtypes) for plain argmax, else the fp32 copies the sampler holds
+        if logits_to_keep:
+            num_fp32_copies = 3 if do_sample else 2 if logprobs else 1
+            if num_fp32_copies == 1:
+                fixed.append(torch.empty((1024, vocab_size), dtype=dtype, device=device))
+            for _ in range(num_fp32_copies):
+                fixed.append(torch.empty((1024, vocab_size), dtype=torch.float32, device=device))
 
         # M-proportional activation peaks: only one is live at a time, so the footprint reserves the largest
         peaks = {
@@ -2676,7 +3080,14 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
                 torch.empty((M, elems_per_kv_token), dtype=dtype, device=device),
                 torch.empty((M, elems_per_kv_read_token), dtype=dtype, device=device),
             ],
+            # Experts: the gathered inputs, the down projection output, its weighted copy and that copy in token order
+            "experts": [
+                torch.empty((M * num_experts_per_tok, hidden_size), dtype=dtype, device=device)
+                for _ in range(4 if num_experts_per_tok else 0)
+            ],
         }
+        if logits_to_keep:  # the LM head only runs on the logit rows, counted above
+            del peaks["lm_head"]
         peak_nbytes = {name: sum(t.nbytes for t in ts) for name, ts in peaks.items()}
         dominant = max(peak_nbytes, key=peak_nbytes.get)
         # Free the non-dominant peak so the accelerator delta reflects only the live one

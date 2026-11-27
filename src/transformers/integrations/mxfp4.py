@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
 from ..utils import get_current_accelerator, is_torch_available, logging
 
 
@@ -216,11 +218,35 @@ def swizzle_mxfp4(w, w_scale, triton_kernels_hub):
         triton_kernels_hub.tensor.wrap_torch_tensor,
     )
     layout = triton_kernels_hub.tensor_details.layout
-    StridedLayout = triton_kernels_hub.tensor_details.layout.StridedLayout
 
     value_layout, value_layout_opts = layout.make_default_matmul_mxfp4_w_layout(mx_axis=1)
     w = convert_layout(wrap_torch_tensor(w, dtype=FP4), value_layout, **value_layout_opts)
-    w_scale = convert_layout(wrap_torch_tensor(w_scale), StridedLayout)
+    # The scales in the swizzled layout of the hardware too, as vLLM does: the matmul reads them faster. On Blackwell
+    # that layout needs the persistent kernel without epilogue subtiles
+    scale_layout, scale_layout_opts = layout.make_default_matmul_mxfp4_w_scale_layout(mx_axis=1, num_warps=8)
+    if w_scale.device.type == "cuda" and torch.cuda.get_device_capability(w_scale.device)[0] == 10:
+        constraints = {"is_persistent": True, "epilogue_subtile": 1}
+        triton_kernels_hub.matmul_ogs_details.opt_flags.update_opt_flags_constraints(constraints)
+    # [scratch] SM120 (RTX PRO 6000): the Blackwell scale layout does not compile past 256 tokens (job
+    # 6b06fba1d91f621b93083065), the strided one does. The default 128 x 256 x 256 tiles (and 128-wide K blocks) spill
+    # ~1,250 registers with the fused swiglu: gpt-oss-20b's MoE block took 386 ms at 8,192 tokens, 8.3 ms with 64-wide K
+    # blocks in 2 stages, 1.2 ms at 8 tokens either way (job 6b070768d91f621b93085a28)
+    elif w_scale.device.type == "cuda" and torch.cuda.get_device_capability(w_scale.device)[0] == 12:
+        scale_layout, scale_layout_opts = layout.StridedLayout, {}
+        constraints = {"block_k": 64, "num_stages": 2}
+        triton_kernels_hub.matmul_ogs_details.opt_flags.update_opt_flags_constraints(constraints)
+    # [scratch] Ampere / Ada: the default prefill tiles (128 x 256 x 128) took ~350 ms a layer on an A100
+    # [scratch] Hopper: no split-K, as vLLM constrains it (PROTO_MXFP4_SM90_SPLITK1=0 for the heuristic's choice)
+    elif (
+        w_scale.device.type == "cuda"
+        and torch.cuda.get_device_capability(w_scale.device)[0] == 9
+        and os.environ.get("PROTO_MXFP4_SM90_SPLITK1", "1") == "1"
+    ):
+        triton_kernels_hub.matmul_ogs_details.opt_flags.update_opt_flags_constraints({"split_k": 1})
+    elif w_scale.device.type == "cuda" and torch.cuda.get_device_capability(w_scale.device)[0] < 9:
+        constraints = {"block_k": 64, "num_stages": 2}
+        triton_kernels_hub.matmul_ogs_details.opt_flags.update_opt_flags_constraints(constraints)
+    w_scale = convert_layout(wrap_torch_tensor(w_scale), scale_layout, **scale_layout_opts)
     return w, w_scale
 
 
@@ -342,6 +368,8 @@ class Mxfp4GptOssExperts(nn.Module):
         self.gate_up_proj_precision_config = None
         self.down_proj_precision_config = None
         self.limit = getattr(config, "swiglu_limit", 7.0)
+        self._proto_trtllm = None  # [scratch] TRT-LLM tensors on Blackwell, see `_proto_trtllm_mxfp4`
+        self._proto_marlin = None  # [scratch] Marlin tensors on Ampere, Ada and SM120, see `_proto_marlin_mxfp4`
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
@@ -436,13 +464,29 @@ class Mxfp4GptOssMLP(nn.Module):
             routed_out = self.experts(hidden_states, router_indices, router_scores)
         else:
             router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
-            with on_device(router_logits.device):
-                routing_data, gather_idx, scatter_idx = triton_kernels_hub.routing.routing(
-                    router_logits, self.router.top_k
-                )
-            routed_out = self.experts.forward_routed(hidden_states, routing_data, gather_idx, scatter_idx)
+            routed_out = self._routed(hidden_states, router_logits)
         routed_out = routed_out.reshape(batch_size, -1, self.router.hidden_dim)
         return routed_out, router_logits
+
+    @torch.compiler.disable  # [scratch] triton_kernels' routing and matmul_ogs do not trace under dynamo
+    def _routed(self, hidden_states, router_logits):
+        if self.experts._proto_trtllm is not None:  # [scratch] Blackwell: TRT-LLM's routed MoE
+            from ._proto_trtllm_mxfp4 import trtllm_gpt_oss_experts
+
+            top_k_logits, top_k_index = torch.topk(router_logits, self.router.top_k, dim=-1)
+            top_k_weights = torch.softmax(top_k_logits.float(), dim=-1).to(torch.bfloat16)
+            return trtllm_gpt_oss_experts(
+                self.experts._proto_trtllm, hidden_states, top_k_index.to(torch.int32), top_k_weights
+            )
+        if self.experts._proto_marlin is not None:  # [scratch] Ampere, Ada, SM120: vLLM's Marlin MoE
+            from ._proto_marlin_mxfp4 import marlin_gpt_oss_experts
+
+            top_k_logits, top_k_index = torch.topk(router_logits, self.router.top_k, dim=-1)
+            top_k_weights = torch.softmax(top_k_logits.float(), dim=-1)
+            return marlin_gpt_oss_experts(self.experts._proto_marlin, hidden_states, top_k_index, top_k_weights)
+        with on_device(router_logits.device):
+            routing_data, gather_idx, scatter_idx = triton_kernels_hub.routing.routing(router_logits, self.router.top_k)
+        return self.experts.forward_routed(hidden_states, routing_data, gather_idx, scatter_idx)
 
 
 def dequantize_convertops(blocks, scales, dtype):

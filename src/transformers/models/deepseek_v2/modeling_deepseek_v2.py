@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from collections.abc import Callable
 
 import torch
@@ -42,7 +43,14 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_deepseek_v2 import DeepseekV2Config
 
 
+# [scratch] absorbed MLA for continuous batching steps
+_PROTO_MLA_ABSORB = os.environ.get("PROTO_MLA_ABSORB", "1") == "1"
+if _PROTO_MLA_ABSORB:
+    from ...integrations._proto_mla_absorbed import absorbed_mla_forward
+
+
 @use_experts_implementation
+
 class DeepseekV2Experts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
@@ -374,6 +382,10 @@ class DeepseekV2Attention(nn.Module):
         k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         q_pe, k_pe = apply_rotary_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
+
+        # [scratch] PROTO_MLA_ABSORB=1: a continuous batching step attends on the cached latents, never expanded
+        if _PROTO_MLA_ABSORB and cache is not None and kwargs.get("cu_seq_lens_q") is not None:
+            return self.o_proj(absorbed_mla_forward(self, q_nope, q_pe, k_nope, k_pe, cache, kwargs)), None
 
         # Cache read / write is performed while the latent KV is still compressed
         if cache is not None:

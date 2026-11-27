@@ -4,6 +4,8 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_deepseek_v3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+import importlib.util
+import os
 from collections.abc import Callable
 
 import torch
@@ -33,7 +35,20 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_deepseek_v3 import DeepseekV3Config
 
 
+# [scratch] absorbed MLA for continuous batching steps
+_PROTO_MLA_ABSORB = os.environ.get("PROTO_MLA_ABSORB", "1") == "1"
+# [scratch] vLLM's fused grouped top-k at inference (sigmoid, bias, group selection, top-k, normalize and scale in one
+# kernel, as vLLM routes DeepSeek-V3): the router's 3 top-k kernels and their glue cost ~0.3 ms a layer of an 8,192-token
+# step on a B300 (17.5 us fused), ~170 us of launches at decode (13.5 us). Same experts, weights within 1e-7
+_PROTO_VLLM_GROUPED_TOPK = (
+    os.environ.get("PROTO_VLLM_GROUPED_TOPK", "1") == "1" and importlib.util.find_spec("vllm") is not None
+)
+if _PROTO_MLA_ABSORB:
+    from ...integrations._proto_mla_absorbed import absorbed_mla_forward
+
+
 @use_kernel_forward_from_hub("RMSNorm")
+
 class DeepseekV3RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
@@ -128,10 +143,24 @@ class DeepseekV3TopkRouter(nn.Module):
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
         self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
+        if _PROTO_VLLM_GROUPED_TOPK:
+            import vllm._custom_ops  # noqa: F401  registers `_moe_C.grouped_topk` and its fake
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        if hidden_states.dtype == torch.bfloat16 and not torch.is_grad_enabled():
+            # [scratch] bf16 x bf16 -> fp32 instead of an fp32 GEMM (the checkpoint's weight is bf16, so the cast is
+            # exact): cuBLAS ran the fp32 one on SIMT cores, 520 us a layer of an 8,192-token step on a B300
+            weight = self.weight.to(torch.bfloat16)
+            router_logits = torch.mm(hidden_states, weight.t(), out_dtype=torch.float32)
+        else:
+            router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        if _PROTO_VLLM_GROUPED_TOPK and router_logits.is_cuda and not torch.is_grad_enabled():
+            topk_weights, topk_indices = torch.ops._moe_C.grouped_topk(
+                router_logits, self.num_group, self.topk_group, self.top_k, self.norm_topk_prob,
+                float(self.routed_scaling_factor), self.e_score_correction_bias.to(router_logits.dtype), 1, None,
+            )  # fmt: skip
+            return router_logits, topk_weights, topk_indices.long()
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias
         group_scores = (
@@ -438,6 +467,10 @@ class DeepseekV3Attention(nn.Module):
             q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
         else:
             q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+
+        # [scratch] PROTO_MLA_ABSORB=1: a continuous batching step attends on the cached latents, never expanded
+        if _PROTO_MLA_ABSORB and cache is not None and kwargs.get("cu_seq_lens_q") is not None:
+            return self.o_proj(absorbed_mla_forward(self, q_pass, q_rot, kv_nope, k_rot, cache, kwargs)), None
 
         # Cache read / write is performed while latent KV is still compressed
         if cache is not None:

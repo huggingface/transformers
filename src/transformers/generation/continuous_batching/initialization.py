@@ -26,7 +26,9 @@ from ...modeling_flash_attention_utils import lazy_import_flash_attention
 from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
 from .cache import ATTN_TYPE_TO_ALLOCATOR, group_layers_by_attn_type
-from .utils import WorkloadHints, get_accelerator_graph_name, logger
+from .cache_allocators import INDEXED_ATTENTION, LINEAR_ATTENTION
+from .cache_allocators.compressed_latents import mla_block_table_enabled
+from .utils import WorkloadHints, get_accelerator_graph_name, logger, proto_no_mask
 
 
 FALLBACK_DEFAULTS = {
@@ -61,6 +63,13 @@ def resolve_continuous_batching_config(
     user_requested_decode_path = cb_config.max_blocks_per_request is not None
     # Same for cuda graphs, if the user signals they want CUDA graphs via any padding/cached-graph parameter
     cuda_graph_requested = any([cb_config.q_padding_interval_size, cb_config.kv_padding_interval_size])
+    user_use_cuda_graph = cb_config.use_cuda_graph
+
+    # FA3's and FA4's paged kernels take any page size, FA2's needs multiples of 256. MLA models (latent cache, their
+    # own kernels) keep 256 until measured. Must happen before anything counts pages.
+    if cb_config.page_size is None:
+        is_mla = getattr(config, "kv_lora_rank", None) is not None
+        cb_config.page_size = 32 if is_flash_attention_requested(config, version=[3, 4]) and not is_mla else 256
 
     # Resolve missing attributes for which we have hints. Must happen before no-hints resolve.
     resolve_using_hints(cb_config, workload_hints)
@@ -80,10 +89,18 @@ def resolve_continuous_batching_config(
     )
 
     # Decide if CUDA graphs should be used. Should happen after compile configs are decided.
-    is_attn_mask_needed = not is_flash_attention_requested(config)
+    is_attn_mask_needed = not is_flash_attention_requested(config) and not proto_no_mask(config)
     decide_use_cuda_graphs(
         cb_config=cb_config, is_attn_mask_needed=is_attn_mask_needed, cuda_graph_requested=cuda_graph_requested
     )
+    # The chunked kernel of the linear attention layers reads the sequence lengths on the host, which a graph cannot
+    # capture: only the decode path, which runs the recurrent kernel, can use graphs on a model with such layers
+    if LINEAR_ATTENTION in group_layers_by_attn_type(config):
+        cb_config.use_cuda_graph = (False, cb_config.cuda_graph_booleans[1])
+    # [scratch] GLM-5.x: varlen graph keys hold the context lengths (a capture every few steps), and their pools did not
+    # fit next to GLM-5.3 on four B300: unless asked for, only the block table decode steps replay graphs
+    if getattr(config, "model_type", None) == "glm_moe_dsa" and user_use_cuda_graph is None:
+        cb_config.use_cuda_graph = (False, cb_config.cuda_graph_booleans[1])
 
     # Decide if asynchronous batching should be used. Should happen after CUDA graphs are decided.
     decide_use_async_batching(cb_config=cb_config, is_attn_mask_needed=is_attn_mask_needed)
@@ -131,8 +148,12 @@ def ensure_decode_fast_path_is_available(
     """Ensures the decode fast path is available. If it is not, set the max blocks per request to 0. If it is
     available, and no user-provided max blocks per request, set it to the fallback default."""
     # The block table path needs to be supported by every attention type to be available
+    # [scratch] MLA allocators take the block table when `mla_block_table_enabled` (their class attribute keeps the
+    # prototype's environment flag)
     all_types_support_block_table = all(
-        ATTN_TYPE_TO_ALLOCATOR[attn_type].supports_block_table for attn_type in group_layers_by_attn_type(config)
+        ATTN_TYPE_TO_ALLOCATOR[attn_type].supports_block_table
+        or (attn_type == INDEXED_ATTENTION and mla_block_table_enabled(config))
+        for attn_type in group_layers_by_attn_type(config)
     )
     if cb_config.max_blocks_per_request != 0 and not all_types_support_block_table:
         if user_requested:
@@ -142,6 +163,10 @@ def ensure_decode_fast_path_is_available(
             )
         cb_config.max_blocks_per_request = 0
 
+    # PROTOTYPE: the MLA prototype attention reads the cache through the block table itself, no flash kernel needed
+    if cb_config.max_blocks_per_request != 0 and mla_block_table_enabled(config) and getattr(config, "kv_lora_rank", None):
+        return
+
     # Then, if the decode fast path is not turned off, check if it is available
     if cb_config.max_blocks_per_request != 0:
         cuda_available = torch.cuda.is_available()
@@ -149,6 +174,8 @@ def ensure_decode_fast_path_is_available(
         # XPU support is given through its kernel variation `kernels-community/flash-attn2`
         xpu_available = is_torch_xpu_available()
         fa_xpu = is_flash_attention_requested(config, version=2) and xpu_available
+        # FA4 reads the pages through its varlen function (`page_table`), it has no `flash_attn_with_kvcache` to check
+        fa4_cuda = is_flash_attention_requested(config, version=4) and cuda_available
         if fa_cuda or fa_xpu:  # Block table is only supported on these
             flash_attn_with_kvcache = lazy_import_flash_attention(config._attn_implementation)[0][2]
             # Throw a warning only if the decode fast path was requested by the user
@@ -160,7 +187,7 @@ def ensure_decode_fast_path_is_available(
                     )
                 cb_config.max_blocks_per_request = 0
         # Specific warning for unsupported attention implementation/device combinations
-        else:
+        elif not fa4_cuda:
             if user_requested:
                 logger.warning(
                     f"Although {cb_config.max_blocks_per_request = }, the decode fast path is not available "

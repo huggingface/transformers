@@ -537,10 +537,18 @@ def grouped_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
+def _proto_decode_experts_forward(self, hidden_states, top_k_index, top_k_weights):
+    """[scratch, bench only] `experts_implementation="proto_decode"`, see `_proto_bf16_experts.py`."""
+    from ._proto_bf16_experts import proto_decode_experts_forward
+
+    return proto_decode_experts_forward(self, hidden_states, top_k_index, top_k_weights)
+
+
 class ExpertsInterface(GeneralInterface):
     """Interface for registering custom experts forward functions."""
 
     _global_mapping = {
+        "proto_decode": _proto_decode_experts_forward,
         "deepgemm": deepgemm_bf16_experts_forward,
         "batched_mm": batched_mm_experts_forward,
         "grouped_mm": grouped_mm_experts_forward,

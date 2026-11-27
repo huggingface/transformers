@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
+import importlib.util
 import inspect
 import os
 from collections.abc import Callable
@@ -34,6 +35,7 @@ from .utils import (
     is_torch_xpu_available,
     logging,
 )
+from .utils.generic import is_flash_attention_requested
 from .utils.import_utils import _package_distribution_mapping, is_tracing
 
 
@@ -79,7 +81,7 @@ FLASH_ATTN_KERNEL_VERSIONS = {
     "kernels-community/flash-attn3": 1,
     "kernels-community/vllm-flash-attn3": 1,
     "kernels-community/aiter-flash-attn": 2,
-    "kernels-community/flash-attn4": 0,
+    "kernels-community/flash-attn4": 1,
     "kernels-community/metal-flash-sdpa": 2,
 }
 
@@ -219,6 +221,11 @@ def _lazy_imports(
         flash_attn_func = getattr(kernel, "flash_attn_func", None)
         flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
         flash_attn_with_kvcache = getattr(kernel, "flash_attn_with_kvcache", None)
+        # FA4 is a CuTe DSL kernel called from Python, which dynamo can't trace
+        if kernel_repo == FLASH_ATTN_KERNEL_FALLBACK["flash_attention_4"]:
+            flash_attn_func, flash_attn_varlen_func = (
+                torch.compiler.disable(fn) if fn is not None else None for fn in (flash_attn_func, flash_attn_varlen_func)
+            )
         # Some kernels, like the MSA kernel from minimax, ship their own attention entry point rather than a varlen
         # function, so no need to check if it is None
         if flash_attn_varlen_func is None and (
@@ -742,6 +749,116 @@ def _process_flash_attention_kwargs(
     return flash_kwargs
 
 
+_PROTO_KV_WRITE = os.environ.get("PROTO_KV_WRITE", "1") == "1"
+# [scratch] FA4 (Blackwell) decode-only steps through flashinfer's TRT-LLM decode kernel (vLLM's Blackwell backend):
+# it splits the keys of a few long sequences and reuses prefix-shared pages better than FA4's varlen call
+_PROTO_TRTLLM_DECODE = os.environ.get("PROTO_TRTLLM_DECODE", "1") == "1"
+# [scratch] dev knobs: TRT-LLM decode for layers with attention sinks / sliding windows too (the kernel matches a torch
+# reference on gpt-oss shapes with both, NHD pages: tonight/scripts/trtllm_sinks_check.py)
+_PROTO_TRTLLM_SINKS = os.environ.get("PROTO_TRTLLM_SINKS", "0") == "1"
+_PROTO_TRTLLM_SLIDING = os.environ.get("PROTO_TRTLLM_SLIDING", "0") == "1"
+_TRTLLM_WORKSPACE: dict = {}
+
+
+def proto_trtllm_decode_workspace(device: torch.device) -> None:
+    """Allocates the zeroed workspace of the TRT-LLM decode kernel, before any CUDA graph capture."""
+    if _PROTO_TRTLLM_DECODE and device not in _TRTLLM_WORKSPACE:
+        _TRTLLM_WORKSPACE[device] = torch.zeros(128 * 1024 * 1024, dtype=torch.uint8, device=device)
+
+
+@torch.compiler.disable
+def _trtllm_decode(q, k_cache, v_cache, block_table, seqused, softmax_scale, window_left, sinks=None):
+    import flashinfer
+
+    # the kernel reads the queries as contiguous [tokens, heads, head_dim] (a head-major view came out as garbage)
+    out = flashinfer.decode.trtllm_batch_decode_with_kv_cache(
+        q.contiguous(), (k_cache, v_cache), _TRTLLM_WORKSPACE[q.device], block_table, seqused,
+        block_table.size(1) * k_cache.size(1), bmm1_scale=softmax_scale, bmm2_scale=1.0, window_left=window_left,
+        sinks=None if sinks is None else sinks.float(), kv_layout="NHD",
+    )  # fmt: skip
+    return out
+# [scratch] FA2 (Ampere, Ada, SM120) decode-only steps through vLLM's Triton unified attention when vLLM is installed:
+# FA2's split-kv kernel reads each sequence's keys once per query head and does not skip the pages of a sliding window
+# (gpt-oss-20b on an H100 with FA2: 205 us per full layer and 106 per sliding one at 128 sequences of ~800 tokens, for
+# 61 and 10 us of reads). The Triton kernel takes the query heads of a KV head together, windows and sinks natively.
+# For layers with sinks or a window only: on plain layers FA2 held up (Qwen3-8B rolling 7,395 FA2 vs 7,029 Triton).
+_PROTO_TRITON_DECODE = os.environ.get("PROTO_TRITON_DECODE", "1") == "1" and importlib.util.find_spec("vllm") is not None
+
+
+@torch.compiler.disable
+def _triton_decode(q, k_cache, v_cache, block_table, seqused, softmax_scale, window, softcap, sinks):
+    """Decode step on the paged cache through vLLM's Triton unified attention: `q` [sequences, heads, head_dim] (one
+    token per sequence), `k_cache` / `v_cache` [pages, page_size, kv_heads, head_dim]. Returns [sequences, heads,
+    head_dim]."""
+    import triton
+    from vllm.v1.attention.ops.triton_unified_attention import unified_attention
+
+    num_sequences, num_heads, head_dim = q.shape
+    q = q.contiguous()
+    out = torch.empty_like(q)
+    segments, dim_padded = 16, triton.next_power_of_2(head_dim)
+    segment_out = torch.empty(num_sequences, num_heads, segments, dim_padded, dtype=torch.float32, device=q.device)
+    segment_max = torch.empty(num_sequences, num_heads, segments, dtype=torch.float32, device=q.device)
+    segment_sum = torch.empty_like(segment_max)
+    unified_attention(
+        q=q, k=k_cache, v=v_cache, out=out,
+        cu_seqlens_q=torch.arange(num_sequences + 1, dtype=torch.int32, device=q.device), max_seqlen_q=1,
+        seqused_k=seqused, max_seqlen_k=block_table.size(1) * k_cache.size(1), softmax_scale=softmax_scale, causal=True,
+        window_size=window, block_table=block_table, softcap=softcap, q_descale=None, k_descale=None, v_descale=None,
+        seq_threshold_3D=max(1, 128 // k_cache.size(2)), num_par_softmax_segments=segments,
+        softmax_segm_output=segment_out, softmax_segm_max=segment_max, softmax_segm_expsum=segment_sum,
+        sinks=None if sinks is None else sinks.float(),
+    )  # fmt: skip
+    return out
+
+
+_PROTO_TRITON_VARLEN = os.environ.get("PROTO_TRITON_VARLEN", "1") == "1"
+
+
+@torch.compiler.disable
+def _triton_varlen(q, k_cache, v_cache, block_table, seqused, cu_seqlens_q, max_seqlen_q, softmax_scale, window, softcap, sinks):
+    """A step with prompts on the paged cache through vLLM's Triton unified attention: `q` [tokens, heads, head_dim]
+    (padding tokens past `cu_seqlens_q[-1]` get no output). Returns [tokens, heads, head_dim]."""
+    from vllm.v1.attention.ops.triton_unified_attention import unified_attention
+
+    q = q.contiguous()
+    out = torch.empty_like(q)
+    unified_attention(
+        q=q, k=k_cache, v=v_cache, out=out, cu_seqlens_q=cu_seqlens_q.to(torch.int32), max_seqlen_q=max_seqlen_q,
+        seqused_k=seqused, max_seqlen_k=block_table.size(1) * k_cache.size(1), softmax_scale=softmax_scale, causal=True,
+        window_size=window, block_table=block_table, softcap=softcap, q_descale=None, k_descale=None, v_descale=None,
+        sinks=None if sinks is None else sinks.float(),
+    )  # fmt: skip
+    return out
+
+
+# [scratch] FA2 prompt steps on Blackwell (layers without sinks, window or softcap) through flashinfer's TRT-LLM context
+# kernel, vLLM's Blackwell prefill: FA2 has no Blackwell kernels and FA4 no paged head_dim 256 (Qwen3-Next). An 8,192-token
+# prompt + 40 decode tokens at Qwen3-Next's shapes (16 / 2 heads, head_dim 256, 256-token pages): 0.55 vs 1.81 ms (B300).
+# The kernel loads whole pages and masks the slots past a sequence's end by multiplying them by zero: they must hold no
+# NaN (`PagedAttentionCache.zero_foreign_sectors`). Qwen3-Next B300 long prompts 1,070 -> 1,148 tok/s
+_PROTO_TRTLLM_CONTEXT = os.environ.get("PROTO_TRTLLM_CONTEXT", "1") == "1"
+
+
+@torch.compiler.disable
+def _trtllm_context(q, k_cache, v_cache, block_table, seqused, cu_seqlens_q, max_seqlen_q, softmax_scale):
+    """A step with prompts on the paged cache (NHD pages): `q` [tokens, heads, head_dim], the rows past
+    `cu_seqlens_q[-1]` get no output. Returns [tokens, heads, head_dim]."""
+    import flashinfer
+
+    if q.device not in _TRTLLM_WORKSPACE:  # zeroed once, outside any graph capture, shared with the decode kernel
+        _TRTLLM_WORKSPACE[q.device] = torch.zeros(128 * 1024 * 1024, dtype=torch.uint8, device=q.device)
+    return flashinfer.prefill.trtllm_batch_context_with_kv_cache(
+        q.contiguous(), (k_cache, v_cache), _TRTLLM_WORKSPACE[q.device], block_table, seqused, max_seqlen_q,
+        block_table.size(1) * k_cache.size(1), softmax_scale, 1.0, block_table.size(0), cu_seqlens_q.to(torch.int32),
+        F.pad(seqused.cumsum(0, dtype=torch.int32), (1, 0)), kv_layout="NHD", enable_pdl=False,
+    )  # fmt: skip
+
+
+# [scratch] debug: attention sinks through the log-sum-exp rescale on Hopper too (see `_flash_attention_forward`)
+_PROTO_SINKS_BY_LSE = os.environ.get("PROTO_SINKS_BY_LSE") == "1"
+
+
 def _flash_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
@@ -765,6 +882,7 @@ def _flash_attention_forward(
     block_table: torch.Tensor | None = None,
     k_cache: torch.Tensor | None = None,
     v_cache: torch.Tensor | None = None,
+    cache_seqlens: torch.Tensor | None = None,
     **kwargs,
 ):
     """
@@ -820,15 +938,152 @@ def _flash_attention_forward(
         **kwargs,
     )
 
+    # [scratch] FA2 takes attention sinks only in the continuous batching branches below (paged, varlen), through the
+    # log-sum-exp
+    if (
+        kwargs.get("s_aux") is not None
+        and is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=2)
+        and not (is_fa_with_paged_kwargs and cache_seqlens is not None)
+        and not (is_fa_with_varlen_kwargs and not is_fa_with_paged_kwargs and attention_mask is None)
+    ):
+        raise ValueError("Attention sinks with flash attention 2 are only supported by continuous batching.")
+
+    # Varlen queries on the paged cache (FA3): each sequence appends its new K/V to its pages and attends over them. The
+    # padded tail of the queries belongs to no sequence (cu_seq_lens_q plateaus) and max_length_q is the padded size
+    if is_fa_with_paged_kwargs and cache_seqlens is not None:
+        q, k, v = (x.reshape(-1, *x.shape[-2:]) for x in (query_states, key_states, value_states))
+        # The keys span every page the block table addresses, so a sliding window layer gets its window
+        flash_kwargs_fn = partial(
+            flash_kwargs_fn.func, **{**flash_kwargs_fn.keywords, "key_length": block_table.size(1) * k_cache.size(1)}
+        )
+        # FA4 has no paged call: the new K/V are written to the pages, then its varlen call reads them through the table
+        if is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=4):
+            from .integrations._proto_paged_kv_write import paged_kv_write
+
+            seqused = paged_kv_write(k, v, k_cache, v_cache, block_table, cache_seqlens, cu_seq_lens_q, max_length_q)
+            keywords = flash_kwargs_fn.keywords
+            # [scratch] decode-only steps (one query token per sequence) through TRT-LLM's decode kernel
+            if (
+                max_length_q == 1
+                and q.device in _TRTLLM_WORKSPACE
+                and (keywords.get("s_aux") is None or _PROTO_TRTLLM_SINKS)
+                and keywords.get("softcap") is None
+                and (keywords.get("sliding_window") is None or _PROTO_TRTLLM_SLIDING)  # gpt-oss came out wrong
+            ):
+                scale = keywords.get("softmax_scale") or q.size(-1) ** -0.5
+                window = keywords.get("sliding_window")
+                window = -1 if window is None else window - 1
+                out = _trtllm_decode(q, k_cache, v_cache, block_table, seqused, scale, window, keywords.get("s_aux"))
+                return out.view(batch_size, -1, *out.shape[-2:])
+            flash_kwargs = partial(process_flash_kwargs_fn, **flash_kwargs_fn.keywords)(
+                max_seqlen_q=max_length_q, max_seqlen_k=block_table.size(1) * k_cache.size(1), block_table=block_table
+            )
+            out = flash_varlen_fn(q, k_cache, v_cache, cu_seqlens_q=cu_seq_lens_q, seqused_k=seqused, **flash_kwargs)
+            out = out[0] if isinstance(out, tuple) else out
+            return out.view(batch_size, -1, *out.shape[-2:])
+        # FA2's paged call takes one query token per sequence: the new K/V are written to the pages first, then decode
+        # steps use the paged call and the others the varlen call, which reads the pages through the block table
+        if is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=2):
+            from .integrations._proto_paged_kv_write import paged_kv_write
+
+            seqused = paged_kv_write(k, v, k_cache, v_cache, block_table, cache_seqlens, cu_seq_lens_q, max_length_q)
+            # [scratch] FA2 takes no attention sinks: they join through the log-sum-exp, out * sigmoid(lse - sink)
+            sinks = flash_kwargs_fn.keywords.get("s_aux")
+            keywords = flash_kwargs_fn.keywords
+            if max_length_q == 1 and _PROTO_TRITON_DECODE and (sinks is not None or keywords.get("sliding_window")):
+                num_sequences = block_table.size(0)
+                scale = keywords.get("softmax_scale") or q.size(-1) ** -0.5
+                window = (-1, -1) if keywords.get("sliding_window") is None else (keywords["sliding_window"] - 1, 0)
+                res = _triton_decode(
+                    q[:num_sequences], k_cache, v_cache, block_table, seqused[:num_sequences], scale, window,
+                    keywords.get("softcap") or 0.0, sinks,
+                )  # fmt: skip
+                out = torch.empty_like(q)
+                out[:num_sequences] = res
+            elif max_length_q == 1:
+                num_sequences = block_table.size(0)
+                flash_kwargs = flash_kwargs_fn(max_seqlen_q=1, block_table=block_table, cache_seqlens=seqused)
+                if sinks is not None:
+                    flash_kwargs["return_softmax_lse"] = True
+                res = flash_kvcache_fn(q[:num_sequences, None], k_cache, v_cache, **flash_kwargs)
+                if sinks is not None:  # out [sequences, 1, heads, dim], lse [sequences, heads, 1]
+                    res = res[0] * torch.sigmoid(res[1].transpose(1, 2) - sinks.float())[..., None].to(res[0].dtype)
+                out = torch.empty_like(q)
+                out[:num_sequences] = res[:, 0]
+            else:
+                # [scratch] steps with prompts too, for layers with sinks or a window (PROTO_TRITON_VARLEN)
+                if _PROTO_TRITON_VARLEN and _PROTO_TRITON_DECODE and (sinks is not None or keywords.get("sliding_window")):
+                    scale = keywords.get("softmax_scale") or q.size(-1) ** -0.5
+                    window = (-1, -1) if keywords.get("sliding_window") is None else (keywords["sliding_window"] - 1, 0)
+                    out = _triton_varlen(
+                        q, k_cache, v_cache, block_table, seqused, cu_seq_lens_q, max_length_q, scale, window,
+                        keywords.get("softcap") or 0.0, sinks,
+                    )  # fmt: skip
+                    return out.view(batch_size, -1, *out.shape[-2:])
+                if (
+                    _PROTO_TRTLLM_CONTEXT
+                    and sinks is None
+                    and keywords.get("sliding_window") is None
+                    and keywords.get("softcap") is None
+                    and torch.cuda.get_device_capability(q.device)[0] == 10
+                    and (q.device in _TRTLLM_WORKSPACE or not torch.cuda.is_current_stream_capturing())
+                ):
+                    scale = keywords.get("softmax_scale") or q.size(-1) ** -0.5
+                    out = _trtllm_context(q, k_cache, v_cache, block_table, seqused, cu_seq_lens_q, max_length_q, scale)
+                    return out.view(batch_size, -1, *out.shape[-2:])
+                cu_seqlens_k = F.pad(seqused.cumsum(0, dtype=torch.int32), (1, 0))
+                max_seqlen_k = block_table.size(1) * k_cache.size(1)
+                flash_kwargs = partial(process_flash_kwargs_fn, **flash_kwargs_fn.keywords)(block_table=block_table)
+                if sinks is not None:
+                    flash_kwargs["return_attn_probs"] = True
+                out = flash_varlen_fn(
+                    q, k_cache, v_cache, cu_seq_lens_q, cu_seqlens_k, max_length_q, max_seqlen_k, **flash_kwargs
+                )
+                if sinks is not None:  # lse [heads, tokens]
+                    out = out[0] * torch.sigmoid(out[1].transpose(0, 1) - sinks.float())[..., None].to(out[0].dtype)
+            out = out[0] if isinstance(out, tuple) else out
+            return out.view(batch_size, -1, *out.shape[-2:])
+        if _PROTO_KV_WRITE:  # [scratch] write the new K/V first, then a plain paged call
+            from .integrations._proto_paged_kv_write import paged_kv_write
+
+            # FA3 takes attention sinks on Hopper only. Elsewhere the sink joins the softmax as one more key through the
+            # log-sum-exp of the scores: out * exp(lse) / (exp(lse) + exp(sink)) = out * sigmoid(lse - sink)
+            sinks = flash_kwargs_fn.keywords.get("s_aux")
+            if sinks is not None and (_PROTO_SINKS_BY_LSE or torch.cuda.get_device_capability()[0] != 9):
+                flash_kwargs_fn = partial(flash_kwargs_fn.func, **{**flash_kwargs_fn.keywords, "s_aux": None})
+            else:
+                sinks = None
+            seqused = paged_kv_write(k, v, k_cache, v_cache, block_table, cache_seqlens, cu_seq_lens_q, max_length_q)
+            flash_kwargs = flash_kwargs_fn(max_seqlen_q=max_length_q, block_table=block_table, cache_seqlens=seqused)
+            out = flash_kvcache_fn(
+                q, k_cache, v_cache, cu_seqlens_q=cu_seq_lens_q, pack_gqa=True, num_splits=1,
+                return_softmax_lse=sinks is not None, **flash_kwargs,
+            )  # fmt: skip
+            if sinks is not None:  # lse is [heads, tokens]
+                out, lse = out[0], out[1]
+                out = out * torch.sigmoid(lse.transpose(0, 1) - sinks.float())[..., None].to(out.dtype)
+        else:
+            flash_kwargs = flash_kwargs_fn(
+                max_seqlen_q=max_length_q, block_table=block_table, cache_seqlens=cache_seqlens
+            )
+            out = flash_kvcache_fn(
+                q, k_cache, v_cache, k, v, cu_seqlens_q=cu_seq_lens_q, cu_seqlens_k_new=cu_seq_lens_q, pack_gqa=True,
+                num_splits=1, **flash_kwargs,
+            )  # fmt: skip
+        out = out[0] if isinstance(out, tuple) else out
+        return out.view(batch_size, -1, *out.shape[-2:])
+
     # There is a block table: we use the paged flash function to compute attention and update the cache
     if is_fa_with_paged_kwargs:
         # Flash paged happens in [seq_len, 1, num_heads, head_dim] format to match the cache
         q, k, v = (x.reshape(-1, 1, *x.shape[-2:]) for x in (query_states, key_states, value_states))
         # NOTE: here k.size(0) is the number of sequences because this is decode only (for now)
         cache_seqlens = cu_seq_lens_k[1 : k.size(0) + 1] - cu_seq_lens_k[: k.size(0)] - 1
+        # The keys span every page the block table addresses, so a sliding window layer gets its window
         flash_kwargs = flash_kwargs_fn(
-            max_seqlen_q=max_length_q, max_seqlen_k=max_length_k, block_table=block_table, cache_seqlens=cache_seqlens
-        )
+            key_length=block_table.size(1) * k_cache.size(1), max_seqlen_q=max_length_q, max_seqlen_k=max_length_k,
+            block_table=block_table, cache_seqlens=cache_seqlens,
+        )  # fmt: skip
         out = flash_kvcache_fn(q, k_cache, v_cache, k, v, **flash_kwargs)
         out = out[0] if isinstance(out, tuple) else out
         return out.view(batch_size, -1, *out.shape[-2:])
@@ -846,8 +1101,25 @@ def _flash_attention_forward(
     # Padding free (i.e. sequences flattened into one total sequence) and cu_seqlen and max_length are provided
     if is_fa_with_varlen_kwargs:
         q, k, v = (x.reshape(-1, *x.shape[-2:]) for x in (query_states, key_states, value_states))
+        # [scratch] FA3 takes attention sinks on Hopper only, elsewhere they join through the log-sum-exp (its varlen
+        # call returns it), as in the paged branch above
+        sinks = flash_kwargs_fn.keywords.get("s_aux")
+        fa2 = is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=2)
+        sinks_by_lse = sinks is not None and (
+            fa2
+            or (
+                is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=3)
+                and (_PROTO_SINKS_BY_LSE or torch.cuda.get_device_capability()[0] != 9)
+            )
+        )
+        if sinks_by_lse:
+            flash_kwargs_fn = partial(flash_kwargs_fn.func, **{**flash_kwargs_fn.keywords, "s_aux": None})
         flash_kwargs = flash_kwargs_fn(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
+        if sinks_by_lse and fa2:  # FA2's varlen call returns the log-sum-exp with its attention probabilities
+            flash_kwargs["return_attn_probs"] = True
         out = flash_varlen_fn(q, k, v, cu_seqlens_q=cu_seq_lens_q, cu_seqlens_k=cu_seq_lens_k, **flash_kwargs)
+        if sinks_by_lse:  # lse is [heads, tokens]
+            out = out[0] * torch.sigmoid(out[1].transpose(0, 1) - sinks.float())[..., None].to(out[0].dtype)
         out = out[0] if isinstance(out, tuple) else out
         return out.view(batch_size, -1, *out.shape[-2:])
 

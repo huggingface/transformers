@@ -29,13 +29,16 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...generation.continuous_batching.cache import PagedAttentionCache
 from ...integrations import (
+    lazy_load_kernel,
     use_experts_implementation,
     use_kernel_forward_from_hub,
     use_kernel_func_from_hub_with_fallback,
     use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
+from ...integrations.linear_attention_paged import causal_conv1d_varlen, compiled_gated_norm
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -756,6 +759,122 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         init.ones_(self.D)
         init.ones_(self.dt_bias)
 
+    def cache_states(self) -> list[tuple[tuple[int, ...], torch.dtype]]:
+        """[scratch] The shape and dtype of the states continuous batching keeps per request for this layer: the last
+        inputs of the causal convolution, then the SSM state, both in the model's dtype as vLLM keeps them (an fp32
+        SSM state is 4 MiB per layer and request on Granite-4.0-H-Small: about 50 requests fit next to the weights on
+        an H100)."""
+        return [
+            ((self.conv_dim, self.conv_kernel_size - 1), self.conv1d.weight.dtype),
+            ((self.num_heads, self.head_dim, self.ssm_state_size), self.conv1d.weight.dtype),
+        ]
+
+    def _paged_recurrent(self, states, x, dt, A, B, C, update_fn=None, state_indices=None):
+        """[scratch] One token per sequence: `states` [n, heads, head_dim, state] updated in place, outputs [n, heads,
+        head_dim]. With `state_indices` [n] (and the hub kernel as `update_fn`), `states` holds every slot and sequence
+        i updates `states[state_indices[i]]`."""
+        n = x.shape[0]
+        heads, head_dim, groups, state = self.num_heads, self.head_dim, self.n_groups, self.ssm_state_size
+        extra = {} if state_indices is None else {"state_batch_indices": state_indices}
+        return (update_fn or mamba2_selective_state_update)(
+            states, x.view(n, heads, head_dim), dt[:, :, None].expand(-1, -1, head_dim),
+            A[:, None, None].expand(-1, head_dim, state), B.view(n, groups, state), C.view(n, groups, state),
+            self.D[:, None].expand(-1, head_dim), z=None, dt_bias=self.dt_bias[:, None].expand(-1, head_dim),
+            dt_softplus=True, **extra,
+        ).view(n, heads, head_dim)  # fmt: skip
+
+    @torch.compiler.disable  # writes into views of the cache tensor, which inductor would functionalize (copy)
+    def _paged_decode_update(self, ssm_view, conv_view, rows, conv_state, x, dt, A, B, C):
+        """[scratch] Decode: the SSM states are updated in place at their cache rows (2 MiB a layer and request on
+        Granite-4.0-H-Small, the gather and scatter around the update took ~40% of the GPU time), the new conv states
+        written back. The hub kernel takes the rows itself (the kernel layer of `mamba2_selective_state_update` drops
+        that argument); without it, the states are gathered and scattered."""
+        n = x.shape[0]
+        kernel = lazy_load_kernel("mamba-ssm")
+        if kernel is not None:
+            out = self._paged_recurrent(
+                ssm_view, x, dt, A, B, C, update_fn=kernel.selective_state_update, state_indices=rows[:n]
+            )
+        else:
+            states = ssm_view[rows[:n]]
+            out = self._paged_recurrent(states, x, dt, A, B, C)
+            ssm_view.index_copy_(0, rows[:n], states)
+        conv_view.index_copy_(0, rows, conv_state.to(conv_view.dtype))
+        return out
+
+    @torch.compiler.disable  # reads the sequence lengths on the host: compiled, it recompiled for every new batch
+    def _paged_varlen_scan(self, x, dt, A, B, C, ssm_state, cu_seqlens, out, cache):
+        """[scratch] A step with prompt tokens: single-token sequences take the recurrent update together, longer ones
+        the chunked scan one at a time, from (and into) their states in `ssm_state`. Writes the outputs into `out`.
+        The step's lengths are read on the host once, by the group's first layer (a read per layer stalled the host
+        on the GPU 36 times a step)."""
+        heads, head_dim, groups, state = self.num_heads, self.head_dim, self.n_groups, self.ssm_state_size
+        allocator = cache.layer_to_allocator[self.layer_idx]
+        if self.layer_idx == allocator.layer_indices[0]:
+            bounds = cu_seqlens.tolist()
+            lengths = [end - start for start, end in zip(bounds[:-1], bounds[1:])]
+            singles = [i for i, length in enumerate(lengths) if length == 1]
+            seqs = torch.tensor(singles, device=x.device) if singles else None
+            tokens = torch.tensor([bounds[i] for i in singles], device=x.device) if singles else None
+            allocator._step_plan = (bounds, lengths, seqs, tokens)
+        bounds, lengths, seqs, tokens = allocator._step_plan
+        if seqs is not None:
+            states = ssm_state[seqs]
+            out[tokens] = self._paged_recurrent(states, x[tokens], dt[tokens], A, B[tokens], C[tokens])
+            ssm_state[seqs] = states
+        for i, length in enumerate(lengths):
+            if length < 2:
+                continue
+            start, end = bounds[i], bounds[i + 1]
+            scan, final = mamba2_chunk_scan(
+                x[start:end].view(1, length, heads, head_dim), dt[None, start:end], A,
+                B[start:end].view(1, length, groups, state), C[start:end].view(1, length, groups, state),
+                chunk_size=self.chunk_size, D=self.D, z=None, dt_bias=self.dt_bias, dt_softplus=True,
+                initial_states=ssm_state[i : i + 1], dt_limit=self.time_step_limit, return_final_states=True,
+            )  # fmt: skip
+            out[start:end] = scan.view(length, heads, head_dim)
+            ssm_state[i] = final[0].to(ssm_state.dtype)
+
+    def _paged_forward(self, hidden_states: torch.Tensor, cache: PagedAttentionCache, kwargs) -> torch.Tensor:
+        """[scratch] Continuous batching: the batch is one row of packed sequences, each continuing from the states its
+        request left in the paged cache. Single-token sequences take the recurrent update together, longer ones the
+        chunked scan one at a time."""
+        dtype = hidden_states.dtype
+        decode = kwargs["max_length_q"] == 1
+        if decode:  # the SSM states are updated in place in the cache (2 MiB a layer and request: no copies)
+            allocator = cache.layer_to_allocator[self.layer_idx]
+            conv_view, ssm_view = allocator.state_views(self.layer_idx)
+            rows = cache._linear_attention_state_index(allocator, kwargs, write=True)
+            conv_state = conv_view[rows]
+        else:
+            conv_state, ssm_state = cache.read_cache_states(self.layer_idx, kwargs)
+        cu_seqlens = kwargs["cu_seq_lens_q"]
+        gate, hidden_states_B_C, dt = self.in_proj(hidden_states).split(
+            [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
+        )
+        hidden_states_B_C, conv_state = causal_conv1d_varlen(
+            hidden_states_B_C.transpose(1, 2), conv_state, cu_seqlens, self.conv1d.weight.squeeze(1),
+            self.conv1d.bias, self.activation,
+        )  # fmt: skip
+        x, B, C = torch.split(
+            hidden_states_B_C.transpose(1, 2)[0],
+            [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size],
+            dim=-1,
+        )
+        dt = dt[0]
+        num_tokens = x.shape[0]
+        A = -torch.exp(self.A_log.float())
+        out = torch.zeros(num_tokens, self.num_heads, self.head_dim, dtype=x.dtype, device=x.device)
+
+        if decode:  # token i is the one token of sequence i
+            n = min(num_tokens, rows.shape[0])
+            out[:n] = self._paged_decode_update(ssm_view, conv_view, rows, conv_state, x[:n], dt[:n], A, B[:n], C[:n])
+        else:
+            self._paged_varlen_scan(x, dt, A, B, C, ssm_state, cu_seqlens, out, cache)
+            cache.write_cache_states(self.layer_idx, (conv_state, ssm_state), kwargs)
+        scan_output = compiled_gated_norm(self.norm, out.view(1, num_tokens, -1), gate)
+        return self.out_proj(scan_output.to(dtype))
+
     @force_accelerate_hooks("conv1d")
     @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
@@ -765,6 +884,8 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
+        if isinstance(cache, PagedAttentionCache):
+            return self._paged_forward(hidden_states, cache, kwargs)
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
         # 1. Gated MLP's linear projection

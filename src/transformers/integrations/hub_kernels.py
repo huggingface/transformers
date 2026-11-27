@@ -906,6 +906,9 @@ if is_kernels_available():
                 },
             },
         }
+        # [scratch] PROTO_NO_HUB=rotary_pos_emb,...: leave these to the eager/compiled code
+        for name in filter(None, os.environ.get("PROTO_NO_HUB", "").split(",")):
+            _KERNEL_MAPPING.pop(name, None)
 
         return _KERNEL_MAPPING
 
@@ -983,6 +986,7 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
     "nvfp4": {"repo_id": "kernels-community/nvfp4-gemm", "version": 1},
+    "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 5},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}

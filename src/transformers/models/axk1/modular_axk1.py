@@ -84,6 +84,21 @@ class AXK1Config(DeepseekV3Config):
     ```"""
 
     model_type = "axk1"
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
+        "layers.*.self_attn.kv_b_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }

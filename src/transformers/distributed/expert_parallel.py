@@ -130,6 +130,9 @@ class EPImplementation:
 
     # Set by implementations that only run when every rank of the EP group holds the same batch, e.g. `AllReduceEP`.
     needs_shared_batch = False
+    # [scratch, bench only] False under `ep_dispatch_experts_partial`: `AllReduceEP` returns this rank's partial sum, the
+    # MLP block reduces it once with the shared experts' (`HF_TP_SINGLE_MLP_ALL_REDUCE`)
+    reduce_output = True
 
     def __init__(self, experts: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh):
         self.experts_forward = experts.forward  # the experts' own forward, on local expert ids
@@ -290,6 +293,8 @@ class AllReduceEP(EPImplementation):
         off_rank = (top_k_index // self.num_local_experts) != self.ep_mesh.get_local_rank()
         local_index = torch.where(off_rank, self.num_local_experts, top_k_index % self.num_local_experts)
         expert_output = self.experts_forward(hidden_states, local_index, top_k_weights.masked_fill(off_rank, 0.0))
+        if not self.reduce_output:
+            return expert_output
         return _AllReduceForward.apply(expert_output, ep_group)
 
 
@@ -380,6 +385,9 @@ class EpDispatchExpertsParallel(ExpertParallelLayer):
     """Whole experts per rank (`Shard(0)` on the EP mesh), reached through the `EPImplementation` that
     `DistributedConfig.ep_implementation` names in `EPImplementationInterface`."""
 
+    def __init__(self, reduce_output: bool = True):
+        self.reduce_output = reduce_output
+
     def should_use_local_tensors(self, module):
         return True
 
@@ -397,7 +405,13 @@ class EpDispatchExpertsParallel(ExpertParallelLayer):
                 f"{', '.join(repr(name) for name in implementations)}, or register an `EPImplementation` "
                 "with `EPImplementationInterface.register`."
             )
+        if not self.reduce_output:
+            # [scratch, bench only] a partial sum per rank, reduced by the MLP block: only `AllReduceEP` makes one
+            if ep_implementation not in ("auto", "all_reduce"):
+                raise ValueError(f"`ep_dispatch_experts_partial` runs with `AllReduceEP`, got {ep_implementation!r}.")
+            ep_implementation = "all_reduce"
         implementation = implementations[ep_implementation](module, ep_mesh, tp_mesh)
+        implementation.reduce_output = self.reduce_output
 
         def ep_forward(hidden_states, top_k_index, top_k_weights):
             if isinstance(hidden_states, DTensor):
@@ -415,6 +429,7 @@ class EpDispatchExpertsParallel(ExpertParallelLayer):
 if is_torch_distributed_available():
     ALL_PARALLEL_STYLES.register("grouped_gemm", MoEParamShard(Shard(0), shards_expert_dim=True))
     ALL_PARALLEL_STYLES.register("ep_dispatch_experts", EpDispatchExpertsParallel())
+    ALL_PARALLEL_STYLES.register("ep_dispatch_experts_partial", EpDispatchExpertsParallel(reduce_output=False))
 
 
 def apply_expert_parallelism(
@@ -441,7 +456,7 @@ def apply_expert_parallelism(
         else:
             module = modules[name]
             # Dispatch hooks need both meshes to redistribute tokens between TP and EP ranks.
-            if style_name == "ep_dispatch_experts":
+            if isinstance(style, EpDispatchExpertsParallel):
                 style.install_forward(module, ep_mesh=ep_mesh, tp_mesh=tp_mesh, ep_implementation=ep_implementation)
             else:
                 style.install_forward(module, ep_mesh)
