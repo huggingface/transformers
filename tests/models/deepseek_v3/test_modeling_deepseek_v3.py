@@ -225,6 +225,17 @@ class DeepseekV3ModelTest(
         self.model_tester = DeepseekV3ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DeepseekV3Config, hidden_size=32)
 
+    def test_tp_plan_matches_params(self):
+        """Need to overwrite as the plan contains keys that are valid but depend on some configs flags and cannot
+        be valid all at the same time"""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        # The key is valid but not always used based on the flag
+        if config.q_lora_rank is not None:
+            config.base_model_tp_plan.pop("layers.*.self_attn.q_proj")
+        super().test_tp_plan_matches_params()
+        # Put them back in class attribute
+        config.base_model_tp_plan.update({"layers.*.self_attn.q_proj": "colwise"})
+
     @parameterized.expand([("random",), ("same",)])
     @unittest.skip("DeepseekV3 is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
