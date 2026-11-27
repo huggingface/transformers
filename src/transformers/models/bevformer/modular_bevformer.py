@@ -31,15 +31,17 @@ from ...image_transforms import normalize
 from ...image_utils import ImageInput, PILImageResampling
 from ...modeling_utils import PreTrainedModel
 from ...models.auto import AutoConfig
+from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
     TensorType,
+    TransformersKwargs,
     auto_docstring,
     is_torch_tensor,
-    is_torchvision_available,
     logging,
     torch_compilable_check,
 )
+from ...utils.generic import can_return_tuple
 from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrDecoderLayer,
     DeformableDetrMLP,
@@ -48,10 +50,6 @@ from ..deformable_detr.modeling_deformable_detr import (
     inverse_sigmoid,
     replace_batch_norm,
 )
-
-
-if is_torchvision_available():
-    from torchvision.transforms.functional import rotate
 
 
 logger = logging.get_logger(__name__)
@@ -1376,33 +1374,50 @@ class BevformerEncoder(nn.Module):
         return bev_queries.new_tensor(np.stack([shift_x, shift_y], axis=-1))
 
     def apply_prev_bev_rotation(self, prev_bev: torch.Tensor, can_bus: torch.Tensor) -> torch.Tensor:
-        """Apply yaw rotation to previous BEV embeddings using the torchvision rotate quirk.
+        """Apply yaw rotation to previous BEV embeddings in a single batched, on-device op.
+
+        Matches upstream `torchvision.transforms.functional.rotate(tmp_prev_bev, rotation_angle, center=self.rotate_center)`
+        bitwise via `F.affine_grid` + `F.grid_sample` (`mode="nearest"`, `padding_mode="zeros"`, `align_corners=False`):
+        - `can_bus[:, -1]` holds the ego yaw (or frame-to-frame delta yaw) in degrees
+          (see https://github.com/fundamentalvision/BEVFormer/blob/master/projects/mmdet3d_plugin/datasets/nuscenes_dataset.py#L161-L165
+          and https://github.com/fundamentalvision/BEVFormer/blob/master/projects/mmdet3d_plugin/bevformer/modules/transformer.py#L146-L156).
+        - Upstream quirk: `PerceptionTransformer` defaults `rotate_center=[100, 100]`
+          (https://github.com/fundamentalvision/BEVFormer/blob/master/projects/mmdet3d_plugin/bevformer/modules/transformer.py#L50),
+          which `bevformer_tiny.py` does not override despite using a `50x50` BEV grid.
 
         Args:
             prev_bev (`torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`):
                 Previous BEV embeddings.
             can_bus (`torch.Tensor` of shape `(batch_size, 18)`):
-                CAN bus status.
+                CAN bus status, with yaw / delta-yaw angle in degrees at index `-1`.
 
         Returns:
             `torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`:
                 Rotated BEV embeddings.
         """
-        if not is_torchvision_available():
-            return prev_bev
-
         batch_size = prev_bev.shape[0]
-        rotated_prev_bev = prev_bev.clone()
+        rad = can_bus[:, -1].to(torch.float32) * (math.pi / 180.0)
+        cos_a = torch.cos(rad)
+        sin_a = torch.sin(rad)
 
-        for b in range(batch_size):
-            # Upstream quirk: can_bus[-1] (yaw in radians) is passed directly as degrees
-            rotation_angle = can_bus[b, -1].item()
-            tmp = prev_bev[b].view(self.bev_h, self.bev_w, self.embed_dims).permute(2, 0, 1)
-            # Upstream quirk: pivot center is at [100.0, 100.0] on a 50x50 grid
-            tmp = rotate(tmp, rotation_angle, center=self.rotate_center)
-            rotated_prev_bev[b] = tmp.permute(1, 2, 0).reshape(self.bev_h * self.bev_w, self.embed_dims)
+        # Upstream quirk: rotate_center defaults to [100.0, 100.0] even on a 50x50 grid
+        cx = self.rotate_center[0] - 0.5 * self.bev_w
+        cy = self.rotate_center[1] - 0.5 * self.bev_h
+        tx = (cx * (1.0 - cos_a) + cy * sin_a) / (0.5 * self.bev_w)
+        ty = (-cx * sin_a + cy * (1.0 - cos_a)) / (0.5 * self.bev_h)
 
-        return rotated_prev_bev
+        theta = torch.stack(
+            [
+                torch.stack([cos_a, -sin_a * (self.bev_h / self.bev_w), tx], dim=-1),
+                torch.stack([sin_a * (self.bev_w / self.bev_h), cos_a, ty], dim=-1),
+            ],
+            dim=1,
+        ).to(prev_bev.dtype)
+
+        grid = F.affine_grid(theta, size=(batch_size, self.embed_dims, self.bev_h, self.bev_w), align_corners=False)
+        bev_map = prev_bev.view(batch_size, self.bev_h, self.bev_w, self.embed_dims).permute(0, 3, 1, 2)
+        rotated = F.grid_sample(bev_map, grid, mode="nearest", padding_mode="zeros", align_corners=False)
+        return rotated.permute(0, 2, 3, 1).reshape(batch_size, self.bev_h * self.bev_w, self.embed_dims)
 
     def forward(
         self,
@@ -1682,9 +1697,8 @@ class BevformerPreTrainedModel(PreTrainedModel):
                 init.constant_(module.output_proj.bias, 0.0)
 
 
+@auto_docstring
 class BevformerModel(BevformerPreTrainedModel):
-    """Base BEVFormer model generating BEV embeddings from multi-camera image streams."""
-
     def __init__(self, config: BevformerConfig):
         super().__init__(config)
         self.config = config
@@ -1698,16 +1712,24 @@ class BevformerModel(BevformerPreTrainedModel):
     def get_input_embeddings(self):
         return self.conv_encoder
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
         lidar2img: torch.Tensor,
         can_bus: torch.Tensor | None = None,
         prev_bev: torch.Tensor | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, ...] | BevformerModelOutput:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BevformerModelOutput:
+        r"""
+        lidar2img (`torch.Tensor` of shape `(batch_size, num_cameras, 4, 4)`):
+            Projection matrices from LiDAR coordinates to each camera's image plane.
+        can_bus (`torch.Tensor` of shape `(batch_size, 18)`, *optional*):
+            CAN bus ego-motion signals (translation, rotation, velocity, acceleration). Defaults to zeros if omitted.
+        prev_bev (`torch.Tensor` of shape `(batch_size, bev_height * bev_width, d_model)`, *optional*):
+            Bird's-eye-view embedding from the previous frame for temporal fusion.
+        """
         batch_size = pixel_values.shape[0]
 
         # 1. Multi-camera feature extraction (backbone + FPN)
@@ -1715,8 +1737,8 @@ class BevformerModel(BevformerPreTrainedModel):
         fpn_features = self.fpn(features)
 
         # 2. Positional encoding & initial BEV queries
-        bev_pos = self.positional_encoding(batch_size=batch_size).to(pixel_values.device)
-        bev_queries = self.query_embedding.get_bev_queries(batch_size=batch_size).to(pixel_values.device)
+        bev_pos = self.positional_encoding(batch_size=batch_size)
+        bev_queries = self.query_embedding.get_bev_queries(batch_size=batch_size)
 
         # 3. BEV Encoder
         bev_embed = self.encoder(
@@ -1728,15 +1750,15 @@ class BevformerModel(BevformerPreTrainedModel):
             prev_bev=prev_bev,
         )
 
-        if not return_dict:
-            return (bev_embed,)
-
         return BevformerModelOutput(last_hidden_state=bev_embed)
 
 
+@auto_docstring(
+    custom_intro="""
+    BEVFormer model with a 3D object detection head on top.
+    """
+)
 class BevformerFor3DObjectDetection(BevformerPreTrainedModel):
-    """BEVFormer Model for 3D object detection from multi-camera images."""
-
     def __init__(self, config: BevformerConfig):
         super().__init__(config)
         self.config = config
@@ -1749,16 +1771,24 @@ class BevformerFor3DObjectDetection(BevformerPreTrainedModel):
         )
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
         lidar2img: torch.Tensor,
         can_bus: torch.Tensor | None = None,
         prev_bev: torch.Tensor | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, ...] | BevformerObjectDetectionOutput:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BevformerObjectDetectionOutput:
+        r"""
+        lidar2img (`torch.Tensor` of shape `(batch_size, num_cameras, 4, 4)`):
+            Projection matrices from LiDAR coordinates to each camera's image plane.
+        can_bus (`torch.Tensor` of shape `(batch_size, 18)`, *optional*):
+            CAN bus ego-motion signals (translation, rotation, velocity, acceleration). Defaults to zeros if omitted.
+        prev_bev (`torch.Tensor` of shape `(batch_size, bev_height * bev_width, d_model)`, *optional*):
+            Bird's-eye-view embedding from the previous frame for temporal fusion.
+        """
         batch_size = pixel_values.shape[0]
 
         # 1. Base BEVFormer forward to extract BEV feature embedding
@@ -1773,9 +1803,6 @@ class BevformerFor3DObjectDetection(BevformerPreTrainedModel):
 
         # 2. Object queries and initial reference points
         query, query_pos, reference_points = self.bevformer.query_embedding.get_object_queries(batch_size=batch_size)
-        query = query.to(pixel_values.device)
-        query_pos = query_pos.to(pixel_values.device)
-        reference_points = reference_points.to(pixel_values.device)
 
         # 3. Detection transformer decoder
         inter_states, inter_references = self.decoder(
@@ -1819,9 +1846,6 @@ class BevformerFor3DObjectDetection(BevformerPreTrainedModel):
 
         all_cls_scores = torch.stack(all_cls_scores, dim=1)
         all_bbox_preds = torch.stack(all_bbox_preds, dim=1)
-
-        if not return_dict:
-            return (all_cls_scores, all_bbox_preds, bev_embed)
 
         return BevformerObjectDetectionOutput(
             logits=all_cls_scores,
