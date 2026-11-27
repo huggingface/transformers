@@ -45,18 +45,18 @@ If `fusion_config` is stored in the model config, `from_pretrained()` will reuse
 
 ## How it works
 
-Fusion registration happens before the model is instantiated:
+Fusion is set up separately for each `from_pretrained()` call that requests it:
 
 1. [`~PreTrainedModel.from_pretrained`] uses the explicit `fusion_config` argument or falls back to `config.fusion_config`.
 2. The fusion registry validates the requested fusion names.
 3. Each enabled fusion meta-initializes the target model class, optionally filters candidate modules by name, and uses `is_fusable(...)` to discover compatible module classes.
-4. Fused replacement classes are registered through [`~transformers.monkey_patching.register_patch_mapping`].
-5. Matching [`~WeightTransform`] rules are generated from the config so checkpoint loading can map weights into the fused runtime layout.
+4. The model is initialized inside [`~transformers.monkey_patching.apply_patches`] with the fused replacement classes. Only this model gets fused modules: other models created in the same process keep the original classes.
+5. Each fused module provides the [`~WeightTransform`] rules that map its weights from the original checkpoint layout, built from its own shapes, so checkpoint loading can fill the fused runtime layout.
 6. By default, [`~PreTrainedModel.save_pretrained`] uses the reverse conversion path to restore the original checkpoint layout. Pass `save_original_format=False` to keep the converted runtime layout instead.
 
 This lets a fusion use a different runtime module structure while still loading from the original checkpoint format, and by default saving back to it as well.
 
-Note: With the current monkey-patching mechanism, fusion registration is class-level: one compatible module class maps to one fused replacement class.
+Note: fusion is class-level: one compatible module class maps to one fused replacement class.
 
 ## Current fusion families
 
@@ -82,8 +82,8 @@ To add a new fusion family:
    This makes the discovery step more explicit by pre-filtering candidate module names before `is_fusable(...)`.
 3. Add a `make_fused_class` factory.
    This returns the runtime replacement class for a compatible module class.
-4. Add a `make_transforms` factory if the fused layout needs checkpoint conversion.
-   This returns the [`~WeightTransform`] rules that map weights between the original and fused layouts for a given config.
+4. Add an `is_fused` predicate and a `make_transforms` factory if the fused layout needs checkpoint conversion.
+   `is_fused` recognizes the modules built by `make_fused_class`, and `make_transforms` returns the [`~WeightTransform`] rules that map the weights of one fused module between the original and fused layouts.
 5. Register the new `ModuleFusionSpec` in [`fusion_mapping.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/fusion_mapping.py).
 
 Once registered, the new fusion becomes available through `fusion_config`.
@@ -94,6 +94,6 @@ Once registered, the new fusion becomes available through `fusion_config`.
 
 [[autodoc]] fusion_mapping.PatchEmbeddingsFusionSpec
 
-[[autodoc]] fusion_mapping._register_module_fusion
+[[autodoc]] fusion_mapping.get_fusion_patch_mapping
 
-[[autodoc]] fusion_mapping.register_fusion_patches
+[[autodoc]] fusion_mapping.get_fusion_weight_transforms

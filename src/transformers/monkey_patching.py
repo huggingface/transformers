@@ -231,11 +231,15 @@ def clear_patch_mapping() -> None:
 
 
 @contextmanager
-def apply_patches():
+def apply_patches(mapping: dict[str, type[nn.Module]] | None = None):
     """
     Context manager to apply registered monkey patches within a block of code.
 
     This temporarily replaces original classes with their registered replacements during the execution of the block, and restores the original classes afterward.
+
+    Args:
+        mapping (`dict[str, type[nn.Module]]`, *optional*):
+            Patches to apply instead of the registered ones, in the format of [`register_patch_mapping`].
 
     Example:
         ```python
@@ -257,7 +261,7 @@ def apply_patches():
         model = Qwen2MoeModel(Qwen2MoeConfig())
         ```
     """
-    mapping = get_patch_mapping()
+    mapping = get_patch_mapping() if mapping is None else mapping
     if not mapping:
         yield
         return
@@ -290,11 +294,12 @@ def apply_patches():
                 # Skip attributes that can't be accessed or modules that can't be imported
                 continue
 
-    yield
-
-    for (module_name, class_name), original_class in original_classes.items():
-        module = sys.modules[module_name]
-        setattr(module, class_name, original_class)
+    try:
+        yield
+    finally:
+        for (module_name, class_name), original_class in original_classes.items():
+            module = sys.modules[module_name]
+            setattr(module, class_name, original_class)
 
 
 # _can_record_outputs is a class attribute so patching and unpatching it in the class won't work

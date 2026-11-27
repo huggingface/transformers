@@ -19,15 +19,16 @@ import unittest
 from copy import deepcopy
 from unittest.mock import patch
 
+import torch
 import torch.nn as nn
 
 import transformers.conversion_mapping as conversion_mapping
 import transformers.fusion_mapping as fusion_mapping
 import transformers.monkey_patching as monkey_patching
 from transformers import PretrainedConfig
-from transformers.conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
+from transformers.conversion_mapping import get_model_conversion_mapping, register_checkpoint_conversion_mapping
 from transformers.core_model_loading import Conv3dToLinear, WeightConverter
-from transformers.fusion_mapping import register_fusion_patches
+from transformers.fusion_mapping import get_fusion_patch_mapping, get_fusion_weight_transforms
 from transformers.modeling_utils import PreTrainedModel
 from transformers.monkey_patching import apply_patches, get_patch_mapping
 
@@ -100,7 +101,7 @@ class DummyFusionModel(PreTrainedModel):
 
 
 class FusionMappingTest(unittest.TestCase):
-    """Covers registration, no-match, and conflict handling for fusion mapping."""
+    """Covers discovery, no-match, conflict handling and per-load scoping for fusion mapping."""
 
     fusion_config = {"patch_embeddings": True}
 
@@ -109,57 +110,39 @@ class FusionMappingTest(unittest.TestCase):
         self.patch_mapping_patcher.start()
         self.discovery_cache_patcher = patch.object(fusion_mapping, "_FUSION_DISCOVERY_CACHE", {})
         self.discovery_cache_patcher.start()
-        self.registered_sources_patcher = patch.object(fusion_mapping, "_REGISTERED_FUSION_SOURCE_PATTERNS", {})
-        self.registered_sources_patcher.start()
         self.checkpoint_conversion_mapping_cache = deepcopy(conversion_mapping._checkpoint_conversion_mapping_cache)
 
     def tearDown(self):
         self.patch_mapping_patcher.stop()
         self.discovery_cache_patcher.stop()
-        self.registered_sources_patcher.stop()
         conversion_mapping._checkpoint_conversion_mapping_cache = deepcopy(self.checkpoint_conversion_mapping_cache)
 
-    def test_register_fusion_patches_is_effective_on_dummy_model(self):
-        # Registers and applies a fusion on a dummy model.
-        DummyFusionConfig.model_type = f"dummy_fusion_{self._testMethodName}"
+    def test_fusion_patch_mapping_fuses_dummy_model(self):
         config = DummyFusionConfig()
 
-        self.assertEqual(get_patch_mapping(), {})
-        self.assertIsNone(get_checkpoint_conversion_mapping(config.model_type))
-        self.assertIsInstance(DummyFusionModel(config).patch_embed.proj, nn.Conv3d)
-
-        register_fusion_patches(DummyFusionModel, config, fusion_config=self.fusion_config)
-
-        self.assertEqual(len(get_patch_mapping()), 1)
-        self.assertEqual(len(get_checkpoint_conversion_mapping(config.model_type)), 2)
-
-        with apply_patches():
+        patch_mapping = get_fusion_patch_mapping(DummyFusionModel, config, self.fusion_config)
+        with apply_patches(patch_mapping):
             fused_model = DummyFusionModel(config)
 
-        fused_projection = getattr(
-            fused_model.patch_embed, "linear_proj", getattr(fused_model.patch_embed, "proj", None)
+        self.assertEqual(list(patch_mapping), ["DummyPatchEmbedding"])
+        self.assertIsInstance(fused_model.patch_embed.linear_proj, nn.Linear)
+        self.assertEqual(
+            [transform.source_patterns for transform in get_fusion_weight_transforms(fused_model)],
+            [[r"patch_embed\.proj\.weight"], [r"patch_embed\.proj\.bias"]],
         )
-        self.assertIsInstance(fused_projection, nn.Linear)
+        self.assertEqual(get_patch_mapping(), {})
+        self.assertIsInstance(DummyFusionModel(config).patch_embed.proj, nn.Conv3d)
 
-    def test_register_fusion_patches_skips_when_no_modules_match(self):
-        # Leaves registries untouched when nothing is fusable.
-        DummyFusionConfig.model_type = f"dummy_fusion_{self._testMethodName}"
+    def test_fusion_patch_mapping_is_empty_when_no_modules_match(self):
         config = DummyFusionConfig(vision_config={"patch_embed_stride": (1, 1, 1)})
 
-        register_fusion_patches(DummyFusionModel, config, fusion_config=self.fusion_config)
+        self.assertEqual(get_fusion_patch_mapping(DummyFusionModel, config, self.fusion_config), {})
 
-        self.assertEqual(get_patch_mapping(), {})
-        self.assertIsNone(get_checkpoint_conversion_mapping(config.model_type))
-
-    def test_register_fusion_patches_raises_on_transform_conflicts(self):
-        # Rejects transforms that would shadow an existing source pattern.
+    def test_fusion_transforms_raise_on_conversion_mapping_conflicts(self):
         DummyFusionConfig.model_type = f"dummy_fusion_{self._testMethodName}"
         config = DummyFusionConfig()
-        model_type = config.model_type
-
-        # build a conflicting conversion mapping with the same source pattern but different target pattern
         register_checkpoint_conversion_mapping(
-            model_type,
+            config.model_type,
             [
                 WeightConverter(
                     source_patterns=r"patch_embed\.proj\.weight",
@@ -169,46 +152,55 @@ class FusionMappingTest(unittest.TestCase):
             ],
             overwrite=True,
         )
+        with apply_patches(get_fusion_patch_mapping(DummyFusionModel, config, self.fusion_config)):
+            fused_model = DummyFusionModel(config)
 
-        with self.assertRaisesRegex(ValueError, "conflicts with an existing conversion mapping"):
-            register_fusion_patches(DummyFusionModel, config, fusion_config=self.fusion_config)
+        with self.assertRaisesRegex(ValueError, "conflict with its conversion mapping"):
+            get_model_conversion_mapping(fused_model)
 
-    def test_register_fusion_patches_is_idempotent(self):
-        # Registering the same fusion again (e.g. loading the same checkpoint twice in one process)
-        # used to collide with the converters the first registration had added.
-        DummyFusionConfig.model_type = f"dummy_fusion_{self._testMethodName}"
-        config = DummyFusionConfig()
+    def test_fusion_only_applies_to_the_load_that_requests_it(self):
+        model = DummyFusionModel(DummyFusionConfig())
 
-        register_fusion_patches(DummyFusionModel, config, fusion_config=self.fusion_config)
-        converters = get_checkpoint_conversion_mapping(config.model_type)
+        with tempfile.TemporaryDirectory() as source_dir:
+            model.save_pretrained(source_dir)
+            DummyFusionModel.from_pretrained(source_dir, fusion_config=self.fusion_config)
+            plain_model, plain_loading_info = DummyFusionModel.from_pretrained(source_dir, output_loading_info=True)
+            fused_model, fused_loading_info = DummyFusionModel.from_pretrained(
+                source_dir, fusion_config=self.fusion_config, output_loading_info=True
+            )
 
-        register_fusion_patches(DummyFusionModel, config, fusion_config=self.fusion_config)
-
-        self.assertEqual(
-            [converter.source_patterns for converter in get_checkpoint_conversion_mapping(config.model_type)],
-            [converter.source_patterns for converter in converters],
+        self.assertIsInstance(plain_model.patch_embed.proj, nn.Conv3d)
+        self.assertFalse(plain_loading_info["missing_keys"] or plain_loading_info["unexpected_keys"])
+        self.assertFalse(fused_loading_info["missing_keys"] or fused_loading_info["unexpected_keys"])
+        torch.testing.assert_close(
+            fused_model.patch_embed.linear_proj.weight, model.patch_embed.proj.weight.flatten(1)
         )
 
     def test_from_pretrained_uses_serialized_fusion_config(self):
         # A serialized `fusion_config` is reused on a later load.
-        DummyFusionConfig.model_type = f"dummy_fusion_{self._testMethodName}"
-
         with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as fused_dir:
             DummyFusionModel(DummyFusionConfig()).save_pretrained(source_dir)
 
             fused_model = DummyFusionModel.from_pretrained(source_dir, fusion_config=self.fusion_config)
             fused_model.save_pretrained(fused_dir)
 
-            # Simulate a fresh process so the second load comes only from the serialized config.
-            monkey_patching._monkey_patch_mapping_cache.clear()
-            fusion_mapping._FUSION_DISCOVERY_CACHE.clear()
-            conversion_mapping._checkpoint_conversion_mapping_cache = deepcopy(
-                self.checkpoint_conversion_mapping_cache
-            )
-
             reloaded_model = DummyFusionModel.from_pretrained(fused_dir)
 
-        fused_projection = getattr(
-            reloaded_model.patch_embed, "linear_proj", getattr(reloaded_model.patch_embed, "proj", None)
+        self.assertIsInstance(reloaded_model.patch_embed.linear_proj, nn.Linear)
+
+    def test_from_pretrained_fuses_model_with_class_name_mapping(self):
+        DummyFusionConfig.model_type = f"dummy_fusion_{self._testMethodName}"
+        register_checkpoint_conversion_mapping(DummyFusionModel.__name__, [], overwrite=True)
+        model = DummyFusionModel(DummyFusionConfig())
+
+        with tempfile.TemporaryDirectory() as source_dir:
+            model.save_pretrained(source_dir)
+            fused_model, loading_info = DummyFusionModel.from_pretrained(
+                source_dir, fusion_config=self.fusion_config, output_loading_info=True
+            )
+
+        self.assertFalse(loading_info["missing_keys"])
+        self.assertFalse(loading_info["unexpected_keys"])
+        torch.testing.assert_close(
+            fused_model.patch_embed.linear_proj.weight, model.patch_embed.proj.weight.flatten(1)
         )
-        self.assertIsInstance(fused_projection, nn.Linear)

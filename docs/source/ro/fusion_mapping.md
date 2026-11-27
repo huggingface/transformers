@@ -94,6 +94,6 @@ Odată înregistrat, noul fusion devine disponibil prin `fusion_config`.
 
 [[autodoc]] fusion_mapping.PatchEmbeddingsFusionSpec
 
-[[autodoc]] fusion_mapping._register_module_fusion
+[[autodoc]] fusion_mapping.get_fusion_patch_mapping
 
-[[autodoc]] fusion_mapping.register_fusion_patches
+[[autodoc]] fusion_mapping.get_fusion_weight_transforms
