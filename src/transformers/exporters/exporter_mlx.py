@@ -82,7 +82,13 @@ class MLXExporter(DynamoExporter):
         with apply_patches("mlx"):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
         exported_program = exported_program.run_decompositions(_mlx_decompositions())
-        fuse_for_mlx(exported_program.graph)
+        state = {**exported_program.state_dict, **exported_program.constants}
+        buffers = {
+            spec.arg.name: state[spec.target]
+            for spec in exported_program.graph_signature.input_specs
+            if spec.target in state and isinstance(state[spec.target], torch.Tensor)
+        }
+        fuse_for_mlx(exported_program.graph, buffers)
         program, metadata.out_constants = _to_mlx_program(exported_program, self._mlx_arrays)
         return program, metadata
 

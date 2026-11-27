@@ -30,8 +30,9 @@ if TYPE_CHECKING:
     from torch.fx import Graph, Node
 
 
-def fuse_for_mlx(graph: Graph) -> None:
-    """Rewrite `graph` in place to use MLX's fused kernels, then drop what no longer feeds an output."""
+def fuse_for_mlx(graph: Graph, buffers: dict[str, torch.Tensor]) -> None:
+    """Rewrite `graph` in place to use MLX's fused kernels, then drop what no longer feeds an output. `buffers` are
+    the values of the graph's buffer inputs, by node name (a rotary embedding's `inv_freq`)."""
     aten = torch.ops.aten
     # Checks the runner ignores, which would keep the nodes a fusion replaces alive
     for node in [node for node in graph.nodes if node.target == aten._assert_tensor_metadata.default]:
@@ -40,7 +41,7 @@ def fuse_for_mlx(graph: Graph) -> None:
     _fuse_cache_writes(graph)
     _fuse_rms_norm(graph)
     _fuse_swiglu(graph)
-    _fuse_rope(graph)
+    _fuse_rope(graph, buffers)
     _drop_repeat_kv(graph)
     graph.eliminate_dead_code()
 
@@ -184,7 +185,17 @@ def _rotary_angle(table: Node, function) -> tuple | None:
     return table.args[0], scaling
 
 
-def _fuse_rope(graph: Graph) -> None:
+def _rope_base(inv_freq: torch.Tensor | None) -> float | None:
+    """The `base` of a standard rotary embedding's `inv_freq = base ** (-2i / d)`, else `None` (scaled, learned)."""
+    if inv_freq is None or inv_freq.numel() < 2:
+        return None
+    inv_freq = inv_freq.detach().cpu()
+    exponents = torch.arange(0, 2 * inv_freq.numel(), 2, dtype=torch.float64) / (2 * inv_freq.numel())
+    base = float(inv_freq[1].double() ** (-1 / exponents[1]))
+    return base if torch.allclose(inv_freq.double(), base**-exponents, rtol=1e-6) else None
+
+
+def _fuse_rope(graph: Graph, buffers: dict[str, torch.Tensor]) -> None:
     """`x * cos + rotate_half(x) * sin`, with `cos` and `sin` of `positions * inv_freq` (a rotary embedding over the
     whole head), as one `mx.fast.rope`."""
     aten = torch.ops.aten
@@ -236,6 +247,8 @@ def _fuse_rope(graph: Graph) -> None:
         if positions.meta["val"].dim() != 2 or 2 * inv_freq.meta["val"].shape[0] != x.meta["val"].shape[-1]:
             continue
         with graph.inserting_before(add):
-            fused = graph.call_function(rope, (x, positions, inv_freq, scaling))
+            fused = graph.call_function(
+                rope, (x, positions, inv_freq, scaling, _rope_base(buffers.get(inv_freq.name)))
+            )
         fused.meta = dict(add.meta)
         add.replace_all_uses_with(fused)

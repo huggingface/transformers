@@ -236,20 +236,28 @@ def _rms_norm(x, normalized_shape, weight=None, eps=None):
 
 def slice_write(x, values, start, axis):
     """`x` with `values` written from `start` on `axis`: `mx.slice_update`, which `mlx_fusions` writes in place of an
-    `index_put` at consecutive positions (a static cache write)."""
-    return mx.slice_update(x, values, start.reshape(1).astype(mx.int32), (axis,))
+    `index_put` at consecutive positions (a static cache write). One position (a decode step) is one scatter, where a
+    `slice_update` at a position read from an array takes two kernels."""
+    if values.shape[axis] == 1:
+        index = mx.broadcast_to(start.reshape([1] * x.ndim), values.shape)
+        return mx.put_along_axis(x, index, values, axis=axis)
+    return mx.slice_update(x, values, start.reshape(1), (axis,))
 
 
-def rope(x, positions, inv_freq, scaling):
-    """`mx.fast.rope`, which `mlx_fusions` writes in place of a rotary embedding's ops. Each token is its own row,
-    rotated at its own position (an offset per row): exact for any positions, padded or packed ones included."""
+def rope(x, positions, inv_freq, scaling, base=None):
+    """`mx.fast.rope`, which `mlx_fusions` writes in place of a rotary embedding's ops: on MLX's own frequencies when
+    the embedding's are the standard `base ** (-2i / d)` (`base`), on its `inv_freq` otherwise. Each token is rotated
+    at its own position: exact for any positions, padded or packed ones included."""
     batch, heads, length, head_dim = x.shape
+    frequencies = {"base": base, "freqs": None if base is not None else 1 / inv_freq.astype(mx.float32)}
     offsets = mx.broadcast_to(positions, (batch, length)).reshape(-1).astype(mx.int32)
-    rows = x.transpose(0, 2, 1, 3).reshape(batch * length, heads, 1, head_dim)
-    rows = mx.fast.rope(
-        rows, head_dim, traditional=False, base=None, scale=1.0, offset=offsets, freqs=1 / inv_freq.astype(mx.float32)
-    )
-    out = rows.reshape(batch, length, heads, head_dim).transpose(0, 2, 1, 3)
+    if length == 1:
+        # One token per row, at the row's offset
+        out = mx.fast.rope(x, head_dim, traditional=False, scale=1.0, offset=offsets, **frequencies)
+    else:
+        rows = x.transpose(0, 2, 1, 3).reshape(batch * length, heads, 1, head_dim)
+        rows = mx.fast.rope(rows, head_dim, traditional=False, scale=1.0, offset=offsets, **frequencies)
+        out = rows.reshape(batch, length, heads, head_dim).transpose(0, 2, 1, 3)
     return out if scaling == 1.0 else out * scaling
 
 
@@ -475,7 +483,7 @@ if is_mlx_available():
         "aten.split.Tensor": _split,
         "aten.split_with_sizes.default": _split_with_sizes,
         "aten.constant_pad_nd.default": _constant_pad_nd,
-        "aten.embedding.default": lambda weight, indices, *_: weight[indices],
+        "aten.embedding.default": lambda weight, indices, *_: mx.take(weight, indices, axis=0),
         "aten.index.Tensor": _index,
         "aten.index_put.default": _index_put,
         "aten.index_select.default": lambda x, dim, index: mx.take(x, index, axis=dim),
