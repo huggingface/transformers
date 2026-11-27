@@ -3994,8 +3994,9 @@ class GenerationMixin(ContinuousMixin):
             model_kwargs=model_kwargs,
         )
 
-        # Make sure we can record past on the cache
-        cache.activate_past_recording(recurrent_states_to_keep=candidate_generator.num_drafting_tokens)
+        # Make sure we can record past on the cache. Rejecting all the drafted tokens rolls the recurrent states back to
+        # the state before the first of them, so we need one more state than the number of drafted tokens
+        cache.activate_past_recording(recurrent_states_to_keep=candidate_generator.num_drafting_tokens + 1)
 
         # init values
         do_sample = generation_config.do_sample
