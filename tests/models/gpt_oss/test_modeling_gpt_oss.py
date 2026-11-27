@@ -88,16 +88,8 @@ class GptOssModelTester(CausalLMModelTester):
 
 @require_torch
 class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
-    _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = GptOssModelTester
-
-    @unittest.skip(
-        reason="The experts are stored transposed with biases: an intra-expert TP plan would add the down "
-        "projection's bias once per rank. It comes with the untransposed expert layout."
-    )
-    def test_moe_parallel_plans_shard_experts(self):
-        pass
 
     @require_kernels
     @require_torch_accelerator
@@ -126,21 +118,14 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         Tests that setting attn_implementation="flash_attention_2" during model initialization
         automatically corrects to the model's `_compatible_flash_implementations`.
         """
-        from kernels import get_kernel
+        from kernels import has_kernel
 
         from transformers.integrations.hub_kernels import get_attn_kernel_version
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         expected_kernel = _FA3_KERNEL
 
-        try:
-            flash = get_kernel(expected_kernel, version=get_attn_kernel_version(expected_kernel))
-        except RuntimeError as e:
-            if "does not support the current device" in str(e):
-                self.skipTest("FA3 kernel is not supported on this device")
-            raise
-
-        if flash is None:
+        if not has_kernel(expected_kernel, version=get_attn_kernel_version(expected_kernel)):
             self.skipTest(f"{expected_kernel} is not available, skipping auto-correction test.")
 
         # Option 1: Auto correction on setting config on init
@@ -164,7 +149,12 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
 
         # Verify model still works
         with torch.no_grad():
-            output = model(**inputs_dict)
+            try:
+                output = model(**inputs_dict)
+            except RuntimeError:
+                # This can only be verified at runtime sadly
+                self.skipTest("FA3 kernel is not supported on this device")
+
         self.assertIsNotNone(output)
 
     @unittest.skip("GptOss's forcefully disables sdpa due to Sink")

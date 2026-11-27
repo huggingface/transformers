@@ -303,7 +303,9 @@ and the processor pads on the left so that `generate` keeps producing from the e
 
 [[autodoc]] MiniCPMOcrModel
     - forward
+    - get_image_embeddings
     - get_image_features
+    - get_video_embeddings
     - get_video_features
 
 ## MiniCPMOcrForConditionalGeneration

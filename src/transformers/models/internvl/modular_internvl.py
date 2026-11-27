@@ -24,8 +24,8 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import flatten_items, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_int
@@ -465,21 +465,19 @@ class InternVLModel(LlavaModel):
                 Downsampled tensor of shape (batch_size, height*scale_factor, width*scale_factor, channels/(scale_factor^2)).
         """
         batch_size, width, height, channels = vision_features.size()
+        # Each axis shrinks by a whole number of patches: integer sizes, which trace with dynamic image sizes
+        stride = round(1 / scale_factor)
 
-        if height % scale_factor != 0 or width % scale_factor != 0:
-            raise ValueError("Height and width must be divisible by scale_factor for proper downsampling.")
+        if height % stride != 0 or width % stride != 0:
+            raise ValueError("Height and width must be divisible by 1 / scale_factor for proper downsampling.")
 
         # Reshape to allow downsampling
-        vision_features = vision_features.view(
-            batch_size, width, int(height * scale_factor), int(channels / scale_factor)
-        )
+        vision_features = vision_features.view(batch_size, width, height // stride, channels * stride)
         # Permute dimensions to align downsampled axis correctly
         vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
 
         # Reshape to achieve final downsampled dimensions
-        vision_features = vision_features.view(
-            batch_size, int(height * scale_factor), int(width * scale_factor), int(channels / (scale_factor**2))
-        )
+        vision_features = vision_features.view(batch_size, height // stride, width // stride, channels * stride**2)
 
         # Swap height and width back for proper orientation
         vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
@@ -498,7 +496,7 @@ class InternVLModel(LlavaModel):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`)
             The tensors corresponding to the input images.
@@ -516,13 +514,11 @@ class InternVLModel(LlavaModel):
         if vision_feature_select_strategy == "default":
             vision_features = vision_features[:, 1:, :]
 
-        # Calculate dimensions based on vision features
-        channels = vision_features.shape[1]
-        feature_size = int(channels**0.5)
+        # The patch grid, from the images' height and width: any resolution, as the position embeddings interpolate
         batch_size = vision_features.shape[0]
-
-        # Reshape tensor to spatial dimensions
-        vision_features = vision_features.reshape(batch_size, feature_size, feature_size, -1)
+        patch_height, patch_width = self.vision_tower.embeddings.patch_embeddings.patch_size
+        grid_height, grid_width = pixel_values.shape[-2] // patch_height, pixel_values.shape[-1] // patch_width
+        vision_features = vision_features.reshape(batch_size, grid_height, grid_width, -1)
 
         # Apply downsampling using pixel shuffle
         vision_features = self.pixel_shuffle(vision_features, scale_factor=downsample_ratio)
@@ -532,10 +528,9 @@ class InternVLModel(LlavaModel):
 
         # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
-        vision_outputs.pooler_output = vision_features
-
-        vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
-        return vision_outputs
+        split_sizes = torch.full(vision_features.shape[:1], vision_features.shape[1], device=vision_features.device)
+        vision_outputs.pooler_output = vision_features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring
@@ -543,7 +538,7 @@ class InternVLModel(LlavaModel):
         self,
         pixel_values_videos: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(num_frames, channels, height, width)`):
             The frames of the input videos, encoded like images.

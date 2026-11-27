@@ -78,9 +78,6 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
 
     model_type = "qwen4_exp_text"
     base_model_tp_plan = {
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_expert.gate_proj": "colwise",
         "layers.*.mlp.shared_expert.up_proj": "colwise",
         "layers.*.mlp.shared_expert.down_proj": "rowwise",

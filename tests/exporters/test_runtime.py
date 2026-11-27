@@ -342,7 +342,9 @@ class ExportedModelTest(unittest.TestCase):
                         self.assertEqual(sorted(os.listdir(resaved)), sorted(os.listdir(directory)))
             # A subclass loads only its own kind.
             with self.assertRaisesRegex(TypeError, "runs as a ExportedModel"):
-                ExportedMultimodalModel.from_pretrained(directory, device=device)
+                ExportedMultimodalModel.from_pretrained(
+                    directory, device=device, trust_remote_code=exporter.requires_trust_remote_code
+                )
 
     @pytest.mark.torch_export_test
     def test_dynamo(self):
@@ -584,7 +586,9 @@ class ExportedModelTest(unittest.TestCase):
             exported.save_pretrained(directory)
             for outputs in (
                 exported.to("cpu")(**inputs),
-                ExportedModel.from_pretrained(directory, device="cpu")(**inputs),
+                ExportedModel.from_pretrained(
+                    directory, device="cpu", trust_remote_code=exporter.requires_trust_remote_code
+                )(**inputs),
             ):
                 self.assertEqual(outputs.hidden_states[:2], (None, (4, 5)))
                 torch.testing.assert_close(outputs.hidden_states[2], expected.hidden_states[2])
@@ -677,8 +681,18 @@ class ExportedMultimodalModelTest(unittest.TestCase):
             exported.save_pretrained(directory)
             for name, runtime in (
                 ("export", exported.to(device)),
-                ("from_pretrained", ExportedMultimodalModel.from_pretrained(directory, device=device)),
-                ("any kind", ExportedModel.from_pretrained(directory, device=device)),
+                (
+                    "from_pretrained",
+                    ExportedMultimodalModel.from_pretrained(
+                        directory, device=device, trust_remote_code=exporter.requires_trust_remote_code
+                    ),
+                ),
+                (
+                    "any kind",
+                    ExportedModel.from_pretrained(
+                        directory, device=device, trust_remote_code=exporter.requires_trust_remote_code
+                    ),
+                ),
             ):
                 with self.subTest(name):
                     self.assertIsInstance(runtime, ExportedMultimodalModel)

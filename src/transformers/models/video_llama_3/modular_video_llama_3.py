@@ -31,7 +31,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring, can_return_tuple, logging
@@ -93,7 +93,6 @@ class VideoLlama3VisionConfig(SiglipVisionConfig):
     ```"""
 
     model_type = "video_llama_3_vision"
-    base_config_key = "vision_config"
     default_rope_type = "axial"
 
     image_size = AttributeError()
@@ -507,7 +506,7 @@ class VideoLlama3Model(Qwen2VLModel):
         video_grid_thw: torch.LongTensor,
         video_merge_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
             The spatial downsampling ratio of each video feature.
@@ -526,7 +525,7 @@ class VideoLlama3Model(Qwen2VLModel):
         image_grid_thw: torch.LongTensor,
         image_merge_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
@@ -541,8 +540,8 @@ class VideoLlama3Model(Qwen2VLModel):
         last_hidden_state = vision_outputs.last_hidden_state
         image_embeds = self.projector(last_hidden_state)
         vision_outputs.pooler_output = image_embeds
-        vision_outputs.split_sizes = image_grid_thw.prod(-1) // image_merge_sizes**2
-        return vision_outputs
+        split_sizes = image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -591,16 +590,14 @@ class VideoLlama3Model(Qwen2VLModel):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = mm_encoder_outputs["image"].pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = mm_encoder_outputs["video"].pooler_output
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             if video_compression_mask is not None:
                 video_embeds = video_embeds[video_compression_mask.to(video_embeds.device)]
             _, video_mask = self.get_placeholder_mask(
@@ -752,6 +749,9 @@ class VideoLlama3Processor(Qwen3VLProcessor):
     def _calculate_timestamps(self):
         raise AttributeError("VideoLlama doesn't need this method")
 
+    def get_text_with_replacements(self):
+        raise AttributeError("VideoLlama has no per-frame vision wrappers, so it uses the default replacement")
+
 
 class VideoLlama3ImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
     r"""
@@ -773,7 +773,6 @@ class VideoLlama3ImageProcessorPil(Qwen2VLImageProcessorPil):
     image_std = IMAGENET_STANDARD_STD
     temporal_patch_size = 1
     merge_size = 1
-    valid_kwargs = VideoLlama3ImageProcessorKwargs
     model_input_names = [
         "pixel_values",
         "image_grid_thw",
@@ -843,7 +842,6 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
     image_std = IMAGENET_STANDARD_STD
     temporal_patch_size = 1
     merge_size = 1
-    valid_kwargs = VideoLlama3ImageProcessorKwargs
     model_input_names = [
         "pixel_values",
         "image_grid_thw",
@@ -1116,7 +1114,8 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         )
 
     def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
-        size = videos_kwargs.get("size", None) or self.size
+        videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
+        size = videos_kwargs["size"]
         size = {
             "shortest_edge": size["shortest_edge"],
             "longest_edge": size["longest_edge"] // num_frames,

@@ -242,10 +242,10 @@ class Cosmos3EdgeImageProcessorPil(PilBackend):
         Returns:
             `int`: Number of image patches per image.
         """
-        images_kwargs = images_kwargs or {}
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        merge_size = images_kwargs.get("merge_size", self.merge_size)
-        size = images_kwargs.get("size", self.size)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        patch_size = images_kwargs["patch_size"]
+        merge_size = images_kwargs["merge_size"]
+        size = images_kwargs["size"]
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
@@ -253,8 +253,8 @@ class Cosmos3EdgeImageProcessorPil(PilBackend):
             height=height,
             width=width,
             factor=factor,
-            min_pixels=size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge,
-            max_pixels=size["longest_edge"] if isinstance(size, dict) else size.longest_edge,
+            min_pixels=size.shortest_edge,
+            max_pixels=size.longest_edge,
             temporal_factor=self.temporal_patch_size,
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size

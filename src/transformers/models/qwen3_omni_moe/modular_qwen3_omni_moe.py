@@ -37,6 +37,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     CausalLMOutputWithPast,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
@@ -57,6 +58,7 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoInput
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..mimi.modeling_mimi import MimiLayerScale
 from ..qwen2_5_omni.configuration_qwen2_5_omni import (
     Qwen2_5OmniAudioEncoderConfig,
@@ -87,7 +89,6 @@ from ..qwen3.modeling_qwen3 import (
     Qwen3ForCausalLM,
     Qwen3MLP,
     Qwen3Model,
-    Qwen3RMSNorm,
     Qwen3RotaryEmbedding,
 )
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
@@ -223,7 +224,7 @@ def get_audio_cu_seqlens(
 
 @auto_docstring
 @dataclass
-class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
+class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     deepstack_features (`List[torch.Tensor]`, *optional*):
         List of hidden-states (feature maps) from deepstack layers.
@@ -295,9 +296,6 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -1192,7 +1190,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
-        vision_outputs.split_sizes = video_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        vision_outputs.split_sizes = video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
         return vision_outputs
 
     def get_image_embeddings(
@@ -1203,19 +1201,19 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="audio")
     @can_return_tuple
     @auto_docstring
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         feature_attention_mask: torch.LongTensor | None = None,
         audio_feature_lengths: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_features (`torch.Tensor`):
             The tensors corresponding to the input audios.
@@ -1233,8 +1231,8 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
 
         feature_lens = audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
         audio_outputs = self.audio_tower(input_features, feature_lens=feature_lens, return_dict=True, **kwargs)
-
-        return audio_outputs
+        split_sizes = _get_feat_extract_output_lengths(feature_lens, self.audio_tower.n_window)
+        return BaseModelOutputWithPoolingAndSplitSizes(**audio_outputs, split_sizes=split_sizes)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -1276,9 +1274,9 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
         image_mask, video_mask = None, None
         # 2. Merge text , audios , image and video
         if input_features is not None:
-            audio_features = self.get_audio_features(
+            audio_features = self.get_audio_embeddings(
                 input_features, feature_attention_mask, audio_feature_lengths, return_dict=True, **kwargs
-            ).last_hidden_state
+            ).pooler_output
             audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
@@ -2144,7 +2142,7 @@ class Qwen3OmniMoeCode2WavMlp(Qwen3MLP):
     pass
 
 
-class Qwen3OmniMoeCode2WavRMSNorm(Qwen3RMSNorm):
+class Qwen3OmniMoeCode2WavRMSNorm(LlamaRMSNorm):
     pass
 
 

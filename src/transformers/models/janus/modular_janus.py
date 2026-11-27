@@ -26,8 +26,13 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode, LogitsProcessorList
 from ...generation.utils import GenerateDecoderOnlyOutput
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    ModelOutput,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
@@ -733,12 +738,12 @@ class JanusModel(JanusPreTrainedModel, MultimodalMixin):
     @auto_docstring
     def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         vision_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
-        vision_outputs.pooler_output = self.aligner(vision_outputs.last_hidden_state)
-
-        vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
-        return vision_outputs
+        features = self.aligner(vision_outputs.last_hidden_state)
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        vision_outputs.pooler_output = features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor

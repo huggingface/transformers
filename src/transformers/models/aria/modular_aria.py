@@ -34,9 +34,9 @@ from ...image_utils import (
 )
 from ...integrations import use_experts_implementation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_multimodal_utils import flatten_items
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
 )
@@ -90,9 +90,6 @@ class AriaTextConfig(LlamaConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_rowwise",
-        "layers.*.mlp.experts.down_proj": "colwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -488,10 +485,10 @@ class AriaImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of patches per image.
         """
-        images_kwargs = images_kwargs or {}
-        split_image = images_kwargs.get("split_image", self.split_image)
-        max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
-        split_resolutions = images_kwargs.get("split_resolutions", self.split_resolutions)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        split_image = images_kwargs["split_image"]
+        max_image_size = images_kwargs["max_image_size"]
+        split_resolutions = images_kwargs["split_resolutions"]
 
         resized_height, resized_width = select_best_resolution((height, width), split_resolutions)
         num_patches = (
@@ -574,9 +571,11 @@ class AriaProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
 
-            max_size = images_kwargs.get("max_image_size", None) or self.image_processor.max_image_size
+            max_size = images_kwargs["max_image_size"]
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
                 for image_size in image_sizes
@@ -692,7 +691,7 @@ class AriaTextMoELayer(nn.Module):
 
 
 class AriaTextAttention(LlamaAttention):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    pass
 
 
 class AriaTextDecoderLayer(LlamaDecoderLayer):
@@ -740,10 +739,8 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 
 class AriaPreTrainedModel(LlamaPreTrainedModel):
     config: AriaConfig
-    base_model_prefix = "model"
     _no_split_modules = ["AriaTextDecoderLayer"]
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (dynamic slicing)
-    _supports_attention_backend = True
     input_modalities = ("image", "text")
 
     def _init_weights(self, module):
@@ -826,7 +823,7 @@ class AriaModel(LlavaModel):
         pixel_mask: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] = -1,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
         image_outputs = self.vision_tower(
             pixel_values,
@@ -840,10 +837,10 @@ class AriaModel(LlavaModel):
             image_attn_mask = torch.logical_not(flattened_mask)
 
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-        image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
-
-        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
-        return image_outputs
+        features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs.pooler_output = features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -905,8 +902,6 @@ class AriaModel(LlavaModel):
     """
 )
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

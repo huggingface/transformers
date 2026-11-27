@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -34,6 +33,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
 )
@@ -628,12 +628,13 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         vision_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = self.mm_projector(vision_outputs.pooler_output).squeeze(1)
         vision_outputs.pooler_output = image_embeds
-        vision_outputs.split_sizes = image_grid_thw[:, 1:].prod(-1) // math.prod(self.vision_tower.merge_kernel_size)
-        return vision_outputs
+        merge_kernel_size = self.vision_tower.merge_kernel_size[0] * self.vision_tower.merge_kernel_size[1]
+        split_sizes = image_grid_thw[:, 1:].prod(-1) // merge_kernel_size
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -643,7 +644,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
@@ -733,16 +734,14 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = mm_encoder_outputs["image"].pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = mm_encoder_outputs["video"].pooler_output
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )

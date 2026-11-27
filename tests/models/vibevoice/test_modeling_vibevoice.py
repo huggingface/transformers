@@ -305,7 +305,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         repeat = model.model.get_audio_features(input_values, padding_mask, sample=False).pooler_output
         torch.testing.assert_close(repeat, mean)
         sampled = model.model.get_audio_features(input_values, padding_mask).pooler_output
-        self.assertFalse(torch.allclose(sampled, mean))
+        self.assertFalse(torch.allclose(torch.cat(sampled), torch.cat(mean)))
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         """

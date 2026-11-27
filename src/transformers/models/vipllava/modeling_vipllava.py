@@ -26,10 +26,11 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -135,7 +136,7 @@ class VipLlavaModel(VipLlavaPreTrainedModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
@@ -157,10 +158,9 @@ class VipLlavaModel(VipLlavaPreTrainedModel, MultimodalMixin):
             image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layer]
             image_features = torch.cat(image_features, dim=-1)
         image_features = self.multi_modal_projector(image_features)
-        image_outputs.pooler_output = image_features
-
-        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
-        return image_outputs
+        split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
+        image_outputs.pooler_output = image_features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -229,8 +229,7 @@ class VipLlavaModel(VipLlavaPreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )

@@ -180,7 +180,9 @@ print(processor.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] Gemma3nModel
     - forward
+    - get_image_embeddings
     - get_image_features
+    - get_audio_embeddings
     - get_audio_features
 
 ## Gemma3nForCausalLM

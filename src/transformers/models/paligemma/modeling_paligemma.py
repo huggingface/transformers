@@ -24,9 +24,10 @@ from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -123,14 +124,13 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel, MultimodalMixin):
     )
     def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_tower(pixel_values, **kwargs)
         selected_image_feature = image_outputs.last_hidden_state
         image_features = self.multi_modal_projector(selected_image_feature)
-        image_outputs.pooler_output = image_features
-
-        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
-        return image_outputs
+        split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
+        image_outputs.pooler_output = image_features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -226,8 +226,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel, MultimodalMixin):
             mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -242,8 +241,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel, MultimodalMixin):
             "position_ids": position_ids,
         }
         if token_type_ids is not None:
-            # Can attend bidirectionally in prefix and only causally in suffix. A step after the prompt has no prefix:
-            # its query positions fall past the given ids, padded with -1.
+            # Can attend bidirectionally in prefix and only causally in suffix (decode steps fall past the prefix)
             mask_kwargs["block_sequence_ids"] = torch.where(token_type_ids == 0, 0, -1)
 
         # PG has no sliding window, only full attn. But PG2 needs sliding mask and full mask

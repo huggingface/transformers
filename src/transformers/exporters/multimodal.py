@@ -24,13 +24,13 @@ from .decompose import (
     _MODALITY_SPECS,
     DEEPSTACK_INPUTS,
     ModalitySpec,
+    _find_config_attr,
     dense_deepstack,
     flatten_anyres_patches,
     pack_anyres_features,
 )
-from .precompute import _find_config_attr, get_rope_index_from_config, precompute_export_inputs
 from .runners.base import ModelRunner
-from .utils import cast_leaf_tensors
+from .utils import cast_leaf_tensors, with_data_dependent_inputs
 
 
 if is_torch_available():
@@ -51,6 +51,8 @@ class ExportedMultimodalModel(ExportedModel):
     def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         """Run the components on a processor's whole output, returning what the source model returns.
         `share_inputs` and `share_outputs` go to the `language_model` runner, as for [`ExportedModel.__call__`]."""
+        # What the model computes with data-dependent ops (M-RoPE positions, encoder inputs), from its code alone
+        kwargs = with_data_dependent_inputs(self.weightless_model, kwargs)
         input_ids = kwargs["input_ids"]
         # The embedder's and modality graphs' outputs are read within this call (what the model returns is copied
         # out), so a backend may hand out its own buffers.
@@ -61,6 +63,12 @@ class ExportedMultimodalModel(ExportedModel):
             given = [key for key in spec.feature_keys if kwargs.get(key) is not None]
             if not given:
                 continue
+            # GLM-Image, Chameleon, ...: their image features become token ids, scattered before the embedding
+            if spec.modality == "image" and getattr(self.config, "vq_config", None) is not None:
+                raise NotImplementedError(
+                    f"{self.config.model_type} fills its image placeholders with VQ token ids, not features, which "
+                    "this runtime doesn't assemble yet: run the export's components yourself."
+                )
             runner = self.runners.get(spec.component)
             if runner is None:
                 raise ValueError(
@@ -80,12 +88,6 @@ class ExportedMultimodalModel(ExportedModel):
             if layers is not None:
                 deepstack.append((mask[..., 0], layers))
         inputs = dict(kwargs)
-        # M-RoPE positions come from the token ids and grids, which the language model no longer takes.
-        if (
-            inputs.get("position_ids") is None
-            and (rope_index := get_rope_index_from_config(self.config, kwargs)) is not None
-        ):
-            inputs["position_ids"] = rope_index[0]
         inputs["inputs_embeds"] = inputs_embeds
         inputs.update(self._deepstack_inputs(deepstack, inputs_embeds))
         language_model = self.runners["language_model"]
@@ -97,13 +99,16 @@ class ExportedMultimodalModel(ExportedModel):
         )
         fields = getattr(outputs, "__dataclass_fields__", {})
         # The model returns each modality's features too, which the language model never sees: as its encoder's
-        # `pooler_output` (`image_outputs`, ...), or as `image_hidden_states` where a model still returns those.
+        # `pooler_output` (`image_outputs`, ...), or as `image_hidden_states` (`audio_hidden_states`, ...) where a
+        # model still returns those.
         for spec in _MODALITY_SPECS:
-            modality_outputs = f"{spec.modality}_outputs"
-            if features.get(spec.component) is not None and modality_outputs in fields:
-                outputs[modality_outputs] = BaseModelOutputWithPooling(pooler_output=features[spec.component].clone())
-        if features.get("vision_embeddings_model") is not None and "image_hidden_states" in fields:
-            outputs["image_hidden_states"] = features["vision_embeddings_model"].clone()
+            if features.get(spec.component) is None:
+                continue
+            if f"{spec.modality}_outputs" in fields:
+                pooled = BaseModelOutputWithPooling(pooler_output=features[spec.component].clone())
+                outputs[f"{spec.modality}_outputs"] = pooled
+            if f"{spec.modality}_hidden_states" in fields:
+                outputs[f"{spec.modality}_hidden_states"] = features[spec.component].clone()
         # And Granite4-Vision its per-layer ones.
         if "deepstack_features" in features and "deepstack_features" in fields:
             outputs["deepstack_features"] = [
@@ -136,7 +141,11 @@ class ExportedMultimodalModel(ExportedModel):
         image_sizes = kwargs.get("image_sizes")
         if image_sizes is not None and "image_sizes" not in traced and "pixel_values" in feed:
             feed["pixel_values"] = flatten_anyres_patches(self.config, feed["pixel_values"], image_sizes)
-        feed = precompute_export_inputs(self.config, feed)
+        # Its data-dependent inputs, under the names its graph was traced with (`image_cu_seqlens` -> `cu_seqlens`)
+        for key, value in kwargs.items():
+            name = key.removeprefix(f"{spec.modality}_")
+            if name != key and key != spec.grid_key and value is not None and name in traced:
+                feed[name] = value
         for name in traced.keys() - feed.keys():
             if (value := _find_config_attr(self.config, name)) is not None:
                 feed[name] = value

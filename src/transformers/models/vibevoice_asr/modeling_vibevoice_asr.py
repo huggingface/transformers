@@ -27,7 +27,8 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_multimodal_utils import MultimodalMixin
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPoolingAndSplitSizes, ModelOutput
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
@@ -301,7 +302,7 @@ class VibeVoiceAsrCausalLMOutputWithPast(ModelOutput):
     without a language modeling head.
     """
 )
-class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
+class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel, MultimodalMixin):
     def __init__(self, config: VibeVoiceAsrConfig):
         super().__init__(config)
         self.acoustic_tokenizer_encoder = AutoModel.from_config(config.acoustic_tokenizer_encoder_config)
@@ -318,7 +319,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Encode audio into embeddings that can be used by the language model.")
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_values: torch.Tensor,
         padding_mask: torch.BoolTensor | None = None,
@@ -372,9 +373,15 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
             positions = torch.arange(combined_features.shape[1], device=num_audio_tokens.device)
             # Keeps a mask already on the CPU from syncing with the accelerator
             padding_mask = (positions < num_audio_tokens[:, None]).cpu()
-            combined_features = combined_features[padding_mask]
-
-        return BaseModelOutputWithPooling(last_hidden_state=acoustic_latents, pooler_output=combined_features)
+            combined_features, split_sizes = combined_features[padding_mask], num_audio_tokens
+        else:
+            split_sizes = torch.full(
+                combined_features.shape[:1], combined_features.shape[1], device=combined_features.device
+            )
+            combined_features = combined_features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(
+            last_hidden_state=acoustic_latents, pooler_output=combined_features, split_sizes=split_sizes
+        )
 
     @can_return_tuple
     @auto_docstring
@@ -403,7 +410,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
 
         audio_embeds = None
         if input_values is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(
+            audio_embeds = self.get_audio_embeddings(
                 input_values=input_values, padding_mask=padding_mask, sample=sample
             ).pooler_output
 
@@ -433,15 +440,12 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
     The VibeVoice ASR model with pre-trained acoustic tokenizers and a language model.
     """
 )
-class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, GenerationMixin):
+class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, MultimodalMixin, GenerationMixin):
     def __init__(self, config: VibeVoiceAsrConfig):
         super().__init__(config)
         self.model = VibeVoiceAsrModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_audio_features(self, *args, **kwargs):
-        return self.model.get_audio_features(*args, **kwargs)
 
     @can_return_tuple
     @auto_docstring

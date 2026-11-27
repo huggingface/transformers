@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import functools
 import inspect
 import json
 import os
@@ -45,9 +46,8 @@ from .decompose import (
     decompose_multimodal,
 )
 from .metadata import ExportMetadata, register_treespec_types
-from .precompute import precompute_export_inputs
 from .quantizers.utils import capture_calibration_inputs
-from .utils import check_packages
+from .utils import check_packages, with_data_dependent_inputs
 
 
 if is_torch_available():
@@ -126,6 +126,18 @@ class ExportedModel(PushToHubMixin):
         """The backend's own program, for a single-graph export."""
         return self.components[self._single_component()].program
 
+    @functools.cached_property
+    def weightless_model(self) -> PreTrainedModel | None:
+        """The source model's base, built from `config` on the meta device (no weights): its code computes the inputs
+        the export takes precomputed (`get_data_dependent_inputs`)."""
+        from ..models.auto import AutoModel
+
+        try:
+            with torch.device("meta"):
+                return AutoModel.from_config(self.config)
+        except ValueError:
+            return None
+
     @property
     def runners(self) -> dict[str, ModelRunner]:
         """The runner of each component, on the backend's default device unless [`~ExportedModel.to`] picked one."""
@@ -171,7 +183,7 @@ class ExportedModel(PushToHubMixin):
         runner_options = {key: kwargs.pop(key) for key in ("share_inputs", "share_outputs") if key in kwargs}
         traced_kwargs = runner.metadata.kwargs
         if self.config is not None and any(key not in kwargs for key in traced_kwargs):
-            kwargs = precompute_export_inputs(self.config, kwargs)
+            kwargs = with_data_dependent_inputs(self.weightless_model, kwargs)
         unused = [key for key in kwargs if key not in traced_kwargs]
         if unused:
             logger.warning_once(f"Dropping inputs the export was not traced with: {unused}.")
@@ -569,12 +581,12 @@ class HfExporter(ABC):
         Returns:
             [`ExportedMultimodalModel`]: One [`ExportedComponent`] per component, called like the model.
         """
-        components = decompose_multimodal(model, sample_inputs)
+        components = decompose_multimodal(model, with_data_dependent_inputs(model, sample_inputs))
 
         def calibration(dataset):
             samples: dict[str, list] = {}
             for sample in dataset:
-                for name, component in decompose_multimodal(model, sample).items():
+                for name, component in decompose_multimodal(model, with_data_dependent_inputs(model, sample)).items():
                     samples.setdefault(name, []).append(component.inputs)
             return samples
 

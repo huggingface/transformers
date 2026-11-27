@@ -28,7 +28,7 @@ from ...audio_utils import (
 from ...cache_utils import Cache
 from ...configuration_utils import SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack, prepare_keyword_inputs, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
@@ -396,7 +396,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         audio_chunk_mapping = torch.repeat_interleave(torch.arange(len(audio), dtype=torch.long), per_sample_windows)
 
         # Based on `WhisperEncoder._get_feat_extract_output_lengths` (conv stride 2 only), so the placeholder
-        # token count matches `get_audio_features` from the same mask.
+        # token count matches `get_audio_embeddings` from the same mask.
         audio_lengths = audio_inputs["input_features_mask"].sum(-1)
         audio_inputs["num_audio_tokens"] = self._get_audio_token_length(audio_lengths, audio_chunk_mapping)
         audio_replacements = [self.replace_audio_token(audio_inputs, audio_idx=idx) for idx in range(len(audio))]
@@ -671,13 +671,13 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
     @auto_docstring(
         custom_intro="Extract MOSS audio embeddings from log-mel features, reassembling multi-chunk audio per sample."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         padding_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`):
             Mask marking valid (non-padded) feature indices, one row per chunked log-mel feature row in
@@ -706,7 +706,8 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
         hidden_size = valid_frames.shape[-1]
         merged_features = valid_frames.reshape(-1, merge_size * hidden_size)
         audio_outputs.pooler_output = self.multi_modal_projector(merged_features)
-        return audio_outputs
+        split_sizes = padded_lengths // merge_size
+        return BaseModelOutputWithPoolingAndSplitSizes(**audio_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring
@@ -739,7 +740,7 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
 
         audio_embeds = None
         if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(
+            audio_embeds = self.get_audio_embeddings(
                 input_features=input_features,
                 input_features_mask=input_features_mask,
                 padding_mask=padding_mask,
@@ -774,24 +775,6 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
 class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
-
-    @auto_docstring
-    def get_audio_features(
-        self,
-        input_features: torch.Tensor,
-        input_features_mask: torch.Tensor,
-        padding_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`):
-            Mask marking valid (non-padded) feature indices, one row per chunked log-mel feature row in
-            `input_features`. Used to compute each chunk's valid encoder-output length.
-        padding_mask (`torch.Tensor` of shape `(batch_size, max_audio_length)`):
-            Mask marking each audio sample's valid raw-audio length, one row per sample. Used with
-            `config.audio_chunk_size` to recover `audio_chunk_mapping`.
-        """
-        return self.model.get_audio_features(input_features, input_features_mask, padding_mask, **kwargs)
 
     @can_return_tuple
     @auto_docstring

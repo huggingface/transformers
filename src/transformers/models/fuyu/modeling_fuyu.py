@@ -19,7 +19,11 @@ from torch import nn
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    CausalLMOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.auto.modeling_auto import AutoModel
 from ...processing_utils import Unpack
@@ -111,18 +115,18 @@ class FuyuModel(FuyuPreTrainedModel, MultimodalMixin):
     @auto_docstring
     def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         """
         patch_embeddings = self.vision_embed_tokens(pixel_values)
-        return BaseModelOutputWithPooling(
-            last_hidden_state=patch_embeddings,
-            pooler_output=patch_embeddings.reshape(-1, patch_embeddings.shape[-1]),
-            split_sizes=patch_embeddings.new_full(
-                patch_embeddings.shape[:-2] or (1,), patch_embeddings.shape[-2], dtype=torch.long
-            ),
+        # A batch of images' patches, or a single image's
+        images_patches = patch_embeddings if patch_embeddings.ndim == 3 else patch_embeddings[None]
+        split_sizes = torch.full(images_patches.shape[:1], images_patches.shape[1], device=images_patches.device)
+        pooler_output = images_patches.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(
+            last_hidden_state=patch_embeddings, pooler_output=pooler_output, split_sizes=split_sizes
         )
 
     def get_placeholder_mask(
@@ -186,8 +190,7 @@ class FuyuModel(FuyuPreTrainedModel, MultimodalMixin):
             mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            patch_embeddings = mm_encoder_outputs["image"].pooler_output
-            patch_embeddings = patch_embeddings.to(inputs_embeds.device, inputs_embeds.dtype)
+            patch_embeddings = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=patch_embeddings
             )

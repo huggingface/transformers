@@ -187,6 +187,7 @@ print(generated_texts[0])
 
 [[autodoc]] SmolVLMModel
     - forward
+    - get_image_embeddings
     - get_image_features
 
 ## SmolVLMForConditionalGeneration

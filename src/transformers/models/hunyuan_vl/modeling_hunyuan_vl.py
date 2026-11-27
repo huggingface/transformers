@@ -38,6 +38,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -1007,20 +1008,6 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel, MultimodalMixin):
         rope_deltas = torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, rope_deltas
 
-    @accepts_precomputed_kwargs(modality="video")
-    @can_return_tuple
-    @auto_docstring
-    def get_video_embeddings(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        video_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
-        video_outputs.split_sizes = video_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
-        return video_outputs
-
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
@@ -1029,17 +1016,15 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         vision_dtype = next(self.vision_tower.parameters()).dtype
         pixel_values = pixel_values.to(vision_dtype)
         image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_outputs.pooler_output = image_outputs.pooler_output[0]
-        merged_height, merged_width = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(
-            -1
-        )
         # Include row separators and image boundary tokens in each split.
-        image_outputs.split_sizes = merged_height * (merged_width + 1) + 2
-        return image_outputs
+        merged_h, merged_w = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(-1)
+        split_sizes = merged_h * (merged_w + 1) + 2
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -1166,8 +1151,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = mm_encoder_outputs["image"].pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(
                 input_ids,
                 inputs_embeds=inputs_embeds,

@@ -481,10 +481,8 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Gemma4Vision2TextModelTester
     additional_model_inputs = ["mm_token_type_ids", "image_position_ids"]
     model_split_percents = [0.85, 0.9]
-
-    @unittest.skip(reason="The encoder's padding mask goes through flash attention's data-dependent unpadding")
-    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
-        pass
+    # The vision tower returns the frames' `last_hidden_state` flattened, without their padding patches
+    skip_test_video_features_output_shape = True
 
     def setUp(self):
         super().setUp()
@@ -553,8 +551,8 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(output.logits, expected.logits)
 
     def test_vision_pooler_compiles_with_dynamic_shapes(self):
-        """The pooler's kernel size, the square root of the patches per soft token, holds under dynamic shapes: there,
-        `int(x ** 0.5)` truncates a symbolic 2.999... to 2 (2520 patches pooled to 280)."""
+        """The pooler's kernel size, the square root of the patches per soft token, is exact under dynamic shapes (2520
+        patches pooled to 280: a kernel of 3)."""
         from transformers.models.gemma4.modeling_gemma4 import Gemma4VisionPooler
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -636,22 +634,16 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     def test_get_audio_features_output(self, return_dict: bool | None):
         pass
 
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_hidden_states(self):
-        pass
-
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_attentions(self):
-        pass
-
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_pooler_output(self):
-        pass
-
-    @parameterized.expand([True, False, None])
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_output(self, return_dict: bool | None):
-        pass
+    def _video_features_prepare_config_and_inputs(self):
+        # Videos are frames encoded like images, concatenated over all videos, with each video's frame count
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        num_videos, num_frames = self.model_tester.batch_size, 2
+        inputs_dict = {
+            "pixel_values_videos": self.model_tester.create_pixel_values(num_videos * num_frames).to(torch_device),
+            "video_position_ids": self.model_tester.create_image_position_ids(num_videos * num_frames),
+            "num_frames_per_video": torch.full((num_videos,), num_frames, device=torch_device),
+        }
+        return config, inputs_dict
 
     @unittest.skip("We need 4 layers to correctly test cache sharing.")
     def test_num_layers_is_small(self):

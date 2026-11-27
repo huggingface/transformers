@@ -47,7 +47,6 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_olmo2 import Olmo2Config
 
 
-@use_kernel_forward_from_hub("RMSNorm")
 class Olmo2RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
@@ -62,7 +61,7 @@ class Olmo2RMSNorm(nn.Module):
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (self.weight * hidden_states).to(input_dtype)
+        return (self.weight * hidden_states).to(input_dtype)  # main diff with Llama
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
