@@ -119,6 +119,12 @@ There are two callable functions available to you. To call them, use `{{- functi
 - `raise_exception(msg)` raises a `TemplateException`. This is useful for debugging or warning users about incorrect template usage.
 - `strftime_now(format_str)` retrieves the current date and time in a specific format, which is often required in system messages. It is equivalent to [datetime.now().strftime(format_str)](https://docs.python.org/3/library/datetime.html#datetime.datetime.now) in Python.
 
+When a template calls `strftime_now()`, the same messages can render to different model inputs at different times.
+For reproducible evaluations, replace the call in a copy of the model's template with a variable such as
+`benchmark_date`, then pass the modified template and a fixed value to `apply_chat_template()`.
+Format the value as the original template would, for example
+`tokenizer.apply_chat_template(messages, chat_template=template, benchmark_date="10 February 2025")`.
+
 ### Compatibility with non-Python Jinja
 
 Jinja is implemented in multiple languages and they generally have the same syntax. Writing a template in Python allows you to use Python methods such as [lower](https://docs.python.org/3/library/stdtypes.html#str.lower) on strings or [items](https://docs.python.org/3/library/stdtypes.html#dict.items) on dicts. But this won't work if the template is used in a non-Python implementation, for example, when deploying with Javascript or Rust.
