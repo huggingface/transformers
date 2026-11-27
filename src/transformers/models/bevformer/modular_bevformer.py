@@ -16,7 +16,6 @@
 import math
 from dataclasses import dataclass
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -26,19 +25,18 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import normalize
-from ...image_utils import ImageInput, PILImageResampling
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
+from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, SizeDict
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...models.auto import AutoConfig
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     ModelOutput,
     TensorType,
     TransformersKwargs,
     auto_docstring,
-    is_torch_tensor,
     logging,
     torch_compilable_check,
 )
@@ -75,6 +73,7 @@ NUSCENES_CLASS_NAMES = (
 # RGB convention and normalizes with *un-rescaled* mean/std, i.e. directly in the 0-255 pixel value space.
 DEFAULT_IMAGE_MEAN = [123.675, 116.28, 103.53]
 DEFAULT_IMAGE_STD = [58.395, 57.12, 57.375]
+DEFAULT_POINT_CLOUD_RANGE = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 
 
 @auto_docstring(checkpoint="hasanfaesal/bevformer-tiny")
@@ -191,315 +190,378 @@ class BevformerConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class BevformerImageProcessor(BaseImageProcessor):
+class BevformerImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
-    Constructs a BEVFormer image processor which rescales, normalizes and pads a stack of multi-view images, and
-    rescales the matching `lidar2img` calibration matrices. This mirrors the inference pipeline of BEVFormer: the
-    images are rescaled to `size` (by default `(450, 800)`, i.e. a 0.5 ratio of the original `(900, 1600)` inputs),
-    normalized in the 0-255 pixel value space and padded at the bottom/right so that the spatial dimensions are
-    multiples of `pad_size_divisor`. The same ratio is applied to the top two rows of the projection matrices so
-    that projected pixel coordinates stay aligned with the rescaled images.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image's (height, width) dimensions to the specified `size`. Can be overridden by
-            the `do_resize` parameter in the `preprocess` method.
-        size (`dict[str, int]`, *optional*, defaults to `{"height": 450, "width": 800}`):
-            Size of the output image after resizing. Can be overridden by `size` in the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-            Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
-            `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Note that, unlike most image processors, the rescale step is not applied
-            first and the statistics operate directly on the 0-255 pixel value space. Can be overridden by the
-            `do_normalize` parameter in the `preprocess` method.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `[123.675, 116.28, 103.53]`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `[58.395, 57.12, 57.375]`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess`
-            method.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image at the bottom and at the right so that both dimensions are divisible by
-            `pad_size_divisor`. Can be overridden by the `do_pad` parameter in the `preprocess` method.
-        pad_size_divisor (`int`, *optional*, defaults to 32):
-            Spatial dimensions of the padded images are set to multiples of this value.
+    pad_size_divisor (`int`, *optional*, defaults to `self.pad_size_divisor`):
+        Spatial dimensions of the padded images are set to multiples of this value.
+    point_cloud_range (`list[float]`, *optional*, defaults to `self.point_cloud_range`):
+        3D LiDAR point cloud bounds `[x_min, y_min, z_min, x_max, y_max, z_max]` used to build 3D pillar reference
+        points, ego-motion shifts, and metric box denormalization.
+    bev_height (`int`, *optional*, defaults to `self.bev_height`):
+        Height of the Bird's-Eye-View (BEV) query grid.
+    bev_width (`int`, *optional*, defaults to `self.bev_width`):
+        Width of the Bird's-Eye-View (BEV) query grid.
+    num_points_in_pillar (`int`, *optional*, defaults to `self.num_points_in_pillar`):
+        Number of sampled vertical anchor points along the z-axis for each BEV pillar.
     """
 
-    model_input_names = ["pixel_values"]
+    pad_size_divisor: int
+    point_cloud_range: list[float]
+    bev_height: int
+    bev_width: int
+    num_points_in_pillar: int
 
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling | int = PILImageResampling.BILINEAR,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        do_pad: bool = True,
-        pad_size_divisor: int = 32,
-        **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-        size = size if size is not None else {"height": 450, "width": 800}
-        size = get_size_dict(size, param_name="size")
 
-        self.do_resize = do_resize
-        self.size = size
-        self.resample = resample
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else DEFAULT_IMAGE_MEAN
-        self.image_std = image_std if image_std is not None else DEFAULT_IMAGE_STD
-        self.do_pad = do_pad
-        self.pad_size_divisor = pad_size_divisor
-
-    def _to_numpy(self, value) -> np.ndarray:
-        """Convert the supported input formats (nested lists, tensors or arrays) to a numpy array."""
-        if is_torch_tensor(value):
-            return value.cpu().numpy()
-        if isinstance(value, np.ndarray):
-            return value
-        if isinstance(value, (list, tuple)):
-            return np.array([self._to_numpy(element) for element in value])
-        return np.asarray(value)
-
-    def _prepare_sample_list(self, images: ImageInput) -> list[np.ndarray]:
-        """Normalize the supported multi-view stacking formats to a list of `(num_cameras, height, width, 3)` arrays."""
-        if isinstance(images, (list, tuple)):
-            elements = [self._to_numpy(element) for element in images]
-            if all(element.ndim == 3 for element in elements):
-                # A list of single images: it is the camera stack of one sample.
-                return [np.stack(elements)]
-            if all(element.ndim == 4 for element in elements):
-                # A batch of stacked samples.
-                return elements
-            raise ValueError(
-                "Multi-view images given as a list must contain either images of shape (height, width, 3) (the camera "
-                "stack of a single sample) or arrays of shape (num_cameras, height, width, 3) (a batch of samples)."
-            )
-
-        array = self._to_numpy(images)
-        if array.ndim == 5:
-            return [array[index] for index in range(array.shape[0])]
-        if array.ndim == 4:
-            return [array]
-        raise ValueError(
-            "Multi-view images must be a batched array or tensor of shape "
-            "(batch_size, num_cameras, height, width, 3), or an array of shape (num_cameras, height, width, 3)."
+def get_bev_reference_points(
+    height: int,
+    width: int,
+    z_height: float = 8.0,
+    num_points_in_pillar: int = 4,
+    dim: str = "3d",
+    batch_size: int = 1,
+    device: torch.device | None = None,
+    dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
+    """Generate normalized 2D or 3D reference points on the BEV grid."""
+    if dim == "3d":
+        zs = (
+            torch.linspace(0.5, z_height - 0.5, num_points_in_pillar, dtype=dtype, device=device)
+            .view(-1, 1, 1)
+            .expand(num_points_in_pillar, height, width)
+            / z_height
         )
+        xs = (
+            torch.linspace(0.5, width - 0.5, width, dtype=dtype, device=device)
+            .view(1, 1, width)
+            .expand(num_points_in_pillar, height, width)
+            / width
+        )
+        ys = (
+            torch.linspace(0.5, height - 0.5, height, dtype=dtype, device=device)
+            .view(1, height, 1)
+            .expand(num_points_in_pillar, height, width)
+            / height
+        )
+        ref_3d = torch.stack((xs, ys, zs), -1)
+        ref_3d = ref_3d.permute(0, 3, 1, 2).flatten(2).permute(0, 2, 1)
+        return ref_3d[None].repeat(batch_size, 1, 1, 1)
 
-    def resize(
+    if dim == "2d":
+        ref_y, ref_x = torch.meshgrid(
+            torch.linspace(0.5, height - 0.5, height, dtype=dtype, device=device),
+            torch.linspace(0.5, width - 0.5, width, dtype=dtype, device=device),
+            indexing="ij",
+        )
+        ref_y = ref_y.reshape(-1)[None] / height
+        ref_x = ref_x.reshape(-1)[None] / width
+        ref_2d = torch.stack((ref_x, ref_y), -1)
+        return ref_2d.repeat(batch_size, 1, 1).unsqueeze(2)
+
+    raise ValueError(f"dim must be '2d' or '3d', got {dim}")
+
+
+def point_sampling(
+    reference_points: torch.Tensor,
+    point_cloud_range: list[float] | tuple[float, ...],
+    lidar2img: torch.Tensor,
+    img_shape: tuple[int, int],
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Project 3D pillar reference points onto multi-camera 2D image coordinates.
+
+    Returns batch-first tensors:
+        - `reference_points_cam` of shape `(batch_size, num_cameras, num_queries, num_points_in_pillar, 2)`
+        - `bev_mask` of shape `(batch_size, num_cameras, num_queries, num_points_in_pillar)`
+    """
+    ref_pts = reference_points.clone()
+    ref_pts[..., 0:1] = ref_pts[..., 0:1] * (point_cloud_range[3] - point_cloud_range[0]) + point_cloud_range[0]
+    ref_pts[..., 1:2] = ref_pts[..., 1:2] * (point_cloud_range[4] - point_cloud_range[1]) + point_cloud_range[1]
+    ref_pts[..., 2:3] = ref_pts[..., 2:3] * (point_cloud_range[5] - point_cloud_range[2]) + point_cloud_range[2]
+
+    # Homogeneous coordinates: (B, D, num_queries, 4) -> (B, 1, num_queries, D, 4, 1)
+    ref_pts = torch.cat([ref_pts, torch.ones_like(ref_pts[..., :1])], dim=-1)
+    ref_pts = ref_pts.transpose(1, 2).unsqueeze(1).unsqueeze(-1)
+
+    reference_points_cam = torch.matmul(
+        lidar2img[:, :, None, None, :, :].to(torch.float32), ref_pts.to(torch.float32)
+    ).squeeze(-1)
+
+    eps = 1e-5
+    bev_mask = reference_points_cam[..., 2:3] > eps
+    depth_clamped = torch.maximum(reference_points_cam[..., 2:3], torch.full_like(reference_points_cam[..., 2:3], eps))
+    reference_points_cam = reference_points_cam[..., 0:2] / depth_clamped
+
+    height, width = img_shape
+    reference_points_cam[..., 0] /= width
+    reference_points_cam[..., 1] /= height
+
+    bev_mask = (
+        bev_mask
+        & (reference_points_cam[..., 1:2] > 0.0)
+        & (reference_points_cam[..., 1:2] < 1.0)
+        & (reference_points_cam[..., 0:1] > 0.0)
+        & (reference_points_cam[..., 0:1] < 1.0)
+    )
+    bev_mask = torch.nan_to_num(bev_mask).squeeze(-1)
+    return reference_points_cam, bev_mask
+
+
+def compute_ego_motion_shift(
+    can_bus: torch.Tensor,
+    point_cloud_range: list[float] | tuple[float, ...],
+    bev_height: int,
+    bev_width: int,
+) -> torch.Tensor:
+    """Compute normalized BEV translation shifts `(shift_x, shift_y)` from CAN bus ego-motion signals."""
+    delta_x, delta_y = can_bus[:, 0], can_bus[:, 1]
+    ego_angle = can_bus[:, -2] / math.pi * 180.0
+
+    grid_length_y = (point_cloud_range[4] - point_cloud_range[1]) / bev_height
+    grid_length_x = (point_cloud_range[3] - point_cloud_range[0]) / bev_width
+    translation_length = torch.sqrt(delta_x**2 + delta_y**2)
+    translation_angle = torch.atan2(delta_y, delta_x) / math.pi * 180.0
+    bev_angle = ego_angle - translation_angle
+
+    shift_y = translation_length * torch.cos(bev_angle / 180.0 * math.pi) / grid_length_y / bev_height
+    shift_x = translation_length * torch.sin(bev_angle / 180.0 * math.pi) / grid_length_x / bev_width
+    return torch.stack([shift_x, shift_y], dim=-1)
+
+
+@auto_docstring
+class BevformerImageProcessor(TorchvisionBackend):
+    valid_kwargs = BevformerImageProcessorKwargs
+    do_resize = True
+    size = {"height": 450, "width": 800}
+    resample = PILImageResampling.BILINEAR
+    do_rescale = False
+    do_normalize = True
+    image_mean = DEFAULT_IMAGE_MEAN
+    image_std = DEFAULT_IMAGE_STD
+    do_pad = True
+    pad_size_divisor = 32
+    point_cloud_range = DEFAULT_POINT_CLOUD_RANGE
+    bev_height = 50
+    bev_width = 50
+    num_points_in_pillar = 4
+    model_input_names = ["pixel_values", "reference_points_cam", "bev_mask", "reference_points_2d", "can_bus"]
+
+    def __init__(self, **kwargs: Unpack[BevformerImageProcessorKwargs]) -> None:
+        super().__init__(**kwargs)
+
+    def _prepare_multiview_samples(
         self,
-        image: np.ndarray,
-        size: tuple[int, int],
-        resample: PILImageResampling | int = PILImageResampling.BILINEAR,
-        input_data_format=None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Rescale an image to `(height, width)`. Supports rescaling by a fractional ratio, e.g. the 0.5 factor of the
-        BEVFormer pipeline, where `(1600, 900)` becomes `(800, 450)`.
+        images: ImageInput,
+        do_convert_rgb: bool | None,
+        input_data_format: str | ChannelDimension | None,
+        device: str | torch.device | None,
+    ) -> list[torch.Tensor]:
+        """Convert multi-view inputs into a list of `(num_cameras, 3, height, width)` float32 tensors."""
+        if isinstance(images, (list, tuple)):
+            if len(images) == 0:
+                raise ValueError("`images` cannot be empty.")
+            first = images[0]
+            if isinstance(first, (list, tuple)):
+                raw_samples = [list(sample) for sample in images]
+            elif hasattr(first, "ndim") and first.ndim == 4:
+                raw_samples = [[sample[c] for c in range(sample.shape[0])] for sample in images]
+            else:
+                raw_samples = [list(images)]
+        elif hasattr(images, "ndim"):
+            if images.ndim == 5:
+                raw_samples = [[images[b, c] for c in range(images.shape[1])] for b in range(images.shape[0])]
+            elif images.ndim == 4:
+                raw_samples = [[images[c] for c in range(images.shape[0])]]
+            else:
+                raise ValueError(
+                    "Multi-view images must be a 4D `(num_cameras, ...)` or 5D `(batch_size, num_cameras, ...)` "
+                    f"array/tensor, got {images.ndim}D."
+                )
+        else:
+            raise ValueError(f"Unsupported multi-view `images` type: {type(images)}")
 
-        The interpolation is performed by bilinear sampling with half-pixel centers on the full-precision pixel
-        values, replicating the `cv2.resize` call (`INTER_LINEAR`) used by the upstream pipeline.
+        samples = []
+        for sample_index, sample in enumerate(raw_samples):
+            cam_tensors = [
+                self.process_image(
+                    cam_image,
+                    do_convert_rgb=do_convert_rgb,
+                    input_data_format=input_data_format,
+                    device=device,
+                ).to(torch.float32)
+                for cam_image in sample
+            ]
+            if not all(cam.shape == cam_tensors[0].shape for cam in cam_tensors):
+                raise ValueError(f"All cameras of sample {sample_index} must share the same (height, width) size.")
+            samples.append(torch.stack(cam_tensors, dim=0))
+        return samples
 
-        Args:
-            image (`np.ndarray`):
-                The image to rescale, in `(height, width, num_channels)` format.
-            size (`tuple[int, int]`):
-                Target size `(height, width)` of the rescaled image.
-            resample (`PILImageResampling` or `int`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-                Resampling filter to use when resizing the image. Only bilinear sampling is supported.
-            input_data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
-
-        Returns:
-            `np.ndarray`: The rescaled image, in `(height, width, num_channels)` format.
-        """
-        if resample is not None and resample != PILImageResampling.BILINEAR:
-            raise ValueError("BEVFormer image processing uses bilinear interpolation, so `resample` must be bilinear.")
-        height, width = size
-        image_tensor = torch.from_numpy(np.ascontiguousarray(image.transpose(2, 0, 1))).to(torch.float32)
-        resized = F.interpolate(image_tensor.unsqueeze(0), size=(height, width), mode="bilinear", align_corners=False)
-        return resized.squeeze(0).permute(1, 2, 0).numpy()
-
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: float | list[float],
-        std: float | list[float],
-        input_data_format=None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Normalize an image in the 0-255 pixel value space with the given mean and standard deviation, i.e.
-        `(image - mean) / std` without any prior `(0, 255) -> (0, 1)` rescaling.
-
-        Args:
-            image (`np.ndarray`):
-                The image to normalize.
-            mean (`float` or `list[float]`):
-                The mean to use for normalization.
-            std (`float` or `list[float]`):
-                The standard deviation to use for normalization.
-            input_data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
-
-        Returns:
-            `np.ndarray`: The normalized image.
-        """
-        return normalize(image=image, mean=mean, std=std, input_data_format=input_data_format, **kwargs)
-
+    @auto_docstring
     def preprocess(
         self,
         images: ImageInput,
         lidar2img: ImageInput | None = None,
-        return_tensors: str | TensorType | None = None,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling | int | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        do_pad: bool | None = None,
-        pad_size_divisor: int | None = None,
+        can_bus: ImageInput | None = None,
+        **kwargs: Unpack[BevformerImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        lidar2img (`ImageInput`, *optional*):
+            Projection matrices from LiDAR coordinates to each camera image plane of shape
+            `(batch_size, num_cameras, 4, 4)` or `(num_cameras, 4, 4)`. When provided, they are rescaled by the
+            image resize factor and used to project 3D pillar reference points into `reference_points_cam` and
+            `bev_mask`.
+        can_bus (`ImageInput`, *optional*):
+            CAN bus ego-motion vectors of shape `(batch_size, 18)` or `(18,)`. Used to compute the ego-motion
+            translation shift for `reference_points_2d` and forwarded to the model.
+        """
+        return super().preprocess(images, lidar2img, can_bus, **kwargs)
+
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        lidar2img: ImageInput | None,
+        can_bus: ImageInput | None,
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        return_tensors: str | TensorType | None,
+        device: str | torch.device | None = None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        Rescale, normalize and pad a stack of multi-view images and rescale the matching `lidar2img` projection
-        matrices. The rescaling factor applied to the images (the ratio between the target and original sizes) is
-        also applied to the top two rows of each `lidar2img` matrix, matching the scaling of the image plane in
-        BEVFormer's inference pipeline.
+        samples = self._prepare_multiview_samples(
+            images,
+            do_convert_rgb=do_convert_rgb,
+            input_data_format=input_data_format,
+            device=device,
+        )
+        return self._preprocess(
+            samples,
+            lidar2img=lidar2img,
+            can_bus=can_bus,
+            return_tensors=return_tensors,
+            device=device,
+            **kwargs,
+        )
 
-        Args:
-            images (`ImageInput`):
-                Multi-view images in one of the following formats:
-                - a stacked array or tensor of shape `(batch_size, num_cameras, height, width, 3)`
-                - an array or tensor of shape `(num_cameras, height, width, 3)` (a single sample)
-                - a list of samples of either of the above
-                Images are expected in the RGB channel convention, with the channel dimension last.
-            lidar2img (`ImageInput`, *optional*):
-                Projection matrices from the lidar coordinate system to each camera plane, of shape
-                `(batch_size, num_cameras, 4, 4)`, `(num_cameras, 4, 4)` or a (possibly nested) list. If provided,
-                they are rescaled with the same ratio that `images` are.
-            return_tensors (`str` or [`TensorType`], *optional*):
-                The type of tensors to return. Can be one of [`TensorType.PYTORCH`], [`TensorType.NUMPY`] or the
-                corresponding string (`"pt"`, `"np"`).
-            do_resize (`bool`, *optional*):
-                Whether to rescale the images. Can be overridden by `preprocess`.
-            size (`dict[str, int]`, *optional*):
-                Target size `{"height": h, "width": w}` of the rescaled images. Can be overridden by `preprocess`.
-            resample (`PILImageResampling`, *optional*):
-                Resampling filter to use when resizing the images. Can be overridden by `preprocess`.
-            do_normalize (`bool`, *optional*):
-                Whether to normalize the images in the 0-255 pixel value space. Can be overridden by `preprocess`.
-            image_mean (`float` or `list[float]`, *optional*):
-                Mean to use if normalizing the images. Can be overridden by `preprocess`.
-            image_std (`float` or `list[float]`, *optional*):
-                Standard deviation to use if normalizing the images. Can be overridden by `preprocess`.
-            do_pad (`bool`, *optional*):
-                Whether to pad the images to dimensions divisible by `pad_size_divisor`. Can be overridden by
-                `preprocess`.
-            pad_size_divisor (`int`, *optional*):
-                Spatial dimensions of the padded images are set to multiples of this value. Can be overridden by
-                `preprocess`.
+    def _preprocess(
+        self,
+        images: list[torch.Tensor],
+        do_resize: bool,
+        size: SizeDict,
+        resample: PILImageResampling | int | None,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size_divisor: int,
+        point_cloud_range: list[float],
+        bev_height: int,
+        bev_width: int,
+        num_points_in_pillar: int,
+        return_tensors: str | TensorType | None,
+        lidar2img: ImageInput | None = None,
+        can_bus: ImageInput | None = None,
+        device: str | torch.device | None = None,
+        **kwargs,
+    ) -> BatchFeature:
+        batch_size = len(images)
+        num_cameras = images[0].shape[0]
+        tensor_device = images[0].device
 
-        Returns:
-            [`BatchFeature`] with the following fields:
-            - **pixel_values** — the processed multi-view images, of shape
-              `(batch_size, num_cameras, 3, height, width)`.
-            - **lidar2img** — the rescaled projection matrices, of shape `(batch_size, num_cameras, 4, 4)`,
-              only returned if `lidar2img` was provided.
-            - **image_shapes** — the `(height, width)` sizes of the images after rescaling but before padding,
-              of shape `(batch_size, num_cameras, 2)`.
-        """
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        size = size if size is not None else self.size
-        resample = resample if resample is not None else self.resample
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        do_pad = do_pad if do_pad is not None else self.do_pad
-        pad_size_divisor = pad_size_divisor if pad_size_divisor is not None else self.pad_size_divisor
-
-        size = get_size_dict(size, param_name="size")
-        target_height, target_width = size["height"], size["width"]
-
-        samples = self._prepare_sample_list(images)
-
-        lidar2img_touched = False
+        lidar2img_tensor = None
         if lidar2img is not None:
-            lidar2img = self._to_numpy(lidar2img)
-            if lidar2img.ndim == 3:
-                lidar2img = lidar2img[np.newaxis]
-            if lidar2img.shape[:2] != (len(samples), len(samples[0])):
+            lidar2img_tensor = torch.as_tensor(lidar2img, dtype=torch.float32, device=tensor_device)
+            if lidar2img_tensor.ndim == 3:
+                lidar2img_tensor = lidar2img_tensor.unsqueeze(0)
+            if lidar2img_tensor.shape[:2] != (batch_size, num_cameras) or lidar2img_tensor.shape[-2:] != (4, 4):
                 raise ValueError(
-                    f"Expected `lidar2img` to have shape ({len(samples)}, {len(samples[0])}, 4, 4), got "
-                    f"{tuple(lidar2img.shape)}."
+                    f"Expected `lidar2img` to have shape ({batch_size}, {num_cameras}, 4, 4), got "
+                    f"{tuple(lidar2img_tensor.shape)}."
                 )
-            if lidar2img.shape[-2:] != (4, 4):
-                raise ValueError(f"Calibration matrices must be 4x4, got shape {tuple(lidar2img.shape[-2:])}.")
-            lidar2img_touched = True
 
         processed_images = []
-        processed_lidar2img = []
-        image_shapes = []
-        for sample_index, sample in enumerate(samples):
-            num_cameras = sample.shape[0]
-            if sample.shape[-1] != 3:
-                raise ValueError(
-                    f"Expected images with the channel dimension last (shape (num_cameras, height, width, 3)), got "
-                    f"the trailing dimensions {tuple(sample.shape[-2:])} for sample index {sample_index}."
-                )
-            if not all(sample[cam].shape == sample[0].shape for cam in range(num_cameras)):
-                raise ValueError(f"All cameras of sample {sample_index} must share the same (height, width) size.")
-
-            # The image scaling ratio is derived from the actual resize performed. Upstream BEVFormer rescales
-            # images and `lidar2img` matrices with a single scalar factor: rows 0 and 1 of each projection
-            # matrix are multiplied by the ratio that maps original size to target size.
+        scaled_lidar2img = []
+        for sample_index, sample in enumerate(images):
+            orig_height, orig_width = sample.shape[-2:]
             scale = 1.0
             if do_resize:
-                height_scale = target_height / sample.shape[1]
-                width_scale = target_width / sample.shape[2]
-                if not np.isclose(height_scale, width_scale, rtol=0.0, atol=1e-4):
+                height_scale = size.height / orig_height
+                width_scale = size.width / orig_width
+                if not math.isclose(height_scale, width_scale, rel_tol=0.0, abs_tol=1e-4):
                     raise ValueError(
                         f"The ratio applied to height ({height_scale}) and width ({width_scale}) must be equal, as "
                         f"a single scalar rescales both image dimensions and the `lidar2img` matrices."
                     )
                 scale = width_scale
+                # antialias=False matches upstream cv2.resize(INTER_LINEAR)
+                sample = self.resize(image=sample, size=size, resample=resample, antialias=False)
 
-            scaled_images = []
-            scaled_shape = None
-            for camera_index in range(num_cameras):
-                image = sample[camera_index].astype(np.float32)
-                if do_resize:
-                    image = self.resize(image=image, size=(target_height, target_width), resample=resample)
-                    scaled_shape = (image.shape[0], image.shape[1])
-                if do_normalize:
-                    image = self.normalize(image=image, mean=image_mean, std=image_std)
-                if scaled_shape is None:
-                    scaled_shape = (image.shape[0], image.shape[1])
-                pad_height = -scaled_shape[0] % pad_size_divisor if do_pad else 0
-                pad_width = -scaled_shape[1] % pad_size_divisor if do_pad else 0
-                if pad_height > 0 or pad_width > 0:
-                    image = np.pad(image, ((0, pad_height), (0, pad_width), (0, 0)))
-                scaled_images.append(image.transpose(2, 0, 1))
-            processed_images.append(np.stack(scaled_images))
-            image_shapes.append(np.tile(np.array(scaled_shape, dtype=np.int64), (num_cameras, 1)))
+            sample = self.rescale_and_normalize(
+                sample,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+            )
 
-            if lidar2img_touched:
-                scale_matrix = np.eye(4, dtype=np.float32)
+            scaled_height, scaled_width = sample.shape[-2:]
+            pad_height = -scaled_height % pad_size_divisor if do_pad else 0
+            pad_width = -scaled_width % pad_size_divisor if do_pad else 0
+            if pad_height > 0 or pad_width > 0:
+                sample = F.pad(sample, (0, pad_width, 0, pad_height), value=0.0)
+            processed_images.append(sample)
+
+            if lidar2img_tensor is not None:
+                scale_matrix = torch.eye(4, dtype=torch.float32, device=tensor_device)
                 scale_matrix[0, 0] = scale
                 scale_matrix[1, 1] = scale
-                processed_lidar2img.append(np.matmul(scale_matrix, lidar2img[sample_index].astype(np.float32)))
+                scaled_lidar2img.append(torch.matmul(scale_matrix, lidar2img_tensor[sample_index]))
 
-        data = {
-            "pixel_values": np.stack(processed_images),
-            "image_shapes": np.stack(image_shapes),
+        pixel_values = torch.stack(processed_images, dim=0)
+        padded_height, padded_width = pixel_values.shape[-2:]
+
+        # Build 2D reference points with ego-motion shift: [shift_ref_2d, ref_2d] -> (B, 2, bev_h * bev_w, 1, 2)
+        ref_2d = get_bev_reference_points(
+            bev_height, bev_width, dim="2d", batch_size=batch_size, device=tensor_device, dtype=torch.float32
+        )
+        can_bus_tensor = None
+        if can_bus is not None:
+            can_bus_tensor = torch.as_tensor(can_bus, dtype=torch.float32, device=tensor_device)
+            if can_bus_tensor.ndim == 1:
+                can_bus_tensor = can_bus_tensor.unsqueeze(0)
+            shift = compute_ego_motion_shift(can_bus_tensor, point_cloud_range, bev_height, bev_width)
+            shift_ref_2d = ref_2d + shift[:, None, None, :]
+        else:
+            shift_ref_2d = ref_2d
+        reference_points_2d = torch.stack([shift_ref_2d, ref_2d], dim=1)
+
+        data: dict[str, torch.Tensor] = {
+            "pixel_values": pixel_values,
+            "reference_points_2d": reference_points_2d,
         }
-        if lidar2img_touched:
-            data["lidar2img"] = np.stack(processed_lidar2img)
+
+        if lidar2img_tensor is not None:
+            lidar2img_scaled = torch.stack(scaled_lidar2img, dim=0)
+            z_height = point_cloud_range[5] - point_cloud_range[2]
+            ref_3d = get_bev_reference_points(
+                bev_height,
+                bev_width,
+                z_height=z_height,
+                num_points_in_pillar=num_points_in_pillar,
+                dim="3d",
+                batch_size=batch_size,
+                device=tensor_device,
+                dtype=torch.float32,
+            )
+            reference_points_cam, bev_mask = point_sampling(
+                ref_3d, point_cloud_range, lidar2img_scaled, img_shape=(padded_height, padded_width)
+            )
+            data["reference_points_cam"] = reference_points_cam
+            data["bev_mask"] = bev_mask
+
+        if can_bus_tensor is not None:
+            data["can_bus"] = can_bus_tensor
+
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def post_process_object_detection(
@@ -507,17 +569,21 @@ class BevformerImageProcessor(BaseImageProcessor):
         outputs,
         threshold: float = 0.1,
         top_k: int = 300,
+        point_cloud_range: list[float] | None = None,
     ) -> list[dict[str, torch.Tensor]]:
         """Converts the raw outputs of [`BevformerFor3DObjectDetection`] into 3D bounding boxes in the LiDAR coordinate
         frame, with confidence scores and class labels.
 
         Args:
             outputs ([`BevformerObjectDetectionOutput`]):
-                Raw outputs from [`BevformerFor3DObjectDetection`].
+                Raw outputs from [`BevformerFor3DObjectDetection`], with `pred_boxes` centers `(cx, cy, cz)` in
+                normalized `[0, 1]` space.
             threshold (`float`, *optional*, defaults to 0.1):
                 Score threshold to filter detections.
             top_k (`int`, *optional*, defaults to 300):
                 Maximum number of boxes to retain per sample.
+            point_cloud_range (`list[float]`, *optional*, defaults to `self.point_cloud_range`):
+                3D point cloud bounds `[x_min, y_min, z_min, x_max, y_max, z_max]` used to denormalize box centers.
 
         Returns:
             `list[dict[str, torch.Tensor]]`:
@@ -528,6 +594,9 @@ class BevformerImageProcessor(BaseImageProcessor):
         """
         logits = outputs.logits
         pred_boxes = outputs.pred_boxes
+        pc_range = point_cloud_range if point_cloud_range is not None else self.point_cloud_range
+        pc_min = pred_boxes.new_tensor(pc_range[:3])
+        pc_diff = pred_boxes.new_tensor(pc_range[3:]) - pc_min
 
         batch_size = logits.shape[0]
         results = []
@@ -535,6 +604,11 @@ class BevformerImageProcessor(BaseImageProcessor):
         for b in range(batch_size):
             scores = logits[b].sigmoid()
             boxes = pred_boxes[b].clone()
+
+            # Denormalize (cx, cy, cz) from [0, 1] into metric LiDAR coordinates
+            boxes[:, 0] = boxes[:, 0] * pc_diff[0] + pc_min[0]
+            boxes[:, 1] = boxes[:, 1] * pc_diff[1] + pc_min[1]
+            boxes[:, 4] = boxes[:, 4] * pc_diff[2] + pc_min[2]
 
             # Upstream 10-vector: cx, cy, w, l, cz, h, sin_yaw, cos_yaw, vx, vy
             # Adjust cz to bottom-center z: z_bottom = cz - 0.5 * h
@@ -1005,94 +1079,11 @@ class BevformerTemporalSelfAttention(DeformableDetrMultiscaleDeformableAttention
         return output, attention_weights
 
 
-def point_sampling(
-    reference_points: torch.Tensor,
-    pc_range: list[float] | tuple[float, ...],
-    lidar2img: torch.Tensor,
-    img_shape: tuple[int, int] | list[int] | torch.Tensor,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Project 3D pillar reference points onto multi-camera 2D image coordinates.
-
-    Args:
-        reference_points (`torch.Tensor` of shape `(batch_size, num_queries, num_points_in_pillar, 3)`):
-            Normalized 3D reference points in `[0, 1]`.
-        pc_range (`list[float]` or `tuple[float, ...]`):
-            Point cloud range `[x_min, y_min, z_min, x_max, y_max, z_max]`.
-        lidar2img (`torch.Tensor` of shape `(batch_size, num_cams, 4, 4)`):
-            Projection matrices from LiDAR to image plane.
-        img_shape (`tuple[int, int]`, `list[int]`, or `torch.Tensor`):
-            Padded image shape `(height, width)`. Upstream BEVFormer normalizes by the padded image shape.
-
-    Returns:
-        tuple[`torch.Tensor`, `torch.Tensor`]:
-            - `reference_points_cam` (`torch.Tensor` of shape `(num_cams, batch_size, num_queries, num_points_in_pillar, 2)`):
-                Normalized image coordinates `[u, v]` in `[0, 1]`.
-            - `bev_mask` (`torch.Tensor` of shape `(num_cams, batch_size, num_queries, num_points_in_pillar)`):
-                Boolean mask indicating whether each pillar point projects within camera frustum and bounds.
-    """
-    ref_pts = reference_points.clone()
-    ref_pts[..., 0:1] = ref_pts[..., 0:1] * (pc_range[3] - pc_range[0]) + pc_range[0]
-    ref_pts[..., 1:2] = ref_pts[..., 1:2] * (pc_range[4] - pc_range[1]) + pc_range[1]
-    ref_pts[..., 2:3] = ref_pts[..., 2:3] * (pc_range[5] - pc_range[2]) + pc_range[2]
-
-    # Convert to homogeneous coordinates (B, D, num_queries, 4)
-    ref_pts = torch.cat([ref_pts, torch.ones_like(ref_pts[..., :1])], dim=-1)
-
-    # Permute to (D, B, num_queries, 4)
-    ref_pts = ref_pts.permute(1, 0, 2, 3)
-    num_points_in_pillar, batch_size, num_queries, _ = ref_pts.shape
-    num_cams = lidar2img.shape[1]
-
-    # Expand for multi-camera batch matmul
-    # ref_pts: (D, B, num_cams, num_queries, 4, 1)
-    ref_pts = (
-        ref_pts.view(num_points_in_pillar, batch_size, 1, num_queries, 4).repeat(1, 1, num_cams, 1, 1).unsqueeze(-1)
-    )
-    # lidar2img: (D, B, num_cams, num_queries, 4, 4)
-    lidar2img_expanded = lidar2img.view(1, batch_size, num_cams, 1, 4, 4).repeat(
-        num_points_in_pillar, 1, 1, num_queries, 1, 1
-    )
-
-    reference_points_cam = torch.matmul(lidar2img_expanded.to(torch.float32), ref_pts.to(torch.float32)).squeeze(-1)
-    eps = 1e-5
-
-    bev_mask = reference_points_cam[..., 2:3] > eps
-    depth_clamped = torch.maximum(
-        reference_points_cam[..., 2:3], torch.ones_like(reference_points_cam[..., 2:3]) * eps
-    )
-    reference_points_cam = reference_points_cam[..., 0:2] / depth_clamped
-
-    if isinstance(img_shape, torch.Tensor):
-        h, w = img_shape[0].item(), img_shape[1].item()
-    else:
-        h, w = img_shape[0], img_shape[1]
-
-    reference_points_cam[..., 0] /= w
-    reference_points_cam[..., 1] /= h
-
-    bev_mask = (
-        bev_mask
-        & (reference_points_cam[..., 1:2] > 0.0)
-        & (reference_points_cam[..., 1:2] < 1.0)
-        & (reference_points_cam[..., 0:1] < 1.0)
-        & (reference_points_cam[..., 0:1] > 0.0)
-    )
-    bev_mask = torch.nan_to_num(bev_mask)
-
-    # Upstream permutation: (2, 1, 3, 0, 4)
-    # From (D, B, num_cams, num_queries, 2) -> (num_cams, B, num_queries, D, 2)
-    reference_points_cam = reference_points_cam.permute(2, 1, 3, 0, 4)
-    bev_mask = bev_mask.permute(2, 1, 3, 0, 4).squeeze(-1)
-
-    return reference_points_cam, bev_mask
-
-
 class BevformerSpatialCrossAttention(nn.Module):
     """Spatial Cross Attention (SCA) module for BEVFormer.
 
-    Extracts multi-camera image features for each BEV query by projecting 3D pillar reference points
-    into the camera views, selecting valid frustum hits per camera, and sampling multi-scale deformable
-    attention offsets.
+    Extracts multi-camera image features for each BEV query using pre-projected 3D pillar reference points,
+    selecting valid frustum hits per camera and sampling multi-scale deformable attention offsets.
     """
 
     def __init__(self, config: BevformerConfig):
@@ -1100,7 +1091,6 @@ class BevformerSpatialCrossAttention(nn.Module):
         self.config = config
         self.embed_dims = config.d_model
         self.num_cams = config.num_cameras
-        self.pc_range = config.point_cloud_range
 
         self.deformable_attention = BevformerSpatialDeformableAttention(
             config,
@@ -1125,17 +1115,15 @@ class BevformerSpatialCrossAttention(nn.Module):
         if position_embeddings is not None:
             hidden_states = hidden_states + position_embeddings
 
-        batch_size, num_queries, _ = hidden_states.shape
+        reference_points_cam = reference_points_cam.to(hidden_states.dtype)
+        batch_size, _, _ = hidden_states.shape
         num_z_anchors = reference_points_cam.shape[3]
 
-        indexes = []
-        for mask_per_img in bev_mask:
-            # mask_per_img[0]: (num_queries, D) -> sum(-1) > 0 indices
-            index_query_per_img = mask_per_img[0].sum(-1).nonzero().squeeze(-1)
-            indexes.append(index_query_per_img)
-
-        lens = [len(each) for each in indexes]
-        max_len = max(lens) if len(lens) > 0 and max(lens) > 0 else 0
+        indexes = [
+            [bev_mask[b, cam_idx].any(dim=-1).nonzero().squeeze(-1) for cam_idx in range(self.num_cams)]
+            for b in range(batch_size)
+        ]
+        max_len = max((len(idx) for sample_indexes in indexes for idx in sample_indexes), default=0)
 
         if max_len > 0:
             queries_rebatch = hidden_states.new_zeros([batch_size, self.num_cams, max_len, self.embed_dims])
@@ -1144,11 +1132,10 @@ class BevformerSpatialCrossAttention(nn.Module):
             )
 
             for b in range(batch_size):
-                for cam_idx, reference_points_per_img in enumerate(reference_points_cam):
-                    idx = indexes[cam_idx]
+                for cam_idx, idx in enumerate(indexes[b]):
                     if len(idx) > 0:
                         queries_rebatch[b, cam_idx, : len(idx)] = hidden_states[b, idx]
-                        reference_points_rebatch[b, cam_idx, : len(idx)] = reference_points_per_img[b, idx]
+                        reference_points_rebatch[b, cam_idx, : len(idx)] = reference_points_cam[b, cam_idx, idx]
 
             num_cams, num_keys, bs, embed_dims = encoder_hidden_states.shape
             value_reshaped = encoder_hidden_states.permute(2, 0, 1, 3).reshape(
@@ -1168,14 +1155,12 @@ class BevformerSpatialCrossAttention(nn.Module):
             ).view(bs, self.num_cams, max_len, self.embed_dims)
 
             for b in range(batch_size):
-                for cam_idx, idx in enumerate(indexes):
+                for cam_idx, idx in enumerate(indexes[b]):
                     if len(idx) > 0:
                         slots[b, idx] += queries_out[b, cam_idx, : len(idx)]
 
         # Average over visible views observing each query pillar
-        count = bev_mask.sum(-1) > 0
-        count = count.permute(1, 2, 0).sum(-1)
-        count = torch.clamp(count, min=1.0)
+        count = bev_mask.any(dim=-1).sum(dim=1).clamp(min=1.0).to(slots.dtype)
         slots = slots / count.unsqueeze(-1)
         return self.output_proj(slots)
 
@@ -1256,16 +1241,14 @@ class BevformerEncoderLayer(DeformableDetrDecoderLayer):
 class BevformerEncoder(nn.Module):
     """BEVFormer BEV Encoder.
 
-    Encapsulates multi-layer BEV refinement, reference point generation (2D/3D),
-    CAN bus ego-motion transformation (shift & rotation), and camera feature embedding.
+    Encapsulates multi-layer BEV refinement, CAN bus MLP injection, previous-BEV rotation,
+    and camera/level feature embedding.
     """
 
     def __init__(self, config: BevformerConfig):
         super().__init__()
         self.config = config
         self.num_layers = config.encoder_layers
-        self.pc_range = config.point_cloud_range
-        self.num_points_in_pillar = config.num_points_in_pillar
         self.bev_h = config.bev_height
         self.bev_w = config.bev_width
         self.embed_dims = config.d_model
@@ -1277,105 +1260,6 @@ class BevformerEncoder(nn.Module):
         # Camera & Level embeddings
         self.level_embeds = nn.Parameter(torch.empty(config.num_feature_levels, config.d_model))
         self.cams_embeds = nn.Parameter(torch.empty(config.num_cameras, config.d_model))
-
-    @staticmethod
-    def get_reference_points(
-        height: int,
-        width: int,
-        z_height: float = 8.0,
-        num_points_in_pillar: int = 4,
-        dim: str = "3d",
-        batch_size: int = 1,
-        device: torch.device | None = None,
-        dtype: torch.dtype = torch.float32,
-    ) -> torch.Tensor:
-        """Generate 2D or 3D reference points on the BEV grid.
-
-        Args:
-            height (`int`): BEV grid height.
-            width (`int`): BEV grid width.
-            z_height (`float`): Metric height span along Z. Defaults to 8.0.
-            num_points_in_pillar (`int`): Number of vertical points per pillar. Defaults to 4.
-            dim (`str`): '2d' or '3d'.
-            batch_size (`int`): Batch size. Defaults to 1.
-            device (`torch.device`, *optional*): Target device.
-            dtype (`torch.dtype`): Target data type. Defaults to `torch.float32`.
-
-        Returns:
-            `torch.Tensor`:
-                If dim='3d', shape `(batch_size, height * width, num_points_in_pillar, 3)`.
-                If dim='2d', shape `(batch_size, height * width, 1, 2)`.
-        """
-        if dim == "3d":
-            zs = (
-                torch.linspace(0.5, z_height - 0.5, num_points_in_pillar, dtype=dtype, device=device)
-                .view(-1, 1, 1)
-                .expand(num_points_in_pillar, height, width)
-                / z_height
-            )
-            xs = (
-                torch.linspace(0.5, width - 0.5, width, dtype=dtype, device=device)
-                .view(1, 1, width)
-                .expand(num_points_in_pillar, height, width)
-                / width
-            )
-            ys = (
-                torch.linspace(0.5, height - 0.5, height, dtype=dtype, device=device)
-                .view(1, height, 1)
-                .expand(num_points_in_pillar, height, width)
-                / height
-            )
-            ref_3d = torch.stack((xs, ys, zs), -1)
-            ref_3d = ref_3d.permute(0, 3, 1, 2).flatten(2).permute(0, 2, 1)
-            return ref_3d[None].repeat(batch_size, 1, 1, 1)
-
-        elif dim == "2d":
-            ref_y, ref_x = torch.meshgrid(
-                torch.linspace(0.5, height - 0.5, height, dtype=dtype, device=device),
-                torch.linspace(0.5, width - 0.5, width, dtype=dtype, device=device),
-                indexing="ij",
-            )
-            ref_y = ref_y.reshape(-1)[None] / height
-            ref_x = ref_x.reshape(-1)[None] / width
-            ref_2d = torch.stack((ref_x, ref_y), -1)
-            return ref_2d.repeat(batch_size, 1, 1).unsqueeze(2)
-
-        raise ValueError(f"dim must be '2d' or '3d', got {dim}")
-
-    def compute_ego_motion(
-        self,
-        can_bus: torch.Tensor,
-        bev_queries: torch.Tensor,
-        grid_length: tuple[float, float] | list[float],
-    ) -> torch.Tensor:
-        """Compute BEV translation shift from CAN bus ego-motion signals.
-
-        Args:
-            can_bus (`torch.Tensor` of shape `(batch_size, 18)`):
-                CAN bus status containing velocity and yaw rate.
-            bev_queries (`torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`):
-                Reference tensor for device and dtype.
-            grid_length (`tuple[float, float]`):
-                Length per BEV cell in meters `(grid_length_y, grid_length_x)`.
-
-        Returns:
-            `torch.Tensor` of shape `(batch_size, 2)`:
-                Translation shifts `(shift_x, shift_y)`.
-        """
-        can_bus_np = can_bus.detach().cpu().numpy()
-        delta_x = can_bus_np[:, 0]
-        delta_y = can_bus_np[:, 1]
-        ego_angle = can_bus_np[:, -2] / np.pi * 180.0
-
-        grid_length_y, grid_length_x = grid_length[0], grid_length[1]
-        translation_length = np.sqrt(delta_x**2 + delta_y**2)
-        translation_angle = np.arctan2(delta_y, delta_x) / np.pi * 180.0
-        bev_angle = ego_angle - translation_angle
-
-        shift_y = translation_length * np.cos(bev_angle / 180.0 * np.pi) / grid_length_y / self.bev_h
-        shift_x = translation_length * np.sin(bev_angle / 180.0 * np.pi) / grid_length_x / self.bev_w
-
-        return bev_queries.new_tensor(np.stack([shift_x, shift_y], axis=-1))
 
     def apply_prev_bev_rotation(self, prev_bev: torch.Tensor, can_bus: torch.Tensor) -> torch.Tensor:
         """Apply yaw rotation to previous BEV embeddings in a single batched, on-device op.
@@ -1427,31 +1311,13 @@ class BevformerEncoder(nn.Module):
         self,
         bev_queries: torch.Tensor,
         multi_level_feats: list[torch.Tensor] | tuple[torch.Tensor, ...],
-        lidar2img: torch.Tensor,
         bev_pos: torch.Tensor,
+        reference_points_cam: torch.Tensor,
+        bev_mask: torch.Tensor,
+        reference_points_2d: torch.Tensor,
         can_bus: torch.Tensor | None = None,
         prev_bev: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Forward pass of the BEVFormer Encoder.
-
-        Args:
-            bev_queries (`torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`):
-                Initial learned BEV query embeddings.
-            multi_level_feats (`list[torch.Tensor]`):
-                List of multi-camera feature maps from FPN, each `(batch_size, num_cams, embed_dims, H, W)`.
-            lidar2img (`torch.Tensor` of shape `(batch_size, num_cams, 4, 4)`):
-                Projection matrices from LiDAR to image plane.
-            bev_pos (`torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`):
-                Learned 2D positional encodings for the BEV plane.
-            can_bus (`torch.Tensor` of shape `(batch_size, 18)`, *optional*):
-                CAN bus ego-motion signals. Defaults to zeros if not provided.
-            prev_bev (`torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`, *optional*):
-                BEV embedding from the previous frame.
-
-        Returns:
-            `torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`:
-                Refined BEV feature representation.
-        """
         batch_size, num_queries, _ = bev_queries.shape
         device = bev_queries.device
         dtype = bev_queries.dtype
@@ -1462,54 +1328,17 @@ class BevformerEncoder(nn.Module):
         # 1. Inject CAN bus signals into BEV queries
         bev_queries = bev_queries + self.can_bus_mlp(can_bus)
 
-        # 2. Reference points in 3D and 2D
-        z_height = self.pc_range[5] - self.pc_range[2]
-        ref_3d = self.get_reference_points(
-            self.bev_h,
-            self.bev_w,
-            z_height=z_height,
-            num_points_in_pillar=self.num_points_in_pillar,
-            dim="3d",
-            batch_size=batch_size,
-            device=device,
-            dtype=dtype,
-        )
-        ref_2d = self.get_reference_points(
-            self.bev_h,
-            self.bev_w,
-            dim="2d",
-            batch_size=batch_size,
-            device=device,
-            dtype=dtype,
-        )
-
-        # 3. Project 3D reference points to camera views (point_sampling)
-        # Upstream BEVFormer derives image height/width from padded feature stride
-        # Feature level 0: shape is (batch_size, num_cams, embed_dims, H, W)
-        feat_h, feat_w = multi_level_feats[0].shape[-2:]
-        # In BEVFormer tiny, backbone stride is 32 -> img_shape = (feat_h * 32, feat_w * 32)
-        padded_img_shape = (feat_h * 32, feat_w * 32)
-        reference_points_cam, bev_mask = point_sampling(ref_3d, self.pc_range, lidar2img, img_shape=padded_img_shape)
-
-        # 4. Translation shift & rotation for temporal fusion
-        real_h = self.pc_range[4] - self.pc_range[1]
-        real_w = self.pc_range[3] - self.pc_range[0]
-        grid_length = (real_h / self.bev_h, real_w / self.bev_w)
-        shift = self.compute_ego_motion(can_bus, bev_queries, grid_length)
-
-        shift_ref_2d = ref_2d.clone()
-        shift_ref_2d += shift[:, None, None, :]
-
-        # 5. Build hybrid 2D reference points and temporal queue
+        # 2. Build hybrid 2D reference points and temporal queue
+        reference_points_2d = reference_points_2d.to(dtype)
         if prev_bev is not None:
             prev_bev_rotated = self.apply_prev_bev_rotation(prev_bev, can_bus)
-            # Stack [prev_bev, bev_queries] along queue dimension (2 * batch_size, num_queries, embed_dims)
             temporal_bev_queue = torch.stack([prev_bev_rotated, bev_queries], dim=1).reshape(
                 batch_size * 2, num_queries, -1
             )
-            hybrid_ref_2d = torch.stack([shift_ref_2d, ref_2d], dim=1).reshape(batch_size * 2, num_queries, 1, 2)
+            hybrid_ref_2d = reference_points_2d.reshape(batch_size * 2, num_queries, 1, 2)
         else:
             temporal_bev_queue = None
+            ref_2d = reference_points_2d[:, 1]
             hybrid_ref_2d = torch.stack([ref_2d, ref_2d], dim=1).reshape(batch_size * 2, num_queries, 1, 2)
 
         # 6. Flatten multi-level features and add camera + level embeddings
@@ -1813,14 +1642,21 @@ class BevformerModel(BevformerPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        lidar2img: torch.Tensor,
+        reference_points_cam: torch.Tensor,
+        bev_mask: torch.Tensor,
+        reference_points_2d: torch.Tensor,
         can_bus: torch.Tensor | None = None,
         prev_bev: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BevformerModelOutput:
         r"""
-        lidar2img (`torch.Tensor` of shape `(batch_size, num_cameras, 4, 4)`):
-            Projection matrices from LiDAR coordinates to each camera's image plane.
+        reference_points_cam (`torch.Tensor` of shape `(batch_size, num_cameras, bev_height * bev_width, num_points_in_pillar, 2)`):
+            Pre-projected normalized 2D image coordinates of 3D BEV pillar anchor points for each camera, as returned
+            by [`BevformerImageProcessor`].
+        bev_mask (`torch.Tensor` of shape `(batch_size, num_cameras, bev_height * bev_width, num_points_in_pillar)`):
+            Boolean visibility mask indicating which projected pillar points fall within each camera's frustum.
+        reference_points_2d (`torch.Tensor` of shape `(batch_size, 2, bev_height * bev_width, 1, 2)`):
+            2D BEV grid reference points `[shift_ref_2d, ref_2d]` for temporal self-attention.
         can_bus (`torch.Tensor` of shape `(batch_size, 18)`, *optional*):
             CAN bus ego-motion signals (translation, rotation, velocity, acceleration). Defaults to zeros if omitted.
         prev_bev (`torch.Tensor` of shape `(batch_size, bev_height * bev_width, d_model)`, *optional*):
@@ -1840,8 +1676,10 @@ class BevformerModel(BevformerPreTrainedModel):
         bev_embed = self.encoder(
             bev_queries=bev_queries,
             multi_level_feats=[fpn_features],
-            lidar2img=lidar2img,
             bev_pos=bev_pos,
+            reference_points_cam=reference_points_cam,
+            bev_mask=bev_mask,
+            reference_points_2d=reference_points_2d,
             can_bus=can_bus,
             prev_bev=prev_bev,
         )
@@ -1894,14 +1732,21 @@ class BevformerFor3DObjectDetection(BevformerPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        lidar2img: torch.Tensor,
+        reference_points_cam: torch.Tensor,
+        bev_mask: torch.Tensor,
+        reference_points_2d: torch.Tensor,
         can_bus: torch.Tensor | None = None,
         prev_bev: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BevformerObjectDetectionOutput:
         r"""
-        lidar2img (`torch.Tensor` of shape `(batch_size, num_cameras, 4, 4)`):
-            Projection matrices from LiDAR coordinates to each camera's image plane.
+        reference_points_cam (`torch.Tensor` of shape `(batch_size, num_cameras, bev_height * bev_width, num_points_in_pillar, 2)`):
+            Pre-projected normalized 2D image coordinates of 3D BEV pillar anchor points for each camera, as returned
+            by [`BevformerImageProcessor`].
+        bev_mask (`torch.Tensor` of shape `(batch_size, num_cameras, bev_height * bev_width, num_points_in_pillar)`):
+            Boolean visibility mask indicating which projected pillar points fall within each camera's frustum.
+        reference_points_2d (`torch.Tensor` of shape `(batch_size, 2, bev_height * bev_width, 1, 2)`):
+            2D BEV grid reference points `[shift_ref_2d, ref_2d]` for temporal self-attention.
         can_bus (`torch.Tensor` of shape `(batch_size, 18)`, *optional*):
             CAN bus ego-motion signals (translation, rotation, velocity, acceleration). Defaults to zeros if omitted.
         prev_bev (`torch.Tensor` of shape `(batch_size, bev_height * bev_width, d_model)`, *optional*):
@@ -1909,7 +1754,9 @@ class BevformerFor3DObjectDetection(BevformerPreTrainedModel):
         """
         outputs = self.model(
             pixel_values=pixel_values,
-            lidar2img=lidar2img,
+            reference_points_cam=reference_points_cam,
+            bev_mask=bev_mask,
+            reference_points_2d=reference_points_2d,
             can_bus=can_bus,
             prev_bev=prev_bev,
             **kwargs,

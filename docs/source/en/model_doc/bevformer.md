@@ -40,36 +40,31 @@ checkpoint = "hasanfaesal/bevformer-tiny"
 image_processor = AutoImageProcessor.from_pretrained(checkpoint)
 model = AutoModelFor3DObjectDetection.from_pretrained(checkpoint)
 
-# Frame 1: batch of 6 multi-view camera images (batch_size=1, num_cameras=6, height=900, width=1600, channels=3)
-# and calibration projection matrix (batch_size=1, num_cameras=6, 4, 4)
-pixel_values = torch.randn(1, 6, 3, 480, 800)
-lidar2img = torch.rand(1, 6, 4, 4)
-can_bus_frame1 = torch.zeros(1, 18)
+# Frame 1: 6 multi-view RGB camera images of shape (num_cameras=6, height=900, width=1600, channels=3)
+# and LiDAR-to-image projection matrices of shape (num_cameras=6, 4, 4)
+images = torch.randint(0, 256, (6, 900, 1600, 3), dtype=torch.uint8)
+lidar2img = torch.eye(4).unsqueeze(0).repeat(6, 1, 1)
+can_bus_frame1 = torch.zeros(18)
+
+inputs_frame1 = image_processor(images=images, lidar2img=lidar2img, can_bus=can_bus_frame1, return_tensors="pt")
 
 # Run Frame 1 (no previous BEV history)
-outputs_frame1 = model(
-    pixel_values=pixel_values,
-    lidar2img=lidar2img,
-    can_bus=can_bus_frame1,
-    prev_bev=None,
-)
+outputs_frame1 = model(**inputs_frame1, prev_bev=None)
 
 # Extract predictions and current BEV embedding
 bev_embed_frame1 = outputs_frame1.bev_embed
 results_frame1 = image_processor.post_process_object_detection(outputs_frame1)
 
 # Frame 2: subsequent timestep with ego-motion delta in can_bus
-can_bus_frame2 = torch.zeros(1, 18)
+can_bus_frame2 = torch.zeros(18)
 # can_bus translation & rotation deltas populate can_bus_frame2
-outputs_frame2 = model(
-    pixel_values=pixel_values,
-    lidar2img=lidar2img,
-    can_bus=can_bus_frame2,
-    prev_bev=bev_embed_frame1.detach(),
-)
+inputs_frame2 = image_processor(images=images, lidar2img=lidar2img, can_bus=can_bus_frame2, return_tensors="pt")
+outputs_frame2 = model(**inputs_frame2, prev_bev=bev_embed_frame1.detach())
 
 results_frame2 = image_processor.post_process_object_detection(outputs_frame2)
-for score, label_id, box in zip(results_frame2[0]["scores"], results_frame2[0]["labels"], results_frame2[0]["boxes"]):
+for score, label_id, box in zip(
+    results_frame2[0]["scores"], results_frame2[0]["labels"], results_frame2[0]["boxes_3d"]
+):
     print(f"{model.config.id2label[label_id.item()]}: {score.item():.2f} {box.tolist()}")
 ```
 

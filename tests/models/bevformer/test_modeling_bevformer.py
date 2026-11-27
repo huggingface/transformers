@@ -65,12 +65,18 @@ class BevformerModelTester:
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_cameras, 3, self.image_height, self.image_width])
-        # lidar2img identity matrices scaled
-        lidar2img = torch.eye(4, device=torch_device).view(1, 1, 4, 4).repeat(self.batch_size, self.num_cameras, 1, 1)
+        bev_num_queries = self.bev_height * self.bev_width
+        reference_points_cam = torch.rand(
+            self.batch_size, self.num_cameras, bev_num_queries, self.num_points_in_pillar, 2
+        ).to(torch_device)
+        bev_mask = torch.ones(
+            self.batch_size, self.num_cameras, bev_num_queries, self.num_points_in_pillar, dtype=torch.bool
+        ).to(torch_device)
+        reference_points_2d = torch.rand(self.batch_size, 2, bev_num_queries, 1, 2).to(torch_device)
         can_bus = torch.zeros(self.batch_size, 18, device=torch_device)
 
         config = self.get_config()
-        return config, pixel_values, lidar2img, can_bus
+        return config, pixel_values, reference_points_cam, bev_mask, reference_points_2d, can_bus
 
     def get_config(self):
         from transformers import ResNetConfig
@@ -97,11 +103,19 @@ class BevformerModelTester:
             is_training=self.is_training,
         )
 
-    def create_and_check_model(self, config, pixel_values, lidar2img, can_bus):
+    def create_and_check_model(
+        self, config, pixel_values, reference_points_cam, bev_mask, reference_points_2d, can_bus
+    ):
         model = BevformerModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values=pixel_values, lidar2img=lidar2img, can_bus=can_bus)
+        result = model(
+            pixel_values=pixel_values,
+            reference_points_cam=reference_points_cam,
+            bev_mask=bev_mask,
+            reference_points_2d=reference_points_2d,
+            can_bus=can_bus,
+        )
         self.parent.assertEqual(
             result.last_hidden_state.shape,
             (self.batch_size, self.num_queries, self.hidden_size),
@@ -111,11 +125,19 @@ class BevformerModelTester:
             (self.batch_size, self.bev_height * self.bev_width, self.hidden_size),
         )
 
-    def create_and_check_for_3d_object_detection(self, config, pixel_values, lidar2img, can_bus):
+    def create_and_check_for_3d_object_detection(
+        self, config, pixel_values, reference_points_cam, bev_mask, reference_points_2d, can_bus
+    ):
         model = BevformerFor3DObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values=pixel_values, lidar2img=lidar2img, can_bus=can_bus)
+        result = model(
+            pixel_values=pixel_values,
+            reference_points_cam=reference_points_cam,
+            bev_mask=bev_mask,
+            reference_points_2d=reference_points_2d,
+            can_bus=can_bus,
+        )
         self.parent.assertEqual(
             result.logits.shape,
             (self.batch_size, self.num_queries, self.num_classes),
@@ -127,10 +149,12 @@ class BevformerModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values, lidar2img, can_bus = config_and_inputs
+        config, pixel_values, reference_points_cam, bev_mask, reference_points_2d, can_bus = config_and_inputs
         inputs_dict = {
             "pixel_values": pixel_values,
-            "lidar2img": lidar2img,
+            "reference_points_cam": reference_points_cam,
+            "bev_mask": bev_mask,
+            "reference_points_2d": reference_points_2d,
             "can_bus": can_bus,
         }
         return config, inputs_dict
