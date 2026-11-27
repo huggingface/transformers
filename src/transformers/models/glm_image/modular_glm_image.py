@@ -477,18 +477,17 @@ class GlmImageModel(Glm4vModel):
 
     def get_data_dependent_inputs(
         self,
+        pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
         **kwargs,
     ) -> dict[str, Any]:
         """What the forward derives from the processor's outputs with data-dependent ops: the vision
-        tower's (see [`GlmImageVisionModel.get_data_dependent_inputs`]) for the source images, prefixed `image_`,
-        as `get_image_features` takes them."""
-        if image_grid_thw is None:
+        tower's (see [`GlmImageVisionModel.get_data_dependent_inputs`]) for the source images in `pixel_values`,
+        prefixed `image_`, as `get_image_embeddings` takes them."""
+        if pixel_values is None or image_grid_thw is None:
             return {}
         source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
-        if source_grids.shape[0] == 0:
-            return {}
         tower_inputs = self.visual.get_data_dependent_inputs(source_grids)
         return {f"image_{name}": value for name, value in tower_inputs.items()}
 
