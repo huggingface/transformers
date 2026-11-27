@@ -372,17 +372,11 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         >>> generated_ids = model.generate(pixel_values)
         >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         ```"""
-        # `record outputs` can rely on the absence of the kwarg to retrieve whether the config should be used or not
-        # Hence, we use this workaround to allow for defaults to work as expected
-        kwargs_shared = {key: kwargs[key] for key in ["output_attentions", "output_hidden_states"] if key in kwargs}
-
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
-        kwargs_encoder = kwargs_encoder | kwargs_shared
-
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
-        kwargs_decoder = kwargs_decoder | kwargs_shared
+        kwargs_decoder |= {key: kwargs[key] for key in ("output_attentions", "output_hidden_states") if key in kwargs}
 
         if encoder_outputs is None:
             if pixel_values is None:
