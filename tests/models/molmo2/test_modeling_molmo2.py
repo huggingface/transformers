@@ -111,14 +111,12 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
         num_patches = (self.image_size // self.patch_size) ** 2
         mm_token_type_ids = torch.zeros_like(input_ids)
         mm_token_type_ids[input_ids == self.image_patch_id] = 1
-        pooled = torch.randint(
+        image_token_pooling = torch.randint(
             0,
             num_patches,
-            (batch_size, self.num_image_tokens, 4),
+            (batch_size * self.num_image_tokens, 4),
             device=torch_device,
         )
-        sample_offsets = (torch.arange(batch_size, device=torch_device) * num_patches).view(-1, 1, 1)
-        image_token_pooling = (pooled + sample_offsets).view(-1, 4)
         return {
             "image_token_pooling": image_token_pooling,
             "image_grids": torch.tensor([[4, 4, 4, 4]] * batch_size, device=torch_device),
@@ -196,11 +194,12 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
 
     def _video_features_prepare_config_and_inputs(self):
         # The generic helper only renames `pixel_values`; Molmo2's `get_video_features` also needs the
-        # pooling index tensor under its video name and a `[num_frames, rows, cols]` grid per video.
+        # pooling index tensor under its video name, a `[num_frames, rows, cols]` grid per video and the 2 frames
+        # per video that grid declares.
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         batch_size = inputs_dict["image_grids"].shape[0]
         inputs_dict = {
-            "pixel_values_videos": inputs_dict["pixel_values"],
+            "pixel_values_videos": inputs_dict["pixel_values"].repeat_interleave(2, dim=0),
             "video_token_pooling": inputs_dict["image_token_pooling"],
             "video_grids": torch.tensor([[2, 4, 4]] * batch_size, device=torch_device),
         }
@@ -257,6 +256,36 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
             # inputs_embeds-only generation returns only the newly generated tokens
             self.assertEqual(out.sequences.shape[0], input_ids.shape[0])
             self.assertEqual(out.sequences.shape[1], 5)
+
+    def test_get_image_features_per_image(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Molmo2Model(config).to(torch_device).eval()
+        num_image_tokens = self.model_tester.num_image_tokens
+        with torch.no_grad():
+            together = model.get_image_features(
+                inputs["pixel_values"], inputs["image_token_pooling"], inputs["image_grids"], inputs["image_num_crops"]
+            ).pooler_output
+            alone = model.get_image_features(
+                inputs["pixel_values"][-1:],
+                inputs["image_token_pooling"][-num_image_tokens:],
+                inputs["image_grids"][-1:],
+                inputs["image_num_crops"][-1:],
+            ).pooler_output
+        # The tiny model's pooled features are around 1e-8, so the default absolute tolerance would accept anything
+        torch.testing.assert_close(together[-1], alone[0], rtol=1e-4, atol=1e-12)
+
+    def test_get_video_features_per_video(self):
+        config, inputs = self._video_features_prepare_config_and_inputs()
+        model = Molmo2Model(config).to(torch_device).eval()
+        num_frames, rows, cols = inputs["video_grids"][-1].tolist()
+        with torch.no_grad():
+            together = model.get_video_features(**inputs).pooler_output
+            alone = model.get_video_features(
+                inputs["pixel_values_videos"][-num_frames:],
+                inputs["video_token_pooling"][-num_frames * rows * cols :],
+                inputs["video_grids"][-1:],
+            ).pooler_output
+        torch.testing.assert_close(together[-1], alone[0], rtol=1e-4, atol=1e-12)
 
     def test_mismatching_num_image_tokens(self):
         """

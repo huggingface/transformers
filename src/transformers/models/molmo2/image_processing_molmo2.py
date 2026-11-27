@@ -415,17 +415,9 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         patches = reorder_images(patches_grouped, grouped_index)
         pooled = reorder_images(pooled_grouped, grouped_index)
 
-        all_crops: list[torch.Tensor] = []
-        all_pooled: list[torch.Tensor] = []
-        patch_offset = 0
-        for crops, pooled_indices in zip(patches, pooled):
-            all_pooled.append(torch.where(pooled_indices >= 0, pooled_indices + patch_offset, pooled_indices))
-            all_crops.append(crops)
-            patch_offset += crops.shape[0] * crops.shape[1]
-
         data = {
-            "pixel_values": torch.cat(all_crops, dim=0),
-            "image_token_pooling": torch.cat(all_pooled, dim=0),
+            "pixel_values": torch.cat(patches, dim=0),
+            "image_token_pooling": torch.cat(pooled, dim=0),
             "image_grids": torch.stack(grids, dim=0),
             "image_num_crops": torch.tensor([crops.shape[0] for crops in patches], dtype=torch.int64, device=device),
         }

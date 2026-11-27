@@ -77,6 +77,13 @@ class Molmo2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(image_num_crops.shape[0], expected_num_images)
         self.assertEqual(pixel_values.shape[0], int(image_num_crops.sum().item()))
 
+    def test_image_token_pooling_is_per_image(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+        together = image_processing(image_inputs, return_tensors="pt")["image_token_pooling"]
+        alone = image_processing(image_inputs[-1], return_tensors="pt")["image_token_pooling"]
+        torch.testing.assert_close(together[-len(alone) :], alone)
+
     def test_call_pil(self):
         for image_processing_class in [self.image_processing_class]:
             image_processing = image_processing_class(**self.image_processor_dict)
