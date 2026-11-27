@@ -122,10 +122,11 @@ class MLXModelRunner(ModelRunner):
                     for tensor, position in zip(tensors, looped)
                 ]
                 outputs = self.function(*arrays)
-            mx.eval(outputs)
-            # Read before the next step is queued, which reading could otherwise wait for
-            outputs_torch = [to_torch(output).to(self.output_device) for output in outputs]
+            # The next step queued before this one is waited on, on its still lazy outputs, as mlx-lm does: the device
+            # never idles while the host reads this step and `generate` picks the token
             self._queue_next_step(arrays, outputs, looped, missed=queued_step is not None and not hit)
+            mx.eval(outputs)
+            outputs_torch = [to_torch(output).to(self.output_device) for output in outputs]
         self.outputs = list(outputs)
         self.last_outputs = {_tensor_key(tensor): position for position, tensor in enumerate(outputs_torch)}
         result = self.unflatten([outputs_torch[position] for position in self.output_positions])
