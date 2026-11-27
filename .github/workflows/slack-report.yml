@@ -76,6 +76,13 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           chunk-delay: 1000
 
+      - name: Move the reports out of batch artifacts
+        run: |
+          shopt -s nullglob
+          for report in tpu_batch_*/*_test_reports; do
+            mv "$report" .
+          done
+
       - name: Prepare some setup values
         run: |
           if [ -f setup_values/prev_workflow_run_id.txt ]; then
