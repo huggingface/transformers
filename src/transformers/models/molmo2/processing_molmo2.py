@@ -196,9 +196,9 @@ class Molmo2Processor(ProcessorMixin):
             patch_size = videos_kwargs["patch_size"]
             pooling_h, pooling_w = videos_kwargs["pooling_size"]
             # Every frame is resized to `size`, so the count doesn't depend on the video's own size
-            patches_per_side = size["height"] // patch_size
-            num_frame_tokens = math.ceil(patches_per_side / pooling_h) * math.ceil(patches_per_side / pooling_w)
-            vision_data["num_video_tokens"] = [num_frames * num_frame_tokens for num_frames, _, _ in video_sizes]
+            num_rows = math.ceil(size["height"] // patch_size / pooling_h)
+            num_cols = math.ceil(size["width"] // patch_size / pooling_w)
+            vision_data["num_video_tokens"] = [num_frames * num_rows * num_cols for num_frames, _, _ in video_sizes]
 
         return MultiModalData(**vision_data)
 
