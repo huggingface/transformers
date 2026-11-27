@@ -352,6 +352,7 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
         """
         if option_chunk_size is not None and option_chunk_size < 1:
             raise ValueError("option_chunk_size must be positive.")
+
         spans = self._split_decision_spans(prompts, max_state_length, max_option_length, truncation)
         states, options, questions = zip(*spans)
         pad_token_id = (self.config.text_config.pad_token_id or 0) if pad_token_id is None else pad_token_id
@@ -371,8 +372,10 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
             "num_options": num_options,
             "option_mask": torch.arange(num_options.max(), device=num_options.device)[None] < num_options[:, None],
         }
+
         if option_chunk_size is not None:
             batch["option_chunk_size"] = option_chunk_size
+
         if targets is not None:
             labels = []
             for target, question in zip(targets, questions, strict=True):
@@ -381,10 +384,12 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
                 if target[0] != 0 and not question.allow_null:
                     raise ValueError("Null targets require a nullable question.")
                 labels.append(num_options.new_tensor(target, dtype=torch.float32))
+
             batch["labels"] = nn.utils.rnn.pad_sequence(labels, batch_first=True)
             batch["allow_null"] = num_options.new_tensor(
                 [question.allow_null for question in questions], dtype=torch.bool
             )
+
         return batch
 
     @torch.no_grad()
