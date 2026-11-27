@@ -104,6 +104,10 @@ class BevformerModelTester:
         result = model(pixel_values=pixel_values, lidar2img=lidar2img, can_bus=can_bus)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
+            (self.batch_size, self.num_queries, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.bev_embed.shape,
             (self.batch_size, self.bev_height * self.bev_width, self.hidden_size),
         )
 
@@ -114,11 +118,11 @@ class BevformerModelTester:
         result = model(pixel_values=pixel_values, lidar2img=lidar2img, can_bus=can_bus)
         self.parent.assertEqual(
             result.logits.shape,
-            (self.batch_size, self.decoder_layers, self.num_queries, self.num_classes),
+            (self.batch_size, self.num_queries, self.num_classes),
         )
         self.parent.assertEqual(
             result.pred_boxes.shape,
-            (self.batch_size, self.decoder_layers, self.num_queries, 10),
+            (self.batch_size, self.num_queries, 10),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -157,6 +161,10 @@ class BevformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="BEVFormer does not use token embeddings")
     def test_resize_tokens_embeddings(self):
+        pass
+
+    @unittest.skip(reason="Weight tying is hardcoded (`model.decoder.bbox_embed = reg_branches`) and always `True`")
+    def test_load_save_without_tied_weights(self):
         pass
 
     def setUp(self):

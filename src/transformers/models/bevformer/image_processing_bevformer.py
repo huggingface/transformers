@@ -369,8 +369,8 @@ class BevformerImageProcessor(BaseImageProcessor):
                 - `"labels"`: Class label indices for each detected box.
                 - `"boxes_3d"`: 9-parameter 3D bounding boxes `[cx, cy, cz_bottom, w, l, h, yaw, vx, vy]` in LiDAR frame.
         """
-        logits = outputs.logits[:, -1]
-        pred_boxes = outputs.pred_boxes[:, -1]
+        logits = outputs.logits
+        pred_boxes = outputs.pred_boxes
 
         batch_size = logits.shape[0]
         results = []

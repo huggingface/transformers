@@ -29,6 +29,7 @@ from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import normalize
 from ...image_utils import ImageInput, PILImageResampling
+from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...models.auto import AutoConfig
 from ...processing_utils import Unpack
@@ -41,12 +42,14 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import can_return_tuple
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrDecoderLayer,
     DeformableDetrMLP,
     DeformableDetrMLPPredictionHead,
     DeformableDetrMultiscaleDeformableAttention,
+    DeformableDetrSelfAttention,
     inverse_sigmoid,
     replace_batch_norm,
 )
@@ -176,6 +179,7 @@ class BevformerConfig(PreTrainedConfig):
     can_bus_dim: int = 18
     can_bus_norm: bool = True
     rotate_center: list[float] | None = None
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if self.point_cloud_range is None:
@@ -522,8 +526,8 @@ class BevformerImageProcessor(BaseImageProcessor):
                 - `"labels"`: Class label indices for each detected box.
                 - `"boxes_3d"`: 9-parameter 3D bounding boxes `[cx, cy, cz_bottom, w, l, h, yaw, vx, vy]` in LiDAR frame.
         """
-        logits = outputs.logits[:, -1]
-        pred_boxes = outputs.pred_boxes[:, -1]
+        logits = outputs.logits
+        pred_boxes = outputs.pred_boxes
 
         batch_size = logits.shape[0]
         results = []
@@ -1563,58 +1567,45 @@ class BevformerEncoder(nn.Module):
         return output
 
 
+class BevformerSelfAttention(DeformableDetrSelfAttention):
+    pass
+
+
 class BevformerDecoderLayer(DeformableDetrDecoderLayer):
     pass
 
 
-class BevformerDetrTransformerDecoder(nn.Module):
-    """Detection transformer decoder for BEVFormer with iterative 2D reference point refinement."""
+class BevformerReferencePointRefiner(nn.Module):
+    """Applies one stage of iterative 3D reference-point refinement and returns `(reference_points, pred_boxes)`."""
 
-    def __init__(self, config: BevformerConfig):
-        super().__init__()
-        self.config = config
-        self.num_layers = config.decoder_layers
-        self.layers = nn.ModuleList([BevformerDecoderLayer(config) for _ in range(self.num_layers)])
+    def forward(self, bbox_deltas: torch.Tensor, reference_points: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        inv_ref = inverse_sigmoid(reference_points)
+        pred_xy = (bbox_deltas[..., 0:2] + inv_ref[..., 0:2]).sigmoid()
+        pred_z = (bbox_deltas[..., 4:5] + inv_ref[..., 2:3]).sigmoid()
+        pred_boxes = torch.cat([pred_xy, bbox_deltas[..., 2:4], pred_z, bbox_deltas[..., 5:]], dim=-1)
+        next_reference_points = torch.cat([pred_xy, pred_z], dim=-1).detach()
+        return next_reference_points, pred_boxes
 
-    def forward(
-        self,
-        query: torch.Tensor,
-        value: torch.Tensor,
-        query_pos: torch.Tensor,
-        reference_points: torch.Tensor,
-        reg_branches: nn.ModuleList | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        spatial_shapes_list = [(self.config.bev_height, self.config.bev_width)]
-        spatial_shapes = query.new_tensor(spatial_shapes_list, dtype=torch.long)
-        level_start_index = query.new_tensor([0], dtype=torch.long)
 
-        output = query
-        intermediate = []
-        intermediate_reference_points = []
+@dataclass
+class BevformerDecoderOutput(BaseModelOutputWithCrossAttentions):
+    """Output type of [`BevformerDecoder`].
 
-        for lid, layer in enumerate(self.layers):
-            ref_input = reference_points[..., :2].unsqueeze(2)  # (batch_size, num_queries, 1, 2)
-            output = layer(
-                hidden_states=output,
-                object_queries_position_embeddings=query_pos,
-                reference_points=ref_input,
-                spatial_shapes=spatial_shapes,
-                spatial_shapes_list=spatial_shapes_list,
-                level_start_index=level_start_index,
-                encoder_hidden_states=value,
-            )
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, d_model)`):
+            Sequence of hidden states at the output of the last decoder layer.
+        reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 3)`):
+            Normalized 3D reference points `(cx, cy, cz)` after the final decoder layer.
+        pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 10)`, *optional*):
+            Normalized 3D box predictions from the final decoder layer when iterative box refinement (`bbox_embed`)
+            is attached.
+        intermediate_reference_points (`tuple[torch.FloatTensor]`, *optional*):
+            Per-layer refined 3D reference points recorded when `output_intermediate_reference_points=True`.
+    """
 
-            if reg_branches is not None:
-                tmp = reg_branches[lid](output)
-                new_ref = torch.zeros_like(reference_points)
-                new_ref[..., :2] = tmp[..., :2] + inverse_sigmoid(reference_points[..., :2])
-                new_ref[..., 2:3] = tmp[..., 4:5] + inverse_sigmoid(reference_points[..., 2:3])
-                reference_points = new_ref.sigmoid().detach()
-
-            intermediate.append(output)
-            intermediate_reference_points.append(reference_points)
-
-        return torch.stack(intermediate, dim=1), torch.stack(intermediate_reference_points, dim=1)
+    reference_points: torch.FloatTensor | None = None
+    pred_boxes: torch.FloatTensor | None = None
+    intermediate_reference_points: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -1622,12 +1613,37 @@ class BevformerModelOutput(ModelOutput):
     """Output type of [`BevformerModel`].
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, bev_height * bev_width, d_model)`):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, d_model)`):
+            Sequence of hidden states at the output of the last decoder layer.
+        bev_embed (`torch.FloatTensor` of shape `(batch_size, bev_height * bev_width, d_model)`):
             Bird's-Eye-View (BEV) embedding generated by the BEV encoder. Can be passed as `prev_bev` to
             subsequent frames.
+        init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 3)`):
+            Initial normalized 3D reference points passed to the decoder.
+        reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 3)`):
+            Final normalized 3D reference points returned by the decoder.
+        pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 10)`, *optional*):
+            Normalized 3D box predictions from the final decoder layer when `decoder.bbox_embed` is attached.
+        decoder_hidden_states (`tuple[torch.FloatTensor]`, *optional*):
+            Decoder hidden states at the output of each layer (plus initial embeddings) when
+            `output_hidden_states=True`.
+        decoder_attentions (`tuple[torch.FloatTensor]`, *optional*):
+            Decoder self-attention weights when `output_attentions=True`.
+        cross_attentions (`tuple[torch.FloatTensor]`, *optional*):
+            Decoder deformable cross-attention weights when `output_attentions=True`.
+        intermediate_reference_points (`tuple[torch.FloatTensor]`, *optional*):
+            Per-layer refined reference points when `output_intermediate_reference_points=True`.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: torch.FloatTensor | None = None
+    bev_embed: torch.FloatTensor | None = None
+    init_reference_points: torch.FloatTensor | None = None
+    reference_points: torch.FloatTensor | None = None
+    pred_boxes: torch.FloatTensor | None = None
+    decoder_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    decoder_attentions: tuple[torch.FloatTensor, ...] | None = None
+    cross_attentions: tuple[torch.FloatTensor, ...] | None = None
+    intermediate_reference_points: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -1635,25 +1651,46 @@ class BevformerObjectDetectionOutput(ModelOutput):
     """Output type of [`BevformerFor3DObjectDetection`].
 
     Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, decoder_layers, num_queries, num_classes)`):
-            Classification logits (pre-sigmoid) for each query at each decoder layer.
-        pred_boxes (`torch.FloatTensor` of shape `(batch_size, decoder_layers, num_queries, 10)`):
-            Predicted 3D bounding box coordinates `[cx, cy, w, l, cz, h, sin(yaw), cos(yaw), vx, vy]` in
-            metric LiDAR frame.
+        logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes)`):
+            Classification logits (pre-sigmoid) for each query from the final decoder layer.
+        pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 10)`):
+            Predicted 3D bounding box coordinates `[cx, cy, w, l, cz, h, sin(yaw), cos(yaw), vx, vy]` from the final
+            decoder layer, with `(cx, cy, cz)` in normalized `[0, 1]` space relative to `config.point_cloud_range`.
         bev_embed (`torch.FloatTensor` of shape `(batch_size, bev_height * bev_width, d_model)`):
             Bird's-Eye-View (BEV) embedding generated by the BEV encoder. Can be passed as `prev_bev` to
             subsequent frames.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, d_model)`):
+            Sequence of hidden states at the output of the last decoder layer.
+        init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 3)`):
+            Initial normalized 3D reference points passed to the decoder.
+        reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 3)`):
+            Final normalized 3D reference points returned by the decoder.
+        decoder_hidden_states (`tuple[torch.FloatTensor]`, *optional*):
+            Decoder hidden states when `output_hidden_states=True`.
+        decoder_attentions (`tuple[torch.FloatTensor]`, *optional*):
+            Decoder self-attention weights when `output_attentions=True`.
+        cross_attentions (`tuple[torch.FloatTensor]`, *optional*):
+            Decoder deformable cross-attention weights when `output_attentions=True`.
+        intermediate_reference_points (`tuple[torch.FloatTensor]`, *optional*):
+            Per-layer refined reference points when `output_intermediate_reference_points=True`.
     """
 
-    logits: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
-    bev_embed: torch.FloatTensor = None
+    logits: torch.FloatTensor | None = None
+    pred_boxes: torch.FloatTensor | None = None
+    bev_embed: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    init_reference_points: torch.FloatTensor | None = None
+    reference_points: torch.FloatTensor | None = None
+    decoder_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    decoder_attentions: tuple[torch.FloatTensor, ...] | None = None
+    cross_attentions: tuple[torch.FloatTensor, ...] | None = None
+    intermediate_reference_points: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
 class BevformerPreTrainedModel(PreTrainedModel):
     config: BevformerConfig
-    base_model_prefix = "bevformer"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
@@ -1697,6 +1734,64 @@ class BevformerPreTrainedModel(PreTrainedModel):
                 init.constant_(module.output_proj.bias, 0.0)
 
 
+class BevformerDecoder(BevformerPreTrainedModel):
+    """Detection transformer decoder for BEVFormer with iterative 3D reference point refinement."""
+
+    _can_record_outputs = {
+        "hidden_states": BevformerDecoderLayer,
+        "attentions": OutputRecorder(BevformerSelfAttention, layer_name="self_attn", index=1),
+        "cross_attentions": OutputRecorder(BevformerMultiscaleDeformableAttention, layer_name="encoder_attn", index=1),
+        "intermediate_reference_points": OutputRecorder(BevformerReferencePointRefiner, index=0),
+    }
+
+    def __init__(self, config: BevformerConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList([BevformerDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.reference_point_refiner = BevformerReferencePointRefiner()
+        self.bbox_embed = None
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    def forward(
+        self,
+        inputs_embeds: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        object_queries_position_embeddings: torch.Tensor,
+        reference_points: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BevformerDecoderOutput:
+        spatial_shapes_list = [(self.config.bev_height, self.config.bev_width)]
+        spatial_shapes = inputs_embeds.new_tensor(spatial_shapes_list, dtype=torch.long)
+        level_start_index = inputs_embeds.new_tensor([0], dtype=torch.long)
+
+        hidden_states = inputs_embeds
+        pred_boxes = None
+
+        for lid, layer in enumerate(self.layers):
+            ref_input = reference_points[..., :2].unsqueeze(2)  # (batch_size, num_queries, 1, 2)
+            hidden_states = layer(
+                hidden_states,
+                object_queries_position_embeddings=object_queries_position_embeddings,
+                reference_points=ref_input,
+                spatial_shapes=spatial_shapes,
+                spatial_shapes_list=spatial_shapes_list,
+                level_start_index=level_start_index,
+                encoder_hidden_states=encoder_hidden_states,
+                **kwargs,
+            )
+
+            if self.bbox_embed is not None:
+                bbox_deltas = self.bbox_embed[lid](hidden_states)
+                reference_points, pred_boxes = self.reference_point_refiner(bbox_deltas, reference_points)
+
+        return BevformerDecoderOutput(
+            last_hidden_state=hidden_states,
+            reference_points=reference_points,
+            pred_boxes=pred_boxes,
+        )
+
+
 @auto_docstring
 class BevformerModel(BevformerPreTrainedModel):
     def __init__(self, config: BevformerConfig):
@@ -1707,6 +1802,7 @@ class BevformerModel(BevformerPreTrainedModel):
         self.positional_encoding = BevformerLearnedPositionalEncoding(config)
         self.query_embedding = BevformerQueryEmbedding(config)
         self.encoder = BevformerEncoder(config)
+        self.decoder = BevformerDecoder(config)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1750,7 +1846,27 @@ class BevformerModel(BevformerPreTrainedModel):
             prev_bev=prev_bev,
         )
 
-        return BevformerModelOutput(last_hidden_state=bev_embed)
+        # 4. Object queries and detection transformer decoder
+        query, query_pos, init_reference_points = self.query_embedding.get_object_queries(batch_size=batch_size)
+        decoder_outputs = self.decoder(
+            inputs_embeds=query,
+            encoder_hidden_states=bev_embed,
+            object_queries_position_embeddings=query_pos,
+            reference_points=init_reference_points,
+            **kwargs,
+        )
+
+        return BevformerModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            bev_embed=bev_embed,
+            init_reference_points=init_reference_points,
+            reference_points=decoder_outputs.reference_points,
+            pred_boxes=decoder_outputs.pred_boxes,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            intermediate_reference_points=decoder_outputs.intermediate_reference_points,
+        )
 
 
 @auto_docstring(
@@ -1759,16 +1875,18 @@ class BevformerModel(BevformerPreTrainedModel):
     """
 )
 class BevformerFor3DObjectDetection(BevformerPreTrainedModel):
+    _tied_weights_keys = {"model.decoder.bbox_embed": "reg_branches"}
+
     def __init__(self, config: BevformerConfig):
         super().__init__(config)
         self.config = config
-        self.bevformer = BevformerModel(config)
-        self.decoder = BevformerDetrTransformerDecoder(config)
+        self.model = BevformerModel(config)
 
         self.cls_branches = nn.ModuleList([BevformerClsHead(config) for _ in range(config.decoder_layers)])
         self.reg_branches = nn.ModuleList(
             [BevformerRegHead(config.d_model, config.d_model, 10, 3) for _ in range(config.decoder_layers)]
         )
+        self.model.decoder.bbox_embed = self.reg_branches
         self.post_init()
 
     @can_return_tuple
@@ -1789,68 +1907,27 @@ class BevformerFor3DObjectDetection(BevformerPreTrainedModel):
         prev_bev (`torch.Tensor` of shape `(batch_size, bev_height * bev_width, d_model)`, *optional*):
             Bird's-eye-view embedding from the previous frame for temporal fusion.
         """
-        batch_size = pixel_values.shape[0]
-
-        # 1. Base BEVFormer forward to extract BEV feature embedding
-        bev_outputs = self.bevformer(
+        outputs = self.model(
             pixel_values=pixel_values,
             lidar2img=lidar2img,
             can_bus=can_bus,
             prev_bev=prev_bev,
-            return_dict=True,
-        )
-        bev_embed = bev_outputs.last_hidden_state
-
-        # 2. Object queries and initial reference points
-        query, query_pos, reference_points = self.bevformer.query_embedding.get_object_queries(batch_size=batch_size)
-
-        # 3. Detection transformer decoder
-        inter_states, inter_references = self.decoder(
-            query=query,
-            value=bev_embed,
-            query_pos=query_pos,
-            reference_points=reference_points,
-            reg_branches=self.reg_branches,
+            **kwargs,
         )
 
-        # 4. Box parameterization matching upstream BEVFormer head
-        num_layers = inter_states.shape[1]
-        all_cls_scores = []
-        all_bbox_preds = []
-
-        pc_range = self.config.point_cloud_range
-        pc_min = query.new_tensor(pc_range[:3])
-        pc_max = query.new_tensor(pc_range[3:])
-        pc_diff = pc_max - pc_min
-
-        for lvl in range(num_layers):
-            hs_lvl = inter_states[:, lvl]
-            if lvl == 0:
-                ref_lvl = reference_points
-            else:
-                ref_lvl = inter_references[:, lvl - 1]
-
-            cls_score = self.cls_branches[lvl](hs_lvl)
-            tmp = self.reg_branches[lvl](hs_lvl)
-
-            inv_ref = inverse_sigmoid(ref_lvl)
-            tmp[..., 0:2] = (tmp[..., 0:2] + inv_ref[..., 0:2]).sigmoid()
-            tmp[..., 4:5] = (tmp[..., 4:5] + inv_ref[..., 2:3]).sigmoid()
-
-            tmp[..., 0:1] = tmp[..., 0:1] * pc_diff[0] + pc_min[0]
-            tmp[..., 1:2] = tmp[..., 1:2] * pc_diff[1] + pc_min[1]
-            tmp[..., 4:5] = tmp[..., 4:5] * pc_diff[2] + pc_min[2]
-
-            all_cls_scores.append(cls_score)
-            all_bbox_preds.append(tmp)
-
-        all_cls_scores = torch.stack(all_cls_scores, dim=1)
-        all_bbox_preds = torch.stack(all_bbox_preds, dim=1)
+        logits = self.cls_branches[-1](outputs.last_hidden_state)
 
         return BevformerObjectDetectionOutput(
-            logits=all_cls_scores,
-            pred_boxes=all_bbox_preds,
-            bev_embed=bev_embed,
+            logits=logits,
+            pred_boxes=outputs.pred_boxes,
+            bev_embed=outputs.bev_embed,
+            last_hidden_state=outputs.last_hidden_state,
+            init_reference_points=outputs.init_reference_points,
+            reference_points=outputs.reference_points,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            intermediate_reference_points=outputs.intermediate_reference_points,
         )
 
 

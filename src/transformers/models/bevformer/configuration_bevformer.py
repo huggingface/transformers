@@ -140,6 +140,7 @@ class BevformerConfig(PreTrainedConfig):
     can_bus_dim: int = 18
     can_bus_norm: bool = True
     rotate_center: list[float] | None = None
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if self.point_cloud_range is None:
