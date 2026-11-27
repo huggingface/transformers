@@ -297,13 +297,16 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
             self.query_pre_attn_scalar = self.head_dim
 
         # `rope_theta`/`partial_rotary_factors` are per-layer (or `rope_theta` a single scalar shared
-        # by all layers). Pop before `super().__post_init__()`: its RoPE handling only supports one
+        # by all layers). Pop before `PreTrainedConfig.__post_init__()`: its RoPE handling only supports one
         # global scalar and would corrupt `self.rope_parameters` with a list.
         rope_theta = kwargs.pop("rope_theta", self.default_theta)
         partial_rotary_factors = kwargs.pop("partial_rotary_factors", None)
         rope_scaling = kwargs.pop("rope_scaling", None)
 
-        super().__post_init__(**kwargs)
+        PreTrainedConfig.__post_init__(self, **kwargs)
+
+        # Checkpoint declares "swigluoai", but the gate is computed inline, so normalize it to silu.
+        self.hidden_act = "silu"
 
         # `DSV4Config` pattern: if `rope_parameters` is already resolved per type (reload), keep
         # only those sub-dicts. Otherwise build fresh, taking each type's value from any one of its layers (they all agree).
