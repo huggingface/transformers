@@ -550,6 +550,7 @@ class Qwen3_5TextModel(Qwen3NextModel):
         if use_cache and cache is None:
             cache = DynamicCache(config=self.config)
 
+        position_ids_provided = position_ids is not None
         # the hard coded `4` is for text, temporal, height and width.
         if position_ids is None:
             past_seen_tokens = cache.get_seq_length() if cache is not None else 0
@@ -571,12 +572,14 @@ class Qwen3_5TextModel(Qwen3NextModel):
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache": cache,
-                "position_ids": text_position_ids,
             }
             # Create the masks
             causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+                # Internally generated positions cannot encode packed sequence boundaries.
+                "full_attention": create_causal_mask(
+                    **mask_kwargs, position_ids=text_position_ids if position_ids_provided else None
+                ),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs, position_ids=text_position_ids),
             }
 
         hidden_states = inputs_embeds

@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_flash_linear_attention,
     require_torch,
     require_torch_gpu,
+    require_torch_greater_or_equal,
     slow,
     torch_device,
 )
@@ -90,6 +91,71 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Qwen3_5TextModelTester
     config_class = Qwen3_5TextConfig
     model_split_percents = [0.5, 0.8, 0.9]
+
+    @require_torch_greater_or_equal("2.14")
+    def test_compiled_sdpa_mask_and_packed_sequence_isolation(self):
+        # Use an interpreter backend to inspect the actual SDPA arguments in the Dynamo graph.
+        calls = []
+
+        class RecordSDPA(torch.fx.Interpreter):
+            def call_function(self, target, args, kwargs):
+                if target is torch.nn.functional.scaled_dot_product_attention:
+                    mask = kwargs.get("attn_mask", args[3] if len(args) > 3 else None)
+                    is_causal = kwargs.get("is_causal", args[5] if len(args) > 5 else False)
+                    calls.append((None if mask is None else mask.detach().clone(), is_causal))
+                return super().call_function(target, args, kwargs)
+
+        def backend(graph_module, example_inputs):
+            return lambda *args: RecordSDPA(graph_module).run(*args)
+
+        config = self.model_tester.get_config()
+        config.num_hidden_layers = 1
+        config.layer_types = ["full_attention"]
+        model = Qwen3_5TextModel._from_config(config, attn_implementation="sdpa").to(torch_device).eval()
+        compiled = torch.compile(model, backend=backend, fullgraph=True)
+        input_ids = torch.tensor([[1, 2, 3, 4, 5, 6]], device=torch_device)
+        positions = torch.tensor([[0, 1, 2, 0, 1, 2]], device=torch_device)
+        with torch.no_grad():
+            compiled(input_ids, use_cache=False)
+            packed_output = compiled(input_ids, position_ids=positions, use_cache=False).last_hidden_state
+            standalone_output = model(input_ids[:, 3:], use_cache=False).last_hidden_state
+
+        self.assertEqual(len(calls), 2)
+        self.assertIsNone(calls[0][0])
+        self.assertIs(calls[0][1], True)
+        packed_mask, is_causal = calls[1]
+        self.assertIs(is_causal, False)
+        expected_mask = torch.tensor(
+            [
+                [1, 0, 0, 0, 0, 0],
+                [1, 1, 0, 0, 0, 0],
+                [1, 1, 1, 0, 0, 0],
+                [0, 0, 0, 1, 0, 0],
+                [0, 0, 0, 1, 1, 0],
+                [0, 0, 0, 1, 1, 1],
+            ],
+            dtype=torch.bool,
+            device=torch_device,
+        )
+        self.assertIsNotNone(packed_mask)
+        torch.testing.assert_close(packed_mask[0, 0], expected_mask)
+        torch.testing.assert_close(packed_output[:, 3:], standalone_output, atol=1e-5, rtol=1e-5)
+
+        model.zero_grad(set_to_none=True)
+        eager_output = model(input_ids, use_cache=False).last_hidden_state
+        loss_weights = torch.linspace(-1, 1, eager_output.numel(), device=torch_device).view_as(eager_output)
+        (eager_output * loss_weights).sum().backward()
+        eager_grads = {
+            name: param.grad.detach().clone() for name, param in model.named_parameters() if param.grad is not None
+        }
+
+        model.zero_grad(set_to_none=True)
+        compiled_output = compiled(input_ids, use_cache=False).last_hidden_state
+        (compiled_output * loss_weights).sum().backward()
+        torch.testing.assert_close(compiled_output, eager_output.detach(), atol=1e-5, rtol=1e-4)
+        for name, param in model.named_parameters():
+            if name in eager_grads:
+                torch.testing.assert_close(param.grad, eager_grads[name], atol=1e-5, rtol=1e-4)
 
     def _get_conv_state_shape(self, batch_size: int, config):
         num_v_heads = config.linear_num_value_heads
