@@ -461,7 +461,10 @@ class FuyuProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            size = kwargs.get("size") or self.image_processor.size
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
+            size = images_kwargs["size"]
             padded_height, padded_width = size["height"], size["width"]
             patch_size = self.image_processor.patch_size
             patch_height, patch_width = patch_size.height, patch_size.width
