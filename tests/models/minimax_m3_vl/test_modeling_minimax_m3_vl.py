@@ -243,9 +243,7 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
         with torch.no_grad():
             logits = model(**inputs).logits
 
-            inputs["input_ids"] = torch.nn.functional.pad(
-                input_ids, (0, 3), value=config.text_config.pad_token_id
-            )
+            inputs["input_ids"] = torch.nn.functional.pad(input_ids, (0, 3), value=config.text_config.pad_token_id)
             inputs["attention_mask"] = torch.nn.functional.pad(attention_mask, (0, 3))
             padded_logits = model(**inputs).logits
 
