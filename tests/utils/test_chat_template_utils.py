@@ -833,6 +833,91 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
 
         self.assertEqual(schema["function"], expected_schema)
 
+    def test_docstring_with_inline_section_keywords(self):
+        # Section keywords like "Returns:", "Raises:", and "Args:" inside sentences should not be treated as section headers
+        def get_weather(city: str):
+            """
+            Look up the weather. Returns: a short forecast for the city.
+
+            Args:
+                city: Name of the city.
+            """
+
+        def run_command(command: str):
+            """
+            Run a shell command.
+
+            Args:
+                command: The command to run. Raises: nothing, errors are returned as text.
+            """
+
+        def parse_cli(text: str):
+            """
+            Parse the command-line Args: everything after the program name.
+
+            Args:
+                text: The raw command line.
+            """
+
+        def run_with_timeout(command: str, timeout: int):
+            """
+            Run a shell command.
+
+            Args:
+                command: The command to run. Returns: are stripped from it.
+                timeout: Seconds to wait.
+            """
+
+        def compute_val(x: int) -> int:
+            """
+            Compute something.
+
+            Args:
+                x: The input value.
+
+            Returns:
+                The doubled value. Raises: nothing.
+            """
+            return x * 2
+
+        weather_schema = get_json_schema(get_weather)
+        self.assertEqual(
+            weather_schema["function"]["description"],
+            "Look up the weather. Returns: a short forecast for the city.",
+        )
+        self.assertEqual(
+            weather_schema["function"]["parameters"]["properties"]["city"]["description"],
+            "Name of the city.",
+        )
+
+        cmd_schema = get_json_schema(run_command)
+        self.assertEqual(
+            cmd_schema["function"]["parameters"]["properties"]["command"]["description"],
+            "The command to run. Raises: nothing, errors are returned as text.",
+        )
+
+        cli_schema = get_json_schema(parse_cli)
+        self.assertEqual(
+            cli_schema["function"]["description"],
+            "Parse the command-line Args: everything after the program name.",
+        )
+
+        timeout_schema = get_json_schema(run_with_timeout)
+        self.assertEqual(
+            timeout_schema["function"]["parameters"]["properties"]["command"]["description"],
+            "The command to run. Returns: are stripped from it.",
+        )
+        self.assertEqual(
+            timeout_schema["function"]["parameters"]["properties"]["timeout"]["description"],
+            "Seconds to wait.",
+        )
+
+        val_schema = get_json_schema(compute_val)
+        self.assertEqual(
+            val_schema["function"]["return"]["description"],
+            "The doubled value. Raises: nothing.",
+        )
+
     def test_return_none(self):
         def fn(x: int) -> None:
             """

@@ -59,9 +59,11 @@ _CONTROL_TOKEN_END = "\U000f0001"
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
 # Extracts the initial segment of the docstring, containing the function description
-description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
+description_re = re.compile(r"^(.*?)(?=(?:^|\r?\n)[ \t]*(?:Args|Returns|Raises):[ \t]*(?:\r?\n|\Z)|\Z)", re.DOTALL)
 # Extracts the Args: block from the docstring
-args_re = re.compile(r"\n\s*Args:\n(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
+args_re = re.compile(
+    r"(?:^|\r?\n)[ \t]*Args:[ \t]*\r?\n(.*?)(?=\r?\n[ \t]*(?:Returns|Raises):[ \t]*(?:\r?\n|\Z)|\Z)", re.DOTALL
+)
 # Splits the Args: block into individual arguments
 args_split_re = re.compile(
     r"""
@@ -73,7 +75,9 @@ args_split_re = re.compile(
     re.DOTALL | re.VERBOSE,
 )
 # Extracts the Returns: block from the docstring, if present. Note that most chat templates ignore the return type/doc!
-returns_re = re.compile(r"\n\s*Returns:\n\s*(.*?)[\n\s]*(Raises:|\Z)", re.DOTALL)
+returns_re = re.compile(
+    r"(?:^|\r?\n)[ \t]*Returns:[ \t]*\r?\n\s*(.*?)(?=\r?\n[ \t]*Raises:[ \t]*(?:\r?\n|\Z)|\Z)", re.DOTALL
+)
 
 
 class TypeHintParsingException(Exception):
