@@ -127,9 +127,11 @@ class DecisionMixin:
             "num_options": marks.new_tensor([counts]),
             "question_type_ids": marks.new_tensor([types]),
         }
+
         if targets is not None:
             if len(targets) != len(counts):
                 raise ValueError("Expected one target distribution per question.")
+
             labels = []
             for target, count in zip(targets, counts):
                 if len(target) != count + 1:
@@ -137,7 +139,9 @@ class DecisionMixin:
                 if target[0] != 0:
                     raise ValueError("This decision head does not support null targets.")
                 labels.extend(target[1:])
+
             model_inputs["labels"] = marks.new_tensor([labels], dtype=torch.float32)
+
         return model_inputs
 
     @torch.no_grad()
@@ -163,6 +167,7 @@ class DecisionMixin:
         scores = self(
             **{key: value.to(self.device) if hasattr(value, "to") else value for key, value in inputs.items()},
         ).logits
+
         return process_scores(
             decision_config, input_ids, marks, decision_questions, scores.split(inputs["num_options"][0].tolist())
         )
