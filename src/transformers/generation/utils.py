@@ -4307,6 +4307,7 @@ class GenerationMixin(ContinuousMixin):
         # or only the new tokens but in this case the attention_mask still contains the FULL sequence (because otherwise we may
         # lose some early padding tokens information). So slice inputs according to that if needed
         # When restarting from `inputs_embeds`, it's always the FULL sequence, and we always need to slice
+        attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
         next_sequence_length = None
         inputs_embeds = model_kwargs.get("inputs_embeds")
         cache = model_kwargs.get("cache")
@@ -4319,7 +4320,6 @@ class GenerationMixin(ContinuousMixin):
             if use_inputs_embeds:
                 next_sequence_length = model_kwargs["inputs_embeds"].shape[1] - past_length
             else:
-                attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
                 attention_mask = model_kwargs.get(attention_mask_key)
                 mask_length = (
                     attention_mask.shape[1]
@@ -4368,7 +4368,7 @@ class GenerationMixin(ContinuousMixin):
                 else self.__call__
             )
 
-            attention_mask = model_kwargs.pop("attention_mask", None)
+            attention_mask = model_kwargs.pop(attention_mask_key, None)
             position_ids = model_kwargs.pop("position_ids", None)
             token_types = {
                 key: model_kwargs.pop(key)
@@ -4398,7 +4398,7 @@ class GenerationMixin(ContinuousMixin):
             for chunk_idx, input_chunk in enumerate(input_chunks):
                 current_length = past_length + input_chunk.shape[-1]
                 if attention_mask is not None:
-                    model_kwargs["attention_mask"] = attention_mask[:, :current_length]
+                    model_kwargs[attention_mask_key] = attention_mask[:, :current_length]
                 if position_ids is not None:
                     # Always slice on `seq-length` (last dim)
                     model_kwargs["position_ids"] = position_ids[..., past_length:current_length]
@@ -4418,7 +4418,7 @@ class GenerationMixin(ContinuousMixin):
                 past_length = current_length
 
             # Recreate the kwargs based on the full length
-            model_kwargs["attention_mask"] = attention_mask
+            model_kwargs[attention_mask_key] = attention_mask
             model_kwargs["position_ids"] = position_ids
             model_kwargs.update(token_types)
             if mm_encoder_outputs is not None:
