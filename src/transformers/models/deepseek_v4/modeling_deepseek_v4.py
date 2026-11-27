@@ -68,10 +68,10 @@ class DeepseekV4RMSNorm(nn.Module):
 class DeepseekV4UnweightedRMSNorm(nn.Module):
     def __init__(self, eps: float = 1.0e-6):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x * torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
+        return x * torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.variance_epsilon).to(x.dtype)
 
 
 class DeepseekV4RotaryEmbedding(nn.Module):
@@ -532,7 +532,60 @@ class DeepseekV4Attention(nn.Module):
 
 
 class DeepseekV4HyperConnection(nn.Module):
-    """Mix residual streams using pre/post gates and a doubly stochastic residual transform."""
+    r"""
+    Manifold-constrained Hyper-Connections (mHC) replace the conventional residual connection with `hc_mult` streams.
+    The streams are collapsed into one before each attention or MLP block and expanded back afterwards, while a
+    learned residual transform mixes the original streams.
+
+    The pre, post and comb weights are computed from the input streams. Sinkhorn-Knopp normalization constrains
+    the comb matrix to be approximately doubly stochastic.
+
+    B = batch_size, S = sequence_length, N = hc_mult, D = hidden_size.
+
+                              N input streams
+                                [B, S, N, D]
+                                      │
+                  ┌───────────────────┼───────────────────┐
+                  │                   │                   │
+                  │         ┌───────────────────┐         │
+                  │         │ FLATTEN + RMSNORM │         │
+                  │         │     + PROJECT     │         │
+                  │         └───────────────────┘         │
+                  │                   │                   │
+                  │           (pre, post, comb)           │
+                  │        [B,S,N], [B,S,N], [B,S,N,N]    │
+                  │                                       │
+        ┌──────────────────┐                   ┌──────────────────┐
+        │  COLLAPSE (pre)  │                   │    MIX (comb)    │
+        │  sum(pre * x)    │                   │    comb.T @ x    │
+        └──────────────────┘                   └──────────────────┘
+                  │                                       │
+             [B, S, D]                                    │
+                  │                                       │
+        ┌──────────────────┐                              │
+        │  NORM + ATTN/MLP │                              │
+        └──────────────────┘                              │
+                  │                                       │
+             [B, S, D]                                    │
+                  │                                       │
+        ┌──────────────────┐                              │
+        │  EXPAND (post)   │                              │
+        └──────────────────┘                              │
+                  │                                       │
+            [B, S, N, D]                            [B, S, N, D]
+                  │                                       │
+                  └───────────────────┬───────────────────┘
+                                      │
+                                 ┌─────────┐
+                                 │   ADD   │
+                                 └─────────┘
+                                      │
+                              N output streams
+                                [B, S, N, D]
+
+    This module computes the collapsed input, post gates and comb matrix. The decoder layer applies the block,
+    expands its output and adds the mixed residual streams.
+    """
 
     def __init__(self, config: DeepseekV4Config):
         super().__init__()

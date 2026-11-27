@@ -532,19 +532,24 @@ class HYV4Experts(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
-        final = torch.zeros_like(hidden_states)
+        final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
-            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in hit:
+            expert_mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
             if expert_idx == self.num_experts:
                 continue
-            top_k_pos, token_idx = torch.where(mask[expert_idx])
-            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
-            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
-            final.index_add_(0, token_idx, current.to(final.dtype))
-        return final
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate_up = F.linear(current_state, self.gate_up_proj[expert_idx])
+            current_hidden_states = self._apply_gate(gate_up)
+            current_hidden_states = F.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
@@ -587,7 +592,7 @@ class HYV4HyperConnection(nn.Module):
 
     def __init__(self, config: HYV4Config):
         super().__init__()
-        self.hc_mult = config.hc_mult  # number of streams, referred as N below
+        self.hc_mult = config.hc_mult
         self.hc_eps = config.hc_eps
         self.input_norm = HYV4UnweightedRMSNorm(eps=config.rms_norm_eps)
         concatenated_weights_size = 2 * self.hc_mult  # noqa: F841

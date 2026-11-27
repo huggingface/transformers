@@ -126,19 +126,24 @@ class Glm5NextTextExperts(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
-        final = torch.zeros_like(hidden_states)
+        final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
-            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in hit:
+            expert_mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
             if expert_idx == self.num_experts:
                 continue
-            top_k_pos, token_idx = torch.where(mask[expert_idx])
-            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
-            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
-            final.index_add_(0, token_idx, current.to(final.dtype))
-        return final
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate_up = F.linear(current_state, self.gate_up_proj[expert_idx])
+            current_hidden_states = self._apply_gate(gate_up)
+            current_hidden_states = F.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
@@ -224,60 +229,63 @@ class Glm5NextTextUnweightedRMSNorm(nn.Module):
 
 class Glm5NextTextHyperConnection(nn.Module):
     r"""
-    A module to implement manifold-constrained Hyper-Connections (mHC) (Xie et al., 2026) which strengthens the
-    conventional residual connections between adjacent Transformer blocks.
+    Manifold-constrained Hyper-Connections (mHC) replace the conventional residual connection with `hc_mult` streams.
+    The streams are collapsed into one before each attention or MLP block and expanded back afterwards, while a
+    learned residual transform mixes the original streams.
 
-    When using mHC, each token is projected onto `hc_mult` streams, so the shape of decoder layer inputs changes from
-    [batch_size, sequence_length, hidden_size] to [batch_size, sequence_length, hc_mult, hidden_size].
-    To keep the same input shape for attention or MLP blocks, the streams are collapsed into one upon entering a block,
-    and expanded back into `hc_mult` streams upon exiting. There is also a weighted residual connection between the
-    input and output streams.
-    The weights used for collapsing (pre), expanding (post) and mixing (comb) are computed from the `hc_mult` input
-    streams through a learned projection (plus Sinkhorn-Knopp algorithm for the comb weight).
+    The pre, post and comb weights are computed from the input streams. Sinkhorn-Knopp normalization constrains
+    the comb matrix to be approximately doubly stochastic.
 
-    The diagram below shows the flow of the mHC streams (B = batch_size, S = seq_length, N = hc_mult, D = hidden_size):
+    B = batch_size, S = sequence_length, N = hc_mult, D = hidden_size.
 
-                                                  ┌───────────────────┐
-                             N input streams  ────│ FLATTEN + PROJECT |────> (pre, post, comb) weights
-                              [B, S, N, D]        └───────────────────┘      ([B, S, N],  [B, S, N],  [B, S, N, N])
-                                  │ │ │
-               ╭──────────────────┴─┼─┼──────────────────╮
-               │ ╭──────────────────┴─┼────────────────╮ │
-               │ │ ╭──────────────────┴──────────────╮ │ │
-               │ │ │                                 │ │ │
-        ┌─────────────────┐                          │ │ │
-        │ COLLAPSE (pre)  │                          │ │ │
-        └─────────────────┘                          │ │ │
-                 │                                   │ │ │
-            Block input                              │ │ │
-             [B, S, D]                               │ │ │
-                 │                                   │ │ │
-        ┌─────────────────┐                     ┌─────────────┐
-        │   ATTN or MLP   │                     │  MIX (comb) │
-        └─────────────────┘                     └─────────────┘
-                 │                                   │ │ │
-           Block output                              │ │ │
-             [B, S, D]                               │ │ │
-                 │                                   │ │ │
-        ┌─────────────────┐                          │ │ │
-        │  EXPAND (post)  │                          │ │ │
-        └─────────────────┘                          │ │ │
-               │ │ │                                 │ │ │
-        N expanded streams                    N residual streams
-           [B, S, N, D]                          [B, S, N, D]
-               │ │ │                                 │ │ │
-               │ │ ╰───────────┌─────────┐───────────╯ │ │
-               │ ╰─────────────│   ADD   │─────────────╯ │
-               ╰───────────────└─────────┘───────────────╯
-                                  │ │ │
-                                  ▼ ▼ ▼
-                            N output streams
-                              [B, S, N, D]
+                              N input streams
+                                [B, S, N, D]
+                                      │
+                  ┌───────────────────┼───────────────────┐
+                  │                   │                   │
+                  │         ┌───────────────────┐         │
+                  │         │ FLATTEN + RMSNORM │         │
+                  │         │     + PROJECT     │         │
+                  │         └───────────────────┘         │
+                  │                   │                   │
+                  │           (pre, post, comb)           │
+                  │        [B,S,N], [B,S,N], [B,S,N,N]    │
+                  │                                       │
+        ┌──────────────────┐                   ┌──────────────────┐
+        │  COLLAPSE (pre)  │                   │    MIX (comb)    │
+        │  sum(pre * x)    │                   │    comb.T @ x    │
+        └──────────────────┘                   └──────────────────┘
+                  │                                       │
+             [B, S, D]                                    │
+                  │                                       │
+        ┌──────────────────┐                              │
+        │  NORM + ATTN/MLP │                              │
+        └──────────────────┘                              │
+                  │                                       │
+             [B, S, D]                                    │
+                  │                                       │
+        ┌──────────────────┐                              │
+        │  EXPAND (post)   │                              │
+        └──────────────────┘                              │
+                  │                                       │
+            [B, S, N, D]                            [B, S, N, D]
+                  │                                       │
+                  └───────────────────┬───────────────────┘
+                                      │
+                                 ┌─────────┐
+                                 │   ADD   │
+                                 └─────────┘
+                                      │
+                              N output streams
+                                [B, S, N, D]
+
+    This module computes the collapsed input, post gates and comb matrix. The decoder layer applies the block,
+    expands its output and adds the mixed residual streams.
     """
 
     def __init__(self, config: Glm5NextTextConfig):
         super().__init__()
-        self.hc_mult = config.hc_mult  # number of streams, referred as N below
+        self.hc_mult = config.hc_mult
         self.hc_sinkhorn_iters = config.hc_sinkhorn_iters
         self.hc_eps = config.hc_eps
         self.input_norm = Glm5NextTextUnweightedRMSNorm(eps=config.rms_norm_eps)
@@ -287,48 +295,36 @@ class Glm5NextTextHyperConnection(nn.Module):
         self.scale = nn.Parameter(torch.empty(3, dtype=torch.float32))
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Computes the weights used to mix in the `hc_mult` streams with the input and output of the next layer, which can
-        be an attention or a MLP layer. This is done through three weights:
-
-        - pre: used to collapse the `hc_mult` input streams into one, creating an input tensor for the next layer
-        - post: used to expand the output of the next layer back into `hc_mult` streams
-        - comb: used to mix the `hc_mult` input streams with the `hc_mult` output streams
-
-        All weights are returned except "pre", which is consumed here.
-        """
+        """Return post gates, residual mixing weights and the collapsed input."""
         batch_size, seq_len = hidden_streams.shape[:2]
         hc = self.hc_mult
 
-        # Flatten and norm the hidden streams
+        # Flatten and normalize the streams before projecting the mixing weights.
         flattened = hidden_streams.view(batch_size, seq_len, -1).float()
         flattened = self.input_norm(flattened)
-        # Mix the streams together to infer the weight coefficients
         flattened = F.linear(flattened, self.fn.float())
-        # Split the weight coefficients
+
+        # Split the projected weights, biases and scales into pre, post and comb.
         pre_w, post_w, comb_w = flattened.split([hc, hc, hc * hc], dim=-1)
         pre_b, post_b, comb_b = self.base.split([hc, hc, hc * hc])
         pre_scale, post_scale, comb_scale = self.scale.unbind(0)
 
-        comb_w = comb_w.view(*comb_w.shape[:-1], hc, hc)  # these are matrix weights, unlike pre or post
+        comb_w = comb_w.view(*comb_w.shape[:-1], hc, hc)
         comb_b = comb_b.view(hc, hc)
 
-        # All weights are computed with a one layer perceptron. For pre and post, this is it.
+        # Pre and post are gates; comb mixes the residual streams.
         pre = torch.sigmoid(pre_w * pre_scale + pre_b) + self.hc_eps
         post = 2 * torch.sigmoid(post_w * post_scale + post_b)
         comb = torch.softmax(comb_w * comb_scale + comb_b, dim=-1) + self.hc_eps
 
-        # The comb weight is a bit different: it dictates how the input streams (In) are added to the output streams
-        # (Out) in this way: Mixed = In @ Comb + Out. To make sure the norm of "Mixed" does not blow up, we constrain
-        # the comb weight to be doubly-stochastic (ie. its rows and columns must sum to 1) with a few iterations of the
-        # Sinkhorn-Knopp algorithm, which iteratively normalizes the rows and columns to sum to 1.
+        # Sinkhorn-Knopp alternates row and column normalization to constrain the
+        # residual mixing matrix to be approximately doubly stochastic.
         comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
         for _ in range(self.hc_sinkhorn_iters - 1):
             comb = comb / (comb.sum(dim=-1, keepdim=True) + self.hc_eps)
             comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
 
-        # Since "pre" is meant to be used with the input streams (available here as `hidden_streams`), we collapse the
-        # streams here and return `collapsed` tensor, which will be the input for the next attention or MLP block.
+        # Collapse the input streams for the attention or MLP block.
         collapsed = (pre.unsqueeze(-1) * hidden_streams).sum(dim=2).to(hidden_streams.dtype)
         return post, comb, collapsed
 
