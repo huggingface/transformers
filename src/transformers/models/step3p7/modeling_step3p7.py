@@ -29,12 +29,14 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
@@ -494,12 +496,10 @@ class Step3p7RotaryEmbedding(nn.Module):
 
 
 class Step3p7RMSNorm(nn.Module):
-    """Gemma-style RMSNorm: normalizes in fp32 and scales by `weight + 1`."""
-
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, hidden_size: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.zeros(hidden_size))
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
@@ -535,10 +535,9 @@ class Step3p7MLP(nn.Module):
         return self.down_proj(gate * up)
 
 
+@use_experts_implementation
 class Step3p7Experts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
-
-    _fp8_experts_clamp_after_activation = True
 
     def __init__(self, config, swiglu_limit=None):
         super().__init__()
@@ -957,7 +956,7 @@ class Step3p7Model(Step3p7PreTrainedModel, MultimodalMixin):
         pixel_values_local: torch.Tensor | None = None,
         num_local_patches: list[int] | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_local (`torch.Tensor` of shape `(total_patches, 3, height, width)`, *optional*):
             All local patches flattened across the batch, or `None` if no local views.
@@ -987,10 +986,12 @@ class Step3p7Model(Step3p7PreTrainedModel, MultimodalMixin):
             cur_feature.append(image_features[i].view(-1, image_features.shape[-1]))
             cur_patch_idx += num_patch
             merged.append(torch.cat(cur_feature) if len(cur_feature) > 1 else cur_feature[0])
-        return BaseModelOutputWithPooling(
+        pooler_output = torch.cat(merged, dim=0)
+        split_sizes = torch.tensor([len(features) for features in merged], device=merged[0].device)
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=vision_output.last_hidden_state,
-            pooler_output=torch.cat(merged, dim=0),
-            split_sizes=torch.tensor([len(features) for features in merged], device=merged[0].device),
+            pooler_output=pooler_output,
+            split_sizes=split_sizes,
             hidden_states=vision_output.hidden_states,
             attentions=vision_output.attentions,
         )
@@ -1055,8 +1056,7 @@ class Step3p7Model(Step3p7PreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 

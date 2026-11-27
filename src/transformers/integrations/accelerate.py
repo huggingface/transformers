@@ -1023,3 +1023,21 @@ def force_accelerate_hooks(child_module_names: str | list[str]) -> Callable:
         return wrapped
 
     return decorator
+
+
+@contextmanager
+def keep_accelerate_hooks(model: nn.Module):
+    """
+    Keep accelerate's hooks on the modules whose `forward` is replaced inside the context.
+
+    With a `device_map`, a hook replaces `forward` to move the inputs to the device of the module, then calls
+    `_old_forward`. The new `forward` becomes `_old_forward`, and the hook is put back.
+    """
+    hooked_forwards = {module: module.forward for module in model.modules() if hasattr(module, "_hf_hook")}
+    try:
+        yield
+    finally:
+        for module, hooked_forward in hooked_forwards.items():
+            if module.forward is not hooked_forward:
+                module._old_forward = module.forward
+                module.forward = hooked_forward

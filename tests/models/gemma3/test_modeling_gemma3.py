@@ -80,7 +80,6 @@ class Gemma3TextModelTester(CausalLMModelTester):
 @require_torch
 class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Gemma3TextModelTester
-    _is_stateful = True
     model_split_percents = [0.5, 0.6]
 
     @unittest.skip("Gemma3 tanh soft-capping amplifies TP numerical noise beyond 80% match threshold")
@@ -200,7 +199,6 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Gemma3Vision2TextModelTester
 
     test_missing_keys = False
-    _is_stateful = True
     model_split_percents = [0.5, 0.6]
     additional_model_inputs = ["token_type_ids"]
 
@@ -244,6 +242,7 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
             reference = model.generate(**reference_inputs, do_sample=False, **generation_kwargs)
             image_outputs = model.get_image_features(pixel_values=inputs.pop("pixel_values"), return_dict=True)
             self.assertFalse(torch.equal(image_outputs.pooler_output[0], image_outputs.pooler_output[1]))
+            image_features = [features.clone() for features in image_outputs.pooler_output]
             inputs["mm_encoder_outputs"] = {"image": image_outputs}
             outputs = model.generate(
                 **inputs,
@@ -252,6 +251,8 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
                 do_sample=do_sample,
                 **generation_kwargs,
             )
+        # Beam search repeats the image features for each beam without touching the ones passed in
+        torch.testing.assert_close(list(image_outputs.pooler_output), image_features, rtol=0, atol=0)
         torch.testing.assert_close(outputs.logits[0], reference.logits[0], rtol=1e-4, atol=1e-5)
 
     def test_training(self):
@@ -735,7 +736,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
                 ("cuda", 7): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
                 ("cuda", 8): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
                 ("rocm", 9): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
-                ("tpu", None): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
+                ("tpu", None): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()

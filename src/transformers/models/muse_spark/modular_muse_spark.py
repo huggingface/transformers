@@ -29,6 +29,7 @@ from ...modeling_multimodal_utils import merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeModelOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -318,9 +319,10 @@ class MuseSparkTopkRouter(MiniMaxM2TopKRouter):
         super().__init__(config)
         self.output_multiplier = config.output_multiplier
         self.scoring_function = ACT2FN["sigmoid"]
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
         self.norm_topk_prob_eps = 1e-15
         self.routed_scaling_factor = config.routed_scaling_factor
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -469,9 +471,9 @@ class MuseSparkTextDecoderLayer(MuseGlimmerTextDecoderLayer):
         self.post_attention_layernorm = MuseSparkRMSNorm(
             config.hidden_size, eps=config.post_norm_eps, with_scale=False
         )
-        self.post_attention_residual_gate = MuseSparkResidualGate(config)
+        self.post_attention_residual_gate = MuseSparkResidualGate(config).to(dtype=torch.float32)
         self.post_feedforward_layernorm = MuseSparkTextInputScaledRMSNorm(config.hidden_size, eps=config.post_norm_eps)
-        self.post_feedforward_residual_gate = MuseSparkResidualGate(config)
+        self.post_feedforward_residual_gate = MuseSparkResidualGate(config).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -757,12 +759,12 @@ class MuseSparkModel(MuseGlimmerModel):
 
     @can_return_tuple
     @auto_docstring
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_values: torch.Tensor,
         input_values_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_values_mask (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):
             Which entries of `input_values` are real audio rather than padding, as produced by
@@ -779,15 +781,16 @@ class MuseSparkModel(MuseGlimmerModel):
             num_tokens = (lengths + samples_per_token - 1) // samples_per_token
             positions = torch.arange(audio_features.shape[1], device=audio_features.device)
             token_mask = positions[None, :] < num_tokens[:, None]
-            audio_features = audio_features[token_mask]
+            audio_features, split_sizes = audio_features[token_mask], num_tokens
         else:
-            audio_features = audio_features.reshape(-1, audio_features.shape[-1])
-
+            split_sizes = torch.full(audio_features.shape[:1], audio_features.shape[1], device=audio_features.device)
+            audio_features = audio_features.flatten(0, 1)
         audio_features = self.get_input_embeddings().embed_norm(audio_features)
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=last_hidden_state,
             pooler_output=audio_features,
             hidden_states=audio_outputs.hidden_states,
+            split_sizes=split_sizes,
         )
 
     def get_audio_placeholder_mask(self, input_ids, inputs_embeds, audio_features):
@@ -903,23 +906,21 @@ class MuseSparkModel(MuseGlimmerModel):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = mm_encoder_outputs["image"].pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = mm_encoder_outputs["video"].pooler_output
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         if input_values is not None:
-            audio_embeds = self.get_audio_features(input_values, input_values_mask).pooler_output
+            audio_embeds = self.get_audio_embeddings(input_values, input_values_mask).pooler_output
             audio_embeds = audio_embeds.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
             audio_mask = self.get_audio_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds

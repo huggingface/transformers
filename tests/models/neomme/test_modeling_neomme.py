@@ -498,7 +498,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
             pixel_values = floats_tensor([len(patch_positions), config.patch_dim]).to(torch_device)
 
             inputs_embeds = model.embed_tokens(input_ids)
-            image_features = model.get_image_features(pixel_values).pooler_output
+            image_features = model.get_image_embeddings(pixel_values).pooler_output
             image_mask = model.get_placeholder_mask(input_ids, image_features)
             scattered = inputs_embeds.masked_scatter(image_mask, image_features)
 

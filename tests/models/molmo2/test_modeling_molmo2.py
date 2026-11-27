@@ -187,10 +187,6 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Molmo2VisionText2TextModelTester
     additional_model_inputs = ["mm_token_type_ids"]
 
-    @unittest.skip(reason="The encoder's padding mask goes through flash attention's data-dependent unpadding")
-    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
-        pass
-
     @unittest.skip(
         "The test slices every input tensor in half along dim 0, but `image_token_pooling` has no batch "
         "dimension: pooled patches of all images are concatenated along one axis."

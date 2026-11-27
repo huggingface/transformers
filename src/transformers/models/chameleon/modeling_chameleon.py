@@ -27,8 +27,13 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    CausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -50,7 +55,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @dataclass
-class ChameleonVQVAEModelOutput(BaseModelOutputWithPooling):
+class ChameleonVQVAEModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     quantized_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
         Quantized last hidden state from the VQ-VAE model.
@@ -867,7 +872,7 @@ class ChameleonModel(ChameleonPreTrainedModel, MultimodalMixin):
     )
     def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
@@ -875,8 +880,9 @@ class ChameleonModel(ChameleonPreTrainedModel, MultimodalMixin):
         batch_size = pixel_values.shape[0]
         vqmodel_outputs: ChameleonVQVAEModelOutput = self.vqmodel.encode(pixel_values, return_dict=True, **kwargs)
         bpe_tokens = self.vocabulary_mapping.convert_img2bpe(vqmodel_outputs.image_tokens).view(batch_size, -1)
-        vqmodel_outputs.pooler_output = self.get_input_embeddings()(bpe_tokens)
-        vqmodel_outputs.pooler_output, vqmodel_outputs.split_sizes = flatten_items(vqmodel_outputs.pooler_output)
+        features = self.get_input_embeddings()(bpe_tokens)
+        vqmodel_outputs.split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        vqmodel_outputs.pooler_output = features.flatten(0, 1)
         return vqmodel_outputs
 
     def get_placeholder_mask(

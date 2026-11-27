@@ -53,7 +53,7 @@ from ...utils import (
 )
 from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple
 from ..clip.modeling_clip import CLIPMLP
-from ..convnext.modeling_convnext import ConvNextLayer
+from ..convnext.modeling_convnext import ConvNextLayer, ConvNextLayerNorm
 from ..detr.image_processing_detr import (
     SUPPORTED_ANNOTATION_FORMATS,
     DetrImageProcessor,
@@ -74,7 +74,6 @@ from ..lw_detr.modeling_lw_detr import (
     LwDetrConvEncoder,
     LwDetrConvNormLayer,
     LwDetrForObjectDetection,
-    LwDetrLayerNorm,
     LwDetrModel,
     LwDetrObjectDetectionOutput,
     LwDetrPreTrainedModel,
@@ -822,7 +821,7 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
         )
 
 
-class RfDetrLayerNorm(LwDetrLayerNorm):
+class RfDetrLayerNorm(ConvNextLayerNorm):
     pass
 
 

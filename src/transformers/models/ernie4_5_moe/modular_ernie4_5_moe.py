@@ -183,14 +183,15 @@ class Ernie4_5_MoeDecoderLayer(Qwen3MoeDecoderLayer):
 class Ernie4_5_MoePreTrainedModel(MixtralPreTrainedModel):
     config: Ernie4_5_MoeConfig
     _no_split_modules = ["Ernie4_5_MoeDecoderLayer"]
-    # Not supporting multi-token prediction (MTP) atm
     _keys_to_ignore_on_load_unexpected = ["mtp"]
+    # The final norm is also the post-norm of the MTP layer
+    _keys_shared_with_mtp = [r"^model\.norm\.weight$"]
     _can_record_outputs = {
         "router_logits": OutputRecorder(Ernie4_5_MoeTopKRouter, index=0),
         "hidden_states": Ernie4_5_MoeDecoderLayer,
         "attentions": Ernie4_5_MoeAttention,
     }
-    _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
+    _keep_in_fp32_modules_strict = ["gate.weight", "e_score_correction_bias"]
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)

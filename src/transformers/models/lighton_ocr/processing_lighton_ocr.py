@@ -144,10 +144,12 @@ class LightOnOcrProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
 
-            size = images_kwargs.get("size", None) or self.image_processor.size
-            patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size
+            size = images_kwargs["size"]
+            patch_size = images_kwargs["patch_size"]
             if isinstance(patch_size, dict) and "height" in patch_size and "width" in patch_size:
                 patch_size = (patch_size["height"], patch_size["width"])
 

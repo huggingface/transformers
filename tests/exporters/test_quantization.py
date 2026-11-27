@@ -29,7 +29,7 @@ from parameterized import parameterized
 
 from tests.exporters.test_export import (
     _run_executorch_program,
-    _run_openvino_model,
+    _run_openvino_program,
     disable_hub_kernels,
 )
 from tests.test_memory_cleanup_mixin import MemoryCleanupMixin
@@ -627,7 +627,7 @@ class OpenVINOQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         VNNI: without it (AVX2-only Intel, AMD Zen 2 and older) their int16 accumulators saturate, so only finiteness
         is checked.
         """
-        outputs = _run_openvino_model(ov_model, copy.deepcopy(inputs))
+        outputs = _run_openvino_program(ov_model, copy.deepcopy(inputs))
         self.assertTrue(outputs)
         self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
         int8_activations = _openvino_op_counts(ov_model)[0] > 0

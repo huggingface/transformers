@@ -41,7 +41,6 @@ from .components import (
     PatchVisionEncoder,
     TokenEmbedder,
 )
-from .precompute import _find_config_attr, get_rope_index_from_config, precompute_export_inputs
 from .utils import patch_attributes
 
 
@@ -444,6 +443,18 @@ _MODALITY_SPECS = (
 )
 
 
+def _find_config_attr(config: Any, name: str) -> Any | None:
+    """The first non-`None` `name` on `config` or any of its (recursive) `sub_configs`."""
+    value = getattr(config, name, None)
+    if value is not None:
+        return value
+    for sub_key in getattr(config, "sub_configs", {}):
+        sub = getattr(config, sub_key, None)
+        if sub is not None and (value := _find_config_attr(sub, name)) is not None:
+            return value
+    return None
+
+
 def anyres_patch_counts(config: Any, image_sizes) -> list[int]:
     """Per-image patch counts (tiles plus the base patch) from `image_sizes`; config-only."""
     from ..image_processing_utils import select_best_resolution
@@ -625,12 +636,16 @@ def decompose_multimodal(
             }
             components[name] = Component(PatchVisionEncoder(owner), tower_inputs)
             continue
-        feature_inputs = precompute_export_inputs(model.config, feature_inputs)
         # The image features keep the shape the model returns them in (`image_hidden_states`): flat (LLaVA), or one
         # row per image (Gemma3, PaliGemma).
         returned = getattr(outputs, "image_hidden_states", None) if name == "vision_embeddings_model" else None
         flatten = not isinstance(returned, torch.Tensor) or returned.dim() == 2
         components[name] = Component(ModalityEncoder(owner, getter, spec.grid_key, flatten), feature_inputs)
+    if "language_model" in components:
+        language_model = components["language_model"]
+        components["language_model"] = replace(
+            language_model, inputs=_without_encoder_inputs(language_model.inputs, components)
+        )
     return components
 
 
@@ -753,10 +768,22 @@ def _capture_generation(
     return components, {name: list(calls) for name, calls in live.items() if calls}, cross_writers
 
 
+def _without_encoder_inputs(call_inputs: dict, components: dict) -> dict:
+    """`call_inputs` without the modalities' data-dependent inputs (`image_cu_seqlens`, ...), which `generate` and
+    the caller add to every call but only an encoder reads: a text graph traced on them would take them too."""
+    encoder_inputs = {
+        f"{spec.modality}_{name}"
+        for spec in _MODALITY_SPECS
+        if spec.component in components
+        for name in components[spec.component].inputs
+    }
+    return {key: value for key, value in call_inputs.items() if key not in encoder_inputs}
+
+
 def embedded_inputs(call_inputs: dict, components: dict) -> dict:
     """A text graph's captured kwargs, rewritten to take embeddings instead of token ids and modality inputs,
     so the runtime can scatter features in."""
-    call_inputs = copy.copy(call_inputs)
+    call_inputs = _without_encoder_inputs(call_inputs, components)
     for spec in _MODALITY_SPECS:
         for input_key in (*spec.input_keys, spec.grid_key):
             call_inputs.pop(input_key, None)
@@ -819,14 +846,10 @@ def dense_deepstack(mask_name: str, like: torch.Tensor, layers, parts=()) -> dic
 def _main_inputs(model: PreTrainedModel, inputs: dict[str, Any], decoder_call: dict[str, Any]) -> dict[str, Any]:
     """`model`'s own kwargs on `inputs_embeds`: the embeddings its text stack received, features scattered in,
     replace the token ids and modality inputs. What the model derived from those and can't recompute without them
-    comes along: M-RoPE positions, computed from the config as the runtime computes them, and deepstack features."""
+    comes along: M-RoPE positions (`get_data_dependent_inputs`, which the caller added) and deepstack features."""
     if decoder_call.get("inputs_embeds") is None:
         return inputs
     main_inputs = copy.copy(inputs)
-    # The rope index alone: the precompute's modality preparers reuse the name (MiniCPM-V's vision `position_ids`).
-    if main_inputs.get("position_ids") is None and "position_ids" in inspect.signature(model.forward).parameters:
-        if (rope_index := get_rope_index_from_config(model.config, inputs)) is not None:
-            main_inputs["position_ids"] = rope_index[0]
     main_inputs = embedded_inputs(main_inputs, {})
     main_inputs.pop("input_ids", None)
     main_inputs["inputs_embeds"] = decoder_call["inputs_embeds"]

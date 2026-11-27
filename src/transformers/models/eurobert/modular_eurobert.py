@@ -82,8 +82,7 @@ class EuroBertConfig(LlamaConfig):
 
 
 class EuroBertRMSNorm(LlamaRMSNorm):
-    def __init__(self, hidden_size, eps=1e-5):
-        super().__init__(hidden_size, eps)
+    pass
 
 
 class EuroBertAttention(LlamaAttention):

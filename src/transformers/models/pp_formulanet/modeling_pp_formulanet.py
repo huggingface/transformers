@@ -38,6 +38,7 @@ from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
@@ -707,7 +708,7 @@ class PPFormulaNetDecoderLayer(GradientCheckpointingLayer):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache", expose_in_signature=True)
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -961,7 +962,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
     return prev_output_tokens
 
 
-class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
+class PPFormulaNetModel(PPFormulaNetPreTrainedModel, MultimodalMixin):
     def __init__(self, config: PPFormulaNetConfig):
         super().__init__(config)
 
@@ -969,6 +970,17 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
         self.encoder = PPFormulaNetVisionModel(config=config.vision_config)
 
         self.post_init()
+
+    @can_return_tuple
+    @auto_docstring(custom_intro="Encodes images into the features the decoder cross-attends to.")
+    def get_image_embeddings(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
+        image_outputs = self.encoder(pixel_values=pixel_values, **kwargs)
+        features = image_outputs.pooler_output
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs.pooler_output = features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring

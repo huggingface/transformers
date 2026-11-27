@@ -43,7 +43,6 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
     DeepseekV3PreTrainedModel,
-    DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
     apply_rotary_pos_emb,
     apply_rotary_pos_emb_interleave,
@@ -51,6 +50,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 )
 from ..glm4_moe_lite.configuration_glm4_moe_lite import Glm4MoeLiteConfig
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
+from ..llama.modeling_llama import LlamaRMSNorm
 
 
 logger = logging.get_logger(__name__)
@@ -91,9 +91,6 @@ class DeepseekV32Config(Glm4MoeLiteConfig):
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -164,7 +161,7 @@ class DeepseekV32Config(Glm4MoeLiteConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-class DeepseekV32RMSNorm(DeepseekV3RMSNorm):
+class DeepseekV32RMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -365,7 +362,7 @@ class DeepseekV32DecoderLayer(Glm4MoeLiteDecoderLayer):
 
 class DeepseekV32PreTrainedModel(DeepseekV3PreTrainedModel):
     _keep_in_fp32_modules = ["indexer.weights_proj"]
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True

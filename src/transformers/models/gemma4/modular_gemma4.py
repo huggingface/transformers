@@ -25,7 +25,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...masking_utils import (
     _preprocess_mask_arguments,
     blockwise_overlay,
@@ -38,7 +37,11 @@ from ...masking_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -188,7 +191,7 @@ class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
 
 @auto_docstring
 @dataclass
-class Gemma4AudioModelOutput(BaseModelOutputWithPooling):
+class Gemma4AudioModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     attention_mask (`torch.BoolTensor`, *optional*):
         A torch.BoolTensor of shape `(batch_size, num_frames)`. True for valid positions, False for padding.
@@ -1007,11 +1010,11 @@ class Gemma4TextAttention(nn.Module):
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
-        self.q_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = Gemma4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
         # Layers sharing kv states don't need any weight matrices
         if not self.is_kv_shared_layer:
-            self.k_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+            self.k_norm = Gemma4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
             self.v_norm = Gemma4RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
             self.k_proj = nn.Linear(
@@ -1927,7 +1930,7 @@ class Gemma4Model(Gemma3nModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
@@ -1941,8 +1944,8 @@ class Gemma4Model(Gemma3nModel, MultimodalMixin):
         vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
         k_squared = math.isqrt(image_position_ids.shape[1] // output_length) ** 2
-        vision_outputs.split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
-        return vision_outputs
+        split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
@@ -1952,7 +1955,7 @@ class Gemma4Model(Gemma3nModel, MultimodalMixin):
         video_position_ids: torch.LongTensor | None = None,
         num_frames_per_video: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
             The frames of every video in the batch, concatenated along the frame axis rather than stacked
@@ -1978,16 +1981,11 @@ class Gemma4Model(Gemma3nModel, MultimodalMixin):
         last_hidden_state = vision_outputs.last_hidden_state
         vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         k_squared = self.config.vision_config.pooling_kernel_size**2
+        # Each video's tokens are the sum of its frames', read at each video's last frame
         tokens_per_frame = (video_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
-        video_index = torch.repeat_interleave(
-            torch.arange(len(num_frames_per_video), device=tokens_per_frame.device),
-            num_frames_per_video.to(tokens_per_frame.device),
-            output_size=len(tokens_per_frame),
-        )
-        vision_outputs.split_sizes = tokens_per_frame.new_zeros(len(num_frames_per_video)).index_add_(
-            0, video_index, tokens_per_frame
-        )
-        return vision_outputs
+        video_ends = tokens_per_frame.cumsum(0)[num_frames_per_video.to(tokens_per_frame.device).cumsum(0) - 1]
+        split_sizes = video_ends.diff(prepend=video_ends.new_zeros(1))
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -2111,8 +2109,7 @@ class Gemma4Model(Gemma3nModel, MultimodalMixin):
             mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_position_ids, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -2133,8 +2130,7 @@ class Gemma4Model(Gemma3nModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("video") is not None:
-            video_features = mm_encoder_outputs["video"].pooler_output
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_features = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -2152,14 +2148,8 @@ class Gemma4Model(Gemma3nModel, MultimodalMixin):
         # Merge text and audio
         audio_outputs = None
         if input_features is not None and input_features_mask is not None:
-            audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
-            audio_features = audio_output.pooler_output
-            audio_mask_from_encoder = audio_output.attention_mask  # True = valid
-
-            # Strip padding tokens: only keep real (non-padding) audio soft tokens.
-            # audio_mask_from_encoder is True for valid positions, False for padding tokens.
-            # This mirrors the vision encoder's padding stripping (see Gemma4VisionEncoder.forward).
-            audio_features = audio_features[audio_mask_from_encoder.to(audio_features.device)]
+            audio_outputs = self.get_audio_embeddings(input_features, input_features_mask, return_dict=True)
+            audio_features = audio_outputs.pooler_output
 
             n_audio_tokens = audio_mask.sum()
             audio_mask = audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
@@ -2219,7 +2209,7 @@ class Gemma4Model(Gemma3nModel, MultimodalMixin):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
@@ -2238,8 +2228,11 @@ class Gemma4Model(Gemma3nModel, MultimodalMixin):
             )
 
         audio_outputs = self.audio_tower(input_features, input_features_mask, return_dict=True, **kwargs)
-        audio_outputs.pooler_output = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
-
+        audio_embeds = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
+        # Only the real audio soft tokens, the ones `attention_mask` is True on, as the image getter drops padding too
+        valid_mask = audio_outputs.attention_mask.to(audio_embeds.device)
+        audio_outputs.pooler_output = audio_embeds[valid_mask]
+        audio_outputs.split_sizes = valid_mask.sum(-1)
         return audio_outputs
 
 
@@ -2249,7 +2242,7 @@ class Gemma4Model(Gemma3nModel, MultimodalMixin):
     head.
     """
 )
-class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration, MultimodalMixin, GenerationMixin):
+class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
     base_model_prefix = "model"
 
     _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
@@ -2346,6 +2339,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration, Multimodal
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            audio_outputs=outputs.audio_outputs,
             shared_kv_states=outputs.shared_kv_states,
             router_logits=outputs.router_logits,
         )

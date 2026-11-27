@@ -280,7 +280,7 @@ def resolve_hidden_states_indices(
 def select_hidden_states(selection: str | Callable[[PreTrainedModel], int | list[int]]):
     """
     Decorator for methods which only use some hidden states, so that only those are captured by the `capture_outputs`
-    of the submodels they forward their kwargs to. If the caller requests hidden states, that takes precedence.
+    of the submodels they forward their kwargs to. Hidden states the caller requests are captured as well.
 
     Args:
         selection (`str` or `Callable`):
@@ -297,16 +297,21 @@ def select_hidden_states(selection: str | Callable[[PreTrainedModel], int | list
 
         @wraps(func)
         def wrapper(self, *args, **kwargs):
-            if not kwargs.get("output_hidden_states"):
-                if isinstance(selection, str):
-                    if selection in kwargs:
-                        kwargs["output_hidden_states"] = kwargs[selection]
-                    elif position < len(args):
-                        kwargs["output_hidden_states"] = args[position]
-                    else:
-                        kwargs["output_hidden_states"] = default
+            requested = kwargs.get("output_hidden_states")
+            if requested is True:
+                return func(self, *args, **kwargs)
+            if isinstance(selection, str):
+                if selection in kwargs:
+                    needed = kwargs[selection]
+                elif position < len(args):
+                    needed = args[position]
                 else:
-                    kwargs["output_hidden_states"] = selection(self)
+                    needed = default
+            else:
+                needed = selection(self)
+            if requested := selected_hidden_states(requested):
+                needed = requested + selected_hidden_states(needed)
+            kwargs["output_hidden_states"] = needed
             return func(self, *args, **kwargs)
 
         return wrapper

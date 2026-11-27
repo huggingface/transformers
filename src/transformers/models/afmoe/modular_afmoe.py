@@ -30,7 +30,6 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..gpt_oss.modeling_gpt_oss import GptOssRMSNorm
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
@@ -38,6 +37,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..olmo2.modeling_olmo2 import Olmo2RMSNorm
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 from .configuration_afmoe import AfmoeConfig
 
@@ -49,7 +49,7 @@ class AfmoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class AfmoeRMSNorm(GptOssRMSNorm):
+class AfmoeRMSNorm(Olmo2RMSNorm):
     pass
 
 
@@ -105,7 +105,7 @@ class AfmoeSparseMoeBlock(nn.Module):
         self.router = AfmoeTokenChoiceRouter(config)
         self.shared_experts = AfmoeMLP(config, config.moe_intermediate_size * config.num_shared_experts)
         self.experts = AfmoeExperts(config)
-        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
+        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts, dtype=torch.float32), requires_grad=False)
 
     def forward(self, hidden_states):
         batch_size, seq_len, hidden_dim = hidden_states.shape

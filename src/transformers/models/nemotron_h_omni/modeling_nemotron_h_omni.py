@@ -27,9 +27,12 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling, MultimodalCausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
@@ -43,7 +46,6 @@ from .configuration_nemotron_h_omni import NemotronH_Omni_Reasoning_V3_Config
 logger = logging.get_logger(__name__)
 
 
-@use_kernel_forward_from_hub("RMSNorm")
 class NemotronH_Omni_RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
@@ -90,7 +92,6 @@ class NemotronH_Omni_Reasoning_V3PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
-    _is_stateful = True
     # mel extraction runs in the processor, so the checkpoint's in-encoder featurizer buffers are unused
     _keys_to_ignore_on_load_unexpected = [r"audio_tower\.feature_extractor\."]
 
@@ -213,7 +214,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
         pixel_values: torch.Tensor,
         image_grid_hw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size**2)`):
             Flattened patches of all images, concatenated.
@@ -237,10 +238,12 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
             image_features = self.vision_final_layernorm(image_features)
         image_features = image_features[pixel_shuffle_index].reshape(-1, merge_size**2 * image_features.shape[-1])
 
-        return BaseModelOutputWithPooling(
+        pooler_output = self.multi_modal_projector(image_features)
+        split_sizes = image_grid_hw.prod(-1) // merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=vision_outputs.last_hidden_state,
-            pooler_output=self.multi_modal_projector(image_features),
-            split_sizes=image_grid_hw.prod(-1) // merge_size**2,
+            pooler_output=pooler_output,
+            split_sizes=split_sizes,
             hidden_states=vision_outputs.hidden_states,
             attentions=vision_outputs.attentions,
         )
@@ -249,7 +252,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
     @auto_docstring
     def get_video_embeddings(
         self, pixel_values_videos: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor` of shape `(num_videos, num_tubelets, video_temporal_patch_size * num_channels, height, width)`):
             Videos packed by the video processor into tubelets of `video_temporal_patch_size` consecutive frames
@@ -277,10 +280,12 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
         patch_size = self.vision_model.patch_size
         grid_height, grid_width = (side // patch_size for side in pixel_values_videos.shape[-2:])
         video_embeds = self.project_vision_features(vision_outputs.features, grid_height, grid_width)
-        return BaseModelOutputWithPooling(
+        pooler_output = video_embeds.flatten(0, 1)
+        split_sizes = video_embeds.new_full((num_videos,), num_tubelets * video_embeds.shape[1], dtype=torch.long)
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=vision_outputs.last_hidden_state.unflatten(0, (num_videos, num_tubelets)),
-            pooler_output=video_embeds.flatten(0, 1),
-            split_sizes=video_embeds.new_full((num_videos,), num_tubelets * video_embeds.shape[1], dtype=torch.long),
+            pooler_output=pooler_output,
+            split_sizes=split_sizes,
             hidden_states=vision_outputs.hidden_states,
             attentions=vision_outputs.attentions,
         )
@@ -289,12 +294,12 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
     @auto_docstring(
         custom_intro="Encodes mel features with the audio tower and projects them into language model space."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_features (`torch.Tensor` of shape `(num_clips, num_frames, num_mel_bins)`):
             Mel features produced by the processor.
@@ -316,15 +321,18 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
         if input_features_mask is not None:
             lengths = self.audio_tower._get_subsampling_output_length(input_features_mask.sum(-1) + 1)
             positions = torch.arange(audio_embeds.shape[1], device=audio_embeds.device)
-            audio_embeds = audio_embeds[positions[None, :] < lengths[:, None].to(audio_embeds.device)]
+            valid_mask = positions[None, :] < lengths[:, None].to(audio_embeds.device)
+            audio_embeds = audio_embeds[valid_mask]
+            split_sizes = valid_mask.sum(-1)
         else:
-            audio_embeds = audio_embeds.reshape(-1, audio_embeds.shape[-1])
-
-        return BaseModelOutputWithPooling(
+            split_sizes = torch.full(audio_embeds.shape[:1], audio_embeds.shape[1], device=audio_embeds.device)
+            audio_embeds = audio_embeds.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=audio_outputs.last_hidden_state,
             pooler_output=audio_embeds,
             hidden_states=audio_outputs.hidden_states,
             attentions=audio_outputs.attentions,
+            split_sizes=split_sizes,
         )
 
     def get_placeholder_mask(
@@ -351,7 +359,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
         )
         return special_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
 
-    def _placeholder_token_id(self, modality: str) -> int:
+    def _modality_token_id(self, modality: str) -> int:
         # Video placeholders reuse the image token
         return self.image_token_id
 
@@ -407,14 +415,12 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
             mm_encoder_outputs["video"] = self.get_video_embeddings(pixel_values_videos, return_dict=True, **kwargs)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = mm_encoder_outputs["image"].pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_embeds, self.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = mm_encoder_outputs["video"].pooler_output
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_embeds, self.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
@@ -422,9 +428,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
                 # the videos of one call are stacked, so they share the number of tubelets in `last_hidden_state`
                 video_outputs = mm_encoder_outputs["video"]
                 num_tubelets = video_outputs.last_hidden_state.shape[1]
-                video_features = video_outputs.pooler_output
-                if isinstance(video_features, torch.Tensor):
-                    video_features = video_features.unflatten(0, (len(video_outputs.split_sizes), -1))
+                video_features = video_outputs.pooler_output.unflatten(0, (len(video_outputs.split_sizes), -1))
                 evs_mask = torch.cat(
                     [
                         compute_retention_mask(features, num_tubelets, self.video_pruning_rate)
@@ -442,7 +446,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
                 input_ids = input_ids[retention_mask].view(batch_size, -1)
 
         if input_features is not None and self.audio_tower is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features, input_features_mask).pooler_output
+            audio_embeds = self.get_audio_embeddings(input_features, input_features_mask).pooler_output
             audio_embeds = audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds, audio_embeds, self.audio_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_embeds)

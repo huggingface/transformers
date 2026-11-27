@@ -30,8 +30,12 @@ from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    MoeModelOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
@@ -52,8 +56,11 @@ from ..gemma3.modeling_gemma3 import (
 )
 from ..higgs_audio_v2.modeling_higgs_audio_v2 import HiggsAudioV2Embeddings
 from ..llama.modeling_llama import LlamaRMSNorm, repeat_kv
+from ..mamba.modeling_mamba import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ..mixtral.modeling_mixtral import MixtralExperts
-from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causal_conv1d_fn, causal_conv1d_update
+from ..qwen3_next.modeling_qwen3_next import (
+    apply_mask_to_padding_states,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -110,13 +117,7 @@ class InklingTextConfig(PreTrainedConfig):
     model_type = "inkling_text"
     base_config_key = "text_config"
     base_model_tp_plan = {
-        "layers.*.mlp.experts.gate_up_proj": "colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
-        "layers.*.mlp.shared_experts.gate_proj": "colwise",
-        "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
-        "layers.*.mlp.shared_experts": "all_reduce",
+        "embed_tokens": "replicate",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -413,10 +414,10 @@ class InklingAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
         self.k_sconv = InklingShortConvolution(
             self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=0
-        )
+        ).to(dtype=torch.float32)
         self.v_sconv = InklingShortConvolution(
             self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=1
-        )
+        ).to(dtype=torch.float32)
         self.q_norm = InklingRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = InklingRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.rel_logits_proj = InklingRelativeLogits(config.d_rel, self.rel_extent)
@@ -519,8 +520,8 @@ class InklingTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
 
         self.weight = nn.Parameter(torch.empty(self.n_total_experts, config.hidden_size))
-        self.global_scale = nn.Parameter(torch.ones(1))
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.global_scale = nn.Parameter(torch.ones(1, dtype=torch.float32))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
@@ -595,7 +596,7 @@ class InklingMoE(nn.Module):
         return hidden_states
 
 
-@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_forward, causal_conv1d_fn])
 class InklingShortConvolution(nn.Module):
     def __init__(self, hidden_size: int, conv_kernel_size: int, layer_idx: int, conv_idx: int):
         super().__init__()
@@ -627,32 +628,16 @@ class InklingShortConvolution(nn.Module):
 
         residual = hidden_states
         hidden_states = apply_mask_to_padding_states(hidden_states, conv_mask)
-        seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
-        if cache is not None:
-            conv_state = cache.get_conv_state(self.layer_idx, state_idx=self.conv_idx)
-        else:
-            conv_state = None
-
-        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
-            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
-            hidden_states = causal_conv1d_update(
-                hidden_states, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias
-            )
-        else:
-            if cache is not None:
-                hidden_states = cache.update_conv_state(
-                    hidden_states, self.layer_idx, state_idx=self.conv_idx, conv_kernel_size=self.conv_kernel_size
-                )
-
-            hidden_states = causal_conv1d_fn(
-                hidden_states, self.conv1d.weight.squeeze(1), self.conv1d.bias, seq_idx=kwargs.get("seq_idx")
-            )
-
-            # Drop the additional previous states
-            if cache is not None:
-                hidden_states = hidden_states[:, :, -seq_len:]
+        hidden_states = causal_conv1d_forward(
+            self.conv1d,
+            hidden_states,
+            cache,
+            self.layer_idx,
+            state_idx=self.conv_idx,
+            **kwargs,
+        )
 
         hidden_states = hidden_states.transpose(1, 2)
         hidden_states = (hidden_states + residual).to(dtype=input_dtype)
@@ -675,10 +660,10 @@ class InklingDecoderLayer(GradientCheckpointingLayer):
         self.layer_type = config.layer_types[layer_idx]
         self.attn_sconv = InklingShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
-        )
+        ).to(dtype=torch.float32)
         self.mlp_sconv = InklingShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
-        )
+        ).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -1106,6 +1091,8 @@ class InklingVisionModel(InklingPreTrainedModel):
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         num_patches = pixel_values.shape[0]
         hidden_states = pixel_values
+        if (target_dtype := self.encoder_layers[0].projection.weight.dtype).is_floating_point:
+            hidden_states = hidden_states.to(target_dtype)
         for layer in self.encoder_layers:
             hidden_states = layer(hidden_states=hidden_states)
 
@@ -1139,18 +1126,20 @@ class InklingModel(InklingPreTrainedModel, MultimodalMixin):
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_tower(pixel_values=pixel_values, **kwargs)
-        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
-        return image_outputs
+        features = image_outputs.pooler_output
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs.pooler_output = features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects discretized dMel bin tokens into the language model space.")
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         audio_input_ids: torch.LongTensor,
         audio_input_ids_mask: torch.Tensor | None = None,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         audio_input_ids (`torch.LongTensor` of shape `(num_audios, max_num_frames, n_mel_bins)`):
             Batch of (padded) dMel bin tokens produced by [`InklingProcessor`].
@@ -1160,9 +1149,14 @@ class InklingModel(InklingPreTrainedModel, MultimodalMixin):
         """
         if audio_input_ids_mask is not None:
             audio_input_ids = audio_input_ids[audio_input_ids_mask.bool()]
+            split_sizes = audio_input_ids_mask.sum(-1)
         else:
-            audio_input_ids = audio_input_ids.reshape(-1, audio_input_ids.shape[-1])
-        return self.audio_tower(audio_input_ids)
+            split_sizes = torch.full(
+                audio_input_ids.shape[:1], audio_input_ids.shape[1], device=audio_input_ids.device
+            )
+            audio_input_ids = audio_input_ids.flatten(0, 1)
+        audio_outputs = self.audio_tower(audio_input_ids)
+        return BaseModelOutputWithPoolingAndSplitSizes(**audio_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -1253,8 +1247,7 @@ class InklingModel(InklingPreTrainedModel, MultimodalMixin):
             mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, return_dict=True, **kwargs)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = mm_encoder_outputs["image"].pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, image_embeds, self.config.image_token_id
             )
@@ -1263,7 +1256,7 @@ class InklingModel(InklingPreTrainedModel, MultimodalMixin):
         # Merge text and audio
         audio_features = None
         if audio_input_ids is not None:
-            audio_features = self.get_audio_features(audio_input_ids, audio_input_ids_mask).last_hidden_state
+            audio_features = self.get_audio_embeddings(audio_input_ids, audio_input_ids_mask).pooler_output
             audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, audio_features, self.config.audio_token_id

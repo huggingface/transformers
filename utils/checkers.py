@@ -199,7 +199,6 @@ _INLINE_CACHE_GLOBS = {
         "utils/**/*.py",
         "scripts/**/*.py",
         ".circleci/create_circleci_config.py",
-        "benchmark_v2/**/*.py",
         "setup.py",
         "conftest.py",
     ],
@@ -210,7 +209,6 @@ _INLINE_CACHE_GLOBS = {
         "utils/**/*.py",
         "scripts/**/*.py",
         ".circleci/create_circleci_config.py",
-        "benchmark_v2/**/*.py",
         "setup.py",
         "conftest.py",
     ],
@@ -460,7 +458,6 @@ RUFF_TARGETS = [
     "utils",
     "scripts",
     ".circleci/create_circleci_config.py",
-    "benchmark_v2",
     "setup.py",
     "conftest.py",
 ]

@@ -40,9 +40,7 @@ if is_torch_available():
 # Copied from transformers.tests.models.llama.LlamaModelTester with Llama->Cohere
 class CohereModelTester(ModelTesterConfigMixin):
     config_class = CohereConfig
-    if is_torch_available():
-        model_class = CohereModel
-        for_causal_lm_class = CohereForCausalLM
+    model_class = CohereModel
 
     defaults = {}
     small_config_overrides = {

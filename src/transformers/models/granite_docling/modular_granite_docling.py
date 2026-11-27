@@ -31,7 +31,8 @@ from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, SizeDict, is_valid_image, make_nested_list_of_images
 from ...masking_utils import create_causal_mask
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -700,7 +701,7 @@ class GraniteDoclingCausalLMOutputWithPast(AriaCausalLMOutputWithPast): ...
     """
 )
 @dataclass
-class GraniteDoclingImageFeaturesOutput(BaseModelOutputWithPooling):
+class GraniteDoclingImageFeaturesOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     pooler_output (`tuple[torch.FloatTensor]` of length `batch_size`):
         Image tokens of each sample, in tile order, projected to the text hidden size. Each tensor has shape
@@ -1122,6 +1123,7 @@ class GraniteDoclingModel(Idefics3Model):
         """
     )
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1163,8 +1165,7 @@ class GraniteDoclingModel(Idefics3Model):
                     pixel_values, pixel_attention_mask, tile_fine_mask=tile_fine_mask, return_dict=True
                 )
             image_outputs = mm_encoder_outputs["image"]
-            image_hidden_states = image_outputs.pooler_output
-            image_hidden_states = image_hidden_states.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_hidden_states = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             deepstack_visual_embeds = image_outputs.deepstack_features
             if deepstack_visual_embeds is not None:
                 deepstack_visual_embeds = [

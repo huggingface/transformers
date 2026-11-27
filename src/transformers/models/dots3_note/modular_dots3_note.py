@@ -28,11 +28,11 @@ from ...audio_utils import make_list_of_audio
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
@@ -115,11 +115,6 @@ class Dots3NoteVisionConfig(VideoLlama3VisionConfig):
 
     model_type = "dots3_note_vision_encoder"
     layer_norm_eps = AttributeError()
-    base_model_tp_plan = {
-        "blocks.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "blocks.*.mlp.experts.down_proj": "rowwise",
-        "blocks.*.mlp.experts": "moe_tp_experts",
-    }
     base_model_ep_plan = {
         "blocks.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "blocks.*.mlp.experts.down_proj": "grouped_gemm",
@@ -274,9 +269,6 @@ class Dots3NoteTextConfig(DeepseekV32Config):
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.g_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -834,9 +826,13 @@ class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
                 **kwargs,
             )
         hidden_states = self.layer_norm(hidden_states)
-        pooled_output = self.adapter(hidden_states[padding_mask.to(hidden_states.device)])
+        padding_mask = padding_mask.to(hidden_states.device)
+        pooled_output = self.adapter(hidden_states[padding_mask])
 
-        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=pooled_output)
+        split_sizes = padding_mask.sum(-1)
+        return BaseModelOutputWithPoolingAndSplitSizes(
+            last_hidden_state=hidden_states, pooler_output=pooled_output, split_sizes=split_sizes
+        )
 
 
 class Dots3NoteAudioAdapter(EvollaFeedForward):
@@ -886,7 +882,7 @@ class Dots3NoteVisionMoE(MiMoV2FlashMoE):
         layer_config = config.per_layer_config[layer_idx]
         self.experts = Dots3NoteExperts(layer_config)
         self.gate = Dots3NoteVisionTopKRouter(layer_config)
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(layer_config.num_local_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(layer_config.num_local_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         super().forward(hidden_states)
@@ -924,7 +920,7 @@ class Dots3NoteVisionPreTrainedModel(Qwen2VLPreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
     _no_split_modules = ["Dots3NoteVisionBlock"]
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
 
     def _init_weights(self, module: nn.Module):
         PreTrainedModel._init_weights(self, module)
@@ -1008,7 +1004,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.Tensor,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         outputs = self.vision_tower(
             pixel_values,
             grid_thw=image_grid_thw,
@@ -1016,8 +1012,8 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel, MultimodalMixin):
             **kwargs,
         )
 
-        outputs.split_sizes = image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
-        return outputs
+        split_sizes = image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**outputs, split_sizes=split_sizes)
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -1027,17 +1023,17 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel, MultimodalMixin):
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.Tensor,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     @can_return_tuple
     @auto_docstring
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         chunk_sample_lengths: torch.Tensor,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         chunk_sample_lengths (`torch.Tensor`):
             Number of waveform samples represented by each feature chunk.
@@ -1105,7 +1101,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel, MultimodalMixin):
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeddings.to(inputs_embeds))
 
         if input_features is not None:
-            audio_embeddings = self.get_audio_features(
+            audio_embeddings = self.get_audio_embeddings(
                 input_features, chunk_sample_lengths, return_dict=True
             ).pooler_output
             audio_mask = self.get_placeholder_mask(
@@ -1126,9 +1122,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel, MultimodalMixin):
 
 
 @auto_docstring
-class Dots3NoteForConditionalGeneration(
-    Dots3NotePreTrainedModel, VoxtralForConditionalGeneration, MultimodalMixin, GenerationMixin
-):
+class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, VoxtralForConditionalGeneration):
     _keep_in_fp32_modules_strict = AttributeError()
     input_modalities = ("image", "video", "audio", "text")
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}

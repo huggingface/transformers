@@ -229,7 +229,9 @@ processor = AutoProcessor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Th
 
 [[autodoc]] HyperCLOVAXVisionV2Model
     - forward
+    - get_image_embeddings
     - get_image_features
+    - get_video_embeddings
     - get_video_features
 
 ## HyperCLOVAXVisionV2ForConditionalGeneration

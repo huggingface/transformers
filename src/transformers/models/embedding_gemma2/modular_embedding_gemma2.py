@@ -28,7 +28,11 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MultimodalBaseModelOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    MultimodalBaseModelOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import (
     AudioKwargs,
@@ -50,12 +54,12 @@ from ...video_processing_utils import VideoMetadata
 from ...video_utils import VideoInput, is_valid_video, make_batched_videos
 from ..auto import AutoConfig
 from ..gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3MLP, Gemma3TextModel, apply_rotary_pos_emb
+from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
 from ..gemma4.modeling_gemma4 import (
     Gemma4AudioModelOutput,
     Gemma4Model,
     Gemma4MultimodalEmbedder,
     Gemma4PreTrainedModel,
-    Gemma4RMSNorm,
     Gemma4TextRotaryEmbedding,
     Gemma4TextScaledWordEmbedding,
     eager_attention_forward,
@@ -215,7 +219,7 @@ class EmbeddingGemma2Config(PreTrainedConfig):
     initializer_range: float | None = 0.02
 
 
-class EmbeddingGemma2RMSNorm(Gemma4RMSNorm):
+class EmbeddingGemma2RMSNorm(Gemma3nRMSNorm):
     pass
 
 
@@ -326,9 +330,9 @@ class EmbeddingGemma2Attention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-        self.q_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.v_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps, with_scale=False)
+        self.q_norm = EmbeddingGemma2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = EmbeddingGemma2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.v_norm = EmbeddingGemma2RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
     def forward(
         self,
@@ -587,7 +591,7 @@ class EmbeddingGemma2Model(Gemma4Model):
         pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
@@ -607,7 +611,7 @@ class EmbeddingGemma2Model(Gemma4Model):
         video_position_ids: torch.LongTensor | None = None,
         num_frames_per_video: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
             The frames of every video in the batch, concatenated along the frame axis rather than stacked
@@ -717,13 +721,9 @@ class EmbeddingGemma2Model(Gemma4Model):
 
         # Merge text and audio
         if input_features is not None and input_features_mask is not None:
-            audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
+            audio_output = self.get_audio_embeddings(input_features, input_features_mask, return_dict=True)
             mm_encoder_outputs["audio"] = audio_output
             audio_features = audio_output.pooler_output
-            audio_mask_from_encoder = audio_output.attention_mask  # True = valid
-
-            # Keep only real audio soft tokens, mirroring the vision encoder's padding stripping.
-            audio_features = audio_features[audio_mask_from_encoder.to(audio_features.device)]
 
             n_audio_tokens = audio_mask.sum()
             audio_mask = audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)

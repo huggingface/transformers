@@ -130,7 +130,7 @@ class OmniASRForCTC(ParakeetForCTC):
                 logits=logits,
                 labels=labels,
                 logit_lengths=encoder_lengths,
-                blank_token_id=self.config.pad_token_id,
+                blank_token_id=self.config.blank_token_id,
                 reduction=self.config.ctc_loss_reduction,
                 zero_infinity=self.config.ctc_zero_infinity,
                 **kwargs,

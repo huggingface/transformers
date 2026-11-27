@@ -33,8 +33,8 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...modeling_multimodal_utils import flatten_items, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, Unpack
 from ...utils import (
@@ -47,6 +47,7 @@ from ...utils import (
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.output_capturing import select_hidden_states
 from ..auto import AutoConfig, AutoModel
+from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..deepseek_vl.configuration_deepseek_vl import DeepseekVLConfig
 from ..deepseek_vl.image_processing_deepseek_vl import DeepseekVLImageProcessor
 from ..deepseek_vl.image_processing_pil_deepseek_vl import DeepseekVLImageProcessorPil
@@ -57,7 +58,7 @@ from ..deepseek_vl.modeling_deepseek_vl import (
 )
 from ..deepseek_vl.processing_deepseek_vl import DeepseekVLProcessor
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
-from ..sam.modeling_sam import SamLayerNorm, SamVisionNeck
+from ..sam.modeling_sam import SamVisionNeck
 
 
 logger = logging.get_logger(__name__)
@@ -104,7 +105,7 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
 
 @auto_docstring
 @dataclass
-class BaseModelOutputWithHighResVisionEncodings(BaseModelOutputWithPooling):
+class BaseModelOutputWithHighResVisionEncodings(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     high_res_vision_last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the high resolution vision model.
@@ -134,7 +135,7 @@ class DeepseekVLHybridCausalLMOutputWithPast(IdeficsCausalLMOutputWithPast):
     pass
 
 
-class DeepseekVLHybridLayerNorm(SamLayerNorm):
+class DeepseekVLHybridLayerNorm(ConvNextLayerNorm):
     pass
 
 
@@ -266,8 +267,8 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         low_res_outputs = self.get_low_res_image_features(pixel_values, **kwargs)
         high_res_outputs = self.get_high_res_image_features(high_res_pixel_values, **kwargs)
         image_features = self.aligner(low_res_outputs.last_hidden_state, high_res_outputs.last_hidden_state)
-        pooler_output, split_sizes = flatten_items(image_features)
-
+        split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
+        pooler_output = image_features.flatten(0, 1)
         return BaseModelOutputWithHighResVisionEncodings(
             last_hidden_state=low_res_outputs.last_hidden_state,
             pooler_output=pooler_output,

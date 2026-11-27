@@ -26,8 +26,8 @@ from .cache import advance_cache_length, causal_mask, mask_width, materialize_ca
 from .decompose import _MODALITY_SPECS, PREFILL_GRAPH, decode_graph_name
 from .metadata import load_treespec
 from .multimodal import ExportedMultimodalModel
-from .precompute import get_rope_index_from_config
 from .runners.base import ModelRunner
+from .utils import with_data_dependent_inputs
 
 
 if is_torch_available():
@@ -350,7 +350,9 @@ class ExportedMultimodalModelForCausalLM(ExportedModelForCausalLM, ExportedMulti
         """Embeds the prompt before `generate` repeats it for each beam or returned sequence: the modality inputs are
         laid out by item (an image's patches, a grid per image), not by prompt, so only their embeddings repeat."""
         if expand_size > 1 and input_ids is not None and model_kwargs.get("inputs_embeds") is None:
-            embedded, _ = self.embed(input_ids=input_ids, **model_kwargs)
+            embedded, _ = self.embed(
+                **with_data_dependent_inputs(self.weightless_model, {"input_ids": input_ids, **model_kwargs})
+            )
             model_kwargs = {key: value for key, value in model_kwargs.items() if key not in _MODALITY_INPUTS}
 
             def repeat_rows(features):
@@ -370,10 +372,12 @@ class ExportedMultimodalModelForCausalLM(ExportedModelForCausalLM, ExportedMulti
         """M-RoPE positions for the prompt, as a VLM's own override builds them; `generate` advances them per step."""
         positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
         input_ids = model_kwargs.get("input_ids", inputs_tensor)
-        rope_index = get_rope_index_from_config(self.config, {**model_kwargs, "input_ids": input_ids})
-        if rope_index is None:
+        prompt = {key: value for key, value in model_kwargs.items() if key != "position_ids"}
+        rope_positions = with_data_dependent_inputs(self.weightless_model, {**prompt, "input_ids": input_ids}).get(
+            "position_ids"
+        )
+        if rope_positions is None:
             return positions
-        rope_positions = rope_index[0]
         # A graph traced with one more row takes the text positions in front, as the model's forward builds them.
         traced_shape = self._decode_metadata().kwargs.get("position_ids", {}).get("shape", [])
         if len(traced_shape) == 3 and traced_shape[0] == rope_positions.shape[0] + 1:
@@ -382,7 +386,11 @@ class ExportedMultimodalModelForCausalLM(ExportedModelForCausalLM, ExportedMulti
 
     def _step(self, **kwargs) -> Any:
         if kwargs.get("input_ids") is not None:
-            embedded, _ = self.embed(**kwargs)
+            # A step carrying modality inputs (the prompt's) encodes them, with their data-dependent inputs
+            has_modality = any(kwargs.get(key) is not None for key in _MODALITY_INPUTS)
+            embedded, _ = self.embed(
+                **(with_data_dependent_inputs(self.weightless_model, kwargs) if has_modality else kwargs)
+            )
             kwargs.update(embedded)
         return super()._step(**kwargs)
 

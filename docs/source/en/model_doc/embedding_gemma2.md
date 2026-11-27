@@ -769,6 +769,9 @@ print(list(inputs.keys()))
 
 [[autodoc]] EmbeddingGemma2Model
     - forward
+    - get_image_embeddings
     - get_image_features
+    - get_video_embeddings
     - get_video_features
+    - get_audio_embeddings
     - get_audio_features

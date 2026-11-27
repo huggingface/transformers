@@ -31,6 +31,7 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoConfig
+from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..sam2.modeling_sam2 import eager_attention_forward, window_partition
 from ..sam2_video.configuration_sam2_video import (
     Sam2VideoMaskDecoderConfig,
@@ -41,7 +42,6 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoFeedForward,
     Sam2VideoImageSegmentationOutput,
     Sam2VideoInferenceSession,
-    Sam2VideoLayerNorm,
     Sam2VideoMemoryAttention,
     Sam2VideoMemoryEncoder,
     Sam2VideoMemoryFuserCXBlock,
@@ -294,7 +294,7 @@ class EdgeTamVideoConfig(PreTrainedConfig):
         self.rope_parameters["rope_theta"] = value
 
 
-class EdgeTamVideoLayerNorm(Sam2VideoLayerNorm):
+class EdgeTamVideoLayerNorm(ConvNextLayerNorm):
     pass
 
 

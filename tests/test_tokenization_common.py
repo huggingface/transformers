@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+import dataclasses
 import functools
 import inspect
 import itertools
@@ -1115,6 +1116,40 @@ Hey how are you doing"""  # noqa: W293
             messages_without_content, chat_template=dummy_template, tokenize=False, return_dict=False
         )
         self.assertEqual(output_none, output_missing)
+
+    @require_jinja
+    def test_chat_template_message_objects(self):
+        """Regression test for #50773: message objects (e.g. the pydantic messages returned by the OpenAI SDK) should
+        render like the equivalent dicts, with their None fields dropped."""
+
+        @dataclasses.dataclass
+        class DataclassMessage:
+            role: str
+            content: str | None = None
+            tool_calls: list | None = None
+
+        class PydanticLikeMessage:
+            def model_dump(self):
+                return {"role": "assistant", "content": None, "tool_calls": None}
+
+        dummy_template = (
+            "{% for message in messages %}"
+            "{{ message['role'] }}"
+            "{% if message.content is defined %}: {{ message['content'] }}{% endif %}"
+            "{% if message.tool_calls is defined %} ({{ message.tool_calls | length }} tool calls){% endif %}"
+            "\n"
+            "{% endfor %}"
+        )
+        message_objects = [DataclassMessage("user", "What is the weather?"), PydanticLikeMessage()]
+        message_dicts = [{"role": "user", "content": "What is the weather?"}, {"role": "assistant"}]
+        tokenizer = self.get_tokenizer()
+        output_objects = tokenizer.apply_chat_template(
+            message_objects, chat_template=dummy_template, tokenize=False, return_dict=False
+        )
+        output_dicts = tokenizer.apply_chat_template(
+            message_dicts, chat_template=dummy_template, tokenize=False, return_dict=False
+        )
+        self.assertEqual(output_objects, output_dicts)
 
     @require_jinja
     def test_jinja_loopcontrols(self):
