@@ -30,7 +30,6 @@ jobs:
       ci_event: Scheduled CI (TPU)
       report_repo_id: hf-gcp-tpu-internal/transformers_daily_ci
       commit_sha: ${{ github.sha }}
-      subdirs: '["models/bert", "models/gpt2", "models/vit"]'
     secrets: inherit
 
   pipeline-ci:
