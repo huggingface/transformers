@@ -35,6 +35,69 @@ if is_torchvision_available():
     from torchvision.transforms.functional import rotate
 
 
+class BevformerFrozenBatchNorm2d(nn.Module):
+    """
+    BatchNorm2d where the batch statistics and the affine parameters are fixed.
+
+    Copy-paste from torchvision.misc.ops with added eps before rsqrt, without which any other models than
+    torchvision.models.resnet[18,34,50,101] produce nans.
+    """
+
+    def __init__(self, n):
+        super().__init__()
+        self.weight = nn.Buffer(torch.ones(n))
+        self.bias = nn.Buffer(torch.zeros(n))
+        self.running_mean = nn.Buffer(torch.zeros(n))
+        self.running_var = nn.Buffer(torch.ones(n))
+
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+    ):
+        num_batches_tracked_key = prefix + "num_batches_tracked"
+        if num_batches_tracked_key in state_dict:
+            del state_dict[num_batches_tracked_key]
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
+
+    def forward(self, x):
+        # move reshapes to the beginning
+        # to make it user-friendly
+        weight = self.weight.reshape(1, -1, 1, 1)
+        bias = self.bias.reshape(1, -1, 1, 1)
+        running_var = self.running_var.reshape(1, -1, 1, 1)
+        running_mean = self.running_mean.reshape(1, -1, 1, 1)
+        epsilon = 1e-5
+        scale = weight * (running_var + epsilon).rsqrt()
+        bias = bias - running_mean * scale
+        return x * scale + bias
+
+
+def replace_batch_norm(model):
+    r"""
+    Recursively replace all `torch.nn.BatchNorm2d` with `BevformerFrozenBatchNorm2d`.
+
+    Args:
+        model (torch.nn.Module):
+            input model
+    """
+    for name, module in model.named_children():
+        if isinstance(module, nn.BatchNorm2d):
+            new_module = BevformerFrozenBatchNorm2d(module.num_features)
+
+            if module.weight.device != torch.device("meta"):
+                new_module.weight.copy_(module.weight)
+                new_module.bias.copy_(module.bias)
+                new_module.running_mean.copy_(module.running_mean)
+                new_module.running_var.copy_(module.running_var)
+
+            model._modules[name] = new_module
+
+        if len(list(module.children())) > 0:
+            replace_batch_norm(module)
+
+
 class BevformerConvEncoder(nn.Module):
     """
     Multi-view convolutional backbone encoder for BEVFormer.
@@ -44,8 +107,7 @@ class BevformerConvEncoder(nn.Module):
     are reshaped to `(batch_size * num_cameras, channels, height, width)` before being passed
     through the backbone, and the multi-camera dimension is restored on the output feature map.
 
-    Batch normalization layers are forced to eval mode in `train()` to match the `norm_eval=True`
-    parity behavior of upstream BEVFormer / MMDetection backbones.
+    `nn.BatchNorm2d` layers are replaced by `BevformerFrozenBatchNorm2d` via `replace_batch_norm`.
     """
 
     def __init__(self, config: BevformerConfig):
@@ -55,18 +117,9 @@ class BevformerConvEncoder(nn.Module):
         backbone = load_backbone(config)
         self.intermediate_channel_sizes = backbone.channels
 
-        # Unwrap if loaded via timm directly
-        if hasattr(backbone, "_backbone"):
-            backbone = backbone._backbone
+        with torch.no_grad():
+            replace_batch_norm(backbone)
         self.model = backbone
-
-    def train(self, mode: bool = True):
-        super().train(mode)
-        if mode:
-            for module in self.model.modules():
-                if isinstance(module, (nn.BatchNorm2d, nn.SyncBatchNorm)):
-                    module.eval()
-        return self
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
@@ -81,13 +134,7 @@ class BevformerConvEncoder(nn.Module):
         batch_size, num_cameras, channels, height, width = pixel_values.shape
         pixel_values = pixel_values.view(batch_size * num_cameras, channels, height, width)
 
-        features = self.model(pixel_values)
-        if hasattr(features, "feature_maps"):
-            feature_map = features.feature_maps[-1]
-        elif isinstance(features, (list, tuple)):
-            feature_map = features[-1]
-        else:
-            feature_map = features
+        feature_map = self.model(pixel_values).feature_maps[-1]
 
         _, out_channels, out_height, out_width = feature_map.shape
         feature_map = feature_map.view(batch_size, num_cameras, out_channels, out_height, out_width)

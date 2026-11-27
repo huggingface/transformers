@@ -29,6 +29,7 @@ from ...image_utils import ImageInput, PILImageResampling
 from ...modeling_utils import PreTrainedModel
 from ...models.auto import AutoConfig
 from ...utils import ModelOutput, TensorType, auto_docstring, is_torch_tensor, is_torchvision_available, logging
+from ..deformable_detr.modeling_deformable_detr import replace_batch_norm
 
 
 if is_torchvision_available():
@@ -558,8 +559,7 @@ class BevformerConvEncoder(nn.Module):
     are reshaped to `(batch_size * num_cameras, channels, height, width)` before being passed
     through the backbone, and the multi-camera dimension is restored on the output feature map.
 
-    Batch normalization layers are forced to eval mode in `train()` to match the `norm_eval=True`
-    parity behavior of upstream BEVFormer / MMDetection backbones.
+    `nn.BatchNorm2d` layers are replaced by `BevformerFrozenBatchNorm2d` via `replace_batch_norm`.
     """
 
     def __init__(self, config: BevformerConfig):
@@ -569,18 +569,9 @@ class BevformerConvEncoder(nn.Module):
         backbone = load_backbone(config)
         self.intermediate_channel_sizes = backbone.channels
 
-        # Unwrap if loaded via timm directly
-        if hasattr(backbone, "_backbone"):
-            backbone = backbone._backbone
+        with torch.no_grad():
+            replace_batch_norm(backbone)
         self.model = backbone
-
-    def train(self, mode: bool = True):
-        super().train(mode)
-        if mode:
-            for module in self.model.modules():
-                if isinstance(module, (nn.BatchNorm2d, nn.SyncBatchNorm)):
-                    module.eval()
-        return self
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
@@ -595,13 +586,7 @@ class BevformerConvEncoder(nn.Module):
         batch_size, num_cameras, channels, height, width = pixel_values.shape
         pixel_values = pixel_values.view(batch_size * num_cameras, channels, height, width)
 
-        features = self.model(pixel_values)
-        if hasattr(features, "feature_maps"):
-            feature_map = features.feature_maps[-1]
-        elif isinstance(features, (list, tuple)):
-            feature_map = features[-1]
-        else:
-            feature_map = features
+        feature_map = self.model(pixel_values).feature_maps[-1]
 
         _, out_channels, out_height, out_width = feature_map.shape
         feature_map = feature_map.view(batch_size, num_cameras, out_channels, out_height, out_width)
