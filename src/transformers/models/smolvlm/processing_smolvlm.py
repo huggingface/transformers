@@ -165,7 +165,6 @@ class SmolVLMProcessor(ProcessorMixin):
         )
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
-        num_frames = video_inputs["pixel_values"].shape[1]
         metadata = video_inputs["video_metadata"][video_idx]
         if metadata.fps is None:
             logger.warning_once(
@@ -175,6 +174,7 @@ class SmolVLMProcessor(ProcessorMixin):
             )
             metadata.fps = 24
         timestamps = [(int(second // 60), int(second % 60)) for second in metadata.timestamps]
+        num_frames = len(timestamps)
         duration = int(metadata.duration) if metadata.duration is not None else int(metadata.timestamps[-1])
         duration_td = timedelta(seconds=int(duration))
         prompt = DEFAULT_VIDEO_INTRO.format(frame_count=num2words(num_frames), video_duration=str(duration_td))

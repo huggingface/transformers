@@ -694,6 +694,9 @@ class VideoLlama3Processor(Qwen3VLProcessor):
     def _calculate_timestamps(self):
         raise AttributeError("VideoLlama doesn't need this method")
 
+    def get_text_with_replacements(self):
+        raise AttributeError("VideoLlama has no per-frame vision wrappers, so it uses the default replacement")
+
 
 class VideoLlama3ImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
     r"""
@@ -1056,7 +1059,8 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         )
 
     def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
-        size = videos_kwargs.get("size", None) or self.size
+        videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
+        size = videos_kwargs["size"]
         size = {
             "shortest_edge": size["shortest_edge"],
             "longest_edge": size["longest_edge"] // num_frames,

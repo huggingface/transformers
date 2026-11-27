@@ -912,7 +912,7 @@ class NopConfig(PreTrainedConfig):
             self.assertTrue(tok2.__class__ == HerbertTokenizer)
 
         tok = AutoProcessor.from_pretrained("mistralai/Ministral-3-8B-Instruct-2512-BF16").tokenizer
-        self.assertTrue(tok.__class__ == MistralCommonBackend)
+        self.assertTrue(tok.__class__ == TokenizersBackend)
 
     def test_custom_tokenizer_with_mismatched_tokenizer_class(self):
         nop_tokenizer_code = """
@@ -1093,6 +1093,7 @@ class NopConfig(PreTrainedConfig):
         "stabilityai/tiny-random-stablelm-2",
         "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
         "naver-clova-ix/donut-base-finetuned-docvqa",
+        "almanach/camembertv2-base",
     ]
 
     @slow
