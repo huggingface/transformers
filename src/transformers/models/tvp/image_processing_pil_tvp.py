@@ -256,7 +256,9 @@ class TvpImageProcessorPil(PilBackend):
             ]
             processed_videos = torch.stack(processed_videos, dim=0)
 
-        return BatchFeature(data={"pixel_values": processed_videos}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_videos}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["TvpImageProcessorPil"]

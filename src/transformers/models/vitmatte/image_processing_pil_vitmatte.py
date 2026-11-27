@@ -151,7 +151,9 @@ class VitMatteImageProcessorPil(PilBackend):
                 image = self.pad_image(image, size_divisor)
             processed_images.append(image)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["VitMatteImageProcessorPil"]

@@ -289,7 +289,7 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
             "video_token_pooling": torch.cat(all_pooled, dim=0),
             "video_grids": torch.stack(all_grids, dim=0),
         }
-        return BatchFeature(data, tensor_type=return_tensors)
+        return BatchFeature(data, tensor_type=return_tensors, device=device, dtype=dtype)
 
 
 __all__ = ["Molmo2VideoProcessor"]

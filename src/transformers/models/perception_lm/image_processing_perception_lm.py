@@ -303,7 +303,9 @@ class PerceptionLMImageProcessor(TorchvisionBackend):
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = [p[None] if p.ndim == 3 else p for p in processed_images]  # add tiles dimension if needed
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["PerceptionLMImageProcessor"]

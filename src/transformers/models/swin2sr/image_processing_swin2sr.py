@@ -108,7 +108,9 @@ class Swin2SRImageProcessor(TorchvisionBackend):
                 stacked_images = self.pad(stacked_images, pad_size=pad_size, size_divisor=size_divisor)
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["Swin2SRImageProcessor"]

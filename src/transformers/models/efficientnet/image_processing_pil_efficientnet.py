@@ -110,7 +110,9 @@ class EfficientNetImageProcessorPil(PilBackend):
             if include_top:
                 image = self.normalize(image, 0, image_std)
             processed_images.append(image)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["EfficientNetImageProcessorPil"]

@@ -229,7 +229,9 @@ class TvpImageProcessor(TorchvisionBackend):
             processed_images = [torch.stack(images, dim=0) for images in processed_images]
             processed_images = torch.stack(processed_images, dim=0)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["TvpImageProcessor"]

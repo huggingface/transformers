@@ -323,7 +323,12 @@ class Ovis2ImageProcessor(TorchvisionBackend):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        return BatchFeature(data={"pixel_values": processed_images, "grids": grids}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images, "grids": grids},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
+        )
 
 
 __all__ = ["Ovis2ImageProcessor"]

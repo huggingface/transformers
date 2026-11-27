@@ -96,6 +96,8 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         return_tensors: str | TensorType | None = "pt",
+        device: str | None = None,
+        dtype: str | None = None,
     ) -> BatchFeature:
         """
         Preprocess an image or batch of images.
@@ -123,7 +125,7 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
             images = [to_pil_image(image) for image in images]
             images = torch.stack([self.val_transforms(image) for image in images])
 
-        return BatchFeature({"pixel_values": images}, tensor_type=return_tensors)
+        return BatchFeature({"pixel_values": images}, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def save_pretrained(self, *args, **kwargs):
         # disable it to make checkpoint the same as in `timm` library.

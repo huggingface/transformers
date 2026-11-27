@@ -122,6 +122,8 @@ class ImageGPTImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         do_color_quantize: bool | None = None,
         clusters: list | np.ndarray | torch.Tensor | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ):
         # Group images by size for batched resizing
@@ -176,9 +178,11 @@ class ImageGPTImageProcessor(TorchvisionBackend):
 
             input_ids = reorder_images(input_ids_grouped, grouped_images_index)
 
-            return BatchFeature(data={"input_ids": input_ids}, tensor_type=return_tensors)
+            return BatchFeature(data={"input_ids": input_ids}, tensor_type=return_tensors, device=device)
 
-        return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": pixel_values}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
     def to_dict(self):
         # Convert torch tensors to lists for JSON serialization

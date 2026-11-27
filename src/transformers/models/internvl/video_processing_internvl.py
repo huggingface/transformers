@@ -143,7 +143,9 @@ class InternVLVideoProcessor(BaseVideoProcessor):
 
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
 
-        return BatchFeature(data={"pixel_values_videos": processed_videos}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values_videos": processed_videos}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["InternVLVideoProcessor"]

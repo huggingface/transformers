@@ -184,7 +184,9 @@ class JanusImageProcessor(TorchvisionBackend):
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
     def postprocess(
         self,

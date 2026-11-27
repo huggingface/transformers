@@ -166,7 +166,9 @@ class EfficientNetImageProcessor(TorchvisionBackend):
                 stacked_images = self.normalize(stacked_images, 0, image_std)
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["EfficientNetImageProcessor"]

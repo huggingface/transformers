@@ -188,7 +188,9 @@ class LightGlueImageProcessor(TorchvisionBackend):
 
         # Return in same format as slow processor
 
-        return BatchFeature(data={"pixel_values": stacked_pairs}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": stacked_pairs}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
     def post_process_keypoint_matching(
         self,

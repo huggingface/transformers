@@ -183,7 +183,9 @@ class LayoutLMv2ImageProcessor(TorchvisionBackend):
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        data = BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        data = BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
         if apply_ocr:
             data["words"] = words_batch

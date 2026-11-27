@@ -104,7 +104,9 @@ class VideoMAEImageProcessor(TorchvisionBackend):
 
         # Stack frames per video: list[list[Tensor(C,H,W)]] → list[Tensor(num_frames,C,H,W)]
         pixel_values = [torch.stack(video_frames) for video_frames in processed_images]
-        return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": pixel_values}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["VideoMAEImageProcessor"]

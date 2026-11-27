@@ -198,6 +198,8 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         data_format: ChannelDimension | None = ChannelDimension.FIRST,
         input_data_format: str | ChannelDimension | None = None,
         return_legacy_image_output: bool = True,
+        device: str | None = None,
+        dtype: str | None = None,
     ) -> BatchFeature:
         """
         Preprocess an image or batch of images.
@@ -296,7 +298,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
             )
         else:
             data = {"pixel_values": pixel_values_images}
-        encoded_outputs = BatchFeature(data, tensor_type=return_tensors)
+        encoded_outputs = BatchFeature(data, tensor_type=return_tensors, device=device, dtype=dtype)
 
         return encoded_outputs
 

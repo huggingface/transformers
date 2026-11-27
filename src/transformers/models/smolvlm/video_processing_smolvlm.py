@@ -299,6 +299,8 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
@@ -344,7 +346,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
                 if do_pad and return_tensors is not None
                 else pixel_attention_mask
             )
-        return BatchFeature(data, tensor_type=return_tensors)
+        return BatchFeature(data, tensor_type=return_tensors, device=device, dtype=dtype)
 
 
 __all__ = ["SmolVLMVideoProcessor"]

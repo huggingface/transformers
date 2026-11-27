@@ -185,7 +185,9 @@ class LayoutLMv3ImageProcessorPil(PilBackend):
                 image = self.normalize(image=image, mean=image_mean, std=image_std)
             processed_images.append(image)
 
-        data = BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        data = BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
         if apply_ocr:
             data["words"] = words_batch

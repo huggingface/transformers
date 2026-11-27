@@ -129,7 +129,9 @@ class PoolFormerImageProcessorPil(PilBackend):
         if do_pad:
             processed_images = self.pad(processed_images, pad_size=pad_size)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["PoolFormerImageProcessorPil"]
