@@ -220,7 +220,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         candidate_ids, candidate_logits = self._generate_candidates(generation_args)
 
         # Keep track of the last drafted length to rollback the Cache
-        self._last_length = candidate_ids.shape[-1]
+        self._last_ids_length = candidate_ids.shape[-1]
         return candidate_ids, candidate_logits
 
     def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.Tensor, num_matches: int):
@@ -296,7 +296,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         """Update past key values and attention masks for subsequent generation rounds."""
         has_cache = self.assistant_kwargs.get("cache", None) is not None
         if has_cache:
-            tokens_to_remove = self._last_length - input_ids.shape[-1] + num_extra_tokens_to_remove
+            tokens_to_remove = self._last_ids_length - input_ids.shape[-1] + num_extra_tokens_to_remove
             if tokens_to_remove >= 0:
                 self.assistant_kwargs["cache"].crop(-tokens_to_remove)
             self.assistant_kwargs = _prepare_attention_mask(
@@ -543,7 +543,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.prev_assistant_ids = assistant_output.sequences
 
         # Keep track of the last drafted length to rollback the Cache
-        self._last_length = (
+        self._last_ids_length = (
             input_ids.shape[-1] if self.prev_target_ids_len >= new_target_ids.shape[1] else new_target_ids.shape[-1]
         )
 
@@ -969,7 +969,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         target_candidate_logits = self._atm_translator.get_target_logits(assistant_candidate_logits)
 
         # Keep track of the last drafted length to rollback the Cache
-        self._last_length = target_candidate_ids.shape[-1]
+        self._last_ids_length = target_candidate_ids.shape[-1]
 
         return target_candidate_ids, target_candidate_logits
 
@@ -1226,7 +1226,7 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
         base_model.config.num_hidden_layers = original_num_hidden_layers
 
         # Keep track of the last drafted length to rollback the Cache
-        self._last_length = candidate_ids.shape[-1]
+        self._last_ids_length = candidate_ids.shape[-1]
         return candidate_ids, candidate_logits
 
 
