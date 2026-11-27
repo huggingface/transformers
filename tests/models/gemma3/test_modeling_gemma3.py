@@ -80,7 +80,6 @@ class Gemma3TextModelTester(CausalLMModelTester):
 @require_torch
 class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Gemma3TextModelTester
-    _is_stateful = True
     model_split_percents = [0.5, 0.6]
 
     @unittest.skip("Gemma3 tanh soft-capping amplifies TP numerical noise beyond 80% match threshold")
@@ -200,7 +199,6 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Gemma3Vision2TextModelTester
 
     test_missing_keys = False
-    _is_stateful = True
     model_split_percents = [0.5, 0.6]
     additional_model_inputs = ["token_type_ids"]
 

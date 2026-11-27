@@ -432,6 +432,7 @@ def mamba2_scan_forward(
     recurrent_state = cache.get_recurrent_state(module.layer_idx, state_idx=0) if cache is not None else None
     A = -torch.exp(module.A_log.float())
 
+    # Recurrent form
     if recurrent_state is not None and seq_len == 1:
         hidden_states = hidden_states.view(batch_size, module.num_heads, module.head_dim)
         dt = dt.transpose(1, 2).expand(-1, -1, module.head_dim)
@@ -445,29 +446,81 @@ def mamba2_scan_forward(
         )
         return scan_output.view(batch_size, 1, -1)
 
-    output_final_state = cache is not None
-    scan_result = mamba2_chunk_scan(
-        hidden_states.view(batch_size, seq_len, module.num_heads, module.head_dim),
-        dt,
+    # Chunked form
+    num_intermediate_recurrent_states = (
+        cache.get_recurrent_states_to_keep(module.layer_idx) if cache is not None else 0
+    )
+    # Cannot be more than the number of tokens
+    num_intermediate_recurrent_states = min(num_intermediate_recurrent_states, seq_len)
+    # Since we want the last num_intermediate_recurrent_states, we need to artifically remove them from the chunks, and split the inputs
+    effective_sequence_length = seq_len - num_intermediate_recurrent_states
+    chunked_hidden_states, sequential_hidden_states = torch.tensor_split(
+        hidden_states, [effective_sequence_length], dim=1
+    )
+    chunked_dt, sequential_dt = torch.tensor_split(dt, [effective_sequence_length], dim=1)
+    chunked_B, sequential_B = torch.tensor_split(B, [effective_sequence_length], dim=1)
+    chunked_C, sequential_C = torch.tensor_split(C, [effective_sequence_length], dim=1)
+
+    all_outputs = []
+    # First, perform the fast scan computation (if we don't need only sequential)
+    scan_output = mamba2_chunk_scan(
+        chunked_hidden_states.view(batch_size, effective_sequence_length, module.num_heads, module.head_dim),
+        chunked_dt,
         A,
-        B.view(batch_size, seq_len, module.n_groups, module.ssm_state_size),
-        C.view(batch_size, seq_len, module.n_groups, module.ssm_state_size),
+        chunked_B.view(batch_size, effective_sequence_length, module.n_groups, module.ssm_state_size),
+        chunked_C.view(batch_size, effective_sequence_length, module.n_groups, module.ssm_state_size),
         chunk_size=module.chunk_size,
         D=module.D,
         z=None,
-        return_final_states=output_final_state,
+        return_final_states=cache is not None,
         dt_bias=module.dt_bias,
         dt_softplus=True,
         initial_states=recurrent_state,
         dt_limit=module.time_step_limit,
         **kwargs,
     )
-    if output_final_state:
-        scan_output, final_state = scan_result
-        cache.update_recurrent_state(final_state, layer_idx=module.layer_idx)
-    else:
-        scan_output = scan_result
-    return scan_output.reshape(batch_size, seq_len, -1)
+    last_scan_recurrent_state = recurrent_state
+    # The number of outputs varies depending on the flag
+    if cache is not None:
+        scan_output, last_scan_recurrent_state = scan_output
+    # Collect it
+    all_outputs.append(scan_output.reshape(batch_size, effective_sequence_length, module.intermediate_size))
+
+    # If we need to return intermediate recurrent state, we now do it sequentially after the chunked part
+    intermediate_recurrent_states = []
+    last_recurrent_state = (
+        last_scan_recurrent_state if last_scan_recurrent_state is not None else A.new_zeros(B.shape[0], *A.shape)
+    )
+    for i in range(num_intermediate_recurrent_states):
+        local_output = mamba2_selective_state_update(
+            last_recurrent_state,
+            sequential_hidden_states[:, i].view(batch_size, module.num_heads, module.head_dim),
+            sequential_dt[:, i : i + 1].transpose(1, 2).expand(-1, -1, module.head_dim),
+            A[:, None, None].expand(-1, module.head_dim, module.ssm_state_size),
+            sequential_B[:, i].view(batch_size, module.n_groups, module.ssm_state_size),
+            sequential_C[:, i].view(batch_size, module.n_groups, module.ssm_state_size),
+            module.D[:, None].expand(-1, module.head_dim),
+            z=None,
+            dt_bias=module.dt_bias[:, None].expand(-1, module.head_dim),
+            dt_softplus=True,
+            **kwargs,
+        )
+        # Combine them
+        all_outputs.append(local_output.view(batch_size, 1, -1))
+        # Note that we need to copy here to correctly store them since it's updated in-place
+        intermediate_recurrent_states.append(last_recurrent_state.clone())
+
+    # Cat all outputs
+    scan_output = torch.cat(all_outputs, dim=1)
+
+    # In case we needed intermediate states, we return them, otherwise the last one is the chunked one
+    last_recurrent_state = (
+        intermediate_recurrent_states if len(intermediate_recurrent_states) > 0 else last_scan_recurrent_state
+    )
+    if cache is not None:
+        cache.update_recurrent_state(last_recurrent_state, module.layer_idx)
+
+    return scan_output
 
 
 @use_kernel_func_from_hub_with_fallback("mamba_split_conv1d_scan_combined", "mamba_ssm")
@@ -717,7 +770,6 @@ class Mamba2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "backbone"
     _no_split_modules = ["Mamba2Block"]
     supports_gradient_checkpointing = True
-    _is_stateful = True
     _can_compile_fullgraph = True
     _can_record_outputs = {"hidden_states": Mamba2Block}
 

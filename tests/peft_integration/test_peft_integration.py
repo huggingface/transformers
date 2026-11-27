@@ -953,6 +953,23 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 loading_info = model.load_adapter(peft_model_id, adapter_name="adapter_1")
                 self.assertEqual(loading_info.missing_keys, set())
 
+    def test_peft_load_adapter_tied_trainable_tokens_no_missing_keys(self):
+        """
+        Test that loading an adapter with trainable tokens on a model with tied embeddings does not report the
+        `lm_head` side as missing, as it shares its weight with the embedding side.
+        """
+        from peft import LoraConfig
+
+        for model_id in self.transformers_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+                model.add_adapter(LoraConfig(target_modules=["q_proj", "v_proj"], trainable_token_indices=[0, 1]))
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
+                    model = transformers_class.from_pretrained(model_id).to(torch_device)
+                    loading_info = model.load_adapter(tmpdirname)
+                self.assertEqual(loading_info.missing_keys, set())
+
     def test_peft_load_adapter_training_inference_mode_true(self):
         """
         By default, when loading an adapter, the whole model should be in eval mode and no parameter should have

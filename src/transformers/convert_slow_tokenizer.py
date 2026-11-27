@@ -150,9 +150,11 @@ class SentencePieceExtractor:
 
         # control tokens are special
         # user defined symbols are not
-        # both user and control tokens are AddedTokens
+        # both user and control tokens are AddedTokens, but user defined symbols only for BPE: Unigram emits them
+        # whole like SentencePiece, while an AddedToken splits the raw text and restarts the dummy prefix after it
         # Add user defined symbols (type == 4) from sentencepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
-        spm_added_tokens = [(id, p.piece, p.type == 3) for id, p in enumerate(self.proto.pieces) if p.type in [3, 4]]
+        types = [3, 4] if model_type.__name__ == "BPE" else [3]
+        spm_added_tokens = [(id, p.piece, p.type == 3) for id, p in enumerate(self.proto.pieces) if p.type in types]
         kwargs["additional_special_tokens"] = [
             AddedToken(token, normalized=False, special=special)
             for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])

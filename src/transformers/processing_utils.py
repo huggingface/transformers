@@ -602,6 +602,70 @@ def _merge_typed_dict(preprocessor_typed_dict: type, modality_typed_dict: type) 
     )
 
 
+def _tool_result_id(obj) -> str:
+    """The id chat templates match tool results with: `tool_call_id`, else `id`, as text."""
+    if not isinstance(obj, dict):
+        return ""
+    for key in ("tool_call_id", "id"):
+        if obj.get(key):
+            return str(obj[key])
+    return ""
+
+
+def _split_tool_results(message: dict) -> list[dict]:
+    """
+    Split an aggregated tool message (`content=[{"id": ..., "output": [...]}, ...]`) into one message per result,
+    holding the typed content parts of its `output` for multimodal input extraction.
+    """
+    content = message.get("content")
+    if not (isinstance(content, list) and content and isinstance(content[0], dict) and "output" in content[0]):
+        return [message]
+    results = []
+    for entry in content:
+        result = {key: entry[key] for key in ("tool_call_id", "id") if key in entry} if isinstance(entry, dict) else {}
+        output = entry.get("output") if isinstance(entry, dict) else None
+        has_parts = isinstance(output, (list, tuple)) and not (
+            output and isinstance(output[0], dict) and output[0].get("type") == "tool_reference"
+        )
+        result["content"] = [part for part in output if isinstance(part, dict) and "type" in part] if has_parts else []
+        results.append(result)
+    return results
+
+
+def _tool_results_in_template_order(conversation: list[dict]) -> list[dict]:
+    """
+    Lay out each block of consecutive tool messages in call order: one message per result, sorted by the
+    `tool_calls` of the preceding assistant message when every result matches a unique call (all ids present
+    and unique), else in message order.
+    """
+    laid_out, start = [], 0
+    while start < len(conversation):
+        if conversation[start].get("role") != "tool":
+            laid_out.append(conversation[start])
+            start += 1
+            continue
+        end = start
+        while end < len(conversation) and conversation[end].get("role") == "tool":
+            end += 1
+        results = [result for message in conversation[start:end] for result in _split_tool_results(message)]
+        previous = conversation[start - 1] if start > 0 else {}
+        tool_calls = (previous.get("tool_calls") if previous.get("role") == "assistant" else None) or []
+        call_ids = [_tool_result_id(call) for call in tool_calls]
+        result_ids = [_tool_result_id(result) for result in results]
+        if (
+            call_ids
+            and all(call_ids)
+            and all(result_ids)
+            and len(set(call_ids)) == len(call_ids)
+            and len(set(result_ids)) == len(result_ids)
+            and set(result_ids) <= set(call_ids)
+        ):
+            results.sort(key=lambda result: call_ids.index(_tool_result_id(result)))
+        laid_out.extend(results)
+        start = end
+    return laid_out
+
+
 class ProcessorMixin(PushToHubMixin):
     """
     This is a mixin used to provide saving/loading functionality for all processor classes.
@@ -2023,9 +2087,15 @@ class ProcessorMixin(PushToHubMixin):
                 continue
 
             if "tokenizer" in sub_processor_type:
-                tokenizer = cls._load_tokenizer_from_pretrained(
-                    sub_processor_type, pretrained_model_name_or_path, **kwargs
-                )
+                # This is only necessary for real official checkpoints on the hub. DO NOT remove it
+                if "PixtralProcessor" in cls.__name__:
+                    from .tokenization_utils_tokenizers import TokenizersBackend
+
+                    tokenizer = TokenizersBackend.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                else:
+                    tokenizer = cls._load_tokenizer_from_pretrained(
+                        sub_processor_type, pretrained_model_name_or_path, **kwargs
+                    )
                 processor_dict[sub_processor_type] = tokenizer
             elif (
                 isinstance(sub_processor_config := processor_dict.get(sub_processor_type), dict)
@@ -2137,6 +2207,9 @@ class ProcessorMixin(PushToHubMixin):
         including URL/path or already decoded inputs. Images and video are returned
         in nested format while audio is flattened into a single list for all batches.
         """
+        if getattr(self, "reorder_tool_results_in_template_order", False):
+            conversations = [_tool_results_in_template_order(conversation) for conversation in conversations]
+
         batch_images, batch_videos, batch_audios = [], [], []
         for conversation in conversations:
             images, videos = [], []
@@ -2848,6 +2921,9 @@ class OmniModalProcessorMixin(ProcessorMixin):
         If `load_audio_from_video=True`, then each video is linked to audio within
         a batch via `audio_from_video_indices`
         """
+        if getattr(self, "reorder_tool_results_in_template_order", False):
+            conversations = [_tool_results_in_template_order(conversation) for conversation in conversations]
+
         batch_images, batch_videos = [], []
         batch_audios, batch_audio_from_video_indices = [], []
         video_idx = 0
