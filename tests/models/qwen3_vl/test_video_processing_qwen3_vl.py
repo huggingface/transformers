@@ -439,3 +439,33 @@ class Qwen3VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
             video_grid_thw = video_processed["video_grid_thw"]
             self.assertEqual(video_grid_thw.tolist(), [[2, 2, 2]])
+
+    def test_odd_frames_padded_output_fits_pixel_budget(self):
+        # Frames are padded up to a multiple of temporal_patch_size, so the resized output must
+        # fit the pixel budget for the padded frame count, not the sampled one (#50871).
+        size = {"longest_edge": 20480, "shortest_edge": 4096}
+        for video_processing_class in self.video_processor_list:
+            encoded = self._process_frames(video_processing_class, 5, size, frame_size=64)
+            # 5 frames pad to 6 (3 temporal groups); the 32x32 output gives a 2x2 patch grid.
+            self.assertEqual(list(encoded.shape), [12, 3 * 2 * 16 * 16])
+
+    def test_odd_frames_downscale_fits_pixel_budget(self):
+        # Same downscale branch as the 57-frame 720x1280 report in #50871, at a CI-friendly size:
+        # 5 frames pad to 6, and 6 * 256 * 256 exceeds the budget, forcing beta = sqrt(3).
+        size = {"longest_edge": 131072, "shortest_edge": 4096}
+        for video_processing_class in self.video_processor_list:
+            encoded = self._process_frames(video_processing_class, 5, size, frame_size=256)
+            # 128x128 output: 3 temporal groups x 8x8 patches, and 6 * 128 * 128 <= 131072.
+            self.assertEqual(list(encoded.shape), [192, 3 * 2 * 16 * 16])
+
+    def test_even_frames_output_unchanged(self):
+        # Even frame counts keep their previous sizes: the padded count equals the sampled one,
+        # so the padded-frame budget fix is a no-op for them (also covers num_frames == 2).
+        for video_processing_class in self.video_processor_list:
+            size = {"longest_edge": 1048576, "shortest_edge": 4096}
+            encoded = self._process_frames(video_processing_class, 8, size, frame_size=256)
+            self.assertEqual(list(encoded.shape), [1024, 3 * 2 * 16 * 16])
+
+            size = {"longest_edge": 262144, "shortest_edge": 4096}
+            encoded = self._process_frames(video_processing_class, 2, size, frame_size=256)
+            self.assertEqual(list(encoded.shape), [256, 3 * 2 * 16 * 16])
