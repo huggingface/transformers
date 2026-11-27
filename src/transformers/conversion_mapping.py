@@ -22,6 +22,7 @@ from .core_model_loading import (
     Chunk,
     Concatenate,
     ErnieFuseAndSplitTextVisionExperts,
+    FuseWeightNorm,
     GroupWeightRename,
     Inkling2IndexOffsetWeightRename,
     Inkling2LoopDequantizeExperts,
@@ -158,6 +159,9 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "VivitModel": "ViTModel",
     "Dinov2Backbone": "Dinov2Model",
     "Dinov2WithRegistersBackbone": "Dinov2WithRegistersModel",
+    # each half of the YuE2 acoustic tokenizer also loads alone from the full original checkpoint
+    "yue2_acoustic_tokenizer_encoder": "yue2_vae",
+    "yue2_acoustic_tokenizer_decoder": "yue2_vae",
 }
 
 
@@ -2267,6 +2271,48 @@ def _build_checkpoint_conversion_mapping():
         "UltraVBertForMaskedLM": [
             WeightRenaming(r"^head\.decoder\.", "lm_head."),
             WeightRenaming(r"^head\.", "projection_head."),
+        ],
+        "yue2_vae": [
+            WeightRenaming(
+                r"^(encoder\.layers\.[1-6]\.layers\.[0-2]|decoder\.layers\.[1-6]\.layers\.[2-4])\.layers\.0\.",
+                r"^\1.snake1.",
+            ),
+            WeightRenaming(
+                r"^(encoder\.layers\.[1-6]\.layers\.[0-2]|decoder\.layers\.[1-6]\.layers\.[2-4])\.layers\.1\.",
+                r"^\1.conv1.",
+            ),
+            WeightRenaming(
+                r"^(encoder\.layers\.[1-6]\.layers\.[0-2]|decoder\.layers\.[1-6]\.layers\.[2-4])\.layers\.2\.",
+                r"^\1.snake2.",
+            ),
+            WeightRenaming(
+                r"^(encoder\.layers\.[1-6]\.layers\.[0-2]|decoder\.layers\.[1-6]\.layers\.[2-4])\.layers\.3\.",
+                r"^\1.conv2.",
+            ),
+            WeightRenaming(r"^(encoder\.layers\.[1-6])\.layers\.0\.", r"^\1.res_unit1."),
+            WeightRenaming(r"^(encoder\.layers\.[1-6])\.layers\.1\.", r"^\1.res_unit2."),
+            WeightRenaming(r"^(encoder\.layers\.[1-6])\.layers\.2\.", r"^\1.res_unit3."),
+            WeightRenaming(r"^(encoder\.layers\.[1-6])\.layers\.3\.", r"^\1.snake1."),
+            WeightRenaming(r"^(encoder\.layers\.[1-6])\.layers\.4\.", r"^\1.conv1."),
+            WeightRenaming(r"^(decoder\.layers\.[1-6])\.layers\.0\.", r"^\1.snake1."),
+            WeightRenaming(r"^(decoder\.layers\.[1-6])\.layers\.1\.", r"^\1.conv_t1."),
+            WeightRenaming(r"^(decoder\.layers\.[1-6])\.layers\.2\.", r"^\1.res_unit1."),
+            WeightRenaming(r"^(decoder\.layers\.[1-6])\.layers\.3\.", r"^\1.res_unit2."),
+            WeightRenaming(r"^(decoder\.layers\.[1-6])\.layers\.4\.", r"^\1.res_unit3."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.0\.", r"^\1.conv1."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.1\.", r"^\1.block.0."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.2\.", r"^\1.block.1."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.3\.", r"^\1.block.2."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.4\.", r"^\1.block.3."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.5\.", r"^\1.block.4."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.6\.", r"^\1.block.5."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.7\.", r"^\1.snake1."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.8\.", r"^\1.conv2."),
+            WeightConverter(
+                ["parametrizations.weight.original0", "parametrizations.weight.original1"],
+                "weight",
+                operations=[FuseWeightNorm()],
+            ),
         ],
     }
 

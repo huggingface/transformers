@@ -497,6 +497,7 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
         ("inkling2_vision", "inkling2"),
         ("inkling2_loop_text", "inkling2_loop"),
         ("nemo_speechlm", "nemotron3_5_transcribe"),
+        ("yue2_vae", "yue2_acoustic_tokenizer"),
     ]
 )
 

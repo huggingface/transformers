@@ -462,6 +462,63 @@ class LinearToConv3d(ConversionOps):
         return Conv3dToLinear(in_channels=self.in_channels, kernel_size=self.kernel_size)
 
 
+class FuseWeightNorm(ConversionOps):
+    """
+    Folds a weight-normalized weight, saved as its magnitude `weight_g` and direction `weight_v` (the two source patterns,
+    in this order), into a plain weight: `weight_g * weight_v / norm(weight_v)`, the norm being taken over every
+    dimension but the first, as `torch.nn.utils.parametrizations.weight_norm` (with its default `dim=0`) computes it at
+    every forward.
+    """
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        if len(source_patterns) != 2 or len(target_patterns) != 1:
+            raise ValueError(
+                "`FuseWeightNorm` folds the magnitude and the direction of a weight-normalized weight into one weight, "
+                "so it expects 2 source patterns (`weight_g`, then `weight_v`) and 1 target pattern, but got "
+                f"{source_patterns} and {target_patterns}."
+            )
+        weight_g, weight_v = input_dict.pop(source_patterns[0]), input_dict.pop(source_patterns[1])
+        weight_g = weight_g[0] if isinstance(weight_g, list) else weight_g
+        weight_v = weight_v[0] if isinstance(weight_v, list) else weight_v
+        norm = torch.linalg.vector_norm(weight_v, dim=tuple(range(1, weight_v.ndim)), keepdim=True)
+        return {target_patterns[0]: weight_v * (weight_g / norm)}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return UnfuseWeightNorm()
+
+
+class UnfuseWeightNorm(ConversionOps):
+    """
+    Splits a plain weight into the magnitude `weight_g` and direction `weight_v` of weight normalization (the two target
+    patterns, in this order): `weight_g = norm(weight)` and `weight_v = weight`, which [`FuseWeightNorm`] folds back.
+    The norm is taken over every dimension but the first, as `torch.nn.utils.parametrizations.weight_norm` (with its
+    default `dim=0`).
+    """
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        if len(input_dict) != 1 or len(target_patterns) != 2:
+            raise ValueError(
+                "`UnfuseWeightNorm` splits one weight into the magnitude and the direction of weight normalization, "
+                "so it expects 1 source weight and 2 target patterns (`weight_g`, then `weight_v`), but got "
+                f"{list(input_dict)} and {target_patterns}."
+            )
+        tensors = next(iter(input_dict.values()))
+        weight = tensors[0] if isinstance(tensors, list) else tensors
+        weight_g = torch.linalg.vector_norm(weight, dim=tuple(range(1, weight.ndim)), keepdim=True)
+        return {target_patterns[0]: weight_g, target_patterns[1]: weight}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return FuseWeightNorm()
+
+
 class PermuteForRope(ConversionOps):
     """
     Applies the permutation required to convert complex RoPE weights to the split sin/cos format.

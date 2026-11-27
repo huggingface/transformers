@@ -667,6 +667,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("yolos", "YolosModel"),
         ("yoso", "YosoModel"),
         ("youtu", "YoutuModel"),
+        ("yue2_acoustic_tokenizer_decoder", "YuE2AcousticTokenizerDecoderModel"),
+        ("yue2_acoustic_tokenizer_encoder", "YuE2AcousticTokenizerEncoderModel"),
+        ("yue2_vae", "YuE2AcousticTokenizerModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
         ("zaya", "ZayaModel"),
@@ -2187,6 +2190,7 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
         ("wavtokenizer", "WavTokenizerModel"),
         ("xcodec2", "Xcodec2Model"),
+        ("yue2_vae", "YuE2AcousticTokenizerModel"),
     ]
 )
 
