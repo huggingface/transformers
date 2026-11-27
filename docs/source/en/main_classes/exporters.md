@@ -123,7 +123,7 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 ## Utilities
 
-Lower-level functions that power `export_for_generation`, useful when you need to intervene
+Lower-level functions that power `export_multimodal` and `export_for_generation`, useful when you need to intervene
 between decomposing a model and exporting each component.
 
 [[autodoc]] exporters.utils.get_leaf_tensors
@@ -132,8 +132,9 @@ between decomposing a model and exporting each component.
 
 [[autodoc]] exporters.utils.decompose_prefill_decode
 
-[[autodoc]] exporters.utils.decompose_multimodal
+[[autodoc]] exporters.decompose.decompose_multimodal
 
 [[autodoc]] exporters.utils.decompose_for_generation
 
-[[autodoc]] exporters.utils.is_multimodal
+[[autodoc]] exporters.decompose.is_multimodal
+

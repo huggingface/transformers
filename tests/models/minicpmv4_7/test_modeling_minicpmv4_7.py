@@ -125,9 +125,11 @@ class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
         "slice_start_id": 12,
         "slice_end_id": 13,
         "newline_id": 14,
-        # patch_size=8, image_size=32 → 4×4 grid → vit_merger [2×2] → merger [1×1] = 1 token
+        # patch_size=8, image_size=64 → 8×8 grid → vit_merger [4×4] → merger [2×2] = 4 tokens
         "image_size": 64,
         "patch_size": 8,
+        # The tower's position grid is larger than an image, as the checkpoint's (980 against 448): a 16×16 grid.
+        "vision_image_size": 128,
         "num_image_tokens": 4,
         "vocab_size": 256,
         "hidden_size": 64,

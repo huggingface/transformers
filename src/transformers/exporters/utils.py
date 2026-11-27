@@ -15,7 +15,7 @@
 
 """Shared export utilities used by all exporter backends.
 
-Organised into five sections (search for the `# ── Name ──` banners):
+Organised into sections (search for the `# ── Name ──` banners):
 
 - **Patch and fix registries** — backend-keyed `_PATCHES` / `_FX_NODE_FIXES` /
   `_FX_PROGRAM_FIXES` populated via `@register_patch(backend, *paths)` /
@@ -27,8 +27,8 @@ Organised into five sections (search for the `# ── Name ──` banners):
   `cast_leaf_tensors`, and `prepare_for_export` (sets attention/experts impl,
   patches non-exportable patterns, strips output flags).
 - **Decomposition** — `decompose_prefill_decode` (split a generative forward
-  into prefill + decode) and `decompose_multimodal` + `is_multimodal` (split a
-  multimodal forward into one entry per submodule), backed by `_capture_forward`.
+  into prefill + decode), backed by `_capture_forward`. A multi-modal forward is
+  split by `exporters.decompose`.
 """
 
 from __future__ import annotations
@@ -47,6 +47,7 @@ from packaging import version
 
 from ..utils import logging
 from ..utils.import_utils import _is_package_available, is_torch_available
+from .decompose import decompose_multimodal, is_multimodal
 
 
 logger = logging.get_logger(__name__)
@@ -492,6 +493,15 @@ def quantize_converted_model(program: Any, sample_inputs: MutableMapping[str, An
 _OUTPUT_FLAGS = ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss")
 
 
+def with_data_dependent_inputs(model, inputs: dict[str, Any]) -> dict[str, Any]:
+    """`inputs` with what `model` computes from them with data-dependent ops (`get_data_dependent_inputs`: host syncs,
+    loops over images), precomputed so it traces; the ones `inputs` already has are kept."""
+    if (get_data_dependent_inputs := getattr(model, "get_data_dependent_inputs", None)) is None:
+        return inputs
+    with torch.no_grad():
+        return {**get_data_dependent_inputs(**inputs), **inputs}
+
+
 def prepare_for_export(
     model: PreTrainedModel | torch.nn.Module, inputs: MutableMapping[str, Any]
 ) -> tuple[PreTrainedModel | torch.nn.Module, MutableMapping[str, Any], dict[str, Any]]:
@@ -531,12 +541,7 @@ def prepare_for_export(
     # honour them during the trace (we don't want them as traced kwargs).
     output_flags = {flag: inputs.pop(flag) for flag in _OUTPUT_FLAGS if flag in inputs}
 
-    # What the model computes with data-dependent ops (host syncs, loops over images), precomputed so it traces
-    if (get_data_dependent_inputs := getattr(model, "get_data_dependent_inputs", None)) is not None:
-        with torch.no_grad():
-            inputs.update(
-                {name: value for name, value in get_data_dependent_inputs(**inputs).items() if name not in inputs}
-            )
+    inputs.update(with_data_dependent_inputs(model, inputs))
 
     # Cast all input tensors to match the model's dtype and device (e.g. cache objects
     # created before the model was moved to bfloat16/CUDA by a backend preparation step).
@@ -551,9 +556,8 @@ def prepare_for_export(
 # ── Decomposition ─────────────────────────────────────────────────────────────
 # Split a model into independently exportable components. `decompose_prefill_decode`
 # captures the prefill and decode forward kwargs from a real `model.generate()` call;
-# `decompose_multimodal` runs a single forward and captures per-submodule kwargs (one
-# entry per encoder / projector / language model). Both rely on `_capture_forward` to
-# wrap a target submodule and record every call's kwargs.
+# a multi-modal prefill is further split by `exporters.decompose.decompose_multimodal`.
+# `_capture_forward` wraps a target submodule and records every call's kwargs.
 
 
 @contextlib.contextmanager
@@ -703,8 +707,13 @@ def decompose_prefill_decode(
     capture_config = copy.deepcopy(generation_config if generation_config is not None else model.generation_config)
     capture_config.max_new_tokens = num_new_tokens
     capture_config.min_new_tokens = num_new_tokens
+    # Features precomputed by `generate` would reach the prefill as `mm_encoder_outputs`, hiding the modality inputs
+    # its split looks for.
+    no_mm_encoder_outputs = []
+    if hasattr(model, "_supports_mm_encoder_outputs"):
+        no_mm_encoder_outputs.append((model, "_supports_mm_encoder_outputs", lambda original: lambda: False))
     try:
-        with _capture_forward(model) as calls:
+        with _capture_forward(model) as calls, patch_attributes(no_mm_encoder_outputs):
             model.generate(**copy.deepcopy(inputs), generation_config=capture_config)
     except Exception as e:
         raise RuntimeError(
@@ -738,102 +747,6 @@ def decompose_prefill_decode(
     }
 
 
-# Projector attribute names — no canonical accessor on `PreTrainedModel`, kept as a heuristic.
-# Encoders and language model are resolved via `get_encoder(modality)` / `get_decoder()`.
-_MULTIMODAL_PROJECTOR_NAMES = ("multi_modal_projector", "connector", "embed_vision", "embed_audio")
-_MULTIMODAL_LM_HEAD_NAMES = ("lm_head",)
-
-
-def _find_multimodal_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Module]:
-    """Return `{attr_name: module}` for multi-modal submodules found on `model`.
-
-    Uses the canonical `PreTrainedModel.get_encoder("image"/"audio")` and `get_decoder()`
-    accessors for encoders and the language model. Projectors and `lm_head` are looked
-    up by name on `model` and its `base_model` (e.g. `LlavaModel` under `LlavaForConditionalGeneration`).
-
-    Only returns results when at least one modal encoder AND a language model are found —
-    otherwise the model is not multi-modal and should be exported as a single unit.
-    """
-    found: dict[str, torch.nn.Module] = {}
-
-    has_encoder = False
-    for modality in ("image", "audio"):
-        encoder = model.get_encoder(modality=modality)
-        # `get_encoder` returns `self` as the "no match" fallback, and some models keep
-        # `self.audio_tower = None` / `self.vision_tower = None` when the corresponding
-        # sub-config is absent — `hasattr` is True but `getattr` is None.
-        if encoder is not None and encoder is not model:
-            found[f"{modality}_encoder"] = encoder
-            has_encoder = True
-
-    decoder = model.get_decoder()
-    if decoder is not None and decoder is not model:
-        found["language_model"] = decoder
-
-    for root in {model, model.base_model}:
-        for name in _MULTIMODAL_PROJECTOR_NAMES + _MULTIMODAL_LM_HEAD_NAMES:
-            if name not in found and getattr(root, name, None) is not None:
-                found[name] = getattr(root, name)
-
-    if not has_encoder or "language_model" not in found:
-        return {}
-
-    return found
-
-
-def is_multimodal(model: PreTrainedModel | torch.nn.Module) -> bool:
-    """Returns `True` if the model is multi-modal with modal encoders and a language model.
-
-    A non-`PreTrainedModel` (e.g. a bare `nn.Module`) has no canonical `get_encoder`/`get_decoder`
-    accessors and is trivially not multi-modal, so it short-circuits to `False`.
-    """
-    return isinstance(model, PreTrainedModel) and bool(_find_multimodal_submodules(model))
-
-
-def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict[str, tuple[torch.nn.Module, dict]]:
-    """Capture inputs to each multi-modal submodule via a single forward pass.
-
-    Detects all known multi-modal submodules by attribute name (vision tower, projector,
-    language model, lm_head, …) and captures their forward kwargs during one
-    `model(**inputs)` call.
-
-    Each submodule is returned as a separate `name: (module, inputs)` entry for
-    independent export. The token-merge step (e.g. `masked_scatter` for multi-modal models)
-    is intentionally left outside the exported graphs — it is the caller's responsibility
-    to assemble `inputs_embeds` from the encoder outputs before running the decoder.
-
-    Returns:
-        `dict[str, tuple[torch.nn.Module, dict]]`: One `name: (module, inputs)`
-        entry per detected submodule (image/audio encoder, projector, language model, lm_head).
-
-    Raises:
-        `ValueError`: if no known multi-modal submodules are found on the model.
-    """
-    submodules = _find_multimodal_submodules(model)
-    if not submodules:
-        raise ValueError(
-            f"decompose_multimodal found no multi-modal submodules on {type(model).__name__}. "
-            f"Expected an image/audio encoder + language model, found neither."
-        )
-
-    try:
-        with contextlib.ExitStack() as stack, torch.no_grad():
-            submodule_inputs = {
-                name: stack.enter_context(_capture_forward(module)) for name, module in submodules.items()
-            }
-            model(**copy.deepcopy(inputs))
-    except Exception as e:
-        raise RuntimeError(
-            f"decompose_multimodal failed for {type(model).__name__}. Inputs passed: {list(inputs.keys())}."
-        ) from e
-
-    return {
-        name: (module, submodule_inputs[name][-1])
-        for name, module in submodules.items()
-        if submodule_inputs[name]  # skip submodules not called (e.g. lm_head on base models)
-    }
-
-
 def decompose_for_generation(
     model: PreTrainedModel, inputs: dict[str, Any], generation_config: Any = None, multi_token_decode: bool = False
 ) -> dict[str, tuple[torch.nn.Module, dict]]:
@@ -841,8 +754,8 @@ def decompose_for_generation(
 
     Runs `decompose_prefill_decode` to capture prefill and decode forward kwargs from a real
     `model.generate(**inputs, max_new_tokens=2)`. If the prefill is multi-modal (per `is_multimodal`),
-    further splits it into one entry per submodule (vision/audio encoder, projector, language model,
-    `lm_head`) via `decompose_multimodal`.
+    further splits it into its token embedder, one encoder per modality and the language model via
+    `decompose_multimodal`.
 
     Args:
         model: Generative model. Must support `model.generate(**inputs)`.
@@ -856,8 +769,8 @@ def decompose_for_generation(
 
     Returns:
         `{component_name: (submodel, forward_inputs)}`. Keys are `"prefill"` / `"decode"` for
-        plain generative models and `"<modality>_encoder"` / `"multi_modal_projector"` /
-        `"language_model"` / `"lm_head"` / `"decode"` for multi-modal generative models.
+        plain generative models and `"text_embeddings_model"` / `"<modality>_embeddings_model"` /
+        `"language_model"` / `"decode"` for multi-modal generative models.
     """
     stages = decompose_prefill_decode(
         model, inputs, generation_config=generation_config, multi_token_decode=multi_token_decode
@@ -867,7 +780,10 @@ def decompose_for_generation(
     if not is_multimodal(prefill_model):
         return stages
 
-    components = decompose_multimodal(prefill_model, prefill_inputs)
+    components = {
+        name: (component.module, component.inputs)
+        for name, component in decompose_multimodal(prefill_model, prefill_inputs).items()
+    }
     components["decode"] = stages["decode"]
     return components
 

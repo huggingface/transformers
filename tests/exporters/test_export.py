@@ -25,6 +25,7 @@ from parameterized import parameterized
 
 from transformers import GenerationConfig, set_seed
 from transformers.exporters.base import ExportedModel
+from transformers.exporters.decompose import decompose_multimodal, is_multimodal
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
@@ -32,9 +33,7 @@ from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExp
 from transformers.exporters.utils import (
     cast_leaf_tensors,
     decompose_for_generation,
-    decompose_multimodal,
     get_leaf_tensors,
-    is_multimodal,
     module_device,
     module_dtype,
     openvino_feed,
@@ -971,7 +970,8 @@ class ExportTesterMixin:
             with torch.no_grad():
                 inputs_dict = {**get_data_dependent_inputs(**inputs_dict), **inputs_dict}
         if is_multimodal(model):
-            return decompose_multimodal(model, inputs_dict)
+            components = decompose_multimodal(model, inputs_dict)
+            return {name: (component.module, component.inputs) for name, component in components.items()}
         return {"model": (model, inputs_dict)}
 
     def _check_export(
@@ -1006,8 +1006,8 @@ class ExportTesterMixin:
                 return
             if type(outputs) is not dict:
                 self.assertIs(type(outputs), type(eager_outputs), msg)
-                outputs = get_leaf_tensors(outputs)
-            actual, eager = outputs, get_leaf_tensors(eager_outputs)
+            # A component may return a dict of nested outputs (Qwen3-VL's deepstack features): flattened like eager's
+            actual, eager = get_leaf_tensors(outputs), get_leaf_tensors(eager_outputs)
             self.assertTrue(actual, f"The export returns no outputs {msg}.")
             self.assertEqual(set(actual), set(eager), msg)
             if check_exactness:
