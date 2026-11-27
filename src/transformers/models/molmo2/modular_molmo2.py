@@ -1054,10 +1054,12 @@ class Molmo2Processor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = self._merge_kwargs(**kwargs)["videos_kwargs"]
-            size = videos_kwargs.get("size", self.video_processor.size)
-            patch_size = videos_kwargs.get("patch_size", self.video_processor.patch_size)
-            pooling_h, pooling_w = videos_kwargs.get("pooling_size", self.video_processor.pooling_size)
+            videos_kwargs = self.video_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["videos_kwargs"]
+            )
+            size = videos_kwargs["size"]
+            patch_size = videos_kwargs["patch_size"]
+            pooling_h, pooling_w = videos_kwargs["pooling_size"]
             # Every frame is resized to `size`, so the count doesn't depend on the video's own size
             patches_per_side = size["height"] // patch_size
             num_frame_tokens = math.ceil(patches_per_side / pooling_h) * math.ceil(patches_per_side / pooling_w)
