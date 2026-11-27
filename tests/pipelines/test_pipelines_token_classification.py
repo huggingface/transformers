@@ -41,6 +41,8 @@ from .test_pipelines_common import ANY
 if is_torch_available():
     import torch
 
+    from transformers import BertConfig, BertForTokenClassification, BertTokenizer
+
 
 VALID_INPUTS = ["A simple string", ["list of strings", "A simple string that is quite a bit longer"]]
 
@@ -342,6 +344,21 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                 ],
             ],
         )
+
+    @require_torch
+    def test_pretokenized_left_padded_batch(self):
+        tokenizer = BertTokenizer(padding_side="left")
+        tokenizer.add_tokens(["new", "york", "city"])
+        config = BertConfig(
+            vocab_size=len(tokenizer), hidden_size=8, num_hidden_layers=1, num_attention_heads=2, intermediate_size=16
+        )
+        ner = TokenClassificationPipeline(model=BertForTokenClassification(config).eval(), tokenizer=tokenizer)
+        words = [["new", "york"], ["new", "york", "city"], ["new", "york", "city", "city"]]
+
+        expected = ner([" ".join(sentence) for sentence in words], batch_size=3, ignore_labels=[])
+        actual = ner(words, is_split_into_words=True, batch_size=3, ignore_labels=[])
+
+        self.assertEqual(nested_simplify(actual), nested_simplify(expected))
 
     @require_torch
     def test_chunking_fast(self):

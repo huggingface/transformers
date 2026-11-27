@@ -344,6 +344,9 @@ class TokenClassificationPipeline(ChunkPipeline):
             )
             special_tokens_mask = model_outputs["special_tokens_mask"][0].numpy()
             word_ids = model_outputs.get("word_ids")
+            if word_ids is not None and self.tokenizer.padding_side == "left":
+                # The batch collator pads tensor fields, but word_ids is a list from the tokenizer.
+                word_ids = [None] * (len(input_ids) - len(word_ids)) + word_ids
 
             maxes = np.max(logits, axis=-1, keepdims=True)
             shifted_exp = np.exp(logits - maxes)
