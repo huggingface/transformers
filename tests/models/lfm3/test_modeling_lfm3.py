@@ -13,7 +13,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch LFM3 model."""
 
+import tempfile
 import unittest
+from functools import wraps
 
 from transformers import AutoTokenizer, Lfm3ForCausalLM, Lfm3Model, is_torch_available
 from transformers.testing_utils import (
@@ -30,6 +32,8 @@ from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 if is_torch_available():
     import torch
+
+    from transformers import AutoModelForCausalLM
 
 
 class Lfm3ModelTester(CausalLMModelTester):
@@ -50,6 +54,41 @@ class Lfm3ModelTester(CausalLMModelTester):
 @require_torch
 class Lfm3ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Lfm3ModelTester
+
+    _half_precision_tests = {
+        "test_cpu_offload",
+        "test_disk_offload_bin",
+        "test_disk_offload_safetensors",
+        "test_flash_attn_2_fp32_ln",
+        "test_kernels_greedy_generate",
+        "test_kernels_can_run_without_crashing_inference",
+        "test_kernels_can_run_without_crashing_training",
+    }
+
+    def with_float16_default(test_func):
+        """The kernels are dependent on half precision so we force it with this decorator"""
+
+        @wraps(test_func)
+        def wrapper(self, *args, **kwargs):
+            previous_dtype = torch.get_default_dtype()
+            try:
+                torch.set_default_dtype(torch.float16)
+                return test_func(self, *args, **kwargs)
+            finally:
+                torch.set_default_dtype(previous_dtype)
+
+        return wrapper
+
+    def setUp(self):
+        super().setUp()
+        if self._testMethodName in self._half_precision_tests:
+            self._previous_dtype = torch.get_default_dtype()
+            torch.set_default_dtype(torch.bfloat16)
+
+    def tearDown(self):
+        if self._testMethodName in self._half_precision_tests:
+            torch.set_default_dtype(self._previous_dtype)
+        super().tearDown()
 
     def _get_conv_state_shape(self, batch_size: int, config):
         return (batch_size, config.hidden_size, config.conv_L_cache)
@@ -143,6 +182,23 @@ class Lfm3ModelTest(CausalLMModelTest, unittest.TestCase):
                     disable_compile=True,
                 )
             self.assertTrue(torch.equal(dynamic, static), layer_types)
+
+    def test_causal_lm_can_accept_training_kwargs(self):
+        """Overriden to force half precision"""
+        if not getattr(self.model_tester, "is_training", False):
+            self.skipTest(reason="ModelTester is not configured to run training tests")
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with torch.device(torch_device):
+                model_eager = AutoModelForCausalLM.from_config(config, dtype=torch.float16)
+
+            model_eager.save_pretrained(tmpdir)
+            model = AutoModelForCausalLM.from_pretrained(tmpdir, dtype=torch.float16, device_map=torch_device)
+            inputs_dict["num_items_in_batch"] = torch.tensor(inputs_dict["input_ids"].shape[0])
+            inputs_dict["labels"] = inputs_dict["input_ids"]
+            _ = model(**inputs_dict, return_dict=False)
 
 
 @require_torch_accelerator

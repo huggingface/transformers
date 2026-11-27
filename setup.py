@@ -88,7 +88,7 @@ _deps = [
     "huggingface-hub>=2.4.0,<3.0",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.6",
-    "kernels>=0.19.0,<0.20",
+    "kernels>=0.19.1,<0.20",
     "librosa",
     "mistral-common[image]>=1.11.7",
     "nltk<=3.8.1",
@@ -167,7 +167,7 @@ def deps_list(*pkgs):
 
 extras = {}
 
-extras["torch"] = deps_list("torch", "accelerate")
+extras["torch"] = deps_list("torch", "accelerate", "kernels")
 extras["vision"] = deps_list("torchvision", "Pillow")
 extras["audio"] = deps_list("torchaudio", "soundfile", "soxr")
 extras["video"] = deps_list("av")
@@ -176,7 +176,7 @@ extras["quality"] = deps_list(
     "datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty", "transformers-mlinter"
 )
 extras["docs"] = deps_list("hf-doc-builder")
-extras["kernels"] = deps_list("kernels")
+extras["kernels"] = deps_list("kernels")  # For BC, already included in torch
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["mistral-common"] = deps_list("mistral-common[image]")
@@ -238,7 +238,6 @@ extras["all"] = (
     + extras["vision"]
     + extras["audio"]
     + extras["video"]
-    + extras["kernels"]
     + extras["timm"]
     + extras["sentencepiece"]
     + extras["tiktoken"]
@@ -260,6 +259,7 @@ install_requires = [
     deps["typer"],  # CLI utilities. In practice, already a dependency of huggingface_hub but we use it as well
     deps["safetensors"],
     deps["tqdm"],  # progress bars in model download and training scripts
+    deps["kernels"],
 ]
 
 

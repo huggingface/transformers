@@ -146,9 +146,9 @@ def resolve_internal_import(module: ModuleType | None, chained_path: str) -> Cal
     return final_module
 
 
-def is_env_variable_true(env_variable: str) -> bool:
+def is_env_variable_true(env_variable: str, default: str | None = None) -> bool:
     """Detect whether `env_variable` has been set to a true value in the environment"""
-    return os.getenv(env_variable, "false").lower() in ("true", "1", "y", "yes", "on")
+    return os.getenv(env_variable, default or "false").lower() in ("true", "1", "y", "yes", "on")
 
 
 def is_env_variable_false(env_variable: str) -> bool:
@@ -174,7 +174,7 @@ TORCHAO_MIN_VERSION = "0.15.0"
 COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.19.0"
+KERNELS_MIN_VERSION = "0.19.1"
 KERNELS_MAX_VERSION = "0.20.0"
 MISTRAL_COMMON_MIN_VERSION = "1.11.5"
 
