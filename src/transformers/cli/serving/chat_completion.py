@@ -354,7 +354,8 @@ class ChatCompletionHandler(BaseHandler):
         if body.get("frequency_penalty") is not None:
             generation_config.repetition_penalty = 1.0 + float(body["frequency_penalty"])
         if body.get("logit_bias") is not None:
-            generation_config.sequence_bias = {(int(k),): v for k, v in body["logit_bias"].items()}
+            # OpenAI clients send integer biases (e.g. -100), but `sequence_bias` only accepts floats.
+            generation_config.sequence_bias = {(int(k),): float(v) for k, v in body["logit_bias"].items()}
         if body.get("stop") is not None:
             generation_config.stop_strings = body["stop"]
 
