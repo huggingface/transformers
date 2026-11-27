@@ -57,7 +57,7 @@ class NVFP4HfQuantizer(HfQuantizer):
 - `serialized_names` lists the tensors a param is stored as. They load together, with the same ops.
 - `checkpoint_renames` maps globs on the last names of a checkpoint key to ours, first match wins. It is applied per layer
   (`rename_layer`), before anything else, so the rest of loading only sees our names. A glob can look further up the
-  key, e.g. NVFP4's `{"experts.*.input_scale": "weight_input_scale"}` renames only the experts' `input_scale`.
+  key, e.g. `{"*.input_scale": "weight_input_scale"}` renames only the `input_scale` tensors.
 - `get_load_operations` returns the op classes for `"deserialize"` and `"dequantize"`. `get_load_operation()` picks the
   one for the config (`dequantize=True` or not). Here `NVFP4Deserialize` turns the checkpoint's packed weights and
   scales into the swizzled layout that `NVFP4Linear` runs.
@@ -95,10 +95,6 @@ class NVFP4Linear(nn.Module):
         return nvfp4_linear(load_nvfp4_kernel(), input, self.weight, self.weight_sf, ...)
 ```
 
-MoE experts need a grouped forward over the kernel. Register it in the format's experts interface, like
-`nvfp4_grouped_mm_experts_forward`, the `grouped_mm` implementation of `ALL_NVFP4_EXPERTS_FUNCTIONS`.
-`NVFP4Experts.forward` dispatches through it, with the per-expert `eager` loop as the default.
-
 ## 3. The load ops
 
 The load ops turn the checkpoint's tensors into the module's. `deserialize` runs on the pre-quantized tensors of one
@@ -116,27 +112,12 @@ class NVFP4HfQuantizer(HfQuantizer):
         return NVFP4Quantize(self)
 ```
 
-Fused experts need nothing else: the model's own converters take each expert's scales along with its weight. A
-converter pattern ending in `.weight` also matches the tensors named after it (`weight_scale_inv`, ...), and they land
-in the target named like it:
+A converter pattern ending in `.weight` also matches the tensors named after it (`weight_scale_inv`, ...), and they
+land in the target named like it. `update_weight_transform` attaches the load op to a param once its first key matches
+a converter: after the converter's ops for deserialize, before them for dequantize.
 
-```text
-checkpoint keys (after rename_layer)              model converter                   targets
-mlp.experts.0.gate_proj.weight         ─┐
-mlp.experts.0.up_proj.weight            ├─ MergeModulelist + Concatenate ─→  mlp.experts.gate_up_proj
-mlp.experts.1.gate_proj.weight ...     ─┘   then deserialize
-mlp.experts.0.gate_proj.scale  → weight_scale_inv ─┐
-mlp.experts.0.up_proj.scale    → weight_scale_inv  ├─ same ops ──────────→  mlp.experts.gate_up_proj_scale_inv
-...                                               ─┘
-```
-
-With `dequantize=True` the converter reads the weights and their scales into the one target `gate_up_proj`, and the
-dequantize op runs first, on each expert, before the merge. `update_weight_transform` attaches the load op to a param
-once its first key matches a converter: after the converter's ops for deserialize, before them for dequantize.
-
-Under tensor parallelism, a param named after a planned one (`gate_up_proj_scale_inv`, GPT-OSS's `gate_up_proj_blocks`)
-shards like it. A format whose scales can't be sharded that way overrides `update_parallel_plan`, e.g. NVFP4 replicates
-its modules.
+Under tensor parallelism, a param named after a planned one shards like it. A format whose scales can't be sharded
+that way overrides `update_parallel_plan`, e.g. NVFP4 replicates its modules.
 
 ## 4. Read the checkpoint's own scheme
 
