@@ -368,6 +368,8 @@ class Owlv2ImageProcessor(TorchvisionBackend):
         image_std: float | list[float] | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -409,7 +411,9 @@ class Owlv2ImageProcessor(TorchvisionBackend):
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["Owlv2ImageProcessor"]

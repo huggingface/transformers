@@ -292,6 +292,8 @@ class Ovis2ImageProcessorPil(PilBackend):
         min_patches: int = 1,
         max_patches: int = 12,
         use_covering_area_grid: bool = True,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if crop_to_patches and max_patches > 1:
@@ -326,7 +328,12 @@ class Ovis2ImageProcessorPil(PilBackend):
                 image = self.normalize(image, image_mean, image_std)
             processed_images.append(image)
 
-        return BatchFeature(data={"pixel_values": processed_images, "grids": grids}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images, "grids": grids},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
+        )
 
 
 __all__ = ["Ovis2ImageProcessorPil"]

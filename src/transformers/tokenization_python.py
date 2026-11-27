@@ -723,6 +723,7 @@ class PythonBackend(PreTrainedTokenizerBase):
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        device: str | None = None,
         **kwargs,
     ) -> BatchEncoding:
         # Detect batched inputs (list of sequences)
@@ -801,7 +802,7 @@ class PythonBackend(PreTrainedTokenizerBase):
                 return_attention_mask=return_attention_mask,
             )
 
-            return BatchEncoding(batch_outputs, tensor_type=return_tensors)
+            return BatchEncoding(batch_outputs, tensor_type=return_tensors, device=device)
 
         # Single sequence handling
         def get_input_ids(text):
@@ -843,6 +844,7 @@ class PythonBackend(PreTrainedTokenizerBase):
             return_special_tokens_mask=return_special_tokens_mask,
             return_length=return_length,
             verbose=verbose,
+            device=device,
         )
 
     def prepare_for_tokenization(
@@ -1144,6 +1146,7 @@ class PythonBackend(PreTrainedTokenizerBase):
         return_length: bool = False,
         verbose: bool = True,
         prepend_batch_axis: bool = False,
+        device: str | None = None,
         **kwargs,
     ) -> BatchEncoding:
         """
@@ -1233,7 +1236,9 @@ class PythonBackend(PreTrainedTokenizerBase):
         if return_length:
             encoded_inputs["length"] = len(encoded_inputs["input_ids"])
 
-        return BatchEncoding(encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis)
+        return BatchEncoding(
+            encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis, device=device
+        )
 
     def truncate_sequences(
         self,

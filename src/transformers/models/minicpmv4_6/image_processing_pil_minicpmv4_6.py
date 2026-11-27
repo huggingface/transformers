@@ -194,6 +194,8 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
         slice_mode: bool,
         downsample_mode: str,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         per_image_pixel_values: list[list[np.ndarray]] = []

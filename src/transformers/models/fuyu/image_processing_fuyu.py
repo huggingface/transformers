@@ -159,6 +159,8 @@ class FuyuImageProcessor(TorchvisionBackend):
         padding_mode: str | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -213,6 +215,8 @@ class FuyuImageProcessor(TorchvisionBackend):
                 "image_sizes": original_image_sizes,
             },
             tensor_type=return_tensors,
+            dtype=dtype,
+            device=device,
             skip_tensor_conversion=["overflowing_values"],
         )
 

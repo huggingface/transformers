@@ -167,6 +167,8 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask: bool | None = None,
         return_tensors: str | TensorType | None = None,
         sampling_rate: int | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -282,6 +284,8 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         pad_to_multiple_of: int | None = None,
         return_attention_mask: bool | None = None,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         is_batched_numpy = isinstance(speech, np.ndarray) and len(speech.shape) > 1
@@ -308,7 +312,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         # convert into correct format for padding
         if is_target:
             features = [self._extract_mel_features(waveform) for waveform in speech]
-            encoded_inputs = BatchFeature({"input_values": features})
+            encoded_inputs = BatchFeature({"input_values": features}, device=device, dtype=dtype)
             self.feature_size = self.num_mel_bins
         else:
             encoded_inputs = BatchFeature({"input_values": speech})
@@ -354,8 +358,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
                 padded_inputs["input_values"], attention_mask=attention_mask, padding_value=self.padding_value
             )
 
-        if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+        padded_inputs = padded_inputs.convert_to_tensors(return_tensors, device=device, dtype=dtype)
 
         return padded_inputs
 

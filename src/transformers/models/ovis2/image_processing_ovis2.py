@@ -310,6 +310,8 @@ class Ovis2ImageProcessor(TorchvisionBackend):
         min_patches: int = 1,
         max_patches: int = 12,
         use_covering_area_grid: bool = True,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if crop_to_patches and max_patches > 1:
@@ -356,7 +358,12 @@ class Ovis2ImageProcessor(TorchvisionBackend):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        return BatchFeature(data={"pixel_values": processed_images, "grids": grids}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images, "grids": grids},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
+        )
 
 
 __all__ = ["Ovis2ImageProcessor"]

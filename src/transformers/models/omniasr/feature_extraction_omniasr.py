@@ -73,6 +73,8 @@ class OmniASRFeatureExtractor(SequenceFeatureExtractor):
         truncation: bool = False,
         return_attention_mask: bool | None = True,
         return_tensors: str | TensorType | None = "pt",
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

@@ -152,6 +152,8 @@ class NemotronH_Omni_Reasoning_V3ImageProcessor(TorchvisionBackend):
         max_model_len: int,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         merge_size = round(1 / downsample_ratio)
@@ -187,6 +189,8 @@ class NemotronH_Omni_Reasoning_V3ImageProcessor(TorchvisionBackend):
                 "image_grid_hw": torch.stack(image_grid_hw),  # (num_images, 2)
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def get_number_of_image_patches(

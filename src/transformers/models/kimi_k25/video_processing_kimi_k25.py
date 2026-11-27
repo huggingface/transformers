@@ -205,6 +205,8 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
         merge_size: int,
         max_patches: int,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ):
         # Split video to chunks based on temporal patch size
@@ -273,6 +275,8 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
                 "num_chunks_per_video": num_chunks_per_video,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

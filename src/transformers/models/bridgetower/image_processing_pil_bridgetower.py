@@ -130,6 +130,8 @@ class BridgeTowerImageProcessorPil(PilBackend):
         pad_size: SizeDict | None,
         return_tensors: str | TensorType | None,
         size_divisor: int = 32,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for BridgeTower."""
@@ -157,7 +159,7 @@ class BridgeTowerImageProcessorPil(PilBackend):
 
         data["pixel_values"] = processed_images
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
 
 __all__ = ["BridgeTowerImageProcessorPil"]

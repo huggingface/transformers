@@ -72,6 +72,8 @@ class VideoMAEImageProcessorPil(PilBackend):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         pixel_values = []
@@ -88,7 +90,9 @@ class VideoMAEImageProcessorPil(PilBackend):
                     image = self.normalize(image, image_mean, image_std)
                 processed_frames.append(image)
             pixel_values.append(processed_frames)
-        return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": pixel_values}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["VideoMAEImageProcessorPil"]

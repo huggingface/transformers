@@ -267,6 +267,8 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         max_length: int | None = None,
         sampling_rate: int | None = None,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -360,8 +362,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         input_features = {"input_features": input_mel, "is_longer": is_longer}
         input_features = BatchFeature(input_features)
 
-        if return_tensors is not None:
-            input_features = input_features.convert_to_tensors(return_tensors)
+        padded_inputs = padded_inputs.convert_to_tensors(return_tensors, device=device, dtype=dtype)
 
         return input_features
 

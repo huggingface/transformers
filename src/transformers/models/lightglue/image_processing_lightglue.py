@@ -156,6 +156,8 @@ class LightGlueImageProcessor(TorchvisionBackend):
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         do_grayscale: bool = True,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -186,7 +188,9 @@ class LightGlueImageProcessor(TorchvisionBackend):
 
         # Return in same format as slow processor
 
-        return BatchFeature(data={"pixel_values": stacked_pairs}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": stacked_pairs}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
     def post_process_keypoint_matching(
         self,

@@ -434,6 +434,8 @@ class Owlv2ImageProcessorPil(PilBackend):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = []
@@ -447,7 +449,9 @@ class Owlv2ImageProcessorPil(PilBackend):
             if do_normalize:
                 image = self.normalize(image, image_mean, image_std)
             processed_images.append(image)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["Owlv2ImageProcessorPil"]

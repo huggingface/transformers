@@ -1679,6 +1679,8 @@ class Inkling2ImageProcessor(TorchvisionBackend):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         return_tensors: str | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         patches, image_grid_thw = [], []
@@ -1695,6 +1697,8 @@ class Inkling2ImageProcessor(TorchvisionBackend):
         return BatchFeature(
             data={"pixel_values": torch.cat(patches), "image_grid_thw": torch.tensor(image_grid_thw)},
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

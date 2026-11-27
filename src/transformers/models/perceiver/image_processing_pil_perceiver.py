@@ -87,6 +87,8 @@ class PerceiverImageProcessorPil(PilBackend):
         do_pad: bool | None,
         pad_size: SizeDict | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for Perceiver: center_crop -> resize -> rescale and normalize."""
@@ -101,7 +103,9 @@ class PerceiverImageProcessorPil(PilBackend):
             if do_normalize:
                 image = self.normalize(image, image_mean, image_std)
             processed_images.append(image)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["PerceiverImageProcessorPil"]

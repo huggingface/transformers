@@ -377,6 +377,8 @@ class Llama4ImageProcessor(TorchvisionBackend):
         resize_to_max_canvas: bool,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if not do_resize:
@@ -448,7 +450,10 @@ class Llama4ImageProcessor(TorchvisionBackend):
 
         processed_images = torch.cat(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(
-            data={"pixel_values": processed_images, "aspect_ratios": aspect_ratios}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "aspect_ratios": aspect_ratios},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

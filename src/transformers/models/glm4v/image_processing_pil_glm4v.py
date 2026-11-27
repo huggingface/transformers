@@ -188,6 +188,8 @@ class Glm4vImageProcessorPil(PilBackend):
         temporal_patch_size: int,
         merge_size: int,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -228,7 +230,10 @@ class Glm4vImageProcessorPil(PilBackend):
         image_grid_thw = np.array(processed_grids)
 
         return BatchFeature(
-            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:

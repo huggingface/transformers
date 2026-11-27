@@ -208,6 +208,7 @@ class CohereAsrFeatureExtractor(SequenceFeatureExtractor):
         do_normalize: bool | None = None,
         device: str | None = "cpu",
         return_token_timestamps: bool | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -370,6 +371,8 @@ class CohereAsrFeatureExtractor(SequenceFeatureExtractor):
                 "attention_mask": attention_mask,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
         result["audio_chunk_index"] = audio_chunk_index
         return result

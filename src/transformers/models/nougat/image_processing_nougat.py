@@ -264,6 +264,8 @@ class NougatImageProcessor(TorchvisionBackend):
         do_align_long_axis: bool = False,
         do_thumbnail: bool = True,
         do_crop_margin: bool = True,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Crop images
@@ -298,7 +300,9 @@ class NougatImageProcessor(TorchvisionBackend):
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["NougatImageProcessor"]

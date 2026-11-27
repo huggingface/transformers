@@ -259,7 +259,13 @@ class GotOcr2Processor(ProcessorMixin):
         data = {**text_inputs, **processed_images}
         data = {k: v for k, v in data.items() if k not in self.unused_input_names}
 
-        return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
+        return BatchFeature(
+            data,
+            tensor_type=return_tensors,
+            skip_tensor_conversion=self.skip_tensor_conversion,
+            device=merged_kwargs["images_kwargs"].get("device"),
+            dtype=merged_kwargs["images_kwargs"].get("dtype"),
+        )
 
     def prepare_inputs_layout(self, images=None, text=None, box=None, color=None, multi_page=False, **kwargs):
         if images is None:

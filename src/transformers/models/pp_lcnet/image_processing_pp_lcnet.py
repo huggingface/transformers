@@ -76,6 +76,8 @@ class PPLCNetImageProcessor(TorchvisionBackend):
         image_std: float | list[float] | None,
         return_tensors: str | TensorType | None,
         disable_grouping: bool | None = False,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -109,7 +111,7 @@ class PPLCNetImageProcessor(TorchvisionBackend):
 
         # RGB -> BGR
         images = [image[[2, 1, 0], :, :] for image in processed_images]
-        return BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+        return BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def get_image_size(
         self,

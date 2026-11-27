@@ -109,6 +109,8 @@ class PoolFormerImageProcessorPil(PilBackend):
         pad_size: SizeDict | None,
         return_tensors: str | TensorType | None,
         crop_pct: float = 0.9,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for PoolFormer (pass crop_pct to resize)."""
@@ -127,7 +129,9 @@ class PoolFormerImageProcessorPil(PilBackend):
         if do_pad:
             processed_images = self.pad(processed_images, pad_size=pad_size)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["PoolFormerImageProcessorPil"]

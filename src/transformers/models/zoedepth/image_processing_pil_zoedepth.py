@@ -214,6 +214,8 @@ class ZoeDepthImageProcessorPil(PilBackend):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = []
@@ -228,7 +230,9 @@ class ZoeDepthImageProcessorPil(PilBackend):
                 image = self.normalize(image, image_mean, image_std)
             processed_images.append(image)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
     def post_process_depth_estimation(
         self,

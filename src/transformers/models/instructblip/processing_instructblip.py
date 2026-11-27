@@ -97,7 +97,12 @@ class InstructBlipProcessor(ProcessorMixin):
             encoding.update(image_encoding)
 
         # Cast to desired return tensors type
-        encoding = BatchFeature(encoding, tensor_type=return_tensors)
+        encoding = BatchFeature(
+            encoding,
+            tensor_type=return_tensors,
+            device=output_kwargs["text_kwargs"].get("device"),
+            dtype=output_kwargs["images_kwargs"].get("dtype"),
+        )
         return encoding
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):

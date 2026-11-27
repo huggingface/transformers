@@ -144,6 +144,7 @@ class InklingFeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask: bool | None = True,
         return_tensors: str | TensorType | None = None,
         device: str | None = "cpu",
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -243,7 +244,7 @@ class InklingFeatureExtractor(SequenceFeatureExtractor):
             # Named `input_features_mask` (not `attention_mask`) so it does not collide with the text
             # `attention_mask` when the processor merges audio and text inputs.
             data["input_features_mask"] = input_features_mask
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
 
 __all__ = ["InklingFeatureExtractor"]

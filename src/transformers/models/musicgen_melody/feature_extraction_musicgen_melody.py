@@ -189,6 +189,8 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         padding: str | None = True,
         max_length: int | None = None,
         sampling_rate: int | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -308,8 +310,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
             # rescale from raw audio length to spectrogram length
             padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, :: self.hop_length]
 
-        if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+        padded_inputs = padded_inputs.convert_to_tensors(return_tensors, device=device, dtype=dtype)
 
         return padded_inputs
 

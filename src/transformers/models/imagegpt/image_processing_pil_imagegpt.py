@@ -107,6 +107,8 @@ class ImageGPTImageProcessorPil(PilBackend):
         return_tensors: str | TensorType | None,
         do_color_quantize: bool | None = None,
         clusters: "list | np.ndarray | torch.Tensor | None" = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ):
         processed_images = []
@@ -140,9 +142,11 @@ class ImageGPTImageProcessorPil(PilBackend):
 
             # We need to convert back to a list to keep consistent behaviour across processors.
             input_ids = list(input_ids)
-            return BatchFeature(data={"input_ids": input_ids}, tensor_type=return_tensors)
+            return BatchFeature(data={"input_ids": input_ids}, tensor_type=return_tensors, device=device)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
     def to_dict(self):
         output = super().to_dict()

@@ -185,6 +185,8 @@ class Gemma3ImageProcessorPil(PilBackend):
         pan_and_scan_min_crop_size: int | None = None,
         pan_and_scan_max_num_crops: int | None = None,
         pan_and_scan_min_ratio_to_activate: float | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = []
@@ -218,7 +220,10 @@ class Gemma3ImageProcessorPil(PilBackend):
             processed_images.extend(processed_image_list)
 
         return BatchFeature(
-            data={"pixel_values": processed_images, "num_crops": num_crops}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "num_crops": num_crops},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

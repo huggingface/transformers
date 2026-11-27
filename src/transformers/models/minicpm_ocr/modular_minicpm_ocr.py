@@ -214,6 +214,8 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
         return_tensors: str | TensorType | None,
         disable_grouping: bool | None,
         downsample_mode: str = "4x",
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if not do_resize:

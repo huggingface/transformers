@@ -278,6 +278,8 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
         merge_size: int | None = None,
         cap_pixels_per_frame: bool | None = None,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ):
         if cap_pixels_per_frame is None:
@@ -334,6 +336,8 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
         return BatchFeature(
             data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):

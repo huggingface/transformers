@@ -740,6 +740,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         verbose: bool = True,
         return_offsets_mapping: Literal[False] = False,
         split_special_tokens: Literal[False] = False,
+        device: str | None = None,
         **kwargs,
     ) -> BatchEncoding:
         # Detect batched inputs (list of sequences)
@@ -809,7 +810,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
                 return_attention_mask=return_attention_mask,
             )
 
-            return BatchEncoding(batch_outputs, tensor_type=return_tensors)
+            return BatchEncoding(batch_outputs, tensor_type=return_tensors, device=device)
 
         def get_input_ids(text):
             if isinstance(text, str):
@@ -839,6 +840,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
             return_special_tokens_mask=return_special_tokens_mask,
             return_length=return_length,
             verbose=verbose,
+            device=device,
         )
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
@@ -863,6 +865,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         prepend_batch_axis: bool = False,
         return_offsets_mapping: Literal[False] = False,
         split_special_tokens: Literal[False] = False,
+        device: str | None = None,
         **kwargs,
     ) -> BatchEncoding:
         """
@@ -969,7 +972,9 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         if return_length:
             encoded_inputs["length"] = len(encoded_inputs["input_ids"])
 
-        return BatchEncoding(encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis)
+        return BatchEncoding(
+            encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis, device=device
+        )
 
     def truncate_sequences(  # type: ignore[override]
         self,

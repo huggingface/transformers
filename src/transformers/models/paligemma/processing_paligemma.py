@@ -127,12 +127,17 @@ class PaliGemmaProcessor(ProcessorMixin):
         # NOTE: ideally users should build 'labels' with data collator, since we return token_type_ids.
         # Kept only for BC!
         if "token_type_ids" in result:
-            result["labels"] = [
-                np.where(np.asarray(token_type_ids) == 0, -100, input_ids)
-                for input_ids, token_type_ids in zip(result["input_ids"], result["token_type_ids"])
-            ]
-
-        return BatchFeature(data=result, tensor_type=return_tensors)
+            ids, types = result["input_ids"], result["token_type_ids"]
+            if hasattr(ids, "masked_fill"):  # torch tensor: stays on its device, no CPU copy
+                result["labels"] = ids.masked_fill(types == 0, -100)
+            else:
+                result["labels"] = np.where(np.asarray(types) == 0, -100, np.asarray(ids))
+        return BatchFeature(
+            data=result,
+            tensor_type=return_tensors,
+            device=kwargs["text_kwargs"].get("device"),
+            dtype=kwargs["images_kwargs"].get("dtype"),
+        )
 
     def prepare_inputs_layout(self, images=None, text=None, **kwargs):
         text = "" or text

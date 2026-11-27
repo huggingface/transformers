@@ -497,6 +497,8 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
         patch_size: int | None = None,
         merge_size: int | None = None,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ):
         # Group videos by size for batched resizing
@@ -570,6 +572,8 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
         return BatchFeature(
             data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     @auto_docstring

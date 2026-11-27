@@ -92,6 +92,8 @@ class SuperPointImageProcessor(TorchvisionBackend):
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         do_grayscale: bool = False,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched processing
@@ -109,7 +111,9 @@ class SuperPointImageProcessor(TorchvisionBackend):
                 stacked_images = self.rescale(stacked_images, rescale_factor)
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
     def post_process_keypoint_detection(
         self, outputs: "SuperPointKeypointDescriptionOutput", target_sizes: TensorType | list[tuple]

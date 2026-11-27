@@ -235,6 +235,8 @@ class GotOcr2ImageProcessorPil(PilBackend):
         crop_to_patches: bool = False,
         min_patches: int = 1,
         max_patches: int = 12,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         num_patches = []
@@ -268,7 +270,10 @@ class GotOcr2ImageProcessorPil(PilBackend):
                 processed_images.append(image)
 
         return BatchFeature(
-            data={"pixel_values": processed_images, "num_patches": num_patches}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "num_patches": num_patches},
+            tensor_type=return_tensors,
+            dtype=dtype,
+            device=device,
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:

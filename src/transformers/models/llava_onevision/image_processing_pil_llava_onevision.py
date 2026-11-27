@@ -185,6 +185,8 @@ class LlavaOnevisionImageProcessorPil(PilBackend):
         pad_size: SizeDict | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for LLaVA-NeXT with patch processing."""
@@ -256,6 +258,8 @@ class LlavaOnevisionImageProcessorPil(PilBackend):
                 "batch_num_images": batch_num_images,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def pad_to_square(

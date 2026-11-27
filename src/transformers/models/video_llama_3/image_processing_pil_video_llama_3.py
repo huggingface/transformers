@@ -222,6 +222,8 @@ class VideoLlama3ImageProcessorPil(PilBackend):
         temporal_patch_size: int,
         merge_size: int,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         all_patches = []
@@ -262,6 +264,8 @@ class VideoLlama3ImageProcessorPil(PilBackend):
                 "image_merge_sizes": image_merge_sizes,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:

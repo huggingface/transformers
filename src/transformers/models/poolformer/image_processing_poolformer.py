@@ -104,6 +104,8 @@ class PoolFormerImageProcessor(TorchvisionBackend):
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         crop_pct: float = 0.9,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for PoolFormer (pass crop_pct to resize)."""
@@ -129,7 +131,9 @@ class PoolFormerImageProcessor(TorchvisionBackend):
         if do_pad:
             processed_images = self.pad(processed_images, pad_size=pad_size, disable_grouping=disable_grouping)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["PoolFormerImageProcessor"]

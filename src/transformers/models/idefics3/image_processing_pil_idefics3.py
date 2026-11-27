@@ -332,6 +332,8 @@ class Idefics3ImageProcessorPil(PilBackend):
         max_image_size: dict[str, int] | None,
         return_row_col_info: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Process a batch of images. Mirrors TorchvisionBackend._preprocess with per-image loops instead of batching."""
@@ -422,7 +424,7 @@ class Idefics3ImageProcessorPil(PilBackend):
         else:
             data = {"pixel_values": images}
 
-        encoding = BatchFeature(data=data, tensor_type=return_tensors)
+        encoding = BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
         if return_row_col_info:
             encoding["rows"] = rows
             encoding["cols"] = cols

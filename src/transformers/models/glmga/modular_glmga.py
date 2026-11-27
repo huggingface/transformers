@@ -102,6 +102,8 @@ class GlmgaImageProcessor(Glm46VImageProcessor):
         patch_expand_factor: int,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -147,7 +149,10 @@ class GlmgaImageProcessor(Glm46VImageProcessor):
         image_grid_thw = torch.tensor(processed_grids)
 
         return BatchFeature(
-            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 
@@ -170,6 +175,8 @@ class GlmgaImageProcessorPil(Glm46VImageProcessorPil):
         temporal_patch_size: int,
         merge_size: int,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -210,7 +217,10 @@ class GlmgaImageProcessorPil(Glm46VImageProcessorPil):
         image_grid_thw = np.array(processed_grids)
 
         return BatchFeature(
-            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 
@@ -326,6 +336,8 @@ class GlmgaVideoProcessor(Glm46VVideoProcessor):
         temporal_patch_size: int | None = None,
         merge_size: int | None = None,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
@@ -374,7 +386,7 @@ class GlmgaVideoProcessor(Glm46VVideoProcessor):
             "video_grid_thw": video_grid_thw,
         }
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
         """

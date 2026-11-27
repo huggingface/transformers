@@ -97,7 +97,9 @@ class Sam3TrackerVideoProcessor(ProcessorMixin):
         elif original_sizes is not None:
             if isinstance(original_sizes, torch.Tensor):
                 original_sizes = original_sizes.cpu().tolist()
-            encoding_image_processor = BatchEncoding({"original_sizes": original_sizes}, tensor_type=return_tensors)
+            encoding_image_processor = BatchEncoding(
+                {"original_sizes": original_sizes}, tensor_type=return_tensors, device=kwargs.get("device")
+            )
         else:
             raise ValueError("Either images or original_sizes must be provided")
 

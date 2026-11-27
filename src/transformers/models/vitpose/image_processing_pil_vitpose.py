@@ -417,6 +417,8 @@ class VitPoseImageProcessorPil(PilBackend):
         do_affine_transform: bool = True,
         normalize_factor: float = 200.0,
         boxes: list | np.ndarray | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for VitPose."""
@@ -438,7 +440,9 @@ class VitPoseImageProcessorPil(PilBackend):
             if do_normalize:
                 image = self.normalize(image, image_mean, image_std)
             processed_images.append(image)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, dtype=dtype, device=device
+        )
 
     def keypoints_from_heatmaps(self, heatmaps: np.ndarray, center: np.ndarray, scale: np.ndarray, kernel: int = 11):
         """Get final keypoint predictions from heatmaps and transform them back to the image."""

@@ -211,6 +211,8 @@ class MuseGlimmerImageProcessor(Glm4vImageProcessor):
         max_image_tokens: int,
         merge_size: int,
         disable_grouping: bool = False,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -253,7 +255,10 @@ class MuseGlimmerImageProcessor(Glm4vImageProcessor):
         image_grid_thw = torch.tensor(processed_grids)
 
         return BatchFeature(
-            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
@@ -462,6 +467,8 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
         max_video_frame_tokens: int,
         merge_size: int,
         disable_grouping: bool = False,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group videos by size for batched resizing
@@ -506,6 +513,8 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
         return BatchFeature(
             data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

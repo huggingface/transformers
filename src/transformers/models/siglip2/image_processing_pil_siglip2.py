@@ -154,6 +154,8 @@ class Siglip2ImageProcessorPil(PilBackend):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         pixel_masks = []
@@ -194,6 +196,8 @@ class Siglip2ImageProcessorPil(PilBackend):
                 "spatial_shapes": spatial_shapes,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
         return batch_feature
 

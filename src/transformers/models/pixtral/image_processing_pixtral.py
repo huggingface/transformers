@@ -199,6 +199,8 @@ class PixtralImageProcessor(TorchvisionBackend):
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         patch_size: dict[str, int] | SizeDict | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         patch_size = get_size_dict(patch_size or self.patch_size, default_to_square=True)
@@ -234,7 +236,10 @@ class PixtralImageProcessor(TorchvisionBackend):
             )
 
         return BatchFeature(
-            data={"pixel_values": processed_images, "image_sizes": batch_image_sizes}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "image_sizes": batch_image_sizes},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

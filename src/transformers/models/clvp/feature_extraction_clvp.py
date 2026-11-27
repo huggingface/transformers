@@ -135,6 +135,8 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask: bool | None = True,
         padding: str | None = "max_length",
         max_length: int | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -231,7 +233,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
         else:
             padded_inputs["input_features"] = input_features
 
-        return padded_inputs.convert_to_tensors(return_tensors)
+        return padded_inputs.convert_to_tensors(return_tensors, device=device, dtype=dtype)
 
 
 __all__ = ["ClvpFeatureExtractor"]

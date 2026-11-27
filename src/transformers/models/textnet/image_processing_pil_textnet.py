@@ -114,6 +114,8 @@ class TextNetImageProcessorPil(PilBackend):
         pad_size: SizeDict | None,
         return_tensors: str | TensorType | None,
         size_divisor: int = 32,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for TextNet."""
@@ -128,7 +130,9 @@ class TextNetImageProcessorPil(PilBackend):
             if do_normalize:
                 image = self.normalize(image, image_mean, image_std)
             processed_images.append(image)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["TextNetImageProcessorPil"]

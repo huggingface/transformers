@@ -739,6 +739,8 @@ class VideoLlama3ImageProcessorPil(Qwen2VLImageProcessorPil):
         temporal_patch_size: int,
         merge_size: int,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         all_patches = []
@@ -779,6 +781,8 @@ class VideoLlama3ImageProcessorPil(Qwen2VLImageProcessorPil):
                 "image_merge_sizes": image_merge_sizes,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 
@@ -809,6 +813,8 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
         merge_size: int,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -858,6 +864,8 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
                 "image_merge_sizes": image_merge_sizes,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 
@@ -992,6 +1000,7 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         use_token_compression: bool | None = None,
         return_tensors: str | TensorType | None = None,
         device: Optional["torch.Tensor"] = None,
+        dtype: str | None = None,
         **kwargs,
     ):
         # Group videos by size for batched resizing
@@ -1056,6 +1065,8 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
                 "video_compression_mask": video_compression_mask,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):

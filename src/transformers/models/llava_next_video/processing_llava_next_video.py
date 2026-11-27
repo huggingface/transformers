@@ -80,7 +80,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
     def replace_image_token(self, image_inputs: dict | None = None, image_idx: int = 0, **kwargs) -> str:
         image_size = image_inputs["image_sizes"][image_idx]
         pixel_values = [pixel_values for sub_list in image_inputs["pixel_values"] for pixel_values in sub_list]
-        height, width = get_image_size(to_numpy_array(pixel_values[image_idx]))
+        height, width = get_image_size(pixel_values[image_idx])
         if not isinstance(image_size, (list, tuple)):
             # cast to list to avoid numerical precision errors when calculating unpadding
             image_size = image_size.tolist()

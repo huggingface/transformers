@@ -141,7 +141,13 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         data = {**text_inputs, **processed_images, **processed_videos}
         data = {k: v for k, v in data.items() if k not in self.unused_input_names}
 
-        return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
+        return BatchFeature(
+            data,
+            tensor_type=return_tensors,
+            skip_tensor_conversion=self.skip_tensor_conversion,
+            device=merged_kwargs["images_kwargs"].get("device"),
+            dtype=merged_kwargs["images_kwargs"].get("dtype"),
+        )
 
     def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
         if text is None:

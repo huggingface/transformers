@@ -267,6 +267,8 @@ class NougatImageProcessorPil(PilBackend):
         do_thumbnail: bool = True,
         do_crop_margin: bool = True,
         do_pad: bool | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = []
@@ -287,7 +289,9 @@ class NougatImageProcessorPil(PilBackend):
                 image = self.normalize(image, image_mean, image_std)
             processed_images.append(image)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["NougatImageProcessorPil"]

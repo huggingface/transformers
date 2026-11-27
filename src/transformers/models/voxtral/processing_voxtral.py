@@ -216,7 +216,12 @@ class VoxtralProcessor(ProcessorMixin):
                     max_source_positions = audio_kwargs.pop("max_source_positions")
                     data["input_features"] = self._retrieve_input_features(audio, max_source_positions, **audio_kwargs)
 
-                return BatchFeature(data=data, tensor_type=return_tensors)
+                return BatchFeature(
+                    data=data,
+                    tensor_type=return_tensors,
+                    device=output_kwargs["text_kwargs"].get("device"),
+                    dtype=output_kwargs["audio_kwargs"].get("dtype"),
+                )
 
         if not is_batched:
             return encoded_instruct_inputs[0]
@@ -413,7 +418,12 @@ class VoxtralProcessor(ProcessorMixin):
                     audio_arrays, max_source_positions, **audio_kwargs
                 )
 
-                return BatchFeature(data=data, tensor_type=return_tensors)
+                return BatchFeature(
+                    data=data,
+                    tensor_type=return_tensors,
+                    device=output_kwargs["text_kwargs"].get("device"),
+                    dtype=output_kwargs["audio_kwargs"].get("dtype"),
+                )
 
         return texts
 

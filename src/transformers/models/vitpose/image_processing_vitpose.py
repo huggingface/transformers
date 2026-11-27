@@ -419,6 +419,8 @@ class VitPoseImageProcessor(TorchvisionBackend):
         do_affine_transform: bool = True,
         normalize_factor: float = 200.0,
         boxes: list | np.ndarray | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for VitPose."""
@@ -444,7 +446,9 @@ class VitPoseImageProcessor(TorchvisionBackend):
             )
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, dtype=dtype, device=device
+        )
 
     def keypoints_from_heatmaps(
         self,

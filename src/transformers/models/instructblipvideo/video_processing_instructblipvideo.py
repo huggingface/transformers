@@ -54,6 +54,8 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group videos by size for batched resizing
@@ -80,7 +82,9 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
 
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
 
-        return BatchFeature(data={"pixel_values": processed_videos}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_videos}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["InstructBlipVideoVideoProcessor"]

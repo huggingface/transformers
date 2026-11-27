@@ -468,6 +468,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         keypoints: list[list[list[list[float]]]] | None,
         keypoint_heatmap_downscale_factor: int | None = None,
         keypoint_heatmap_sigma: float | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
@@ -536,7 +537,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             data["labels"] = heatmaps_list
             data["label_weights"] = weights_list
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def reduce_label(self, labels: list["torch.Tensor"]) -> list["torch.Tensor"]:
         """Reduce label values by 1, replacing 0 with 255."""

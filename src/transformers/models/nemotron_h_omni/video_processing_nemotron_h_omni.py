@@ -110,7 +110,13 @@ class NemotronH_Omni_Reasoning_V3VideoProcessor(BaseVideoProcessor):
         return pw, ph
 
     def _preprocess(
-        self, videos: list["torch.Tensor"], temporal_patch_size: int | None = None, return_tensors=None, **kwargs
+        self,
+        videos: list["torch.Tensor"],
+        temporal_patch_size: int | None = None,
+        return_tensors=None,
+        device: str | None = None,
+        dtype: str | None = None,
+        **kwargs,
     ):
         temporal_patch_size = temporal_patch_size or self.temporal_patch_size
         norm_mean = torch.tensor(self.norm_mean).view(1, 3, 1, 1)
@@ -159,6 +165,8 @@ class NemotronH_Omni_Reasoning_V3VideoProcessor(BaseVideoProcessor):
                 "num_frames": frame_counts,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

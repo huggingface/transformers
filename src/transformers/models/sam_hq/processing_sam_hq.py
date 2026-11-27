@@ -162,9 +162,6 @@ class SamHQProcessor(ProcessorMixin):
 
         original_sizes = encoding_image_processor["original_sizes"]
 
-        if hasattr(original_sizes, "numpy"):
-            original_sizes = original_sizes.numpy()
-
         input_points, input_labels, input_boxes = self._check_and_preprocess_points(
             input_points=input_points,
             input_labels=input_labels,
@@ -181,7 +178,12 @@ class SamHQProcessor(ProcessorMixin):
             point_pad_value=point_pad_value,
         )
 
-        return encoding_image_processor
+        return BatchFeature(
+            data=encoding_image_processor,
+            tensor_type=output_kwargs["images_kwargs"].get("return_tensors"),
+            device=output_kwargs["images_kwargs"].get("device"),
+            dtype=output_kwargs["images_kwargs"].get("dtype"),
+        )
 
     def _normalize_and_convert(
         self,

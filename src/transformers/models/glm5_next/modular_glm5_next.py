@@ -1947,6 +1947,8 @@ class Glm5NextImageProcessor(GlmgaImageProcessor):
         max_image_tokens: int,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -1994,7 +1996,10 @@ class Glm5NextImageProcessor(GlmgaImageProcessor):
         image_grid_thw = torch.tensor(processed_grids)
 
         return BatchFeature(
-            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
@@ -2104,6 +2109,8 @@ class Glm5NextImageProcessorPil(GlmgaImageProcessorPil):
         min_image_tokens: int,
         max_image_tokens: int,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -2145,7 +2152,10 @@ class Glm5NextImageProcessorPil(GlmgaImageProcessorPil):
         image_grid_thw = np.array(processed_grids)
 
         return BatchFeature(
-            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
@@ -2300,6 +2310,8 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
         min_image_tokens: int | None = None,
         max_image_tokens: int | None = None,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
@@ -2350,7 +2362,7 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
             "video_grid_thw": video_grid_thw,
         }
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def resize(
         self,

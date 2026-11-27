@@ -181,6 +181,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         return_tensors: str | TensorType | None = None,
         sampling_rate: int | None = None,
         return_attention_mask: bool | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -302,8 +304,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
                 padded_inputs["input_features"], attention_mask=attention_mask
             )
 
-        if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+        padded_inputs = padded_inputs.convert_to_tensors(return_tensors, device=device, dtype=dtype)
 
         return padded_inputs
 

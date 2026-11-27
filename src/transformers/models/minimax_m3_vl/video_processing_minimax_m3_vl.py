@@ -136,6 +136,8 @@ class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
         max_pixels: int,
         vision_segment_max_frames: int | None,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         grouped, grouped_idx = group_videos_by_shape(videos)
@@ -200,6 +202,8 @@ class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
                 "num_chunks_per_video": num_chunks_per_video,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

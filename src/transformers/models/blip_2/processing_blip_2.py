@@ -67,7 +67,11 @@ class Blip2Processor(ProcessorMixin):
         if max_length is not None:
             output_kwargs["text_kwargs"]["max_length"] = max_length - self.num_query_tokens
 
-        encoding = BatchFeature(tensor_type=return_tensors)
+        encoding = BatchFeature(
+            tensor_type=return_tensors,
+            device=output_kwargs["text_kwargs"].get("device"),
+            dtype=output_kwargs["images_kwargs"].get("dtype"),
+        )
         if text is not None:
             if isinstance(text, str):
                 text = [text]
@@ -95,7 +99,12 @@ class Blip2Processor(ProcessorMixin):
             encoding.update(image_encoding)
 
         # Cast to desired return tensors type
-        encoding = BatchFeature(encoding, tensor_type=return_tensors)
+        encoding = BatchFeature(
+            encoding,
+            tensor_type=return_tensors,
+            device=output_kwargs["text_kwargs"].get("device"),
+            dtype=output_kwargs["images_kwargs"].get("dtype"),
+        )
         return encoding
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):

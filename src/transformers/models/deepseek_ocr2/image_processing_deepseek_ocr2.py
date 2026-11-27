@@ -221,6 +221,8 @@ class DeepseekOcr2ImageProcessor(TorchvisionBackend):
         image_std: float | list[float] | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # --- Local patches (batched by shape group) ---
@@ -283,7 +285,7 @@ class DeepseekOcr2ImageProcessor(TorchvisionBackend):
         if flat_local_list:
             data["pixel_values_local"] = flat_local_list
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """

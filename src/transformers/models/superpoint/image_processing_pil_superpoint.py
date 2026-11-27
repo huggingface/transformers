@@ -93,6 +93,8 @@ class SuperPointImageProcessorPil(PilBackend):
         rescale_factor: float,
         return_tensors: str | TensorType | None,
         do_grayscale: bool = False,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = []
@@ -108,7 +110,9 @@ class SuperPointImageProcessorPil(PilBackend):
                 image = convert_to_grayscale(image)
             processed_images.append(image)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
     @requires(backends=("torch",))
     def post_process_keypoint_detection(

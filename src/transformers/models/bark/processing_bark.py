@@ -333,7 +333,9 @@ class BarkProcessor(ProcessorMixin):
 
         if voice_preset is not None:
             self._validate_voice_preset_dict(voice_preset, **kwargs)
-            voice_preset = BatchFeature(data=voice_preset, tensor_type=return_tensors)
+            voice_preset = BatchFeature(
+                data=voice_preset, tensor_type=return_tensors, device=kwargs.get("device"), dtype=kwargs.get("dtype")
+            )
 
         encoded_text = self.tokenizer(
             text,

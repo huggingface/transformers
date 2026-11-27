@@ -130,6 +130,8 @@ class SLANeXtImageProcessor(TorchvisionBackend):
         pad_size: SizeDict | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if resample is not None and not is_torchdynamo_compiling():
@@ -161,7 +163,9 @@ class SLANeXtImageProcessor(TorchvisionBackend):
         if do_pad:
             processed_images = self.pad(processed_images, pad_size=pad_size, disable_grouping=disable_grouping)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
         super().__init__(**kwargs)

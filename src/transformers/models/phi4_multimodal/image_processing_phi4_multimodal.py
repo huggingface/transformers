@@ -212,6 +212,8 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
         patch_size: int,
         dynamic_hd: int,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ):
         if size.height != size.width:
@@ -269,7 +271,7 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
             "num_img_tokens": images_tokens,
         }
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def get_number_of_image_tokens(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """

@@ -278,6 +278,7 @@ class FuyuProcessor(ProcessorMixin):
 
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
+        device = merged_kwargs["text_kwargs"].pop("device", None)
         if text is not None:
             # text_kwargs has priority for backwards compatibility
             return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
@@ -346,7 +347,13 @@ class FuyuProcessor(ProcessorMixin):
         # Pop unused keys from the inputs, e.g. inputs used only to compute number of image tokens
         data = {**text_inputs, **processed_images}
         data = {k: v for k, v in data.items() if k not in self.unused_input_names}
-        return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
+        return BatchFeature(
+            data,
+            tensor_type=return_tensors,
+            device=device,
+            dtype=merged_kwargs["images_kwargs"].get("dtype"),
+            skip_tensor_conversion=self.skip_tensor_conversion,
+        )
 
     def prepare_inputs_layout(
         self,

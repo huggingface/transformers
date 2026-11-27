@@ -414,6 +414,8 @@ class RTDetrImageProcessorPil(PilBackend):
         pad_size: SizeDict | None,
         format: str | AnnotationFormat | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -497,10 +499,11 @@ class RTDetrImageProcessorPil(PilBackend):
             data.update({"pixel_mask": pixel_masks})
 
         data.update({"pixel_values": images})
-        encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
+        encoded_inputs = BatchFeature(data, tensor_type=return_tensors, device=device, dtype=dtype)
         if annotations is not None:
             encoded_inputs["labels"] = [
-                BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
+                BatchFeature(annotation, tensor_type=return_tensors, device=device, dtype=dtype)
+                for annotation in annotations
             ]
         return encoded_inputs
 

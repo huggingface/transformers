@@ -136,6 +136,8 @@ class UnlimitedOcrImageProcessor(DeepseekOcr2ImageProcessor):
         image_std: "float | list[float] | None",
         disable_grouping: bool | None,
         return_tensors: "str | TensorType | None",
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # --- Local patches (batched by shape group) ---

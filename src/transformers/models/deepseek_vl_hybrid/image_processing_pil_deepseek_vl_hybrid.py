@@ -181,6 +181,8 @@ class DeepseekVLHybridImageProcessorPil(PilBackend):
         high_res_image_std: float | list[float] | None,
         return_tensors: str | TensorType | None,
         do_pad: bool = True,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         high_res_processed_images = []
@@ -212,6 +214,8 @@ class DeepseekVLHybridImageProcessorPil(PilBackend):
         return BatchFeature(
             data={"pixel_values": processed_images, "high_res_pixel_values": high_res_processed_images},
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def postprocess(self):

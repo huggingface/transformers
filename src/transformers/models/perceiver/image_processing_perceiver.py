@@ -90,6 +90,8 @@ class PerceiverImageProcessor(TorchvisionBackend):
         pad_size: SizeDict | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for Perceiver: center_crop -> resize -> rescale and normalize."""
@@ -118,7 +120,9 @@ class PerceiverImageProcessor(TorchvisionBackend):
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["PerceiverImageProcessor"]

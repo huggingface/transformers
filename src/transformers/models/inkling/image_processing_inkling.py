@@ -151,6 +151,8 @@ class InklingImageProcessor(TorchvisionBackend):
         rescale_image_frac: float | None,
         rescale_image_max_upscaled_long_edge: int | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         per_image_patches: list[torch.Tensor] = []
@@ -180,7 +182,7 @@ class InklingImageProcessor(TorchvisionBackend):
             "pixel_values": pixel_values,
             "num_patches": torch.tensor(num_patches),
         }
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """

@@ -217,6 +217,8 @@ class DeepseekOcr2ImageProcessorPil(PilBackend):
         max_patches: int = 6,
         tile_size: int = 768,
         background_color: list[int] | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if background_color is None:
@@ -269,7 +271,7 @@ class DeepseekOcr2ImageProcessorPil(PilBackend):
         if all_pixel_values_local:
             data["pixel_values_local"] = all_pixel_values_local
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """

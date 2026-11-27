@@ -150,6 +150,8 @@ class AriaImageProcessorPil(PilBackend):
         split_resolutions: list[list[int]] | None = None,
         split_image: bool = False,
         resample: "PILImageResampling | None" = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if max_image_size not in [490, 980]:
@@ -204,6 +206,8 @@ class AriaImageProcessorPil(PilBackend):
                 "num_crops": num_crops,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:

@@ -263,6 +263,8 @@ class Cosmos3EdgeVideoProcessor(BaseVideoProcessor):
         temporal_patch_size: int | None = None,
         merge_size: int | None = None,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
@@ -309,7 +311,7 @@ class Cosmos3EdgeVideoProcessor(BaseVideoProcessor):
             "video_grid_thw": video_grid_thw,
         }
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
 
 __all__ = ["Cosmos3EdgeVideoProcessor"]

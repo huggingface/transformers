@@ -245,6 +245,8 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
         max_video_frame_tokens: int,
         merge_size: int,
         disable_grouping: bool = False,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group videos by size for batched resizing
@@ -289,6 +291,8 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
         return BatchFeature(
             data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

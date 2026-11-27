@@ -19,6 +19,7 @@ from copy import deepcopy
 
 import numpy as np
 
+from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
@@ -143,7 +144,9 @@ class Sam3Processor(ProcessorMixin):
         elif original_sizes is not None:
             if isinstance(original_sizes, torch.Tensor):
                 original_sizes = original_sizes.cpu().tolist()
-            encoding = BatchEncoding({"original_sizes": original_sizes}, tensor_type=return_tensors)
+            encoding = BatchEncoding(
+                {"original_sizes": original_sizes}, tensor_type=return_tensors, device=kwargs.get("device")
+            )
         elif input_boxes is not None:
             raise ValueError("Either images or original_sizes must be provided if input_boxes is not None")
 
@@ -205,7 +208,12 @@ class Sam3Processor(ProcessorMixin):
                 final_boxes_labels = torch.tensor(padded_boxes_labels, dtype=torch.int64)
                 encoding.update({"input_boxes_labels": final_boxes_labels})
 
-        return encoding
+        return BatchFeature(
+            data=encoding,
+            tensor_type=return_tensors,
+            device=kwargs.get("device"),
+            dtype=kwargs.get("dtype"),
+        )
 
     def _normalize_coordinates(self, coords: "torch.Tensor", original_size, is_bounding_box=False) -> "torch.Tensor":
         """

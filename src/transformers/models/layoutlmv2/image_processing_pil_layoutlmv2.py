@@ -145,6 +145,8 @@ class LayoutLMv2ImageProcessorPil(PilBackend):
         apply_ocr: bool = True,
         ocr_lang: str | None = None,
         tesseract_config: str | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Tesseract OCR to get words + normalized bounding boxes
@@ -169,7 +171,9 @@ class LayoutLMv2ImageProcessorPil(PilBackend):
 
             processed_images.append(image)
 
-        data = BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        data = BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
         if apply_ocr:
             data["words"] = words_batch

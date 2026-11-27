@@ -227,6 +227,8 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
         merge_size: int,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -265,7 +267,10 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
         image_grid_thw = torch.tensor(processed_grids_ordered, dtype=torch.long)
 
         return BatchFeature(
-            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:

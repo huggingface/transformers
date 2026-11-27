@@ -222,6 +222,8 @@ class VideoLlama3ImageProcessor(TorchvisionBackend):
         merge_size: int,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -271,6 +273,8 @@ class VideoLlama3ImageProcessor(TorchvisionBackend):
                 "image_merge_sizes": image_merge_sizes,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:

@@ -221,6 +221,8 @@ class GotOcr2ImageProcessor(TorchvisionBackend):
         crop_to_patches: bool = False,
         min_patches: int = 1,
         max_patches: int = 12,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         if crop_to_patches:
@@ -265,7 +267,10 @@ class GotOcr2ImageProcessor(TorchvisionBackend):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         return BatchFeature(
-            data={"pixel_values": processed_images, "num_patches": num_patches}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "num_patches": num_patches},
+            tensor_type=return_tensors,
+            dtype=dtype,
+            device=device,
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:

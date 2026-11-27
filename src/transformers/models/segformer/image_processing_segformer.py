@@ -93,6 +93,7 @@ class SegformerImageProcessor(TorchvisionBackend):
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
         device: Union[str, "torch.device"] | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
@@ -133,7 +134,7 @@ class SegformerImageProcessor(TorchvisionBackend):
             ]
             data["labels"] = processed_segmentation_maps
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def reduce_label(self, labels: list["torch.Tensor"]) -> list["torch.Tensor"]:
         """Reduce label values by 1, replacing 0 with 255."""
@@ -158,6 +159,8 @@ class SegformerImageProcessor(TorchvisionBackend):
         image_mean: float | list[float],
         image_std: float | list[float],
         disable_grouping: bool,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:  # Return type can be list if return_tensors=None
         """Custom preprocessing for Segformer."""

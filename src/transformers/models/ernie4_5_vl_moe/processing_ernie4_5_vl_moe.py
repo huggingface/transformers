@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os.path
+from functools import reduce
+from operator import or_
 from pathlib import Path
 from shutil import SameFileError, copyfile
 
@@ -93,33 +95,19 @@ class Ernie4_5_VLMoeProcessor(ProcessorMixin):
             integer is the modality type ID for the corresponding token. Note that this is different
             from `mm_token_type_ids` since MoE encodes start/end of vision tokens as well
         """
-        array_ids = np.array(input_ids)
-        moe_mm_token_type_ids = np.zeros_like(input_ids)  # text
-        moe_mm_token_type_ids[array_ids == self.image_token_id] = 1  # img
-        moe_mm_token_type_ids[array_ids == self.video_token_id] = 2  # vid
+        is_tensor = hasattr(input_ids, "device")  # torch tensor, without importing torch
+        ids = input_ids if is_tensor else np.asarray(input_ids)
 
-        # moe additionally adds start/end tokens
-        for token_id in [
-            self.image_start_token_id,
-            self.image_end_token_id,
-        ]:
-            moe_mm_token_type_ids[array_ids == token_id] = 1
-        for token_id in [
-            self.video_start_token_id,
-            self.video_end_token_id,
-        ]:
-            moe_mm_token_type_ids[array_ids == token_id] = 2
+        def is_any(token_ids):
+            return reduce(or_, (ids == t for t in token_ids))
 
-        moe_mm_token_type_ids = moe_mm_token_type_ids.astype(int)
+        img = is_any([self.image_token_id, self.image_start_token_id, self.image_end_token_id])
+        vid = is_any([self.video_token_id, self.video_start_token_id, self.video_end_token_id])
+        types = img * 1 + vid * 2  # 0 = text, 1 = image, 2 = video
 
-        # Cast MoE token types to the same input type as input IDs
-        if isinstance(input_ids, np.ndarray):
-            return moe_mm_token_type_ids
-        elif hasattr(input_ids, "device") and hasattr(input_ids, "dtype"):
-            # torch.Tensor (or tensor-like) without importing torch
-            return type(input_ids)(moe_mm_token_type_ids).to(device=input_ids.device, dtype=input_ids.dtype)
-        else:
-            return moe_mm_token_type_ids.tolist()
+        if is_tensor:
+            return types.to(input_ids.dtype)  # same device, no CPU round trip
+        return types if isinstance(input_ids, np.ndarray) else types.tolist()
 
     @property
     def model_input_names(self):

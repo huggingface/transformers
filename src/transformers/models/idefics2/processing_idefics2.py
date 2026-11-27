@@ -175,7 +175,12 @@ class Idefics2Processor(ProcessorMixin):
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
             inputs.update(image_inputs)
 
-        return BatchFeature(inputs, tensor_type=return_tensors)
+        return BatchFeature(
+            inputs,
+            tensor_type=return_tensors,
+            device=output_kwargs["text_kwargs"].get("device"),
+            dtype=output_kwargs["images_kwargs"].get("dtype"),
+        )
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """

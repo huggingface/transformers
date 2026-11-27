@@ -207,7 +207,12 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
         encoding = {**text_encoding, **audio_encoding, "num_delay_tokens": self.num_delay_tokens}
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return BatchFeature(data=encoding, tensor_type=return_tensors)
+        return BatchFeature(
+            data=encoding,
+            tensor_type=return_tensors,
+            device=output_kwargs["text_kwargs"].get("device"),
+            dtype=output_kwargs["audio_kwargs"].get("dtype"),
+        )
 
 
 __getattr__ = deprecate_attr(__name__, rename={"VoxtralRealtimeProcessorKwargs": (ProcessingKwargs, "5.29.0")})

@@ -97,7 +97,9 @@ class FunAsrNanoProcessor(ProcessorMixin):
             labels[mm_token_type_ids != 0] = -100  # audio positions
             labels[labels == self.tokenizer.pad_token_id] = -100
             model_inputs["labels"] = labels
-        return BatchFeature(data=model_inputs, tensor_type="pt")
+        return BatchFeature(
+            data=model_inputs, tensor_type="pt", device=kwargs.get("device"), dtype=kwargs.get("dtype")
+        )
 
     def validate_inputs(
         self,

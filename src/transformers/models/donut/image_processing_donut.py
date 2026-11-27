@@ -171,6 +171,8 @@ class DonutImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         do_thumbnail: bool = True,
         do_align_long_axis: bool = False,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for Donut."""
@@ -200,7 +202,9 @@ class DonutImageProcessor(TorchvisionBackend):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["DonutImageProcessor"]

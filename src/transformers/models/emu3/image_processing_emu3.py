@@ -313,6 +313,8 @@ class Emu3ImageProcessor(BaseImageProcessor):
         return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension | None = ChannelDimension.FIRST,
         input_data_format: str | ChannelDimension | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ):
         """
@@ -414,7 +416,10 @@ class Emu3ImageProcessor(BaseImageProcessor):
             pixel_values = np.array(pixel_values)
 
         return BatchFeature(
-            data={"pixel_values": pixel_values, "image_sizes": image_sizes}, tensor_type=return_tensors
+            data={"pixel_values": pixel_values, "image_sizes": image_sizes},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def postprocess(

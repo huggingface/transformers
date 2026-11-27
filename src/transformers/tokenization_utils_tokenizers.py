@@ -998,6 +998,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         return_length: bool = False,
         verbose: bool = True,
         split_special_tokens: bool | None = None,
+        device: str | None = None,
         **kwargs,
     ) -> BatchEncoding:
         # Input validation (from _call_one)
@@ -1134,7 +1135,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         for input_ids in sanitized_tokens["input_ids"]:
             self._eventual_warn_about_too_long_sequence(input_ids, max_length, verbose)
 
-        batched_output = BatchEncoding(sanitized_tokens, sanitized_encodings, tensor_type=return_tensors)
+        batched_output = BatchEncoding(
+            sanitized_tokens, sanitized_encodings, tensor_type=return_tensors, device=device
+        )
 
         # If single input, remove the batch dimension (unless returning overflowing tokens)
         if not is_batched and return_tensors is None and not return_overflowing_tokens:

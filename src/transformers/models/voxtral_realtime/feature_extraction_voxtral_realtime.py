@@ -121,6 +121,7 @@ class VoxtralRealtimeFeatureExtractor(SequenceFeatureExtractor):
         device: str | None = "cpu",
         return_token_timestamps: bool | None = None,
         center: bool = True,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -243,7 +244,7 @@ class VoxtralRealtimeFeatureExtractor(SequenceFeatureExtractor):
             attention_mask = padded_inputs.attention_mask[:, self.win_length - 1 :: self.hop_length]
             data["attention_mask"] = attention_mask.to(torch.bool)
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
 
 __all__ = ["VoxtralRealtimeFeatureExtractor"]

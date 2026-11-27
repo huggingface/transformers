@@ -100,6 +100,8 @@ class Swin2SRImageProcessorPil(PilBackend):
         pad_size: SizeDict | None,
         return_tensors: str | TensorType | None,
         size_divisor: int = 8,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for Swin2SR."""
@@ -110,7 +112,9 @@ class Swin2SRImageProcessorPil(PilBackend):
             if do_pad:
                 image = self.pad(image, pad_size=pad_size, size_divisor=size_divisor)
             processed_images.append(image)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
 
 __all__ = ["Swin2SRImageProcessorPil"]

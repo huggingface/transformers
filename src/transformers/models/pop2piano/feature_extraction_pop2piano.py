@@ -280,6 +280,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         is_batched: bool,
         return_attention_mask: bool,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
     ):
         """
         Pads the inputs to same length and returns attention_mask.
@@ -334,7 +336,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched and not return_attention_mask:
             processed_features_dict["input_features"] = processed_features_dict["input_features"][:-1, ...]
 
-        outputs = BatchFeature(processed_features_dict, tensor_type=return_tensors)
+        outputs = BatchFeature(processed_features_dict, tensor_type=return_tensors, device=device, dtype=dtype)
 
         return outputs
 
@@ -346,6 +348,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         resample: bool | None = True,
         return_attention_mask: bool | None = False,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -436,7 +440,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 "input_features": batch_input_features,
                 "beatsteps": batch_beatsteps,
                 "extrapolated_beatstep": batch_ext_beatstep,
-            }
+            },
         )
 
         output = self.pad(
@@ -444,6 +448,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             is_batched=is_batched,
             return_attention_mask=return_attention_mask,
             return_tensors=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
         return output

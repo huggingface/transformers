@@ -162,6 +162,8 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
         sampling_rate: int | None = None,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -217,7 +219,7 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         features = [self._extract_fbank_features(waveform, max_length=self.max_length) for waveform in raw_speech]
 
         # convert into BatchFeature
-        padded_inputs = BatchFeature({"input_values": features})
+        padded_inputs = BatchFeature({"input_values": features}, device=device, dtype=dtype)
 
         # make sure list is in array format
         input_values = padded_inputs.get("input_values")
@@ -228,8 +230,7 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         if self.do_normalize:
             padded_inputs["input_values"] = [self.normalize(feature) for feature in input_values]
 
-        if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+        padded_inputs = padded_inputs.convert_to_tensors(return_tensors, device=device, dtype=dtype)
 
         return padded_inputs
 

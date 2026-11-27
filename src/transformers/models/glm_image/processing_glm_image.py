@@ -161,6 +161,7 @@ class GlmImageProcessor(ProcessorMixin):
         num_source_images = images_per_sample[0] if images_per_sample else 0
 
         all_grids = []
+        device = output_kwargs["images_kwargs"].get("device", "cpu")
         for i in range(batch_size):
             token_h, token_w, prev_h, prev_w = self._get_target_shape(height=target_h, width=target_w)
             # Add source grids for this sample (i2i mode only)
@@ -175,7 +176,7 @@ class GlmImageProcessor(ProcessorMixin):
                     prev_token_h=prev_h,
                     prev_token_w=prev_w,
                     is_text_to_image=is_text_to_image,
-                )
+                ).to(device=device)
             )
         model_inputs["image_grid_thw"] = torch.cat(all_grids, dim=0)
 
@@ -185,7 +186,12 @@ class GlmImageProcessor(ProcessorMixin):
         model_inputs["images_per_sample"] = torch.tensor(
             [num_source_images + num_target_grids] * batch_size, dtype=torch.long
         )
-        return BatchFeature(data=model_inputs, tensor_type=return_tensors)
+        return BatchFeature(
+            data=model_inputs,
+            tensor_type=return_tensors,
+            device=output_kwargs["text_kwargs"].get("device"),
+            dtype=output_kwargs["images_kwargs"].get("dtype"),
+        )
 
     def prepare_inputs_layout(
         self,

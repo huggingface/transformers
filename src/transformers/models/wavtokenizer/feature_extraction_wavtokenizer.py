@@ -77,6 +77,8 @@ class WavTokenizerFeatureExtractor(SequenceFeatureExtractor):
         max_length: int | None = None,
         return_tensors: str | TensorType | None = None,
         sampling_rate: int | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
     ) -> BatchFeature:
         """
         Featurize and prepare one or several audio sequence(s) for the model.
@@ -154,9 +156,7 @@ class WavTokenizerFeatureExtractor(SequenceFeatureExtractor):
         input_values = [example[np.newaxis, :] for example in padded_inputs.pop("input_values")]
         padded_inputs["input_values"] = input_values
 
-        if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
-
+        padded_inputs = padded_inputs.convert_to_tensors(return_tensors, device=device, dtype=dtype)
         return padded_inputs
 
 

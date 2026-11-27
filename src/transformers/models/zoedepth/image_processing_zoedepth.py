@@ -201,6 +201,8 @@ class ZoeDepthImageProcessor(TorchvisionBackend):
         image_std: float | list[float] | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -218,7 +220,9 @@ class ZoeDepthImageProcessor(TorchvisionBackend):
             resized_images_grouped[shape] = stacked_images
         processed_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
     def post_process_depth_estimation(
         self,

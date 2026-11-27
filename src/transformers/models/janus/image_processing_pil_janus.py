@@ -155,6 +155,8 @@ class JanusImageProcessorPil(PilBackend):
         min_size: int,
         return_tensors: str | TensorType | None,
         do_pad: bool = True,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = []
@@ -169,7 +171,9 @@ class JanusImageProcessorPil(PilBackend):
                 image = self.normalize(image, image_mean, image_std)
             processed_images.append(image)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
     def postprocess(
         self,

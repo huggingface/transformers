@@ -152,6 +152,8 @@ class LightGlueImageProcessorPil(PilBackend):
         rescale_factor: float,
         return_tensors: str | TensorType | None,
         do_grayscale: bool = True,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         all_images = []
@@ -172,7 +174,7 @@ class LightGlueImageProcessorPil(PilBackend):
 
         data = {"pixel_values": image_pairs}
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
     @requires(backends=("torch",))
     def post_process_keypoint_matching(

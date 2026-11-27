@@ -153,6 +153,8 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
         truncation: bool = False,
         pad_to_multiple_of: int | None = None,
         return_attention_mask: bool | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -204,6 +206,8 @@ class FunAsrNanoFeatureExtractor(SequenceFeatureExtractor):
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
             return_tensors=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
         if "attention_mask" in padded_inputs:

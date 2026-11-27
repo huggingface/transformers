@@ -185,6 +185,8 @@ class DeepseekVLHybridImageProcessor(TorchvisionBackend):
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         do_pad: bool = True,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -249,6 +251,8 @@ class DeepseekVLHybridImageProcessor(TorchvisionBackend):
         return BatchFeature(
             data={"pixel_values": processed_images, "high_res_pixel_values": high_res_processed_images},
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def postprocess(self) -> "torch.Tensor":

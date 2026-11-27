@@ -202,6 +202,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: int | None = None,
         do_normalize: bool | None = None,
         device: str | None = "cpu",
+        dtype: torch.dtype | str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Main method to featurize and prepare for the model one or several sequence(s). Implementation uses PyTorch
@@ -340,8 +341,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 rescaled_attention_mask = rescaled_attention_mask[:, :-1]
             padded_inputs["attention_mask"] = rescaled_attention_mask
 
-        if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+        padded_inputs = padded_inputs.convert_to_tensors(return_tensors, device=device, dtype=dtype)
 
         return padded_inputs
 

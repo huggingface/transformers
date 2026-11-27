@@ -79,6 +79,8 @@ class PPOCRV5ServerRecImageProcessor(TorchvisionBackend):
         pad_size: SizeDict | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -112,7 +114,9 @@ class PPOCRV5ServerRecImageProcessor(TorchvisionBackend):
         if do_pad and target_size.width < pad_size.width:
             processed_images = self.pad(processed_images, pad_size=pad_size, disable_grouping=disable_grouping)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device, dtype=dtype
+        )
 
     def get_target_size(self, shape_list: list[torch.Size]):
         """

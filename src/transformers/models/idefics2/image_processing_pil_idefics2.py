@@ -196,6 +196,8 @@ class Idefics2ImageProcessorPil(PilBackend):
         do_pad: bool | None,
         do_image_splitting: bool | None,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Process a batch of images. Mirrors TorchvisionBackend._preprocess with per-image loops."""
@@ -248,7 +250,7 @@ class Idefics2ImageProcessorPil(PilBackend):
         else:
             data = {"pixel_values": images}
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
 
 __all__ = ["Idefics2ImageProcessorPil"]

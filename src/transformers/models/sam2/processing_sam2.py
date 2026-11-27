@@ -19,6 +19,7 @@ from copy import deepcopy
 
 import numpy as np
 
+from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
@@ -91,9 +92,7 @@ class Sam2Processor(ProcessorMixin):
                 **kwargs,
             )
         elif original_sizes is not None:
-            if isinstance(original_sizes, torch.Tensor):
-                original_sizes = original_sizes.cpu().tolist()
-            encoding_image_processor = BatchEncoding({"original_sizes": original_sizes}, tensor_type=return_tensors)
+            encoding_image_processor = {"original_sizes": original_sizes}
         else:
             raise ValueError("Either images or original_sizes must be provided")
 
@@ -170,7 +169,12 @@ class Sam2Processor(ProcessorMixin):
                 self._normalize_tensor_coordinates(final_boxes, original_sizes, is_bounding_box=True)
                 encoding_image_processor.update({"input_boxes": final_boxes})
 
-        return encoding_image_processor
+        return BatchFeature(
+            data=encoding_image_processor,
+            tensor_type=return_tensors,
+            device=kwargs.get("device"),
+            dtype=kwargs.get("dtype"),
+        )
 
     def _normalize_coordinates(
         self, target_size: int, coords: "torch.Tensor", original_size, is_bounding_box=False

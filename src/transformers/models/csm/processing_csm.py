@@ -308,7 +308,12 @@ class CsmProcessor(ProcessorMixin):
 
             data["labels"] = labels
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(
+            data=data,
+            tensor_type=return_tensors,
+            device=output_kwargs["text_kwargs"].get("device"),
+            dtype=output_kwargs["audio_kwargs"].get("dtype"),
+        )
 
     @property
     def model_input_names(self):

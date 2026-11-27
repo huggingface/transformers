@@ -196,6 +196,8 @@ class MiniCPMV4_6ImageProcessor(TorchvisionBackend):
         downsample_mode: str,
         return_tensors: str | TensorType | None = None,
         disable_grouping: bool | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         per_image_pixel_values: list[list[torch.Tensor]] = []

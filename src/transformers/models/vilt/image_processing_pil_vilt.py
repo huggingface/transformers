@@ -219,6 +219,8 @@ class ViltImageProcessorPil(PilBackend):
         do_pad: bool | None,
         return_tensors: str | TensorType | None,
         size_divisor: int | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = []
@@ -239,7 +241,7 @@ class ViltImageProcessorPil(PilBackend):
         else:
             data = {"pixel_values": processed_images}
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, device=device, dtype=dtype)
 
 
 __all__ = ["ViltImageProcessorPil"]

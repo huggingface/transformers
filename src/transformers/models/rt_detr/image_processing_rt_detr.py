@@ -406,6 +406,8 @@ class RTDetrImageProcessor(TorchvisionBackend):
         format: str | AnnotationFormat | None,
         return_tensors: str | TensorType | None,
         disable_grouping: bool | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -500,11 +502,12 @@ class RTDetrImageProcessor(TorchvisionBackend):
             data.update({"pixel_mask": torch.stack(reorder_images(grouped_masks, grouped_images_index), dim=0)})
 
         data.update({"pixel_values": torch.stack(processed_images, dim=0)})
-        encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
+        encoded_inputs = BatchFeature(data, tensor_type=return_tensors, device=device, dtype=dtype)
         if annotations is not None:
             annotations = reorder_images(grouped_annotations, grouped_images_index)
             encoded_inputs["labels"] = [
-                BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
+                BatchFeature(annotation, tensor_type=return_tensors, device=device, dtype=dtype)
+                for annotation in annotations
             ]
         return encoded_inputs
 

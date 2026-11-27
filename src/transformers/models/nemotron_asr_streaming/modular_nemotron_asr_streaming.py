@@ -265,6 +265,7 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
         return_token_timestamps: bool | None = None,
         center: bool = True,
         is_last_audio_chunk: bool = False,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -400,6 +401,8 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
                 "attention_mask": attention_mask,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

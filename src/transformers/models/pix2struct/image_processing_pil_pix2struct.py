@@ -373,6 +373,8 @@ class Pix2StructImageProcessorPil(PilBackend):
         max_patches: int,
         patch_size: SizeDict,
         return_tensors: str | TensorType | None,
+        device: str | None = None,
+        dtype: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -400,6 +402,8 @@ class Pix2StructImageProcessorPil(PilBackend):
         return BatchFeature(
             data={"flattened_patches": flattened_patches, "attention_mask": attention_masks},
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 
