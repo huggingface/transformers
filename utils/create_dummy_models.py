@@ -216,6 +216,7 @@ CONFIGS_WITHOUT_PROCESSOR = {
     "PPLCNetV3Config",
     "TimesFmConfig",
     "TimesFm2_5Config",
+    "TimestralConfig",
     "TimmBackboneConfig",
     "TimmWrapperConfig",
     "VitDetConfig",
