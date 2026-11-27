@@ -15,6 +15,7 @@ from transformers import (
 from transformers.generation.candidate_generator import (
     AssistantToTargetTranslator,
     AssistantVocabTranslatorCache,
+    PromptLookupCandidateGenerator,
     UniversalSpeculativeDecodingGenerator,
 )
 from transformers.testing_utils import require_torch, torch_device
@@ -342,3 +343,38 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
 
         # Assert that the outputs match
         cls.assertEqual(usd_text, vanilla_text)
+
+
+@require_torch
+class TestPromptLookupCandidateGenerator(unittest.TestCase):
+    def test_prompt_lookup_max_length_capping(self):
+        """Test that candidate generation respects max_length - 1 bound to prevent static cache overflow."""
+        # 10 tokens: match ngram [1, 2] earlier in sequence
+        input_ids = torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8, 1, 2]])
+        # max_length=12 allows at most max_length - 1 = 11 tokens (1 draft token)
+        generator = PromptLookupCandidateGenerator(num_output_tokens=10, max_matching_ngram_size=2, max_length=12)
+        candidates, _ = generator.get_candidates(input_ids)
+        self.assertLessEqual(candidates.shape[1], generator.max_length - 1)
+        # Should have drafted exactly 1 token (start_idx 2, which is token 3)
+        self.assertEqual(candidates.shape[1], 11)
+        self.assertEqual(candidates[0, -1].item(), 3)
+
+    def test_prompt_lookup_input_length_exceeds_max_length(self):
+        """Test that no candidates are drafted when input_length + 1 >= max_length."""
+        input_ids = torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8, 1, 2]])  # length 10
+        # max_length <= 11 means input_length + 1 >= max_length
+        generator = PromptLookupCandidateGenerator(num_output_tokens=5, max_matching_ngram_size=2, max_length=11)
+        candidates, _ = generator.get_candidates(input_ids)
+        self.assertEqual(candidates.shape[1], input_ids.shape[1])
+
+        generator = PromptLookupCandidateGenerator(num_output_tokens=5, max_matching_ngram_size=2, max_length=10)
+        candidates, _ = generator.get_candidates(input_ids)
+        self.assertEqual(candidates.shape[1], input_ids.shape[1])
+
+    def test_prompt_lookup_max_length_none(self):
+        """Test that max_length=None works without errors and drafts up to num_output_tokens."""
+        input_ids = torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8, 1, 2]])  # length 10
+        generator = PromptLookupCandidateGenerator(num_output_tokens=5, max_matching_ngram_size=2, max_length=None)
+        candidates, _ = generator.get_candidates(input_ids)
+        # Matches [1, 2] at index 0, continuation is [3, 4, 5, 6, 7] (5 tokens)
+        self.assertEqual(candidates.shape[1], 15)

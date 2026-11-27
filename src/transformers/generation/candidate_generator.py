@@ -29,7 +29,6 @@ from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor, Suppr
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..tokenization_utils_base import PreTrainedTokenizerBase
-    from .configuration_utils import GenerationConfig
 
 
 class CandidateGenerator:
@@ -1075,7 +1074,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         bsz, input_length = input_ids.shape
 
         # Don't generate more than `max_length - 1` candidates since the target model generates one extra token.
-        if self.max_length == input_length + 1:
+        if self.max_length is not None and self.max_length <= input_length + 1:
             return input_ids, None
 
         chosen_ids = None
@@ -1098,8 +1097,10 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
             # longest valid candidates?
             for idx in match_indices:
                 start_idx = idx + ngram_size
-                end_idx = start_idx + self.num_output_tokens
-                end_idx = min(end_idx, input_length, self.max_length)
+                max_output_tokens = self.num_output_tokens
+                if self.max_length is not None:
+                    max_output_tokens = min(max_output_tokens, self.max_length - input_length - 1)
+                end_idx = min(start_idx + max_output_tokens, input_length)
 
                 if start_idx < end_idx:
                     chosen_ids = input_ids[0, start_idx:end_idx]
