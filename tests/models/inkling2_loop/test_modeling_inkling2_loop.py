@@ -56,6 +56,7 @@ if is_torch_available():
         Inkling2LoopModel,
         Inkling2LoopTextModel,
     )
+    from transformers.cache_utils import DynamicCache, StaticCache
 
 
 def check_loop_cache(test, batch_size, cache, seq_length, config, check_cache):
@@ -138,6 +139,54 @@ class Inkling2LoopTextModelTest(CausalLMModelTest, unittest.TestCase):
         if dtype in ("fp16", "bf16"):
             self.skipTest("Low-precision rounding differences across expert kernels exceed the 1e-4 tolerance")
         _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
+
+    def test_static_cache_matches_dynamic_with_loops(self):
+        # `last_loop` passes before the last read the cache without writing, which must match across cache types,
+        # also past the sliding window
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.sliding_window_size = 4
+        input_ids = inputs_dict["input_ids"][:1].repeat(1, 2)[:, :12]
+        model = Inkling2LoopForCausalLM(config).to(torch_device).eval()
+        for mode in ("per_loop", "last_loop"):
+            with self.subTest(mode=mode):
+                dynamic = DynamicCache(config=config)
+                static = StaticCache(config=config, max_cache_len=16)
+                # `generate` records the mode on the cache from `generation_config`
+                dynamic.recurrent_kv_cache_mode = static.recurrent_kv_cache_mode = mode
+                with torch.no_grad():
+                    for start, end in ((0, 2), (2, 4), (4, 7), (7, 8), (8, 12)):
+                        expected = model(input_ids[:, start:end], cache=dynamic).logits
+                        actual = model(input_ids[:, start:end], cache=static).logits
+                        torch.testing.assert_close(actual, expected, rtol=1e-4, atol=1e-4)
+
+    def test_generate_with_static_cache_past_sliding_window(self):
+        # `generate` prebuilds the causal masks: the sliding layers of hybrid models must get a sliding mask, not a
+        # full one, or the static buffer length breaks the attention on prefills longer than the window
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.sliding_window_size = 4
+        input_ids = inputs_dict["input_ids"][:, :12]
+        model = Inkling2LoopForCausalLM(config).to(torch_device).eval()
+        dynamic = model.generate(input_ids, max_new_tokens=8, do_sample=False, cache=DynamicCache(config=config))
+        for mode in ("per_loop", "last_loop"):
+            with self.subTest(mode=mode):
+                static = model.generate(
+                    input_ids,
+                    max_new_tokens=8,
+                    do_sample=False,
+                    cache=StaticCache(config=config, max_cache_len=20),
+                    recurrent_kv_cache_mode=mode,
+                )
+                torch.testing.assert_close(static, dynamic, rtol=0, atol=0)
+
+    def test_recurrent_kv_cache_mode_is_immutable_per_cache(self):
+        # A cache is laid out for the mode it was built with: reusing it with the other mode raises
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Inkling2LoopForCausalLM(config).to(torch_device).eval()
+        cache = DynamicCache(config=config)
+        kwargs = {"max_new_tokens": 2, "do_sample": False, "cache": cache}
+        model.generate(inputs_dict["input_ids"], recurrent_kv_cache_mode="last_loop", **kwargs)
+        with self.assertRaises(ValueError):
+            model.generate(inputs_dict["input_ids"], recurrent_kv_cache_mode="per_loop", **kwargs)
 
 
 class Inkling2LoopVisionText2TextModelTester(VLMModelTester):
