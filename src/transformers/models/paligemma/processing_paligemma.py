@@ -127,9 +127,10 @@ class PaliGemmaProcessor(ProcessorMixin):
         # NOTE: ideally users should build 'labels' with data collator, since we return token_type_ids.
         # Kept only for BC!
         if "token_type_ids" in result:
-            labels = np.array(result["input_ids"])
-            labels[np.array(result["token_type_ids"]) == 0] = -100
-            result["labels"] = labels
+            result["labels"] = [
+                np.where(np.asarray(token_type_ids) == 0, -100, input_ids)
+                for input_ids, token_type_ids in zip(result["input_ids"], result["token_type_ids"])
+            ]
 
         return BatchFeature(data=result, tensor_type=return_tensors)
 
