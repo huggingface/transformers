@@ -16,6 +16,7 @@
 """
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
 import torch
@@ -96,6 +97,53 @@ class DecisionMixin:
         if kwargs.get("is_main_process", True):
             self.decision_config.save_pretrained(save_directory)
 
+    def prepare_inputs_for_decision(
+        self,
+        prompts: Sequence[tuple[dict, list[Question]]],
+        *,
+        targets: Sequence[Sequence[float]] | None = None,
+    ) -> dict:
+        """Prepare a batch of rendered prompts for the model's forward pass.
+
+        Args:
+            prompts (`Sequence[tuple[dict, list[Question]]]`):
+                Tokenized prompts and their parsed questions, as returned by
+                [`DecisionConfig.prepare_inputs`]. JEV takes one prompt, which can contain several questions.
+            targets (`Sequence[Sequence[float]]`, *optional*):
+                One probability distribution per question in prompt order. Each starts with the null probability,
+                followed by the probabilities of the options in question order. JEV requires zero null probability.
+                If omitted, the returned inputs contain no labels.
+        """
+        if len(prompts) != 1:
+            raise ValueError("This decision head expects one rendered prompt per forward pass.")
+
+        inputs, questions = prompts[0]
+        marks = inputs["marks"]
+        counts = [len(question.options) for question in questions]
+        types = [Question.questions_types.index(question.type) for question in questions]
+        model_inputs = {
+            **inputs,
+            "marks": marks[None],
+            "num_options": marks.new_tensor([counts]),
+            "question_type_ids": marks.new_tensor([types]),
+        }
+
+        if targets is not None:
+            if len(targets) != len(counts):
+                raise ValueError("Expected one target distribution per question.")
+
+            labels = []
+            for target, count in zip(targets, counts):
+                if len(target) != count + 1:
+                    raise ValueError("Expected a null probability followed by one probability per option.")
+                if target[0] != 0:
+                    raise ValueError("This decision head does not support null targets.")
+                labels.extend(target[1:])
+
+            model_inputs["labels"] = marks.new_tensor([labels], dtype=torch.float32)
+
+        return model_inputs
+
     @torch.no_grad()
     def decide(
         self,
@@ -113,17 +161,15 @@ class DecisionMixin:
         decision_config = decision_config or self.decision_config
         # Override any caller preference because we read `.logits` below.
         kwargs["return_dict"] = True
-        inputs = {"input_ids": input_ids, **kwargs}
-        num_options = torch.tensor([[len(question.options) for question in decision_questions]])
-        question_types = [Question.questions_types.index(question.type) for question in decision_questions]
+        inputs = self.prepare_inputs_for_decision(
+            [({"input_ids": input_ids, "marks": marks, **kwargs}, decision_questions)]
+        )
         scores = self(
-            marks=marks[None].to(self.device),
-            num_options=num_options.to(self.device),
-            question_type_ids=torch.tensor([question_types], device=self.device),
             **{key: value.to(self.device) if hasattr(value, "to") else value for key, value in inputs.items()},
         ).logits
+
         return process_scores(
-            decision_config, inputs["input_ids"], marks, decision_questions, scores.split(num_options[0].tolist())
+            decision_config, input_ids, marks, decision_questions, scores.split(inputs["num_options"][0].tolist())
         )
 
 

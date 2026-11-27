@@ -88,21 +88,12 @@ half the ranked probability score for ordered Score questions.
 Using the model and request above, train on the first option of each question:
 
 ```python
-from transformers.decision import Question
-
 model.train()
-inputs, questions = config.prepare_inputs(request, tokenizer)[0]
-counts = torch.tensor([[len(q.options) for q in questions]])
-types = torch.tensor([[Question.questions_types.index(q.type) for q in questions]])
-
-inputs.update(
-    marks=inputs["marks"][None],
-    num_options=counts,
-    question_type_ids=types,
-    labels=torch.zeros_like(counts),
-)
-outputs = model(**{name: tensor.to(model.device) for name, tensor in inputs.items()})
-outputs.loss.backward()
+for inputs, questions in config.prepare_inputs(request, tokenizer):
+    targets = [[0.0, 1.0] + [0.0] * (len(question.options) - 1) for question in questions]
+    batch = model.prepare_inputs_for_decision([(inputs, questions)], targets=targets)
+    outputs = model(**{name: tensor.to(model.device) for name, tensor in batch.items()})
+    outputs.loss.backward()
 ```
 
 Pass `loss_weights` with shape `(1, num_questions)` to weight individual questions. The loss is divided by the number
@@ -120,3 +111,4 @@ different numbers of questions correctly. The standard `Trainer` averages the mi
 
 [[autodoc]] JevForDecision
     - forward
+    - prepare_inputs_for_decision
