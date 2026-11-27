@@ -371,6 +371,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("jetmoe", "JetMoeConfig"),
         ("jev", "JevConfig"),
         ("jina_embeddings_v3", "JinaEmbeddingsV3Config"),
+        ("jina_embeddings_v5", "JinaEmbeddingsV5Config"),
         ("kimi_k25", "Kimi_K25Config"),
         ("kimi_k25_vision", "Kimi_K25VisionConfig"),
         ("kimi_linear", "KimiLinearConfig"),

@@ -309,6 +309,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("janus", "JanusModel"),
         ("jetmoe", "JetMoeModel"),
         ("jina_embeddings_v3", "JinaEmbeddingsV3Model"),
+        ("jina_embeddings_v5", "JinaEmbeddingsV5Model"),
         ("kimi_k25", "Kimi_K25Model"),
         ("kimi_k25_vision", "Kimi_K25VisionModel"),
         ("kimi_linear", "KimiLinearModel"),
