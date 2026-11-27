@@ -15,6 +15,7 @@
 FastAPI app factory.
 """
 
+import secrets
 import uuid
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
@@ -51,6 +52,7 @@ def build_server(
     systemone_handler: "SystemOneHandler",
     generation_state: GenerationState,
     enable_cors: bool = False,
+    api_key: str | None = None,
 ) -> "FastAPI":
     """Build and return a configured FastAPI application.
 
@@ -63,6 +65,8 @@ def build_server(
             in here so `/health` can check whether the CB worker has died and respond with
             503 instead of a misleading 200.
         enable_cors: If `True`, adds permissive CORS middleware (allow all origins).
+        api_key: If set, requests other than `/health` and CORS preflights must send
+            `Authorization: Bearer <api_key>`, otherwise they get a 401.
 
     Returns:
         A FastAPI app ready to be passed to uvicorn.
@@ -91,6 +95,18 @@ def build_server(
         logger.warning_once("CORS allow origin is set to `*`. Not recommended for production.")
 
     # ---- Middleware ----
+
+    if api_key:
+
+        @app.middleware("http")
+        async def api_key_middleware(request: Request, call_next):
+            """Reject requests without the API key, except health checks and CORS preflights."""
+            if request.method == "OPTIONS" or request.url.path == "/health":
+                return await call_next(request)
+            authorization = request.headers.get("Authorization", "")
+            if not secrets.compare_digest(authorization.encode(), f"Bearer {api_key}".encode()):
+                return JSONResponse({"error": "Invalid or missing API key."}, status_code=401)
+            return await call_next(request)
 
     @app.middleware("http")
     async def request_id_middleware(request: Request, call_next):
