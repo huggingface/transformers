@@ -228,9 +228,11 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             model.base_model.rope_deltas = None
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
             input_ids = curr_input_dict["input_ids"][:1]
+            mm_token_type_ids = curr_input_dict["mm_token_type_ids"][:1]
             pixel_values = curr_input_dict["pixel_values"][:one_img_length]
             image_grid_thw = curr_input_dict["image_grid_thw"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
+            mm_token_type_ids = torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0)
 
             # one image and two image tokens raise an error
             with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
@@ -238,6 +240,7 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                     input_ids=input_ids,
                     pixel_values=pixel_values,
                     image_grid_thw=image_grid_thw,
+                    mm_token_type_ids=mm_token_type_ids,
                 )
 
             model.base_model.rope_deltas = None
@@ -248,7 +251,16 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
             )
+
+    def test_missing_mm_token_type_ids_raises(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_dict.pop("mm_token_type_ids")
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            with self.assertRaisesRegex(ValueError, "`mm_token_type_ids` is missing"):
+                model(**input_dict)
 
     def test_vision_position_ids(self):
         """
@@ -379,6 +391,8 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             input_ids[b, insertion_point - 1] = self.model_tester.vision_start_token_id
             input_ids[b, insertion_point : insertion_point + patches_per_video] = self.model_tester.video_token_id
 
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.model_tester.video_token_id] = 2
         for model_class in self.all_model_classes:
             second_per_grid_ts = torch.tensor([1.0] * B, device=torch_device)
             model = model_class(config).to(torch_device)
@@ -387,6 +401,7 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 pixel_values_videos=pixel_values_videos,
                 video_grid_thw=video_grid_thw,
                 second_per_grid_ts=second_per_grid_ts,
+                mm_token_type_ids=mm_token_type_ids,
             )
             self.assertIsNotNone(outputs)
 
