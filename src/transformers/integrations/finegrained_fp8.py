@@ -447,27 +447,54 @@ class FP8Linear(nn.Linear):
 
 
 class FP8Embedding(nn.Embedding):
-    """`nn.Embedding` whose table is stored in FP8 with a single per-tensor `weight_scale`.
+    """`nn.Embedding` whose table is stored in FP8, with its scales in `weight_scale`.
 
     Qwen4-Exp's hashed n-gram table is ~48 GiB in FP8, too big to dequantize at load time, so the
     rescale runs on the rows a lookup gathers instead. Build it on the `meta` device: like
     `FP8Linear`, `__init__` lets `nn.Embedding` allocate a full-precision table first.
+
+    The table has a single scale by default. With `block_size`, each row has a scale of its own for every
+    `block_size` values in a row, which is how DeepSeek-V4.1 stores its Engram tables.
     """
 
+    # TODO: rebase this on #50245 once it is merged. It renames `weight_scale` to `weight_scale_inv` and moves
+    # the module swap into the quantizer's `quantized_module`. `block_size` and `scale_fmt` should then come from
+    # the plan entry of the table (its `weight_block_size`) rather than from `embedding_block_size`.
     def __init__(
         self,
         num_embeddings: int,
         embedding_dim: int,
         padding_idx: int | None = None,
+        block_size: int | None = None,
+        scale_fmt: str = "float",
     ):
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
+        self.block_size = block_size
         self.weight = nn.Parameter(torch.empty(num_embeddings, embedding_dim, dtype=_FP8_DTYPE), requires_grad=False)
-        # `(1,)` rather than a scalar: the shape checkpoints serialize per-tensor scales with.
-        self.weight_scale = nn.Parameter(torch.ones(1), requires_grad=False)
+        if block_size is None:
+            # One scale for the whole table. `(1,)` rather than a scalar: the shape checkpoints serialize
+            # per-tensor scales with.
+            self.weight_scale = nn.Parameter(torch.ones(1), requires_grad=False)
+        elif embedding_dim % block_size != 0:
+            raise ValueError(
+                "An FP8 table with block scales needs rows that divide into whole blocks, but got "
+                f"embedding_dim={embedding_dim} and block_size={block_size}."
+            )
+        else:
+            # One scale per block of each row, in the format the scales of the linears use
+            scale_dtype = _get_ue8m0_dtype() if scale_fmt == "ue8m0" else torch.float32
+            self.weight_scale = nn.Parameter(
+                torch.empty(num_embeddings, embedding_dim // block_size, dtype=scale_dtype), requires_grad=False
+            )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         rows = super().forward(input)
-        return rows.to(self.weight_scale.dtype) * self.weight_scale
+        if self.block_size is None:
+            return rows.to(self.weight_scale.dtype) * self.weight_scale
+        # We gather the scales of the same rows, and each one covers `block_size` values. The product is
+        # computed in float32 because `ue8m0` scales cannot be multiplied directly.
+        scales = F.embedding(input, self.weight_scale).to(torch.float32)
+        return rows.to(torch.float32) * scales.repeat_interleave(self.block_size, dim=-1)
 
 
 class FP8GroupedLinear(FP8Linear):
@@ -916,7 +943,13 @@ def _disable_deepgemm_on_multi_device(model: nn.Module) -> None:
     )
 
 
-def replace_with_fp8_embedding(model, patterns: list[str], modules_to_not_convert: list[str] | None = None):
+def replace_with_fp8_embedding(
+    model,
+    patterns: list[str],
+    modules_to_not_convert: list[str] | None = None,
+    block_size: int | None = None,
+    scale_fmt: str = "float",
+):
     """Swap every `nn.Embedding` whose name ends with one of `patterns` for `FP8Embedding`.
 
     Also runs under `dequantize=True`: a table worth quantizing is one we cannot afford to expand.
@@ -926,7 +959,13 @@ def replace_with_fp8_embedding(model, patterns: list[str], modules_to_not_conver
             if not should_convert_module(name, modules_to_not_convert):
                 continue
             with torch.device("meta"):
-                new_module = FP8Embedding(module.num_embeddings, module.embedding_dim, module.padding_idx)
+                new_module = FP8Embedding(
+                    module.num_embeddings,
+                    module.embedding_dim,
+                    module.padding_idx,
+                    block_size=block_size,
+                    scale_fmt=scale_fmt,
+                )
             new_module._hf_quantized_needs_local_tp = True
             model.set_submodule(name, new_module)
     return model

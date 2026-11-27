@@ -124,7 +124,13 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         modules_to_convert = self.quantization_config.modules_to_convert
         if self.pre_quantized and modules_to_convert:
-            replace_with_fp8_embedding(model, modules_to_convert, self.modules_to_not_convert)
+            replace_with_fp8_embedding(
+                model,
+                modules_to_convert,
+                self.modules_to_not_convert,
+                block_size=self.quantization_config.embedding_block_size,
+                scale_fmt=self.quantization_config.scale_fmt,
+            )
 
         model = replace_with_fp8_linear(
             model,

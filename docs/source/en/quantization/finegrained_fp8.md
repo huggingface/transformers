@@ -65,6 +65,7 @@ These [`FineGrainedFP8Config`] parameters change how the weights and activations
 | `scale_fmt` | `"float"` | Storage format of the weight scales. `"float"` stores float32 scales. `"ue8m0"` stores 1-byte power-of-two scales (`torch.float8_e8m0fnu`), as in DeepSeek-V4 checkpoints, and needs PyTorch 2.7 or later. |
 | `expert_dtype` | `"fp8"` | Format of the mixture-of-experts weights. `"fp4"` loads the FP4-packed experts in DeepSeek-V4 checkpoints. |
 | `modules_to_convert` | `None` | Embedding tables to load in FP8 from a pre-quantized checkpoint, matched by module name suffix. |
+| `embedding_block_size` | `None` | How many consecutive values in a row of a `modules_to_convert` table share one scale, as in the Engram tables of DeepSeek-V4.1. `None` means one scale for the whole table. |
 
 ## Load a pre-quantized FP8 checkpoint
 

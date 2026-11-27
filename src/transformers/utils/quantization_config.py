@@ -1699,6 +1699,9 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             `"ue8m0"` (1-byte `torch.float8_e8m0fnu`, V4-style).
         expert_dtype (`str`, *optional*, defaults to `"fp8"`):
             Format of the MoE experts' weights: `"fp8"`, or `"fp4"` for DeepSeek-V4's FP4-packed experts.
+        embedding_block_size (`int`, *optional*):
+            How many consecutive values in a row of the `modules_to_convert` tables share a scale, as in
+            DeepSeek-V4.1's Engram tables. A table has a single scale by default.
     """
 
     def __init__(
@@ -1710,6 +1713,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         modules_to_convert: list | None = None,
         scale_fmt: str = "float",
         expert_dtype: str = "fp8",
+        embedding_block_size: int | None = None,
         **kwargs,
     ):
         self.quant_method = kwargs.pop("quant_method", QuantizationMethod.FP8)
@@ -1719,6 +1723,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         self.modules_to_not_convert = modules_to_not_convert
         # TODO: check overlap with not to convert
         self.modules_to_convert = modules_to_convert
+        # TODO: after #50245, a table can have its own plan entry, and this becomes its `weight_block_size`
+        self.embedding_block_size = embedding_block_size
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size
         self.dequantize = dequantize
@@ -1741,6 +1747,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
         if self.expert_dtype not in ("fp8", "fp4"):
             raise ValueError(f"expert_dtype must be 'fp8' or 'fp4'; got {self.expert_dtype!r}")
+        if self.embedding_block_size is not None and self.embedding_block_size <= 0:
+            raise ValueError(f"embedding_block_size must be a positive integer; got {self.embedding_block_size!r}")
 
     def get_loading_attributes(self):
         return {"dequantize": self.dequantize, "modules_to_not_convert": self.modules_to_not_convert}
