@@ -197,13 +197,16 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
 
         batched_speech = BatchFeature({"input_features": raw_speech})
 
+        if return_attention_mask is None:
+            return_attention_mask = self.return_attention_mask
+
         padded_inputs = self.pad(
             batched_speech,
             padding=padding,
             max_length=max_length if max_length else self.n_samples,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=return_attention_mask,
+            return_attention_mask=True,
         )
 
         input_features = padded_inputs["input_features"].transpose(2, 0, 1)

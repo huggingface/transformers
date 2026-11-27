@@ -94,6 +94,20 @@ class Qwen3ASRFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         fe = Qwen3ASRFeatureExtractor()
         self.assertEqual(fe.n_window, 50)
 
+    def test_return_attention_mask(self):
+        audio = np.zeros(16_800, dtype=np.float32)
+        for default, override in itertools.product((True, False), (None, True, False)):
+            with self.subTest(default=default, override=override):
+                fe = Qwen3ASRFeatureExtractor(return_attention_mask=default)
+                kwargs = {} if override is None else {"return_attention_mask": override}
+                out = fe(audio, sampling_rate=16_000, padding="longest", return_tensors="np", **kwargs)
+                expected = default if override is None else override
+                self.assertEqual("attention_mask" in out, expected)
+                self.assertEqual(out["input_features"].shape, (1, 128, 200))
+                if expected:
+                    self.assertEqual(out["attention_mask"].shape, (1, 200))
+                    self.assertEqual(out["attention_mask"].sum(), 105)
+
     def test_mel_padding_aligns_to_chunk(self):
         """The mel time axis is right-padded to a multiple of `2 * n_window`."""
         fe = Qwen3ASRFeatureExtractor()
