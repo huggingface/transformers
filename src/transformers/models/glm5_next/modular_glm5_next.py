@@ -1768,7 +1768,29 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
 
 
 class Glm5NextProcessor(Glm46VProcessor):
-    pass
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        video_processor=None,
+        chat_template=None,
+        reorder_tool_results_in_template_order: bool = True,
+        **kwargs,
+    ):
+        r"""
+        reorder_tool_results_in_template_order (`bool`, *optional*, defaults to `True`):
+            Whether to reorder consecutive tool messages and expand aggregated `{"id": ..., "output": [...]}`
+            results to match the preceding assistant's `tool_calls` order when extracting multimodal inputs from
+            conversations.
+        """
+        super().__init__(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            chat_template=chat_template,
+            **kwargs,
+        )
+        self.reorder_tool_results_in_template_order = reorder_tool_results_in_template_order
 
 
 def smart_resize(
@@ -1987,13 +2009,13 @@ class Glm5NextImageProcessor(GlmgaImageProcessor):
         Returns:
             `int`: Number of image patches per image.
         """
-        images_kwargs = images_kwargs or {}
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        merge_size = images_kwargs.get("merge_size", self.merge_size)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        patch_size = images_kwargs["patch_size"]
+        merge_size = images_kwargs["merge_size"]
 
         # Key difference is the dynamically based resize on min/max image tokens
-        min_image_tokens = images_kwargs.get("min_image_tokens", self.min_image_tokens)
-        max_image_tokens = images_kwargs.get("max_image_tokens", self.max_image_tokens)
+        min_image_tokens = images_kwargs["min_image_tokens"]
+        max_image_tokens = images_kwargs["max_image_tokens"]
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
@@ -2138,13 +2160,13 @@ class Glm5NextImageProcessorPil(GlmgaImageProcessorPil):
         Returns:
             `int`: Number of image patches per image.
         """
-        images_kwargs = images_kwargs or {}
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        merge_size = images_kwargs.get("merge_size", self.merge_size)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        patch_size = images_kwargs["patch_size"]
+        merge_size = images_kwargs["merge_size"]
 
         # Key difference is the dynamically based resize on min/max image tokens
-        min_image_tokens = images_kwargs.get("min_image_tokens", self.min_image_tokens)
-        max_image_tokens = images_kwargs.get("max_image_tokens", self.max_image_tokens)
+        min_image_tokens = images_kwargs["min_image_tokens"]
+        max_image_tokens = images_kwargs["max_image_tokens"]
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
@@ -2383,13 +2405,13 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
         Returns:
             `int`: Number of video patches per video.
         """
-        videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
-        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
-        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
-        patch_expand_factor = videos_kwargs.get("patch_expand_factor", None) or self.patch_expand_factor
-        min_image_tokens = videos_kwargs.get("min_image_tokens", None) or self.min_image_tokens
-        max_image_tokens = videos_kwargs.get("max_image_tokens", None) or self.max_image_tokens
+        videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
+        patch_size = videos_kwargs["patch_size"]
+        merge_size = videos_kwargs["merge_size"]
+        temporal_patch_size = videos_kwargs["temporal_patch_size"]
+        patch_expand_factor = videos_kwargs["patch_expand_factor"]
+        min_image_tokens = videos_kwargs["min_image_tokens"]
+        max_image_tokens = videos_kwargs["max_image_tokens"]
 
         resized_height, resized_width = smart_resize(
             height=height,

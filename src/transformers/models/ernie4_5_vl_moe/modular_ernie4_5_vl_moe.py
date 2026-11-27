@@ -122,6 +122,7 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
     """
 
     model_type = "ernie4_5_vl_moe_text"
+    attribute_map = {"num_experts": "moe_num_experts", "num_experts_per_tok": "moe_k"}
     base_config_key = "text_config"
 
     base_model_tp_plan = {
@@ -154,6 +155,7 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
     moe_layer_end_index = AttributeError()
     moe_layer_interval = AttributeError()
     moe_layer_start_index = AttributeError()
+    num_mtp_layers = AttributeError()
 
     def __post_init__(self, **kwargs):
         if self.mlp_layer_types is None:
@@ -163,6 +165,9 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
             self.moe_intermediate_size = [1536, 512]
 
         PreTrainedConfig.__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        raise AttributeError("Not needed for Ernie 4.5 VL")
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")

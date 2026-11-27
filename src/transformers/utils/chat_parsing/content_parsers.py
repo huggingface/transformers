@@ -104,13 +104,21 @@ def _sub_parse(raw: str, value_parser: dict | None) -> Any:
 
 def _xml_inline(text: str, args: dict) -> dict:
     """Parse shallow XML-ish tags into a dict. `tag_pattern` regex must have named
-    groups `key` and `value`. Optional `value_parser` recurses; `merge_duplicates`
-    collects duplicate keys into a list."""
+    groups `key` and `value`. Optional `value_parser` recurses; `value_parser_by` picks the
+    parser per tag from another named group; `merge_duplicates` collects duplicate keys into a list."""
     tag_pattern = args.get("tag_pattern")
     if tag_pattern is None:
         raise ValueError("xml-inline: 'tag_pattern' content_arg is required")
     value_parser = args.get("value_parser")
     merge = args.get("merge_duplicates", False)
+    by_group, parsers_by_capture = None, {}
+    if (value_parser_by := args.get("value_parser_by")) is not None:
+        by_group, parsers_by_capture = value_parser_by.get("group"), value_parser_by.get("parsers")
+        if not isinstance(by_group, str) or not isinstance(parsers_by_capture, dict):
+            raise ValueError(
+                "xml-inline: 'value_parser_by' must be a dict with 'group' (a named group in tag_pattern) "
+                f"and 'parsers' (a dict mapping what that group captures to a value parser). Got: {value_parser_by!r}"
+            )
 
     out: dict[str, Any] = {}
     merged: set[str] = set()
@@ -119,7 +127,16 @@ def _xml_inline(text: str, args: dict) -> dict:
         key = groups.get("key")
         if key is None:
             raise ValueError(f"xml-inline: tag_pattern must have a named group 'key'. Pattern: {tag_pattern}")
-        value = _sub_parse(groups.get("value", ""), value_parser)
+        parser = value_parser
+        if by_group is not None:
+            if by_group not in groups:
+                raise ValueError(
+                    f"xml-inline: value_parser_by names group '{by_group}', which tag_pattern does not define. "
+                    f"Pattern: {tag_pattern}"
+                )
+            # A capture with no entry (or a group that did not take part in the match) falls back to `value_parser`
+            parser = parsers_by_capture.get(groups[by_group], value_parser)
+        value = _sub_parse(groups.get("value", ""), parser)
         if key in out and merge:
             if key not in merged:
                 out[key] = [out[key]]

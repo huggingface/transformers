@@ -192,8 +192,10 @@ class Idefics2Processor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
-            do_image_splitting = images_kwargs.get("do_image_splitting", self.image_processor.do_image_splitting)
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
+            do_image_splitting = images_kwargs["do_image_splitting"]
 
             # Image splitting yields 4 crops + the original image
             num_patches = 5 if do_image_splitting else 1

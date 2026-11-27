@@ -177,12 +177,13 @@ class UnlimitedOcrProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
-            image_processor = self.image_processor
-            min_patches = images_kwargs.get("min_patches", image_processor.min_patches)
-            max_patches = images_kwargs.get("max_patches", image_processor.max_patches)
-            tile_size = images_kwargs.get("tile_size", image_processor.tile_size)
-            crop_to_patches = images_kwargs.get("crop_to_patches", image_processor.crop_to_patches)
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
+            min_patches = images_kwargs["min_patches"]
+            max_patches = images_kwargs["max_patches"]
+            tile_size = images_kwargs["tile_size"]
+            crop_to_patches = images_kwargs["crop_to_patches"]
 
             num_image_tokens = []
             for height, width in image_sizes:
