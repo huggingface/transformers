@@ -24,9 +24,7 @@ from .parallel_utils import (
     ALL_PARALLEL_STYLES,
     ParallelInterface,  # noqa: F401
     _use_local_dtensor_params,
-    install_parallel_forward,
     replace_layer_number_by_wildcard,
-    wrapped_forward,
 )
 from .utils import _get_torch_distributed_rank, _warning_once_on_rank_zero
 
@@ -130,7 +128,7 @@ class TensorParallelLayer:
 
     def install_forward(self, module, mesh, *, config=None, mesh_manager=None):
         """Install pre / around / post transforms by replacing module.forward."""
-        original_forward = wrapped_forward(module)
+        original_forward = module.forward
 
         def tp_forward(*args, **kwargs):
             args, kwargs = self.transform_inputs_pre_forward(module, args, kwargs, mesh)
@@ -138,7 +136,7 @@ class TensorParallelLayer:
                 output = original_forward(*args, **kwargs)
             return self.transform_output_post_forward(module, output, mesh, config=config)
 
-        install_parallel_forward(module, tp_forward)
+        module.forward = tp_forward
         return module
 
 
@@ -486,7 +484,6 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
     """
 
     def install_forward(self, module, mesh, *, config=None, mesh_manager=None):
-        original_forward = wrapped_forward(module)
         # Module-level backward hooks create graph breaks when using torch.compile but not with parameter-level
         # hooks. We can't add them during setup time as the parameters are empty placeholders that are going to be
         # replaced with the loaded weights, discarding all previously attached hooks. So they are attached only on
@@ -496,15 +493,16 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
         def _all_reduce_grad(param):
             dist.all_reduce(param.grad, group=mesh.get_group())
 
-        def tp_forward(*args, **kwargs):
+        def hook_parameters(module, args):
             if torch.is_grad_enabled():
                 for name, param in module.named_parameters(recurse=False):
                     if param.requires_grad and is_already_hooked.get(name) is not param:
                         param.register_post_accumulate_grad_hook(_all_reduce_grad)
                         is_already_hooked[name] = param
-            return original_forward(*args, **kwargs)
 
-        install_parallel_forward(module, tp_forward)
+        # A forward pre-hook rather than a wrapper around `module.forward`: it stays in place when `forward` is
+        # replaced after loading, which is what kernels do
+        module.register_forward_pre_hook(hook_parameters)
         return module
 
 

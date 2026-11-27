@@ -21,12 +21,7 @@ from typing import TYPE_CHECKING, NamedTuple
 from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
-from .parallel_utils import (
-    ALL_PARALLEL_STYLES,
-    _use_local_dtensor_params,
-    install_parallel_forward,
-    wrapped_forward,
-)
+from .parallel_utils import ALL_PARALLEL_STYLES, _use_local_dtensor_params
 
 
 if TYPE_CHECKING:
@@ -75,7 +70,7 @@ class ExpertParallelLayer:
 
     def install_forward(self, module, mesh):
         """Install pre / around / post transforms by replacing module.forward."""
-        original_forward = wrapped_forward(module)
+        original_forward = module.forward
 
         def ep_forward(*args, **kwargs):
             args, kwargs = self.transform_inputs_pre_forward(module, args, kwargs, mesh)
@@ -83,7 +78,7 @@ class ExpertParallelLayer:
                 output = original_forward(*args, **kwargs)
             return self.transform_output_post_forward(module, output, mesh)
 
-        install_parallel_forward(module, ep_forward)
+        module.forward = ep_forward
         return module
 
 
@@ -413,7 +408,7 @@ class EpDispatchExpertsParallel(ExpertParallelLayer):
                 output = implementation(hidden_states, top_k_index, top_k_weights)
             return output.to(hidden_states.dtype)
 
-        install_parallel_forward(module, ep_forward)
+        module.forward = ep_forward
         return module
 
 

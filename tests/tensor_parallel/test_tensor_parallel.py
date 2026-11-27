@@ -61,18 +61,22 @@ def _test_checkpoint_with_both_tied_keys_impl(_rank, model_path, equal):
         torch.testing.assert_close(model_tp(input_ids).logits.cpu(), model(input_ids).logits.cpu())
 
 
-def _test_norm_grad_with_kernels_impl(_rank, model_id):
+def _test_norm_grad_impl(_rank, model_id):
     distributed_config = DistributedConfig(tp_size=dist.get_world_size())
-    model_tp = AutoModelForCausalLM.from_pretrained(
-        model_id, distributed_config=distributed_config, use_kernels=True, dtype=torch.float32
-    )
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32).to(model_tp.device)
-    input_ids = torch.arange(16, device=model_tp.device)[None]
+    input_ids = torch.arange(16)[None]
+
+    model = AutoModelForCausalLM.from_pretrained(model_id, use_kernels=False, dtype=torch.float32)
     model(input_ids, labels=input_ids).loss.backward()
-    model_tp(input_ids, labels=input_ids).loss.backward()
     grad = model.model.layers[0].self_attn.q_norm.weight.grad
-    grad_tp = model_tp.model.layers[0].self_attn.q_norm.weight.grad
-    torch.testing.assert_close(grad_tp, grad, rtol=1e-4, atol=1e-6)
+
+    for use_kernels in (False, True):
+        model_tp = AutoModelForCausalLM.from_pretrained(
+            model_id, distributed_config=distributed_config, use_kernels=use_kernels, dtype=torch.float32
+        )
+        model_tp(input_ids.to(model_tp.device), labels=input_ids.to(model_tp.device)).loss.backward()
+        grad_tp = model_tp.model.layers[0].self_attn.q_norm.weight.grad
+
+        torch.testing.assert_close(grad_tp.cpu(), grad, rtol=1e-4, atol=1e-6, msg=f"{use_kernels=}")
 
 
 @is_tensor_parallel_test
@@ -389,6 +393,13 @@ class TestTensorParallelLayer(TestCasePlus):
                 self.assertEqual(module.random_attr, 123)
                 self.assertFalse(hasattr(module, "num_experts"))
 
+    @require_kernels
+    def test_norm_grad_with_and_without_kernels(self):
+        """A per-head norm only sees its rank's heads, so the ranks' gradients of its weight are summed. Kernels
+        replace the norm's `forward` after the model is loaded: the sum must still happen."""
+        model_id = "trl-internal-testing/tiny-Qwen3ForCausalLM"
+        run_distributed(world_size=2)(_test_norm_grad_impl)(model_id)
+
 
 @is_tensor_parallel_test
 class TestUnitParallel(TestCasePlus):
@@ -514,13 +525,3 @@ class TestTensorParallelTiedWeights(TestCasePlus):
             model.save_pretrained(tmp_dir)
             _tiny_llama_config(tie_word_embeddings=True).save_pretrained(tmp_dir)
             run_distributed(world_size=2)(_test_checkpoint_with_both_tied_keys_impl)(tmp_dir, equal)
-
-
-@is_tensor_parallel_test
-class TestTensorParallelKernels(TestCasePlus):
-    @require_kernels
-    def test_norm_grad_with_kernels(self):
-        """A per-head norm only sees its rank's heads, so the ranks' gradients of its weight are summed. Kernels
-        replace the norm's `forward` after the model is loaded: the sum must still happen."""
-        model_id = "trl-internal-testing/tiny-Qwen3ForCausalLM"
-        run_distributed(world_size=2)(_test_norm_grad_with_kernels_impl)(model_id)
