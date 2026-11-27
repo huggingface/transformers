@@ -1157,14 +1157,11 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
 
         # In case we didn't find a match return the input sequence unchanged, reverts back to autoregressive decoding
         if not match_found or chosen_ids is None or len(chosen_ids) == 0:
-            # Keep track of the last drafted length to rollback the Cache
-            self._last_length = input_ids.shape[-1]
             return input_ids, None
 
         # Now need extend input_ids with chosen_ids
         chosen_ids = chosen_ids.unsqueeze(0)
         candidate_input_ids = torch.cat((input_ids, chosen_ids), dim=1)
-
         # assisted_generation expects logits as well, but we don't have those here, so returning None
         return candidate_input_ids, None
 
