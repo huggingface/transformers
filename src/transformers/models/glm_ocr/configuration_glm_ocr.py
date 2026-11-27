@@ -74,6 +74,10 @@ class GlmOcrVisionConfig(PreTrainedConfig):
 @strict
 class GlmOcrTextConfig(PreTrainedConfig):
     r"""
+    num_mtp_layers (`int`, *optional*):
+        Number of multi-token prediction (MTP) layers stored after the base model in the checkpoint, used for
+        speculative decoding with `generate(..., use_mtp=True)`. The released GLM-OCR checkpoint has one.
+
     Example:
 
     ```python
@@ -121,6 +125,9 @@ class GlmOcrTextConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     rope_parameters: RopeParameters | dict | None = None
     pad_token_id: int | None = None
+
+    attribute_map = {"num_mtp_layers": "num_nextn_predict_layers"}
+    num_mtp_layers: int | None = None
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
