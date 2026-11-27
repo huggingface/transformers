@@ -300,11 +300,11 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
         """
         Returns the number of image patches for a given image size (1 global + local patches).
         """
-        images_kwargs = images_kwargs or {}
-        min_patches = images_kwargs.get("min_patches", self.min_patches)
-        max_patches = images_kwargs.get("max_patches", self.max_patches)
-        tile_size = images_kwargs.get("tile_size", self.tile_size)
-        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        min_patches = images_kwargs["min_patches"]
+        max_patches = images_kwargs["max_patches"]
+        tile_size = images_kwargs["tile_size"]
+        crop_to_patches = images_kwargs["crop_to_patches"]
 
         num_patches = 1  # global view
         if crop_to_patches and max(height, width) > tile_size:
@@ -490,11 +490,11 @@ class DeepseekOcr2ImageProcessorPil(GotOcr2ImageProcessorPil):
         """
         Returns the number of image patches for a given image size (1 global + local patches).
         """
-        images_kwargs = images_kwargs or {}
-        min_patches = images_kwargs.get("min_patches", self.min_patches)
-        max_patches = images_kwargs.get("max_patches", self.max_patches)
-        tile_size = images_kwargs.get("tile_size", self.tile_size)
-        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        min_patches = images_kwargs["min_patches"]
+        max_patches = images_kwargs["max_patches"]
+        tile_size = images_kwargs["tile_size"]
+        crop_to_patches = images_kwargs["crop_to_patches"]
 
         num_patches = 1  # global view
         if crop_to_patches and max(height, width) > tile_size:

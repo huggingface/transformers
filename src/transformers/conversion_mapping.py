@@ -2456,6 +2456,12 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(source_patterns=r"\.input_proj\.", target_patterns=r".eh_proj."),
         WeightRenaming(source_patterns=r"^chain_norm\.", target_patterns=r"shared_post_norm."),
         WeightRenaming(source_patterns=r"layers\.(\d+)\.transformer_block\.", target_patterns=r"layers.\1.mtp_block."),
+        # Ernie 4.5 MoE checkpoint layout: each part of MTP layer `k` is stored as `mtp_{part}.{k}`, and the
+        # base model's final `norm` (renamed below) is the post-norm of the MTP layer
+        WeightRenaming(source_patterns=r"^mtp_block\.(\d+)\.", target_patterns=r"layers.\1.mtp_block."),
+        WeightRenaming(source_patterns=r"^mtp_emb_norm\.(\d+)\.", target_patterns=r"layers.\1.enorm."),
+        WeightRenaming(source_patterns=r"^mtp_hidden_norm\.(\d+)\.", target_patterns=r"layers.\1.hnorm."),
+        WeightRenaming(source_patterns=r"^mtp_linear_proj\.(\d+)\.", target_patterns=r"layers.\1.eh_proj."),
         # Mellum checkpoint layout: single MTP layer with `fc`, `pre_fc_norm_*` and `norm` stored one level up.
         WeightRenaming(
             source_patterns=r"^layers\.(\d+)\.(?!(?:mtp_block|enorm|hnorm|eh_proj|post_norm)\.)",

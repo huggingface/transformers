@@ -14,15 +14,14 @@
 """
 Handler for the /v1/chat/completions endpoint.
 
-Supports streaming (SSE via DirectStreamer) and non-streaming (JSON) responses.
+Supports streaming (SSE) and non-streaming (JSON) responses.
 """
 
-import asyncio
+import json
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
-from ...utils import logging
 from ...utils.import_utils import is_serve_available
 
 
@@ -45,19 +44,21 @@ if is_serve_available():
 
 
 from .utils import (
-    BaseGenerateManager,
     BaseHandler,
-    Modality,
+    EventStream,
     ReasoningText,
     ToolCall,
     _StreamError,
     build_response_parser,
     parse_assistant_message,
+    prompt_length,
 )
 
 
 if TYPE_CHECKING:
-    from transformers import GenerationConfig, PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
+    from transformers import GenerationConfig
+
+    from .model_manager import EngineClient
 
 
 class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
@@ -66,9 +67,7 @@ class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreamin
     chat_template_kwargs: dict
 
 
-# Fields accepted by the OpenAI schema but not yet supported.
-# Receiving these raises an error to avoid silent misbehaviour.
-# NOTE: "stop" is NOT in this set — we map it to stop_strings.
+# Fields of the OpenAI schema that are ignored, with a warning
 UNUSED_CHAT_COMPLETION_FIELDS = {
     "audio",
     "function_call",
@@ -84,15 +83,11 @@ UNUSED_CHAT_COMPLETION_FIELDS = {
     "response_format",
     "service_tier",
     "store",
-    "stream_options",
     "tool_choice",
     "top_logprobs",
     "user",
     "web_search_options",
 }
-
-
-logger = logging.get_logger(__name__)
 
 
 class ChatCompletionHandler(BaseHandler):
@@ -116,117 +111,62 @@ class ChatCompletionHandler(BaseHandler):
         """
         self._validate_request(body)
 
-        model_id, model, processor = self._resolve_model(body)
-        modality = self.model_manager.get_model_modality(model, processor=processor)
-        use_cb = self.generation_state.use_continuous_batching(model, modality)
-        logger.warning(f"[Request received] Model: {model_id}, CB: {use_cb}")
-        gen_manager = self.generation_state.get_manager(model_id, use_cb=use_cb)
-        processor_inputs = self.get_processor_inputs_from_messages(body["messages"], modality)
-
-        has_video = any(
-            c.get("type") == "video"
-            for msg in processor_inputs
-            for c in (msg.get("content") if isinstance(msg.get("content"), list) else [])
-        )
-        # Default to 32 frames for video (Gemma 4 default); some processors load all frames otherwise.
-        # Merge order (later wins): custom default -> server default → request-level kwargs.
-        chat_template_kwargs: dict = {}
-        if has_video:
-            chat_template_kwargs["num_frames"] = 32
-        chat_template_kwargs.update(self.chat_template_kwargs)
-        chat_template_kwargs.update(body.get("chat_template_kwargs", {}))
-        inputs = processor.apply_chat_template(
-            processor_inputs,
-            add_generation_prompt=True,
-            tools=body.get("tools"),
-            return_tensors=None if use_cb else "pt",
-            return_dict=True,
-            tokenize=True,
-            load_audio_from_video=modality == Modality.MULTIMODAL and has_video,
-            **chat_template_kwargs,
-        )
-        if not use_cb:
-            inputs = inputs.to(model.device)  # type: ignore[union-attr]
-
-        gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
-        # TODO: remove when CB supports per-request generation config
-        if use_cb:
-            gen_manager.init_cb(model, gen_config)
+        engine = self.model_manager.get_engine(body.get("model"))
+        inputs = await self.run_in_thread(self.render_messages, engine, body["messages"], body)
+        generation_kwargs = self._build_generation_kwargs(body, engine.generation_config)
 
         streaming = body.get("stream")
+        self._check_prompt_length(engine, inputs)
+        self._log_request(request_id, engine, inputs, generation_kwargs, streaming, body)
         if streaming:
-            return self._streaming(
-                request_id,
-                model,
-                processor,
-                model_id,
-                inputs,
-                gen_config,
-                gen_manager=gen_manager,
-                tools=body.get("tools"),
-            )
+            tools, stream_options = body.get("tools"), body.get("stream_options")
+            return self._streaming(request_id, engine, inputs, generation_kwargs, tools, stream_options)
         else:
-            return await self._non_streaming(
-                request_id,
-                model,
-                processor,
-                model_id,
-                inputs,
-                gen_config,
-                gen_manager=gen_manager,
-                tools=body.get("tools"),
-            )
+            return await self._non_streaming(request_id, engine, inputs, generation_kwargs, tools=body.get("tools"))
 
     # ----- streaming -----
 
     def _streaming(
         self,
         request_id: str,
-        model: "PreTrainedModel",
-        processor: "ProcessorMixin | PreTrainedTokenizerFast",
-        model_id: str,
+        engine: "EngineClient",
         inputs: dict,
-        gen_config: "GenerationConfig",
-        gen_manager: BaseGenerateManager,
+        generation_kwargs: dict,
         tools=None,
+        stream_options: dict | None = None,
     ) -> StreamingResponse:
-        """Stream tokens as SSE via DirectStreamer."""
-        response_parser = build_response_parser(processor, model, inputs["input_ids"], tools=tools)
-        queue, streamer = gen_manager.generate_streaming(
-            model,
-            processor,
-            inputs,
-            gen_config,
-            request_id=request_id,
-            response_parser=response_parser,
+        """Stream tokens as SSE, decoded by a `Detokenizer`. With ``stream_options={"include_usage": True}``, a last
+        chunk has the usage."""
+        include_usage = bool(stream_options and stream_options.get("include_usage"))
+        processor, model_id = engine.processor, engine.model_id
+        response_parser = build_response_parser(processor, engine.model_config, inputs["input_ids"], tools=tools)
+        queue, streamer = engine.generate_streaming(inputs, generation_kwargs, response_parser=response_parser)
+        input_len = prompt_length(inputs)
+        created = int(time.time())
+        content_template = self.sse_template(
+            self._build_chunk_sse(request_id, model=model_id, created=created, content="<text>"), content="<text>"
         )
-        input_ids = inputs["input_ids"]
-        # CB returns plain lists, regular path returns tensors
-        input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
+        reasoning_template = self.sse_template(
+            self._build_chunk_sse(request_id, model=model_id, created=created, reasoning_content="<text>"),
+            reasoning_content="<text>",
+        )
 
         async def sse_gen() -> AsyncGenerator[str, None]:
             try:
-                yield self._build_chunk_sse(request_id, role="assistant", model=model_id)
+                yield self._build_chunk_sse(request_id, role="assistant", model=model_id, created=created)
 
                 tool_call_index = 0
                 has_tool_calls = False
                 done = False
                 while not done:
-                    item = await queue.get()
-                    batch = [item]
-                    try:
-                        while True:
-                            batch.append(queue.get_nowait())
-                    except asyncio.QueueEmpty:
-                        pass
-
+                    new_outputs = await self.read_queue_outputs(queue)
                     sse_parts: list[str] = []
-                    for item in batch:
+                    for item in new_outputs:
                         if item is None:
                             done = True
                             break
                         if isinstance(item, _StreamError):
-                            sse_parts.append(f'data: {{"error": "{item.msg}"}}\n\n')
+                            sse_parts.append(f"data: {json.dumps({'error': item.msg})}\n\n")
                             yield "".join(sse_parts)
                             return
                         if isinstance(item, ToolCall):
@@ -243,62 +183,48 @@ class ChatCompletionHandler(BaseHandler):
                                             function={"name": item.name, "arguments": item.arguments},
                                         )
                                     ],
+                                    created=created,
                                 )
                             )
                             tool_call_index += 1
                         elif isinstance(item, ReasoningText):
-                            sse_parts.append(self._build_chunk_sse(request_id, model=model_id, reasoning_content=item))
+                            text = json.dumps(item, ensure_ascii=False)
+                            sse_parts.append(reasoning_template.format(reasoning_content=text))
                         else:
-                            sse_parts.append(self._build_chunk_sse(request_id, model=model_id, content=item))
+                            text = json.dumps(item, ensure_ascii=False)
+                            sse_parts.append(content_template.format(content=text))
 
                     if sse_parts:
                         yield "".join(sse_parts)
 
-                hit_max = gen_config.max_new_tokens is not None and streamer.total_tokens >= gen_config.max_new_tokens
-                if has_tool_calls:
-                    finish_reason = "tool_calls"
-                elif hit_max:
-                    finish_reason = "length"
-                else:
-                    finish_reason = "stop"
-                usage = CompletionUsage(
-                    prompt_tokens=input_len,
-                    completion_tokens=streamer.total_tokens,
-                    total_tokens=input_len + streamer.total_tokens,
-                )
-                yield self._build_chunk_sse(
-                    request_id,
-                    finish_reason=finish_reason,
-                    model=model_id,
-                    usage=usage,
-                )
-            except (GeneratorExit, asyncio.CancelledError):
-                # Client disconnected — abort generation to free GPU.
-                # Re-raise is mandatory: Python raises RuntimeError if GeneratorExit is swallowed.
+                finish_reason = self._get_finish_reason(generation_kwargs, streamer.total_tokens, has_tool_calls)
+                yield self._build_chunk_sse(request_id, finish_reason=finish_reason, model=model_id, created=created)
+                if include_usage:
+                    usage = CompletionUsage(
+                        prompt_tokens=input_len,
+                        completion_tokens=streamer.total_tokens,
+                        total_tokens=input_len + streamer.total_tokens,
+                    )
+                    yield self._build_chunk_sse(request_id, model=model_id, usage=usage, created=created)
+            finally:  # stops the generation if the client left
                 streamer.cancel()
-                raise
 
-        return StreamingResponse(sse_gen(), media_type="text/event-stream")
+        return EventStream(sse_gen(), media_type="text/event-stream")
 
     # ----- non-streaming -----
 
     async def _non_streaming(
         self,
         request_id: str,
-        model: "PreTrainedModel",
-        processor: "ProcessorMixin | PreTrainedTokenizerFast",
-        model_id: str,
+        engine: "EngineClient",
         inputs: dict,
-        gen_config: "GenerationConfig",
-        gen_manager: BaseGenerateManager,
+        generation_kwargs: dict,
         tools=None,
     ) -> JSONResponse:
         """Run generation and return a JSONResponse."""
-        content, input_len, generated_ids = await gen_manager.generate_non_streaming(
-            model, processor, inputs, gen_config, request_id=request_id
-        )
+        processor, model_id = engine.processor, engine.model_id
+        content, input_len, generated_ids = await engine.generate_non_streaming(inputs, generation_kwargs)
 
-        hit_max = gen_config.max_new_tokens is not None and len(generated_ids) >= gen_config.max_new_tokens
         completion_tokens = len(generated_ids)
         usage = CompletionUsage(
             prompt_tokens=input_len,
@@ -307,7 +233,12 @@ class ChatCompletionHandler(BaseHandler):
         )
 
         content, reasoning_content, parsed_tool_calls = parse_assistant_message(
-            processor, model, generated_ids, input_ids=inputs["input_ids"], cleaned_content=content, tools=tools
+            processor,
+            engine.model_config,
+            generated_ids,
+            input_ids=inputs["input_ids"],
+            cleaned_content=content,
+            tools=tools,
         )
         tool_calls = None
         if parsed_tool_calls:
@@ -320,12 +251,7 @@ class ChatCompletionHandler(BaseHandler):
                 for i, tc in enumerate(parsed_tool_calls)
             ]
 
-        if tool_calls is not None:
-            finish_reason = "tool_calls"
-        elif hit_max:
-            finish_reason = "length"
-        else:
-            finish_reason = "stop"
+        finish_reason = self._get_finish_reason(generation_kwargs, completion_tokens, tool_calls is not None)
 
         return JSONResponse(
             self._build_completion(
@@ -342,23 +268,23 @@ class ChatCompletionHandler(BaseHandler):
 
     # ----- helpers -----
 
-    def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False):
-        """Apply Chat Completions params (``max_completion_tokens``, ``max_tokens``, ``frequency_penalty``,
-        ``logit_bias``, ``stop``) on top of the base generation config."""
-        generation_config = super()._build_generation_config(body, model_generation_config, use_cb=use_cb)
+    def _build_generation_kwargs(self, body: dict, model_generation_config: "GenerationConfig") -> dict:
+        """Adds the Chat Completions params (``max_completion_tokens``, ``max_tokens``, ``frequency_penalty``,
+        ``logit_bias``, ``stop``) to the shared ones."""
+        generation_kwargs = super()._build_generation_kwargs(body, model_generation_config)
 
         if body.get("max_completion_tokens") is not None:
-            generation_config.max_new_tokens = int(body["max_completion_tokens"])
+            generation_kwargs["max_new_tokens"] = int(body["max_completion_tokens"])
         elif body.get("max_tokens") is not None:
-            generation_config.max_new_tokens = int(body["max_tokens"])
+            generation_kwargs["max_new_tokens"] = int(body["max_tokens"])
         if body.get("frequency_penalty") is not None:
-            generation_config.repetition_penalty = 1.0 + float(body["frequency_penalty"])
+            generation_kwargs["repetition_penalty"] = 1.0 + float(body["frequency_penalty"])
         if body.get("logit_bias") is not None:
-            generation_config.sequence_bias = {(int(k),): v for k, v in body["logit_bias"].items()}
+            generation_kwargs["sequence_bias"] = {(int(k),): v for k, v in body["logit_bias"].items()}
         if body.get("stop") is not None:
-            generation_config.stop_strings = body["stop"]
+            generation_kwargs["stop_strings"] = body["stop"]
 
-        return generation_config
+        return generation_kwargs
 
     # ----- response builders -----
 
@@ -411,6 +337,7 @@ class ChatCompletionHandler(BaseHandler):
         tool_calls: list | None = None,
         usage: CompletionUsage | None = None,
         reasoning_content: str | None = None,
+        created: int | None = None,
     ) -> str:
         """Build a streaming ``ChatCompletionChunk`` and format it as an SSE ``data:`` line.
 
@@ -421,8 +348,11 @@ class ChatCompletionHandler(BaseHandler):
             role (`str`, *optional*): Role (only sent in the first chunk).
             finish_reason (`str`, *optional*): Set on the final chunk.
             tool_calls (`list`, *optional*): Tool call deltas.
-            usage (`CompletionUsage`, *optional*): Token usage (sent with the final chunk).
+            usage (`CompletionUsage`, *optional*): Token usage: the chunk is then the usage chunk, the last one, with no
+                choices (``stream_options.include_usage``).
             reasoning_content (`str`, *optional*): Reasoning/thinking delta (OpenAI-compatible extension).
+            created (`int`, *optional*): When the stream started, in seconds since the epoch: the same for all its
+                chunks. Defaults to now.
 
         Returns:
             `str`: A formatted SSE event string.
@@ -434,9 +364,9 @@ class ChatCompletionHandler(BaseHandler):
         )
         chunk = ChatCompletionChunk(
             id=request_id,
-            created=int(time.time()),
+            created=int(time.time()) if created is None else created,
             model=model,
-            choices=[ChoiceChunk(delta=delta, index=0, finish_reason=finish_reason)],
+            choices=[] if usage is not None else [ChoiceChunk(delta=delta, index=0, finish_reason=finish_reason)],
             usage=usage,
             system_fingerprint="",
             object="chat.completion.chunk",
