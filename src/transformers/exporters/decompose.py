@@ -117,6 +117,12 @@ class ModalitySpec(NamedTuple):
     def input_keys(self) -> tuple[str, ...]:
         return self.feature_keys + self.aux_keys
 
+    @property
+    def modality(self) -> str:
+        """`image`, `video` or `audio`: the prefix of its token field, of the inputs `generate` precomputes for it
+        (`image_cu_seqlens`) and of its encoder's outputs (`image_outputs`)."""
+        return self.token_field.removesuffix("_token_id")
+
 
 _MODALITY_SPECS = (
     ModalitySpec(
@@ -309,21 +315,15 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
         name, calls = spec.component, captured_features.get(spec.component)
         if not calls:
             continue
-        # The getter's own names: `generate` passes what it precomputes prefixed with the modality (`image_cu_seqlens`),
-        # which the getter takes unprefixed when it has no parameter of that name (`accepts_precomputed_kwargs`)
-        prefix = spec.token_field.removesuffix("token_id")
+        # Under the names the getter reads them by: `generate` prefixes what it precomputes (`image_cu_seqlens`), which
+        # the getter takes unprefixed where it has no parameter of that name (`accepts_precomputed_kwargs`)
         parameters = inspect.signature(getattr(owner, getter)).parameters
-        feature_inputs = {
-            (
-                "grid_thw"
-                if key == spec.grid_key
-                else key.removeprefix(prefix)
-                if key.startswith(prefix) and key not in parameters
-                else key
-            ): value
-            for key, value in calls[-1].items()
-            if value is not None
-        }
+        feature_inputs = {}
+        for key, value in calls[-1].items():
+            if key not in parameters:
+                key = key.removeprefix(f"{spec.modality}_")
+            if value is not None:
+                feature_inputs["grid_thw" if key == spec.grid_key else key] = value
         # Config-derived tensors become graph inputs: a getter reading its grid as data cannot be traced.
         if name == "vision_embeddings_model" and packs_anyres_features(owner, model.config):
             tower_inputs = {
