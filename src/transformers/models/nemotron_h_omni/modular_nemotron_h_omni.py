@@ -97,7 +97,6 @@ class NemotronH_Omni_Reasoning_V3PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
-    _is_stateful = True
     # mel extraction runs in the processor, so the checkpoint's in-encoder featurizer buffers are unused
     _keys_to_ignore_on_load_unexpected = [r"audio_tower\.feature_extractor\."]
 

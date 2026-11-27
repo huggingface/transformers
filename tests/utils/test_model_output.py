@@ -236,6 +236,26 @@ class ModelOutputTester(unittest.TestCase):
             foo = BaseModelOutputWithPast(cache_params=0)
         self.assertEqual(foo.cache, 0)
 
+    def test_legacy_cache_name_field(self):
+        """Output classes (usually from remote code) which declare an old cache name as a field must keep using it."""
+        output = ModelOutputLegacyCacheTest(logits=1, past_key_values=0)
+        self.assertEqual(list(output.keys()), ["logits", "past_key_values"])
+        self.assertEqual(output.past_key_values, 0)
+        self.assertEqual(output["past_key_values"], 0)
+        self.assertTrue("past_key_values" in output)
+        self.assertEqual(output.get("past_key_values"), 0)
+
+        output.past_key_values = 1
+        self.assertEqual(output["past_key_values"], 1)
+        output["past_key_values"] = 2
+        self.assertEqual(output.past_key_values, 2)
+
+
+@dataclass
+class ModelOutputLegacyCacheTest(ModelOutput):
+    logits: float | None = None
+    past_key_values: float | None = None
+
 
 @contextmanager
 def ensure_deprecation_warning():

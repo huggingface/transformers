@@ -57,7 +57,6 @@ class VaultGemmaModelTester(CausalLMModelTester):
 
 @require_torch
 class VaultGemmaModelTest(CausalLMModelTest, unittest.TestCase):
-    _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = VaultGemmaModelTester
 

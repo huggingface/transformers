@@ -93,7 +93,6 @@ class VideoLlama3VisionConfig(SiglipVisionConfig):
     ```"""
 
     model_type = "video_llama_3_vision"
-    base_config_key = "vision_config"
     default_rope_type = "axial"
 
     image_size = AttributeError()
@@ -695,6 +694,9 @@ class VideoLlama3Processor(Qwen3VLProcessor):
     def _calculate_timestamps(self):
         raise AttributeError("VideoLlama doesn't need this method")
 
+    def get_text_with_replacements(self):
+        raise AttributeError("VideoLlama has no per-frame vision wrappers, so it uses the default replacement")
+
 
 class VideoLlama3ImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
     r"""
@@ -716,7 +718,6 @@ class VideoLlama3ImageProcessorPil(Qwen2VLImageProcessorPil):
     image_std = IMAGENET_STANDARD_STD
     temporal_patch_size = 1
     merge_size = 1
-    valid_kwargs = VideoLlama3ImageProcessorKwargs
     model_input_names = [
         "pixel_values",
         "image_grid_thw",
@@ -786,7 +787,6 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
     image_std = IMAGENET_STANDARD_STD
     temporal_patch_size = 1
     merge_size = 1
-    valid_kwargs = VideoLlama3ImageProcessorKwargs
     model_input_names = [
         "pixel_values",
         "image_grid_thw",
@@ -1059,7 +1059,8 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         )
 
     def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
-        size = videos_kwargs.get("size", None) or self.size
+        videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
+        size = videos_kwargs["size"]
         size = {
             "shortest_edge": size["shortest_edge"],
             "longest_edge": size["longest_edge"] // num_frames,

@@ -45,6 +45,7 @@ from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -55,9 +56,8 @@ if is_torch_available():
 
 class BambaModelTester(ModelTesterConfigMixin):
     config_class = BambaConfig
-    if is_torch_available():
-        model_class = BambaModel
-        for_causal_lm_class = BambaForCausalLM
+    model_class = BambaModel
+    causal_lm_class = BambaForCausalLM
 
     defaults = {}
     small_config_overrides = {
@@ -74,7 +74,7 @@ class BambaModelTester(ModelTesterConfigMixin):
         "intermediate_size": 64,
         "hidden_act": "silu",
         "attention_dropout": 0.0,
-        "attn_layer_indices": None,
+        "attn_layer_indices": [0],
         "attn_rotary_emb": 8,
         "max_position_embeddings": 512,
         "type_vocab_size": 16,
@@ -180,7 +180,7 @@ class BambaModelTester(ModelTesterConfigMixin):
         input_mask,
         token_labels,
     ):
-        model = self.for_causal_lm_class(config=config)
+        model = self.causal_lm_class(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -198,7 +198,7 @@ class BambaModelTester(ModelTesterConfigMixin):
     ):
         # config.is_decoder = True
         # config.add_cross_attention = True
-        model = self.for_causal_lm_class(config=config)
+        model = self.causal_lm_class(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -277,7 +277,9 @@ class BambaModelTester(ModelTesterConfigMixin):
 
 
 @require_torch
-class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class BambaModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, unittest.TestCase
+):
     model_tester_class = BambaModelTester
     all_model_classes = (BambaModel, BambaForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -344,7 +346,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
-        expected_num_attentions = self.model_tester.num_hidden_layers - len(self.model_tester.attn_layer_indices)
+        expected_num_attentions = len(self.model_tester.attn_layer_indices)
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True

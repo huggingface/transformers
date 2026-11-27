@@ -44,7 +44,7 @@ from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...utils.generic import can_return_tuple
 from ...utils.output_capturing import capture_outputs
 from ...utils.type_validators import positive_int
-from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
+from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from ..laguna.modeling_laguna import LagunaRotaryEmbedding
 from ..lfm2_vl.image_processing_lfm2_vl import convert_image_to_patches
@@ -238,18 +238,18 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         The method applies the effective resize settings, then rounds each image dimension up to a whole patch.
         Values in `images_kwargs` override the processor settings.
         """
-        images_kwargs = images_kwargs or {}
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        max_side = images_kwargs.get("max_side", self.max_side)
-        size = self._standardize_kwargs(size=images_kwargs.get("size", self.size))["size"]
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        patch_size = images_kwargs["patch_size"]
+        max_side = images_kwargs["max_side"]
+        size = self._standardize_kwargs(size=images_kwargs["size"])["size"]
 
-        if images_kwargs.get("do_resize", self.do_resize):
+        if images_kwargs["do_resize"]:
             height, width = get_resize_output_size(height, width, max_side, size)
 
         return -(-height // patch_size) * (-(-width // patch_size))
 
 
-class NeoMMERMSNorm(Gemma4RMSNorm):
+class NeoMMERMSNorm(Gemma3nRMSNorm):
     pass
 
 

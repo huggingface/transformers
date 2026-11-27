@@ -29,7 +29,6 @@ from ..distributed.tensor_parallel import (
     ColwiseParallel,
     MlaKvAProjParallel,
     MoeExpertsParallel,
-    MoeIdentityParallel,
     PackedColwiseParallel,
     PackedRowwiseParallel,
     ParallelInterface,
@@ -44,7 +43,6 @@ from ..distributed.tensor_parallel import (
 from ..distributed.utils import initialize_tensor_parallelism
 
 
-MoeIdentityExpertParallel = MoeIdentityParallel
 MoeTensorParalellExperts = MoeExpertsParallel
 
 
@@ -62,7 +60,6 @@ def shard_and_distribute_module(*args, **kwargs):
 
 __all__ = [
     "ALL_PARALLEL_STYLES",
-    "MoeIdentityExpertParallel",
     "MoeTensorParalellExperts",
     "initialize_tensor_parallelism",
     "AllReduceParallel",
@@ -70,7 +67,6 @@ __all__ = [
     "MlaKvAProjParallel",
     "MoeExpertsParallel",
     "MoEParamShard",
-    "MoeIdentityParallel",
     "PackedColwiseParallel",
     "PackedRowwiseParallel",
     "ParallelInterface",

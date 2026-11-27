@@ -27,6 +27,7 @@ from ..conversion_mapping import get_checkpoint_conversion_mapping, register_che
 from ..modeling_flash_attention_utils import FLASH_ATTN_KERNEL_VERSIONS
 from ..monkey_patching import register_patch_mapping
 from ..utils import ENV_VARS_TRUE_VALUES, logging
+from ..utils.generic import suppress_kernels_logging
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
@@ -37,6 +38,7 @@ from ..utils.import_utils import (
     is_torchdynamo_exporting,
     resolve_internal_import,
 )
+from .accelerate import keep_accelerate_hooks
 from .flash_attention import flash_attention_forward
 
 
@@ -78,6 +80,14 @@ _KERNELS_INTERNAL_PATH_MAPPINGS = {
 
 # Maps from import name to the distribution that ships it, where the two differ
 _PACKAGE_TO_DISTRIBUTION = {"fla": "flash-linear-attention"}
+
+# Maps from import name to the device types the package's kernels run on (ROCm tensors report `cuda`). Inputs on other
+# devices, e.g. CPU, use the torch implementation. Packages that aren't listed get inputs on every device.
+_PACKAGE_SUPPORTED_DEVICES = {
+    "causal_conv1d": ("cuda",),
+    "fla": ("cuda", "xpu", "mlu", "npu"),
+    "mamba_ssm": ("cuda",),
+}
 
 
 if is_kernels_available():
@@ -196,6 +206,18 @@ if is_kernels_available():
                         version=5,
                     ),
                 },
+                "rocm": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_fn",
+                        version=5,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_fn",
+                        version=5,
+                    ),
+                },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
@@ -211,6 +233,18 @@ if is_kernels_available():
             },
             "causal_conv1d_update": {
                 "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_update",
+                        version=5,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_update",
+                        version=5,
+                    ),
+                },
+                "rocm": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
@@ -248,6 +282,18 @@ if is_kernels_available():
                         version=2,
                     ),
                 },
+                "rocm": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_gated_delta_rule",
+                        version=2,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_gated_delta_rule",
+                        version=2,
+                    ),
+                },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/fla",
@@ -271,6 +317,13 @@ if is_kernels_available():
                         version=2,
                     ),
                 },
+                "rocm": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_gated_delta_rule",
+                        version=2,
+                    ),
+                },
                 "xpu": {
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
@@ -281,6 +334,18 @@ if is_kernels_available():
             },
             "mamba_chunk_scan_combined": {
                 "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_chunk_scan_combined",
+                        version=5,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_chunk_scan_combined",
+                        version=5,
+                    ),
+                },
+                "rocm": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
@@ -318,6 +383,18 @@ if is_kernels_available():
                         version=5,
                     ),
                 },
+                "rocm": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_split_conv1d_scan_combined",
+                        version=5,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_split_conv1d_scan_combined",
+                        version=5,
+                    ),
+                },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
@@ -333,6 +410,18 @@ if is_kernels_available():
             },
             "mamba_inner_fn": {
                 "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_inner_fn",
+                        version=5,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_inner_fn",
+                        version=5,
+                    ),
+                },
+                "rocm": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_inner_fn",
@@ -370,6 +459,18 @@ if is_kernels_available():
                         version=5,
                     ),
                 },
+                "rocm": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_scan_fn",
+                        version=5,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_scan_fn",
+                        version=5,
+                    ),
+                },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
@@ -385,6 +486,18 @@ if is_kernels_available():
             },
             "selective_state_update": {
                 "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_state_update",
+                        version=5,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_state_update",
+                        version=5,
+                    ),
+                },
+                "rocm": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
@@ -462,24 +575,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=3,
+                        version=4,
                     ),
                 },
                 "rocm": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=3,
+                        version=4,
                     ),
                 },
                 "xpu": {
@@ -511,6 +624,18 @@ if is_kernels_available():
             },
             "RMSNormGated": {
                 "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="FusedRMSNormGated",
+                        version=2,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="FusedRMSNormGated",
+                        version=2,
+                    ),
+                },
+                "rocm": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="FusedRMSNormGated",
@@ -583,6 +708,13 @@ if is_kernels_available():
                         version=1,
                     )
                 },
+                "rocm": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation",
+                        layer_name="FastGELU",
+                        version=1,
+                    )
+                },
                 "xpu": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/activation",
@@ -593,6 +725,13 @@ if is_kernels_available():
             },
             "QuickGELU": {
                 "cuda": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation",
+                        layer_name="QuickGELU",
+                        version=1,
+                    )
+                },
+                "rocm": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/activation",
                         layer_name="QuickGELU",
@@ -615,6 +754,13 @@ if is_kernels_available():
                         version=1,
                     )
                 },
+                "rocm": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation",
+                        layer_name="NewGELU",
+                        version=1,
+                    )
+                },
                 "xpu": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/activation",
@@ -625,6 +771,11 @@ if is_kernels_available():
             },
             "SiLU": {
                 "cuda": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation", layer_name="Silu", version=1
+                    )
+                },
+                "rocm": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/activation", layer_name="Silu", version=1
                     )
@@ -641,6 +792,11 @@ if is_kernels_available():
                         repo_id="kernels-community/activation", layer_name="Gelu", version=1
                     )
                 },
+                "rocm": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation", layer_name="Gelu", version=1
+                    )
+                },
                 "xpu": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/activation", layer_name="Gelu", version=1
@@ -653,6 +809,11 @@ if is_kernels_available():
                         repo_id="kernels-community/activation", layer_name="GeluTanh", version=1
                     )
                 },
+                "rocm": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation", layer_name="GeluTanh", version=1
+                    )
+                },
                 "xpu": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/activation", layer_name="GeluTanh", version=1
@@ -661,6 +822,18 @@ if is_kernels_available():
             },
             "chunk_kda": {
                 "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        version=2,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        version=2,
+                    ),
+                },
+                "rocm": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="chunk_kimi_delta_attention",
@@ -686,6 +859,13 @@ if is_kernels_available():
                 # Inference only: the fused recurrent kernel has no backward implementation,
                 # so training stays on the torch path.
                 "cuda": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_kimi_delta_attention",
+                        version=2,
+                    ),
+                },
+                "rocm": {
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="recurrent_kimi_delta_attention",
@@ -950,6 +1130,8 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
+# Runtimes managing their own state (e.g. vLLM) replace these layers with `kernelize`, they have no kernel on the Hub
+@suppress_kernels_logging(layers={"causal_conv1d_forward", "mamba_scan_forward", "mamba2_scan_forward"})
 def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
     if not is_kernels_available():
@@ -960,12 +1142,13 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     # Keep the original forward instead of raising when a kernel can't be loaded (e.g. no compatible build)
     use_fallback = KernelizeFallback.ALL
 
-    if model.kernel_config is not None:
-        inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
-        with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
+    with keep_accelerate_hooks(model):
+        if model.kernel_config is not None:
+            inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
+            with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
+                _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
+        else:
             _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
-    else:
-        _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
 
     model._use_kernels = True
 
@@ -995,7 +1178,7 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
     This combines all options with kernels, enabling kernels on top of the original package if requested as well.
     The order of priority is
         1. Hf kernels (if requested)
-        2. Original package
+        2. Original package (if it runs on the device of the inputs)
         3. Torch only path
     """
     kernel_wrapper_decorator = use_kernel_forward_from_hub(func_name)
@@ -1004,6 +1187,13 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
     internal_path = _KERNELS_INTERNAL_PATH_MAPPINGS.get(func_name, internal_path)  # defaults
     full_func_path = func_name if internal_path is None else f"{internal_path}.{func_name}"
     full_module_path = package if internal_path is None else f"{package}.{internal_path}"
+
+    def get_input_device_type(args: tuple, kwargs: dict) -> str | None:
+        """Device type of the first tensor in the arguments, `None` if there is none."""
+        for arg in (*args, *kwargs.values()):
+            if isinstance(arg, torch.Tensor):
+                return arg.device.type
+        return None
 
     def decorator(torch_function: Callable) -> Callable:
         implementation = None
@@ -1023,6 +1213,7 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
         applicable_params = tuple(inspect.signature(implementation).parameters)
         # A boolean to track if the implementation is new, i.e. not the original torch function
         is_new_implementation = implementation is not torch_function
+        supported_devices = _PACKAGE_SUPPORTED_DEVICES.get(package) if is_new_implementation else None
 
         @functools.wraps(torch_function)
         def wrapped(*args, **kwargs):
@@ -1030,22 +1221,29 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
             if is_new_implementation and is_torchdynamo_exporting():
                 return torch_function(*args, **kwargs)
 
-            if not is_new_implementation and (
+            # Original packages only run on some devices, so inputs on any other device (e.g. CPU) use the torch path
+            device_type = get_input_device_type(args, kwargs) if supported_devices is not None else None
+            unsupported_device = device_type is not None and device_type not in supported_devices
+
+            if (not is_new_implementation or unsupported_device) and (
                 kwargs.get("cu_seqlens") is not None or kwargs.get("seq_idx") is not None
             ):
                 distribution = _PACKAGE_TO_DISTRIBUTION.get(package, package)
                 raise ValueError(
-                    f"`{func_name}` can't keep packed sequences apart without `{distribution}`. Install "
-                    f"`{distribution}` to train on packed sequences."
+                    f"`{func_name}` can't keep packed sequences apart without `{distribution}`, which is either not "
+                    "installed or doesn't support the device of the inputs."
                 )
 
-            if not is_new_implementation and not is_torchdynamo_compiling():
+            if (not is_new_implementation or unsupported_device) and not is_torchdynamo_compiling():
                 distribution = _PACKAGE_TO_DISTRIBUTION.get(package, package)
                 logger.warning_once(
                     f"`{func_name}` is falling back to its reference PyTorch implementation because "
-                    f"`{distribution}` is not installed. This is correct but much slower; install "
-                    f"`{distribution}` for the optimized kernel."
+                    f"`{distribution}` is either not installed or doesn't support the device of the inputs. This is "
+                    "correct but much slower."
                 )
+
+            if unsupported_device:
+                return torch_function(*args, **kwargs)
 
             kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
             return implementation(*args, **kwargs)

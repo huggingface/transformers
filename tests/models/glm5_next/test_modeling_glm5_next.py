@@ -17,6 +17,7 @@ import copy
 import tempfile
 import unittest
 
+import pytest
 from safetensors.torch import load_file
 
 from transformers import (
@@ -30,6 +31,7 @@ from transformers.models.glm5_next.modeling_glm5_next import Glm5NextTextLinearA
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
+    skip_tpu,
     slow,
     torch_device,
 )
@@ -145,6 +147,11 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.8, 0.9]
     # FIXME: export is very sensitive to any shape changes
     test_torch_exportable = False
+
+    @pytest.mark.generate
+    @skip_tpu("test aborts")
+    def test_generate_without_input_ids(self):
+        super().test_generate_without_input_ids()
 
     def test_text_model_save_uses_original_weight_names(self):
         """Keep text-only saves in the released layout expected by SGLang (sgl-project/sglang#38618)."""

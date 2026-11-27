@@ -96,7 +96,7 @@ or you run out of memory.
 
 ## Performance and memory usage
 
-Transformers load models in full `float32` precision by default, and for a 8B model, this requires ~32GB of memory! Use the `torch_dtype="auto"` argument, which generally uses `bfloat16` for models that were trained with it, to reduce your memory usage.
+Transformers load models in full `float32` precision by default, and for a 8B model, this requires ~32GB of memory! Use the `dtype="auto"` argument, which generally uses `bfloat16` for models that were trained with it, to reduce your memory usage.
 
 > [!TIP]
 > Refer to the [Quantization](./quantization/overview) docs for more information about the different quantization backends available.

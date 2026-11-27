@@ -185,6 +185,7 @@ class OmniASRAudioModel(OmniASRPreTrainedModel):
         output_mask = None
         if padding_mask is not None:
             output_mask = self._get_output_attention_mask(padding_mask, target_length=hidden_states.shape[1])
+            output_mask = output_mask.to(hidden_states.device)
             # make sure padded tokens output 0
             hidden_states = hidden_states.masked_fill(~output_mask[..., None], 0.0)
 

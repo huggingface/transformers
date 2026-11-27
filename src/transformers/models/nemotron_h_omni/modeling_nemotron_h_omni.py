@@ -26,7 +26,6 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutputWithPooling, MultimodalCausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -39,7 +38,6 @@ from .configuration_nemotron_h_omni import NemotronH_Omni_Reasoning_V3_Config
 logger = logging.get_logger(__name__)
 
 
-@use_kernel_forward_from_hub("RMSNorm")
 class NemotronH_Omni_RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
@@ -86,7 +84,6 @@ class NemotronH_Omni_Reasoning_V3PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
-    _is_stateful = True
     # mel extraction runs in the processor, so the checkpoint's in-encoder featurizer buffers are unused
     _keys_to_ignore_on_load_unexpected = [r"audio_tower\.feature_extractor\."]
 

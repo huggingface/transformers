@@ -488,7 +488,7 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 quantized_model = AutoModelForCausalLM.from_pretrained(
     model_id,
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     quantization_config=quantization_config,
 )
 print("quantized model:", quantized_model)
@@ -524,7 +524,7 @@ print("Response:", correct_output_text[0][len(prompt) :])
 reloaded_model = AutoModelForCausalLM.from_pretrained(
     save_to,
     device_map=torch.accelerator.current_accelerator(),
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     # quantization_config=quantization_config,
 )
 

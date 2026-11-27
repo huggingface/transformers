@@ -91,7 +91,9 @@ class GradientCheckpointingLayer(nn.Module):
             # Subclasses of a layer are wrapped too (e.g. the `FSDP<Layer>` class that FSDP2 creates), so a `forward`
             # can be wrapped more than once. Only the outermost wrapper checkpoints.
             is_outermost = type(self).forward is forward_with_checkpointing
-            if self.gradient_checkpointing and self.training and is_outermost:
+            # Without gradients there is no backward to replay the layer, so it runs as is, cache included (e.g.
+            # generating from a model in training mode). `merge_with_config_defaults` keeps `use_cache` the same way.
+            if self.gradient_checkpointing and self.training and torch.is_grad_enabled() and is_outermost:
                 do_warn = False
                 layer_name = self.__class__.__name__
                 message = f"Caching is incompatible with gradient checkpointing in {layer_name}. Setting"
@@ -630,6 +632,8 @@ class MtpModel(PreTrainedModel):
             final_mtp_patterns.append(pattern)
         if len(final_mtp_patterns) == 0:
             raise ValueError(f"{main_model.__class__.__name__} does not seem to register any known MTP layer patterns")
+        # Base model weights that the mtp layers also load
+        final_mtp_patterns.extend(getattr(main_model, "_keys_shared_with_mtp", []))
         return re.compile("|".join(rf"({pattern})" for pattern in final_mtp_patterns))
 
     def get_weight_conversions(self, main_model: PreTrainedModel) -> list[WeightTransform]:

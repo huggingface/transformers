@@ -50,14 +50,7 @@ from .configuration_biogpt import BioGptConfig
 
 
 class BioGptLearnedPositionalEmbedding(OPTLearnedPositionalEmbedding):
-    def forward(
-        self,
-        attention_mask: torch.LongTensor,
-        cache_length: int = 0,
-        position_ids: torch.LongTensor | None = None,
-    ):
-        """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        return super().forward(attention_mask, cache_length, position_ids)
+    pass
 
 
 class BioGptScaledWordEmbedding(BartScaledWordEmbedding):

@@ -27,9 +27,8 @@ from typing import Any
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
+from torch import Tensor, nn
 from tqdm import tqdm
 
 from ... import initialization as init

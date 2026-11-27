@@ -13,7 +13,7 @@ IMPORTANT_MODELS = [
     "whisper",
     "wav2vec2",
     "qwen2_audio",
-    "speech_t5",
+    "speecht5",
     "csm",
     "llama",
     "gemma3",
