@@ -29,9 +29,20 @@ from ...image_transforms import normalize
 from ...image_utils import ImageInput, PILImageResampling
 from ...modeling_utils import PreTrainedModel
 from ...models.auto import AutoConfig
-from ...utils import ModelOutput, TensorType, auto_docstring, is_torch_tensor, is_torchvision_available, logging
+from ...utils import (
+    ModelOutput,
+    TensorType,
+    auto_docstring,
+    is_torch_tensor,
+    is_torchvision_available,
+    logging,
+    torch_compilable_check,
+)
 from ..deformable_detr.modeling_deformable_detr import (
+    DeformableDetrDecoderLayer,
     DeformableDetrMLPPredictionHead,
+    DeformableDetrMultiscaleDeformableAttention,
+    MultiScaleDeformableAttention,
     inverse_sigmoid,
     replace_batch_norm,
 )
@@ -829,260 +840,84 @@ class BevformerRegHead(DeformableDetrMLPPredictionHead):
     pass
 
 
-class MultiScaleDeformableAttention(nn.Module):
-    """
-    Pure PyTorch implementation of Multi-Scale Deformable Attention sampling kernel.
-
-    Performs multi-scale bilinear sampling using `torch.nn.functional.grid_sample` with `align_corners=False`,
-    achieving exact mathematical equivalence with MMCV's CUDA and C++ deformable attention kernels.
-    """
-
-    def forward(
-        self,
-        value: torch.Tensor,
-        value_spatial_shapes: torch.Tensor | list[tuple[int, int]],
-        sampling_locations: torch.Tensor,
-        attention_weights: torch.Tensor,
-    ) -> torch.Tensor:
-        batch_size, _, num_heads, head_dim = value.shape
-        _, num_queries, _, num_levels, num_points, _ = sampling_locations.shape
-
-        if isinstance(value_spatial_shapes, torch.Tensor):
-            value_spatial_shapes = value_spatial_shapes.tolist()
-
-        value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
-        sampling_grids = 2 * sampling_locations - 1
-
-        sampling_value_list = []
-        for level_idx, (height, width) in enumerate(value_spatial_shapes):
-            value_l = (
-                value_list[level_idx]
-                .flatten(2)
-                .transpose(1, 2)
-                .reshape(batch_size * num_heads, head_dim, height, width)
-            )
-            sampling_grid_l = sampling_grids[:, :, :, level_idx].transpose(1, 2).flatten(0, 1)
-
-            sampling_value_l = F.grid_sample(
-                value_l,
-                sampling_grid_l,
-                mode="bilinear",
-                padding_mode="zeros",
-                align_corners=False,
-            )
-            sampling_value_list.append(sampling_value_l)
-
-        attention_weights = attention_weights.transpose(1, 2).reshape(
-            batch_size * num_heads, 1, num_queries, num_levels * num_points
-        )
-
-        stacked_sampling_values = torch.stack(sampling_value_list, dim=-2).flatten(-2)
-
-        output = (
-            (stacked_sampling_values * attention_weights)
-            .sum(-1)
-            .view(batch_size, num_heads * head_dim, num_queries)
-            .transpose(1, 2)
-            .contiguous()
-        )
-        return output
+class BevformerMultiscaleDeformableAttention(DeformableDetrMultiscaleDeformableAttention):
+    def __init__(self, config: BevformerConfig, num_heads: int, n_points: int):
+        super().__init__(config, num_heads=num_heads, n_points=n_points)
+        self.n_levels = 1
+        del self.disable_custom_kernels
 
 
-multi_scale_deformable_attention = MultiScaleDeformableAttention()
+class BevformerSpatialDeformableAttention(DeformableDetrMultiscaleDeformableAttention):
+    """Each BEV query samples `num_points_in_pillar` z-anchors, the sampling offsets are split across them."""
 
-
-class BevformerMSDeformableAttention3D(nn.Module):
-    """
-    3D Multi-Scale Deformable Attention used in BEVFormer spatial cross-attention and detection decoder.
-
-    Decomposes sampling offsets across 3D depth/pillar reference points, enabling continuous multi-view
-    and multi-depth spatial feature aggregation.
-
-    Args:
-        embed_dims (`int`, *optional*, defaults to 256):
-            Hidden embedding dimension.
-        num_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads.
-        num_levels (`int`, *optional*, defaults to 1):
-            Number of feature pyramid levels.
-        num_points (`int`, *optional*, defaults to 8):
-            Total sampling points per head per level across all depth anchors.
-        dropout (`float`, *optional*, defaults to 0.1):
-            Dropout probability on the output projection.
-        has_output_proj (`bool`, *optional*, defaults to True):
-            Whether to apply an output projection layer.
-    """
-
-    def __init__(
-        self,
-        embed_dims: int = 256,
-        num_heads: int = 8,
-        num_levels: int = 1,
-        num_points: int = 8,
-        dropout: float = 0.1,
-        has_output_proj: bool = True,
-    ):
-        super().__init__()
-        if embed_dims % num_heads != 0:
-            raise ValueError(f"embed_dims ({embed_dims}) must be divisible by num_heads ({num_heads})")
-
-        self.embed_dims = embed_dims
-        self.num_heads = num_heads
-        self.num_levels = num_levels
-        self.num_points = num_points
-        self.head_dim = embed_dims // num_heads
-
-        self.sampling_offsets = nn.Linear(embed_dims, num_heads * num_levels * num_points * 2)
-        self.attention_weights = nn.Linear(embed_dims, num_heads * num_levels * num_points)
-        self.value_proj = nn.Linear(embed_dims, embed_dims)
-
-        if has_output_proj:
-            self.output_proj = nn.Linear(embed_dims, embed_dims)
-        else:
-            self.output_proj = None
-
-        self.dropout = nn.Dropout(dropout)
-        self.deformable_attention = MultiScaleDeformableAttention()
-
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        nn.init.constant_(self.sampling_offsets.weight, 0.0)
-        # Match MMCV deformable attention offset initialization
-        thetas = torch.arange(self.num_heads, dtype=torch.float32) * (2.0 * np.pi / self.num_heads)
-        grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
-        grid_init = (
-            (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
-            .view(self.num_heads, 1, 1, 2)
-            .repeat(1, self.num_levels, self.num_points, 1)
-        )
-        for i in range(self.num_points):
-            grid_init[:, :, i, :] *= i + 1
-
-        with torch.no_grad():
-            self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-        nn.init.constant_(self.attention_weights.weight, 0.0)
-        nn.init.constant_(self.attention_weights.bias, 0.0)
-        nn.init.xavier_uniform_(self.value_proj.weight)
-        nn.init.constant_(self.value_proj.bias, 0.0)
-        if self.output_proj is not None:
-            nn.init.xavier_uniform_(self.output_proj.weight)
-            nn.init.constant_(self.output_proj.bias, 0.0)
+    def __init__(self, config: BevformerConfig, num_heads: int, n_points: int):
+        super().__init__(config, num_heads=num_heads, n_points=n_points)
+        del self.output_proj
+        del self.disable_custom_kernels
 
     def forward(
         self,
-        query: torch.Tensor,
-        key: torch.Tensor | None = None,
-        value: torch.Tensor | None = None,
-        identity: torch.Tensor | None = None,
-        query_pos: torch.Tensor | None = None,
-        reference_points: torch.Tensor | None = None,
-        spatial_shapes: torch.Tensor | list[tuple[int, int]] | None = None,
-        level_start_index: torch.Tensor | None = None,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        reference_points: torch.Tensor,
+        spatial_shapes: torch.Tensor,
+        spatial_shapes_list: list[tuple[int, int]],
+        level_start_index: torch.Tensor,
+        position_embeddings: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """
-        Args:
-            query (`torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`):
-                Query embeddings.
-            key (`torch.Tensor`, *optional*):
-                Key features (not used directly; value is used).
-            value (`torch.Tensor` of shape `(batch_size, num_keys, embed_dims)`, *optional*):
-                Input feature representation. If `None`, defaults to `query`.
-            identity (`torch.Tensor`, *optional*):
-                Residual tensor. If `None`, defaults to `query`.
-            query_pos (`torch.Tensor`, *optional*):
-                Positional encoding for queries, added to `query` before computing offsets and weights.
-            reference_points (`torch.Tensor` of shape `(batch_size, num_queries, 2)` or `(batch_size, num_queries, num_Z_anchors, 2)`):
-                2D or 3D reference point coordinates normalized to `[0, 1]` as `(x, y)` = `(w, h)`.
-            spatial_shapes (`torch.Tensor` or `list[tuple[int, int]]` of shape `(num_levels, 2)`):
-                Spatial `(height, width)` per feature level.
-            level_start_index (`torch.Tensor`, *optional*):
-                Prefix sum index for multi-level flattening.
+        if position_embeddings is not None:
+            hidden_states = hidden_states + position_embeddings
 
-        Returns:
-            `torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`:
-                Attended output representation.
-        """
-        if value is None:
-            value = query
+        batch_size, num_queries, _ = hidden_states.shape
+        _, sequence_length, _ = encoder_hidden_states.shape
+        total_elements = sum(height * width for height, width in spatial_shapes_list)
+        torch_compilable_check(
+            total_elements == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
 
-        if identity is None:
-            identity = query
+        value = self.value_proj(encoder_hidden_states)
+        value = value.view(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
 
-        if query_pos is not None:
-            query = query + query_pos
-
-        batch_size, num_queries, _ = query.shape
-        _, num_keys, _ = value.shape
-
-        if reference_points is None:
-            raise ValueError("`reference_points` must be provided to `BevformerMSDeformableAttention3D`")
-
-        # Support both 2D reference points (bs, num_queries, 2) and 3D reference points (bs, num_queries, num_Z, 2)
-        if reference_points.ndim == 3:
-            reference_points = reference_points.unsqueeze(2)
+        sampling_offsets = self.sampling_offsets(hidden_states).view(
+            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points, 2
+        )
+        attention_weights = self.attention_weights(hidden_states).view(
+            batch_size, num_queries, self.n_heads, self.n_levels * self.n_points
+        )
+        attention_weights = F.softmax(attention_weights, -1).view(
+            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
+        )
 
         num_z_anchors = reference_points.shape[2]
+        if self.n_points % num_z_anchors != 0:
+            raise ValueError(f"n_points ({self.n_points}) must be divisible by num_z_anchors ({num_z_anchors})")
+        num_points_per_anchor = self.n_points // num_z_anchors
 
-        if self.num_points % num_z_anchors != 0:
-            raise ValueError(f"num_points ({self.num_points}) must be divisible by num_z_anchors ({num_z_anchors})")
-        num_points_per_anchor = self.num_points // num_z_anchors
-
-        value = self.value_proj(value)
-        value = value.view(batch_size, num_keys, self.num_heads, self.head_dim)
-
-        sampling_offsets = self.sampling_offsets(query)
-        sampling_offsets = sampling_offsets.view(
-            batch_size, num_queries, self.num_heads, self.num_levels, self.num_points, 2
-        )
-
-        attention_weights = self.attention_weights(query).view(
-            batch_size, num_queries, self.num_heads, self.num_levels * self.num_points
-        )
-        attention_weights = F.softmax(attention_weights, dim=-1).view(
-            batch_size, num_queries, self.num_heads, self.num_levels, self.num_points
-        )
-
-        if isinstance(spatial_shapes, list):
-            spatial_shapes_tensor = query.new_tensor(spatial_shapes, dtype=torch.long)
-        else:
-            spatial_shapes_tensor = spatial_shapes
-
-        # offset_normalizer is (width, height)
-        offset_normalizer = torch.stack([spatial_shapes_tensor[..., 1], spatial_shapes_tensor[..., 0]], -1)
-
-        # Decompose sampling offsets across Z anchors
+        offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
         sampling_offsets = sampling_offsets.view(
             batch_size,
             num_queries,
-            self.num_heads,
-            self.num_levels,
+            self.n_heads,
+            self.n_levels,
             num_points_per_anchor,
             num_z_anchors,
             2,
         )
+        sampling_locations = (
+            reference_points[:, :, None, None, None, :, :]
+            + sampling_offsets / offset_normalizer[None, None, None, :, None, None, :]
+        ).view(batch_size, num_queries, self.n_heads, self.n_levels, self.n_points, 2)
 
-        # Broadcast reference points across heads, levels, and points per anchor
-        # reference_points: (batch_size, num_queries, 1, 1, 1, num_z_anchors, 2)
-        ref_points_expanded = reference_points[:, :, None, None, None, :, :]
-        normalizer_expanded = offset_normalizer[None, None, None, :, None, None, :]
-
-        sampling_locations = ref_points_expanded + sampling_offsets / normalizer_expanded
-        sampling_locations = sampling_locations.view(
-            batch_size, num_queries, self.num_heads, self.num_levels, self.num_points, 2
-        )
-
-        output = self.deformable_attention(
+        return self.attn(
             value,
             spatial_shapes,
+            spatial_shapes_list,
+            level_start_index,
             sampling_locations,
             attention_weights,
+            self.im2col_step,
         )
-
-        if self.output_proj is not None:
-            output = self.output_proj(output)
-
-        return self.dropout(output)
 
 
 class BevformerTemporalSelfAttention(nn.Module):
@@ -1272,9 +1107,11 @@ class BevformerTemporalSelfAttention(nn.Module):
         )
 
         if isinstance(spatial_shapes, list):
+            spatial_shapes_list = spatial_shapes
             spatial_shapes_tensor = query.new_tensor(spatial_shapes, dtype=torch.long)
         else:
             spatial_shapes_tensor = spatial_shapes
+            spatial_shapes_list = spatial_shapes.tolist()
 
         offset_normalizer = torch.stack([spatial_shapes_tensor[..., 1], spatial_shapes_tensor[..., 0]], -1)
 
@@ -1286,9 +1123,12 @@ class BevformerTemporalSelfAttention(nn.Module):
 
         output = self.deformable_attention(
             value,
-            spatial_shapes,
+            spatial_shapes_tensor,
+            spatial_shapes_list,
+            level_start_index,
             sampling_locations,
             attention_weights,
+            64,
         )
 
         # Fuse over the temporal queue dimension (num_bev_queue=2) via mean
@@ -1395,13 +1235,10 @@ class BevformerSpatialCrossAttention(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
         self.pc_range = config.point_cloud_range
 
-        self.deformable_attention = BevformerMSDeformableAttention3D(
-            embed_dims=config.d_model,
+        self.deformable_attention = BevformerSpatialDeformableAttention(
+            config,
             num_heads=config.encoder_attention_heads,
-            num_levels=config.num_feature_levels,
-            num_points=config.num_points_in_bev,
-            dropout=config.dropout,
-            has_output_proj=False,
+            n_points=config.num_points_in_bev,
         )
         self.output_proj = nn.Linear(config.d_model, config.d_model)
 
@@ -1414,7 +1251,8 @@ class BevformerSpatialCrossAttention(nn.Module):
         query_pos: torch.Tensor | None = None,
         reference_points_cam: torch.Tensor | None = None,
         bev_mask: torch.Tensor | None = None,
-        spatial_shapes: list[list[int]] | torch.Tensor | None = None,
+        spatial_shapes: torch.Tensor | None = None,
+        spatial_shapes_list: list[tuple[int, int]] | None = None,
         level_start_index: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Forward pass for Spatial Cross Attention.
@@ -1483,19 +1321,18 @@ class BevformerSpatialCrossAttention(nn.Module):
                         queries_rebatch[b, cam_idx, : len(idx)] = query[b, idx]
                         reference_points_rebatch[b, cam_idx, : len(idx)] = reference_points_per_img[b, idx]
 
-            num_cams, num_keys, bs, embed_dims = key.shape
-            key_reshaped = key.permute(2, 0, 1, 3).reshape(bs * self.num_cams, num_keys, self.embed_dims)
+            num_cams, num_keys, bs, embed_dims = value.shape
             value_reshaped = value.permute(2, 0, 1, 3).reshape(bs * self.num_cams, num_keys, self.embed_dims)
 
             queries_in = queries_rebatch.view(bs * self.num_cams, max_len, self.embed_dims)
             ref_pts_in = reference_points_rebatch.view(bs * self.num_cams, max_len, num_z_anchors, 2)
 
             queries_out = self.deformable_attention(
-                query=queries_in,
-                key=key_reshaped,
-                value=value_reshaped,
+                hidden_states=queries_in,
+                encoder_hidden_states=value_reshaped,
                 reference_points=ref_pts_in,
                 spatial_shapes=spatial_shapes,
+                spatial_shapes_list=spatial_shapes_list,
                 level_start_index=level_start_index,
             ).view(bs, self.num_cams, max_len, self.embed_dims)
 
@@ -1553,7 +1390,8 @@ class BevformerEncoderLayer(nn.Module):
         ref_3d: torch.Tensor | None = None,
         bev_h: int | None = None,
         bev_w: int | None = None,
-        spatial_shapes: list[list[int]] | torch.Tensor | None = None,
+        spatial_shapes: torch.Tensor | None = None,
+        spatial_shapes_list: list[tuple[int, int]] | None = None,
         level_start_index: torch.Tensor | None = None,
         reference_points_cam: torch.Tensor | None = None,
         bev_mask: torch.Tensor | None = None,
@@ -1613,6 +1451,7 @@ class BevformerEncoderLayer(nn.Module):
             reference_points_cam=reference_points_cam,
             bev_mask=bev_mask,
             spatial_shapes=spatial_shapes,
+            spatial_shapes_list=spatial_shapes_list,
             level_start_index=level_start_index,
         )
         query = self.norm2(query)
@@ -1908,6 +1747,7 @@ class BevformerEncoder(nn.Module):
                 bev_h=self.bev_h,
                 bev_w=self.bev_w,
                 spatial_shapes=spatial_shapes_tensor,
+                spatial_shapes_list=spatial_shapes,
                 level_start_index=level_start_index,
                 reference_points_cam=reference_points_cam,
                 bev_mask=bev_mask,
@@ -1917,75 +1757,8 @@ class BevformerEncoder(nn.Module):
         return output
 
 
-class BevformerDecoderLayer(nn.Module):
-    """Detection decoder layer for BEVFormer.
-
-    Order of operations:
-    1. Multi-head self-attention on object queries (`self_attn`) -> `norm1`
-    2. Deformable cross-attention over BEV embedding (`cross_attn`) -> `norm2`
-    3. Feed-forward network (`ffn`) -> `norm3`
-    """
-
-    def __init__(self, config: BevformerConfig):
-        super().__init__()
-        self.config = config
-        self.self_attn = nn.MultiheadAttention(
-            embed_dim=config.d_model,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.dropout,
-            batch_first=True,
-        )
-        self.dropout1 = nn.Dropout(config.dropout)
-        self.norm1 = nn.LayerNorm(config.d_model, eps=1e-5)
-
-        self.cross_attn = BevformerMSDeformableAttention3D(
-            embed_dims=config.d_model,
-            num_heads=config.decoder_attention_heads,
-            num_levels=1,
-            num_points=4,
-            dropout=config.dropout,
-            has_output_proj=True,
-        )
-        self.norm2 = nn.LayerNorm(config.d_model, eps=1e-5)
-
-        self.ffn = nn.Sequential(
-            nn.Linear(config.d_model, config.decoder_ffn_dim),
-            nn.ReLU(inplace=True),
-            nn.Dropout(config.dropout),
-            nn.Linear(config.decoder_ffn_dim, config.d_model),
-            nn.Dropout(config.dropout),
-        )
-        self.norm3 = nn.LayerNorm(config.d_model, eps=1e-5)
-
-    def forward(
-        self,
-        query: torch.Tensor,
-        value: torch.Tensor,
-        query_pos: torch.Tensor | None = None,
-        reference_points: torch.Tensor | None = None,
-        spatial_shapes: list[list[int]] | torch.Tensor | None = None,
-        level_start_index: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        # 1. Multi-head Self-Attention
-        q = query + query_pos if query_pos is not None else query
-        k = q
-        attn_out, _ = self.self_attn(q, k, query)
-        query = self.norm1(query + self.dropout1(attn_out))
-
-        # 2. Cross-Attention over BEV feature map
-        cross_out = self.cross_attn(
-            query=query,
-            value=value,
-            query_pos=query_pos,
-            reference_points=reference_points,
-            spatial_shapes=spatial_shapes,
-            level_start_index=level_start_index,
-        )
-        query = self.norm2(query + cross_out)
-
-        # 3. FFN
-        query = self.norm3(query + self.ffn(query))
-        return query
+class BevformerDecoderLayer(DeformableDetrDecoderLayer):
+    pass
 
 
 class BevformerDetrTransformerDecoder(nn.Module):
@@ -2005,7 +1778,8 @@ class BevformerDetrTransformerDecoder(nn.Module):
         reference_points: torch.Tensor,
         reg_branches: nn.ModuleList | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        spatial_shapes = query.new_tensor([[self.config.bev_height, self.config.bev_width]], dtype=torch.long)
+        spatial_shapes_list = [(self.config.bev_height, self.config.bev_width)]
+        spatial_shapes = query.new_tensor(spatial_shapes_list, dtype=torch.long)
         level_start_index = query.new_tensor([0], dtype=torch.long)
 
         output = query
@@ -2015,12 +1789,13 @@ class BevformerDetrTransformerDecoder(nn.Module):
         for lid, layer in enumerate(self.layers):
             ref_input = reference_points[..., :2].unsqueeze(2)  # (batch_size, num_queries, 1, 2)
             output = layer(
-                query=output,
-                value=value,
-                query_pos=query_pos,
+                hidden_states=output,
+                object_queries_position_embeddings=query_pos,
                 reference_points=ref_input,
                 spatial_shapes=spatial_shapes,
+                spatial_shapes_list=spatial_shapes_list,
                 level_start_index=level_start_index,
+                encoder_hidden_states=value,
             )
 
             if reg_branches is not None:
