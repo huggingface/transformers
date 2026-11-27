@@ -60,6 +60,9 @@ output.loss.backward()
 ```
 
 Use right padding and put null probability first in `labels`. Training updates the encoder and head by default.
+Pass the boolean `allow_null` tensor to train coverage for selected decisions. If your `Trainer` dataset has an
+`allow_null` column, set `remove_unused_columns=False` to pass it through.
+
 For exact weighting across uneven microbatches in a custom loop, pass the total decision count as
 `num_items_in_batch`. The standard `Trainer` averages the microbatch losses.
 

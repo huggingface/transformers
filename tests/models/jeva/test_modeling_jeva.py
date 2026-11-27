@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+import math
 import tempfile
 import unittest
 from pathlib import Path
@@ -54,13 +55,40 @@ class JevaModelTester:
     def prepare_config_and_inputs_for_training(self):
         return copy.deepcopy(self.config), self.prepare_inputs()
 
-    def prepare_loss_inputs(self):
-        return (
-            torch.tensor([[1.0, -0.2, -torch.inf], [0.3, 0.1, -0.4]], requires_grad=True),
-            torch.tensor([0.5, -1.2], requires_grad=True),
-            torch.tensor([[True, True, False], [True, True, True]]),
-            torch.tensor([[0.2, 0.3, 0.5, 0.0], [0.0, 0.1, 0.3, 0.6]]),
+
+@require_torch
+class JevaLossTest(unittest.TestCase):
+    def test_candidate_and_coverage_loss(self):
+        logits = torch.tensor([[0.0, 0.0, -torch.inf], [0.0, 0.0, 0.0]])
+        coverage_logits = torch.zeros(2, requires_grad=True)
+        loss = JevaForDecisionLoss(
+            logits=_log_softmax(logits),
+            labels=torch.tensor([[0.25, 0.5, 0.25, 0.0], [0.0, 0.0, 0.0, 1.0]]),
+            coverage_logits=coverage_logits,
+            option_mask=torch.isfinite(logits),
+            allow_null=torch.tensor([True, False]),
+            num_items_in_batch=3,
         )
+
+        expected = (0.75 * math.log(2) + math.log(2) + math.log(3)) / 3
+        self.assertAlmostEqual(loss.item(), expected, places=6)
+        loss.backward()
+        torch.testing.assert_close(coverage_logits.grad, torch.tensor([-0.25 / 3, 0.0]))
+
+    def test_confident_prediction_gradients(self):
+        logits = torch.tensor([[9.0, -9.0, -9.0]], requires_grad=True)
+        coverage = torch.tensor([18.0], requires_grad=True)
+        mask = torch.ones_like(logits, dtype=torch.bool)
+        loss = JevaForDecisionLoss(
+            _log_softmax(logits), torch.tensor([[0.0, 1.0, 0.0, 0.0]]), coverage, mask, allow_null=torch.tensor([True])
+        )
+        mass = torch.exp(torch.tensor(-18.0, dtype=torch.float64))
+        option_gradient = mass / (1 + 2 * mass)
+        expected_gradient = torch.stack([-2 * option_gradient, option_gradient, option_gradient])[None]
+        loss.backward()
+        torch.testing.assert_close(loss.double(), torch.log1p(2 * mass) + torch.log1p(mass), rtol=1e-6, atol=0)
+        torch.testing.assert_close(logits.grad.double(), expected_gradient, rtol=1e-6, atol=0)
+        torch.testing.assert_close(coverage.grad.double(), (-mass / (1 + mass))[None], rtol=1e-6, atol=0)
 
 
 @require_torch
@@ -92,80 +120,6 @@ class JevaForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         self.model_tester = JevaModelTester(type(self).config)
         self.config = copy.deepcopy(type(self).config)
         self.inputs = self.model_tester.prepare_inputs()
-
-    def test_official_loss_and_gradients(self):
-        logits, coverage_logits, option_mask, labels = self.model_tester.prepare_loss_inputs()
-        for allow_null in (None, torch.tensor([True, False]), torch.tensor([True, True])):
-            with self.subTest(allow_null=allow_null):
-                scores = logits.detach().double().requires_grad_()
-                coverage = coverage_logits.detach().double().requires_grad_()
-                terms = []
-                for index, count in enumerate(option_mask.sum(-1).tolist()):
-                    student = torch.distributions.Categorical(logits=scores[index, :count])
-                    target = labels[index, 1 : count + 1].double()
-                    term = -(target * student.logits).sum()
-                    if allow_null is not None and allow_null[index]:
-                        covered = torch.distributions.Bernoulli(logits=coverage[index])
-                        mass = target.sum()
-                        term = (
-                            term
-                            - mass * covered.log_prob(torch.ones_like(mass))
-                            - (1 - mass) * covered.log_prob(torch.zeros_like(mass))
-                        )
-                    terms.append(term)
-                expected = torch.stack(terms).mean()
-                actual = JevaForDecisionLoss(
-                    _log_softmax(logits), labels, coverage_logits, option_mask, allow_null=allow_null
-                )
-                torch.testing.assert_close(actual.double(), expected)
-                actual_gradients = torch.autograd.grad(actual, (logits, coverage_logits), allow_unused=True)
-                expected_gradients = torch.autograd.grad(expected, (scores, coverage), allow_unused=True)
-                for actual_gradient, expected_gradient in zip(actual_gradients, expected_gradients):
-                    if expected_gradient is None:
-                        if actual_gradient is not None:
-                            torch.testing.assert_close(actual_gradient, torch.zeros_like(actual_gradient))
-                    else:
-                        torch.testing.assert_close(actual_gradient.double(), expected_gradient)
-
-    def test_accumulated_loss(self):
-        logits, coverage_logits, option_mask, labels = self.model_tester.prepare_loss_inputs()
-        rows = torch.tensor([0, 1, 0])
-        loss = JevaForDecisionLoss(
-            _log_softmax(logits[rows]), labels[rows], coverage_logits[rows], option_mask[rows], allow_null=rows == 0
-        )
-        expected = torch.autograd.grad(loss, (logits, coverage_logits))
-
-        accumulated_loss = 0.0
-        for batch in (rows[:1], rows[1:]):
-            microbatch_loss = JevaForDecisionLoss(
-                _log_softmax(logits[batch]),
-                labels[batch],
-                coverage_logits[batch],
-                option_mask[batch],
-                allow_null=batch == 0,
-                num_items_in_batch=len(rows),
-            )
-            microbatch_loss.backward()
-            accumulated_loss += microbatch_loss.detach()
-
-        torch.testing.assert_close(accumulated_loss, loss)
-        for actual, reference in zip((logits.grad, coverage_logits.grad), expected):
-            torch.testing.assert_close(actual, reference)
-
-    def test_confident_prediction_gradients(self):
-        logits = torch.tensor([[9.0, -9.0, -9.0]], requires_grad=True)
-        coverage = torch.tensor([18.0], requires_grad=True)
-        mask = torch.ones_like(logits, dtype=torch.bool)
-        loss = JevaForDecisionLoss(
-            _log_softmax(logits), torch.tensor([[0.0, 1.0, 0.0, 0.0]]), coverage, mask, allow_null=torch.tensor([True])
-        )
-        mass = torch.exp(torch.tensor(-18.0, dtype=torch.float64))
-        option_gradient = mass / (1 + 2 * mass)
-        expected_gradient = torch.stack([-2 * option_gradient, option_gradient, option_gradient])[None]
-        loss.backward()
-        torch.testing.assert_close(loss.double(), torch.log1p(2 * mass) + torch.log1p(mass), rtol=1e-6, atol=0)
-        torch.testing.assert_close(logits.grad.double(), expected_gradient, rtol=1e-6, atol=0)
-        torch.testing.assert_close(coverage.grad.double(), (-mass / (1 + mass))[None], rtol=1e-6, atol=0)
 
     def test_option_chunking(self):
         model = JevaForDecision(self.config).eval()

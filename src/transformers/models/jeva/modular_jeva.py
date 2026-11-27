@@ -327,7 +327,6 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
         option_position_ids: torch.LongTensor | None = None,
         option_chunk_size: int | None = None,
         labels: torch.Tensor | None = None,
-        allow_null: torch.BoolTensor | None = None,
         **kwargs,
     ) -> JevaDecisionOutput:
         r"""
@@ -345,9 +344,9 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
             Number of options encoded in one forward pass. Defaults to all options.
         labels (`torch.FloatTensor` of shape `(batch_size, max_num_options + 1)`, *optional*):
             Target probability distributions, with null mass first and zero mass on padded options.
-        allow_null (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
-            Whether to train coverage for each decision. Defaults to false for all decisions.
         """
+        loss_kwargs = {name: kwargs.pop(name) for name in ("allow_null", "num_items_in_batch") if name in kwargs}
+
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
         if option_attention_mask is None:
@@ -384,8 +383,7 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
                 labels=labels,
                 coverage_logits=coverage_logit,
                 option_mask=option_mask,
-                allow_null=allow_null,
-                **kwargs,
+                **loss_kwargs,
             )
         return JevaDecisionOutput(loss=loss, logits=log_q, coverage_logits=coverage_logit)
 
