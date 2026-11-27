@@ -493,7 +493,7 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
         def _all_reduce_grad(param):
             dist.all_reduce(param.grad, group=mesh.get_group())
 
-        def hook_parameters(module, args):
+        def tp_forward_pre_hook(module, args):
             if torch.is_grad_enabled():
                 for name, param in module.named_parameters(recurse=False):
                     if param.requires_grad and is_already_hooked.get(name) is not param:
@@ -502,7 +502,7 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
 
         # A forward pre-hook rather than a wrapper around `module.forward`: it stays in place when `forward` is
         # replaced after loading, which is what kernels do
-        module.register_forward_pre_hook(hook_parameters)
+        module.register_forward_pre_hook(tp_forward_pre_hook)
         return module
 
 
