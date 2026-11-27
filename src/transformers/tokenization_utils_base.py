@@ -3061,6 +3061,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         ids. This method is intended for use with chat models, and will read the tokenizer's chat_template attribute to
         determine the format and control tokens to use when converting.
 
+        Templates that call `strftime_now()` can produce different inputs for the same conversation at different times.
+        See the [chat template writing guide](https://huggingface.co/docs/transformers/main/en/chat_templating_writing#special-variables-and-callables)
+        for how to use a fixed date in evaluations.
+
         Args:
             conversation (Union[list[dict[str, str]], list[list[dict[str, str]]]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
