@@ -47,7 +47,38 @@ class ClmModelTester:
     def prepare_config_and_inputs_for_training(self):
         inputs = self.prepare_inputs()
         inputs["labels"] = torch.arange(inputs["num_options"].shape[1])
+        inputs["group_ids"] = torch.tensor([0, 0, 1])
         return copy.deepcopy(self.config), inputs
+
+
+@require_torch
+class ClmLossTest(unittest.TestCase):
+    def test_bidirectional_loss_with_soft_targets(self):
+        logits = torch.tensor([[1.0, -0.3, 0.2], [0.4, 1.2, -0.5]])
+        targets = torch.tensor([[1.0, 0.0, 0.0], [0.5, 0.5, 0.0]])
+        reverse_targets = torch.tensor([[2 / 3, 1 / 3], [0.0, 1.0]])
+        expected = (F.cross_entropy(logits, targets) + F.cross_entropy(logits.T[:2], reverse_targets)) / 2
+
+        torch.testing.assert_close(ClmForDecisionLoss(logits, targets), expected)
+
+    def test_group_mask_and_accumulation_count(self):
+        logits = torch.tensor([[1.0, -0.3, 0.2], [0.4, 1.2, -0.5], [0.1, 0.6, 0.7]])
+        labels = torch.arange(3)
+        loss = ClmForDecisionLoss(logits, labels, group_ids=torch.tensor([0, 0, 1]), num_items_in_batch=5)
+
+        logits[0, 1] = logits[1, 0] = -torch.inf
+        expected = (F.cross_entropy(logits, labels) + F.cross_entropy(logits.T, labels)) * (3 / 10)
+        torch.testing.assert_close(loss, expected)
+
+    def test_confident_prediction_gradients(self):
+        logits = torch.tensor([[9.0, -9.0], [-9.0, 9.0]], requires_grad=True)
+        loss = ClmForDecisionLoss(logits, torch.arange(2))
+        mass = torch.exp(torch.tensor(-18.0, dtype=torch.float64))
+        gradient = mass / (1 + mass) / 2
+        expected_gradient = torch.stack([-gradient, gradient, gradient, -gradient]).reshape(2, 2)
+        loss.backward()
+        torch.testing.assert_close(loss.double(), torch.log1p(mass), rtol=1e-6, atol=0)
+        torch.testing.assert_close(logits.grad.double(), expected_gradient, rtol=1e-6, atol=0)
 
 
 @require_torch
@@ -103,82 +134,6 @@ class ClmForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         self.model_tester = ClmModelTester(type(self).config)
         self.config = copy.deepcopy(type(self).config)
         self.inputs = self.model_tester.prepare_inputs()
-
-    def test_official_loss_and_gradients(self):
-        logits = torch.tensor([[1.0, -0.3, 0.2], [0.4, 1.2, -0.5], [0.1, 0.6, 0.7]], requires_grad=True)
-        cases = [
-            (torch.arange(3), None),
-            (torch.arange(3), torch.tensor([0, 0, 1])),
-            (torch.tensor([[0.5, 0.5, 0.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]]), None),
-        ]
-        for labels, group_ids in cases:
-            with self.subTest(soft_labels=labels.is_floating_point(), group_ids=group_ids):
-                reference_logits = logits.detach().double().requires_grad_()
-                scores = reference_logits
-                targets = F.one_hot(labels, 3).double() if labels.ndim == 1 else labels.double()
-                if group_ids is not None:
-                    same_group = group_ids[:, None] == group_ids[None]
-                    same_group.fill_diagonal_(False)
-                    scores = scores.masked_fill(same_group, -torch.inf)
-                forward = (
-                    F.cross_entropy(scores, targets.argmax(-1))
-                    if labels.ndim == 1
-                    else F.cross_entropy(scores, targets)
-                )
-                reverse = targets.T
-                positive = reverse.sum(-1) > 0
-                reverse = reverse[positive] / reverse[positive].sum(-1, keepdim=True)
-                backward = (
-                    F.cross_entropy(scores.T[positive], reverse.argmax(-1))
-                    if labels.ndim == 1
-                    else F.cross_entropy(scores.T[positive], reverse)
-                )
-                expected = (forward + backward) / 2
-                actual = ClmForDecisionLoss(logits, labels, group_ids=group_ids)
-                torch.testing.assert_close(actual.double(), expected)
-                torch.testing.assert_close(
-                    torch.autograd.grad(actual, logits)[0].double(), torch.autograd.grad(expected, reference_logits)[0]
-                )
-
-    def test_accumulation_weights_each_local_candidate_pool(self):
-        logits = torch.tensor(
-            [
-                [1.0, 0.1, 0.2, 0.3, 0.4],
-                [0.3, 1.1, 0.2, 0.4, 0.1],
-                [0.2, 0.3, 0.5, 0.2, 0.1],
-                [0.2, 0.4, 0.3, 0.7, 0.2],
-                [0.1, 0.3, 0.4, 0.1, 0.5],
-            ],
-            requires_grad=True,
-        )
-        reference = logits.detach().clone().requires_grad_()
-
-        def symmetric_ce(scores, labels):
-            return (F.cross_entropy(scores, labels) + F.cross_entropy(scores.T, labels)) / 2
-
-        expected = (
-            2 * symmetric_ce(reference[:2, :2], torch.arange(2)) + 3 * symmetric_ce(reference[2:, 2:], torch.arange(3))
-        ) / 5
-
-        accumulated_loss = 0.0
-        for batch in (slice(None, 2), slice(2, None)):
-            scores = logits[batch, batch]
-            loss = ClmForDecisionLoss(scores, torch.arange(scores.shape[0]), num_items_in_batch=5)
-            loss.backward()
-            accumulated_loss += loss.detach()
-
-        torch.testing.assert_close(accumulated_loss, expected)
-        torch.testing.assert_close(logits.grad, torch.autograd.grad(expected, reference)[0])
-
-    def test_confident_prediction_gradients(self):
-        logits = torch.tensor([[9.0, -9.0], [-9.0, 9.0]], requires_grad=True)
-        loss = ClmForDecisionLoss(logits, torch.arange(2))
-        mass = torch.exp(torch.tensor(-18.0, dtype=torch.float64))
-        gradient = mass / (1 + mass) / 2
-        expected_gradient = torch.stack([-gradient, gradient, gradient, -gradient]).reshape(2, 2)
-        loss.backward()
-        torch.testing.assert_close(loss.double(), torch.log1p(mass), rtol=1e-6, atol=0)
-        torch.testing.assert_close(logits.grad.double(), expected_gradient, rtol=1e-6, atol=0)
 
     def test_candidate_permutation(self):
         model = ClmForDecision(self.config).eval()

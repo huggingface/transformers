@@ -48,7 +48,10 @@ output = model(
 output.loss.backward()
 ```
 
-Use `group_ids` in paired batches to exclude same-group false negatives. Each microbatch has its own contrastive pool.
+Use a `group_ids` tensor of shape `(num_questions,)` in paired batches to exclude same-group false negatives in both
+directions. If your `Trainer` dataset has a `group_ids` column, set `remove_unused_columns=False` to pass it through.
+
+Each microbatch has its own contrastive pool.
 Gradient accumulation averages losses across those pools. To train only the projection heads and scale, freeze
 `model.base_model` before training.
 
