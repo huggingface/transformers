@@ -115,6 +115,14 @@ class Phi3VForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase):
                 ).logits[:, -1]
                 torch.testing.assert_close(logits, expected, rtol=1e-4, atol=1e-4)
 
+    @unittest.skip(reason="The common test keeps `pixel_values[:1]`, but the crops of all images are packed")
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip(reason="The common test keeps `pixel_values[:1]`, but the crops of all images are packed")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
     def test_reverse_loading_mapping(self):
         # The Hub checkpoints are saved from the model with head, the mapping is written for that layout
         super().test_reverse_loading_mapping(skip_base_model=True)
