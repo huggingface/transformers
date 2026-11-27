@@ -123,9 +123,10 @@ def _cache_geometry(cache) -> dict[str, Any]:
         "linear_states": linear_states_of(cache),
     }
     if isinstance(cache, StaticCache):
-        # The decode graph only takes a cache of the length it was traced on.
-        lengths = [getattr(layer, "max_cache_len", None) for layer in cache.layers]
-        geometry["max_cache_len"] = max(length for length in lengths if length is not None)
+        # The decode graph only takes a cache of the length it was traced on (none for Mamba2's linear states).
+        lengths = [layer.max_cache_len for layer in cache.layers if getattr(layer, "max_cache_len", None) is not None]
+        if lengths:
+            geometry["max_cache_len"] = max(lengths)
     return json.loads(json.dumps(geometry))
 
 
