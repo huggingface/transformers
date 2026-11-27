@@ -235,6 +235,7 @@ class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
         spans = self._split_decision_spans(prompts, max_state_length, max_option_length, truncation)
         segments, counts = [], []
         pool, option_columns = {}, []
+
         for state, options, question in spans:
             segments.append(state)
             if targets is None:
@@ -244,6 +245,7 @@ class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
 
             if question.allow_null:
                 raise ValueError("CLM does not support nullable decisions.")
+
             start = len(pool)
             columns = []
             for option in options:
@@ -252,6 +254,7 @@ class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
                     pool[key] = len(pool)
                     segments.append(option)
                 columns.append(pool[key])
+
             counts.append(len(pool) - start)
             option_columns.append(columns)
 
@@ -261,6 +264,7 @@ class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
             "marks": input_ids.new_tensor([[len(segment) for segment in segments]]).cumsum(-1),
             "num_options": input_ids.new_tensor([counts]),
         }
+
         if targets is not None:
             labels = input_ids.new_zeros((len(spans), len(pool)), dtype=torch.float32)
             option_mask = torch.zeros_like(labels, dtype=torch.bool)
@@ -270,7 +274,9 @@ class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
                 indices = input_ids.new_tensor(columns)
                 labels[row].scatter_add_(0, indices, labels.new_tensor(target[1:]))
                 option_mask[row, indices] = True
+
             batch.update(labels=labels, option_mask=option_mask)
+
         return batch
 
     @torch.no_grad()
