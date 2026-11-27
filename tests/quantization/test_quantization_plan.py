@@ -26,7 +26,6 @@ from transformers import (
     LlamaConfig,
     LlamaForCausalLM,
     Mistral4ForCausalLM,
-    Mxfp4Config,
     NVFP4Config,
 )
 from transformers.quantizers.auto import (
@@ -40,9 +39,7 @@ from transformers.utils import is_torch_available
 
 if is_torch_available():
     import torch
-    from safetensors.torch import load_file, save_file
 
-    from transformers.integrations.mxfp4 import FP4_VALUES
 
 # A tiny Mistral4 saved pre-quantized like Mistral-Large-4's NVFP4 release: fp8 attention and experts, nvfp4 shared
 # experts. `dense_reference.pt` holds the bf16 weights it was quantized from.
@@ -62,7 +59,7 @@ TINY_DEEPSEEK = {
 @require_torch
 class QuantizationPlanTest(unittest.TestCase):
     def dense_reference(self):
-        return torch.load(hf_hub_download(REPO, "dense_reference.pt"))
+        return torch.load(hf_hub_download(REPO, "dense_reference.pt")) # TODO: should be a safetensor?
 
     def check_logits(self, model):
         config = AutoConfig.from_pretrained(REPO)

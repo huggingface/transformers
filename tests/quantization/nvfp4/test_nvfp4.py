@@ -27,7 +27,6 @@ from transformers.integrations.nvfp4 import (
     swizzled_sf_shape,
 )
 from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
-from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 from transformers.utils.quantization_config import QuantizationMethod
 

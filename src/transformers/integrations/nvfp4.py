@@ -83,6 +83,7 @@ def load_nvfp4_kernel() -> NVFP4Kernel:
 
     return NVFP4Kernel(**entry_points)
 
+
 def dequantize_nvfp4(packed: torch.Tensor, scales: torch.Tensor, scale_2) -> torch.Tensor:
     """
     Dense float32 `(out_features, in_features)`: `fp4 * scales * scale_2`, two e2m1 values per byte, low nibble
@@ -171,7 +172,7 @@ class NVFP4Linear(nn.Module):
         self.input_scale = nn.Buffer(torch.empty(1 if static_input_scale else 0, dtype=torch.float32))
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        if self.weight_only: # TODO: maybe we'll create a mapping W4A16 -> func?
+        if self.weight_only:  # TODO: maybe we'll create a mapping W4A16 -> func?
             weight = dequantize_nvfp4(self.weight, self.weight_scale, self.weight_scale_2)
             return nn.functional.linear(input, weight.to(input.dtype))
         return nvfp4_linear(
@@ -187,7 +188,6 @@ class NVFP4Linear(nn.Module):
 
     def extra_repr(self) -> str:
         return f"in_features={self.in_features}, out_features={self.out_features}, nvfp4"
-
 
 
 class NVFP4Quantize(ConversionOps):
@@ -281,7 +281,6 @@ class NVFP4Dequantize(ConversionOps):
     def reverse_op(self) -> ConversionOps:
         # TODO: A dequantized model has no quantization config anymore: it saves unquantized
         return _IdentityOp()
-
 
 
 def is_nvfp4_compatible(module: nn.Module) -> bool:
