@@ -732,56 +732,61 @@ class Xcodec2FiniteScalarQuantization(nn.Module):
 
 class Xcodec2ISTFTHead(nn.Module):
     """
-    Head for converting decoder outputs to waveform via STFT projection and ISTFT.
+    Vocos-style ISTFT head: hidden states -> spectrogram (magnitude + phase) -> istft -> audio
 
-    Uses custom "same" padding ISTFT from Vocos:
-    https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/spectral_ops.py#L47
+    We cannot use `torch.istft` because we need frames centred on hops: T frames <-> T * hop_length samples,
+    so a token (a fixed number of frames, here 3) is a fixed number of samples.
+
+        hops    -2    -1     0     1     2     3     4     5     6     7     8
+        audio                ├────────────── audio ──────────────┤
+
+        torch.stft / torch.istft (center=True): pad n_fft // 2 per end
+        padded   ├─── pad ───┼────────────── audio ──────────────┼─── pad ───┤
+        frames            ├─ 0 ─┼─ 1 ─┼─ 2 ─┼─ 3 ─┼─ 4 ─┼─ 5 ─┼─ 6 ─┤   7 frames, centred on hop boundaries
+        tokens            ├──── token A ────┼──── token B ────┼─ ? ─┤   ✗ frame 6 in no token
+
+        ours: pad (n_fft - hop_length) // 2 per end
+        padded      ├─ pad ──┼────────────── audio ──────────────┼─ pad ──┤
+        frames               ├─ 0 ─┼─ 1 ─┼─ 2 ─┼─ 3 ─┼─ 4 ─┼─ 5 ─┤   6 frames, centred on hops
+        tokens               ├──── token A ────┼──── token B ────┤   ✓ 3 hops per token
     """
 
     def __init__(self, config: Xcodec2Config):
         super().__init__()
-        self.linear = nn.Linear(config.hidden_size, config.n_fft + 2)
         self.n_fft = config.n_fft
         self.hop_length = config.hop_length
-        self.padding = (self.n_fft - self.hop_length) // 2
-        window = torch.hann_window(config.n_fft)
+
+        window = torch.hann_window(config.n_fft, dtype=torch.float32)
         self.window = nn.Buffer(window, persistent=False)
+        self.linear = nn.Linear(config.hidden_size, 2 * (config.n_fft // 2 + 1))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        stft_pred = self.linear(hidden_states)
-        # Keep the frequency axis last for `torch.polar` compatibility with torch.compile
-        magnitude, phase = stft_pred.chunk(2, dim=-1)
-        # Cast to float32: complex exponential and irfft are not supported for fp16 (ComplexHalf)
-        magnitude = magnitude.float()
-        phase = phase.float()
-        # Clamp like original: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/codec_decoder_vocos.py#L138
-        magnitude = torch.exp(magnitude).clamp(max=1e2)
-        spectrogram_complex = torch.polar(magnitude, phase)
+        # float32: polar/irfft don't support ComplexHalf. Clamp like original:
+        # https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/codec_decoder_vocos.py#L138
+        magnitude, phase = self.linear(hidden_states).float().chunk(2, dim=-1)
+        spectrogram = torch.polar(magnitude.exp().clamp(max=1e2), phase)
 
-        # Back to audio (ISTFT with manual "same" padding: torch.istft lacks a native same-padding mode,
-        # so we use irfft + fold with explicit pre-computed padding to replicate it)
-        time_frames = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=-1, norm="backward").transpose(1, 2)
-        time_frames = time_frames * self.window[None, :, None]
-        num_frames = spectrogram_complex.shape[1]
-        output_size = (num_frames - 1) * self.hop_length + self.n_fft
-        audio = F.fold(
-            time_frames,
-            output_size=(1, output_size),
-            kernel_size=(1, self.n_fft),
-            stride=(1, self.hop_length),
-        )[:, 0, 0, self.padding : -self.padding]
-
-        # Normalize
-        window_envelope = F.fold(
-            self.window.square().expand(1, num_frames, -1).transpose(1, 2),
-            output_size=(1, output_size),
-            kernel_size=(1, self.n_fft),
-            stride=(1, self.hop_length),
-        ).squeeze()[self.padding : -self.padding]
-        # Clamp as expected by original: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/codec_decoder_vocos.py#L82
-        window_envelope = window_envelope.clamp(min=1e-11)
-        audio = audio / window_envelope
+        audio = self._istft(spectrogram)
         return audio.unsqueeze(1)
+
+    # TODO: @eustlb, we might want to standardize this in audio_utils
+    def _istft(self, spectrogram: torch.Tensor) -> torch.Tensor:
+        """Inverse STFT of `spectrogram` (`(batch, num_frames, n_fft // 2 + 1)`), `num_frames * hop_length` long."""
+        time_frames = torch.fft.irfft(spectrogram, self.n_fft, dim=-1, norm="backward") * self.window
+        window_envelope = self.window.square().expand_as(time_frames)
+
+        frames = torch.cat([time_frames, window_envelope]).transpose(1, 2)
+        output_size = (spectrogram.shape[1] - 1) * self.hop_length + self.n_fft
+        overlap_added = F.fold(
+            frames, output_size=(1, output_size), kernel_size=(1, self.n_fft), stride=(1, self.hop_length)
+        )[:, 0, 0]
+        # frames centred on hops: trim `(n_fft - hop_length) // 2` samples at each end, `num_frames * hop_length` left
+        padding = (self.n_fft - self.hop_length) // 2
+        overlap_added = overlap_added[:, padding : output_size - padding]
+        audio, window_envelope = overlap_added.chunk(2)
+
+        # Clamp as in Vocos: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/spectral_ops.py#L78
+        return audio / window_envelope.clamp(min=1e-11)
 
 
 class Xcodec2Quantizer(nn.Module):

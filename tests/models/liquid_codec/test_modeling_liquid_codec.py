@@ -396,9 +396,9 @@ class LiquidCodecIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             with torch.no_grad():
                 for start in range(0, audio_codes.shape[-1], 4):
                     out = model.decode(audio_codes[..., start : start + 4], use_streaming=True, **caches)
-                    caches = {"decoder_cache": out.decoder_cache, "overlap_add_cache": out.overlap_add_cache}
+                    caches = {"decoder_cache": out.decoder_cache, "istft_cache": out.istft_cache}
                     chunks.append(out.audio_values)
-                last_audio_values = out.overlap_add_cache.flush().audio_values
+                last_audio_values = out.istft_cache.flush().audio_values
 
                 offline = model.decode(audio_codes)
 
@@ -409,55 +409,6 @@ class LiquidCodecIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             self.assertEqual(audio_values.shape, (audio_codes.shape[-1] * 1920,))
             torch.testing.assert_close(
                 audio_values[self.expected_audio_values_indices[index]],
-                torch.tensor(self.expected_audio_values[index]),
-                rtol=self.RTOL,
-                atol=self.ATOL,
-            )
-
-    @slow
-    def test_decode_streaming_batch(self):
-        """
-        reproducer: https://gist.github.com/eustlb/1befc95bf557e88c808d61c9f7b199d8#file-reproducer-codec-py
-        """
-        model = AutoModel.from_pretrained(
-            self.checkpoint, revision=self.revision, dtype=torch.float32, device_map=torch_device
-        )
-
-        # golden codes, right-padded
-        num_frames = torch.tensor([len(codes[0]) for codes in self.expected_codes], device=torch_device)
-        audio_codes = torch.zeros(2, len(self.expected_codes[0]), int(num_frames.max()), dtype=torch.long)
-        for index, expected_codes in enumerate(self.expected_codes):
-            audio_codes[index, :, : num_frames[index]] = torch.tensor(expected_codes)
-        audio_codes = audio_codes.to(torch_device)
-        audio_codes_mask = torch.arange(audio_codes.shape[-1], device=torch_device) < num_frames[:, None]
-
-        chunks, masks, caches = [], [], {}
-        with torch.no_grad():
-            for start in range(0, audio_codes.shape[-1], 4):
-                out = model.decode(
-                    audio_codes[..., start : start + 4],
-                    audio_codes_mask[:, start : start + 4],
-                    use_streaming=True,
-                    **caches,
-                )
-                caches = {"decoder_cache": out.decoder_cache, "overlap_add_cache": out.overlap_add_cache}
-                chunks.append(out.audio_values)
-                masks.append(out.audio_values_mask)
-            flushed = out.overlap_add_cache.flush()
-            last_audio_values, last_audio_values_mask = flushed.audio_values, flushed.audio_values_mask
-
-            offline = model.decode(audio_codes, audio_codes_mask)
-
-        audio_values = torch.cat([*chunks, last_audio_values], dim=-1)
-        audio_values_mask = torch.cat([*masks, last_audio_values_mask], dim=-1)
-        torch.testing.assert_close(audio_values, offline.audio_values, rtol=self.RTOL, atol=self.ATOL)
-        self.assertTrue(torch.equal(audio_values_mask, offline.audio_values_mask))
-
-        for index in range(len(self.expected_codes)):
-            clip_audio_values = audio_values[index][audio_values_mask[index]].cpu()
-            self.assertEqual(clip_audio_values.shape, (int(num_frames[index]) * 1920,))
-            torch.testing.assert_close(
-                clip_audio_values[self.expected_audio_values_indices[index]],
                 torch.tensor(self.expected_audio_values[index]),
                 rtol=self.RTOL,
                 atol=self.ATOL,

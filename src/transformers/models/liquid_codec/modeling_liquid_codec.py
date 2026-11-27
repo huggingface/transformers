@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -36,76 +37,12 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedAudioTokenizerBase, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_liquid_codec import LiquidCodecConfig, LiquidCodecDecoderConfig, LiquidCodecEncoderConfig
-
-
-class LiquidCodecOverlapAddCache:
-    """
-    Overlap-add cache of [`LiquidCodecISTFTHead`] for streaming decode: holds back the last `n_fft - hop_length`
-    samples of a chunk until the next one completes them. [`~LiquidCodecOverlapAddCache.flush`] ends the stream.
-    """
-
-    def __init__(self, config: LiquidCodecDecoderConfig):
-        self.overlap = config.n_fft - config.hop_length
-        self.padding = self.overlap // 2
-        self.reset()
-
-    def reset(self):
-        self.audio: torch.Tensor | None = None
-        self.envelope: torch.Tensor | None = None
-        self.mask: torch.Tensor | None = None
-        self.has_mask = False
-        self.num_samples_to_trim = self.padding
-
-    @staticmethod
-    def normalize(audio: torch.Tensor, window_envelope: torch.Tensor, samples_mask: torch.Tensor) -> torch.Tensor:
-        # Clamp as expected by original: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/codec_decoder_vocos.py#L82
-        return audio / window_envelope.clamp(min=1e-11) * samples_mask
-
-    def update(
-        self, audio: torch.Tensor, window_envelope: torch.Tensor, samples_mask: torch.Tensor, has_mask: bool = False
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Adds the cached tail, caches the new one; returns the final samples with their envelope and mask."""
-        if self.audio is not None:
-            audio = torch.cat([audio[:, : self.overlap] + self.audio, audio[:, self.overlap :]], dim=1)
-            window_envelope = torch.cat(
-                [window_envelope[:, : self.overlap] + self.envelope, window_envelope[:, self.overlap :]], dim=1
-            )
-            samples_mask = torch.cat(
-                [samples_mask[:, : self.overlap] | self.mask, samples_mask[:, self.overlap :]], dim=1
-            )
-
-        self.audio, self.envelope = audio[:, -self.overlap :], window_envelope[:, -self.overlap :]
-        self.mask = samples_mask[:, -self.overlap :]
-        self.has_mask = self.has_mask or has_mask
-        audio, window_envelope = audio[:, : -self.overlap], window_envelope[:, : -self.overlap]
-        samples_mask = samples_mask[:, : -self.overlap]
-
-        # "same" padding: the first `padding` samples of the stream are dropped
-        num_trimmed = min(self.num_samples_to_trim, audio.shape[1])
-        self.num_samples_to_trim -= num_trimmed
-        return audio[:, num_trimmed:], window_envelope[:, num_trimmed:], samples_mask[:, num_trimmed:]
-
-    def flush(self) -> "LiquidCodecDecoderOutput":
-        """Ends the stream: last samples (with their mask if the stream had one), then resets the cache."""
-        if self.audio is None:
-            raise ValueError("Nothing to flush: no chunk was decoded since the cache was created or last flushed.")
-
-        audio = self.audio[:, self.num_samples_to_trim : -self.padding]
-        window_envelope = self.envelope[:, self.num_samples_to_trim : -self.padding]
-        samples_mask = self.mask[:, self.num_samples_to_trim : -self.padding]
-        has_mask = self.has_mask
-
-        self.reset()
-        return LiquidCodecDecoderOutput(
-            audio_values=self.normalize(audio, window_envelope, samples_mask),
-            audio_values_mask=samples_mask if has_mask else None,
-        )
 
 
 @auto_docstring
@@ -161,8 +98,8 @@ class LiquidCodecDecoderOutput(ModelOutput):
         Samples decoded from the valid frames of each clip.
     decoder_cache (`Cache`, *optional*, returned when streaming):
         Decoder cache, to pass with the next chunk.
-    overlap_add_cache ([`LiquidCodecOverlapAddCache`], *optional*, returned when streaming):
-        Overlap-add cache, to pass with the next chunk; `flush()` ends the stream.
+    istft_cache ([`LiquidCodecISTFTCache`], *optional*, returned when streaming):
+        ISTFT cache, to pass with the next chunk; `flush()` ends the stream.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
         Hidden states of the decoder at the output of each layer plus its input.
     attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
@@ -172,7 +109,7 @@ class LiquidCodecDecoderOutput(ModelOutput):
     audio_values: torch.FloatTensor | None = None
     audio_values_mask: torch.BoolTensor | None = None
     decoder_cache: Cache | None = None
-    overlap_add_cache: LiquidCodecOverlapAddCache | None = None
+    istft_cache: "LiquidCodecISTFTCache | None" = None
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
@@ -349,81 +286,159 @@ class LiquidCodecQuantizer(nn.Module):
         return latents.transpose(1, 2)
 
 
-class LiquidCodecISTFTHead(nn.Module):
+class LiquidCodecISTFTCache:
     """
-    Head for converting decoder outputs to waveform via STFT projection and ISTFT.
+    Streaming cache of [`LiquidCodecISTFTHead`]: the last `n_fft - hop_length` samples of a chunk, which the next
+    chunk's frames still overlap. [`~LiquidCodecISTFTCache.flush`] ends the stream.
 
-    Uses custom "same" padding ISTFT from Vocos:
-    https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/spectral_ops.py#L47
+    Each chunk is normalized by its own window envelope. Over the overlap, the stream is the crossfade of both chunks,
+    weighted by their share of the full envelope: it depends only on the window and the hop.
     """
 
     def __init__(self, config: LiquidCodecDecoderConfig):
+        self.num_overlap_samples = config.n_fft - config.hop_length
+        self.num_padding_samples = self.num_overlap_samples // 2
+
+        # window envelope of the frames reaching into the overlap: a chunk's first ones cover its head, its last ones
+        # its tail
+        squared_window = torch.hann_window(config.n_fft).square()
+        num_frames = math.ceil(self.num_overlap_samples / config.hop_length)
+        window_envelope = F.fold(
+            squared_window[None, :, None].expand(1, -1, num_frames),
+            output_size=(1, (num_frames - 1) * config.hop_length + config.n_fft),
+            kernel_size=(1, config.n_fft),
+            stride=(1, config.hop_length),
+        )[0, 0, 0]
+        head_envelope = window_envelope[: self.num_overlap_samples]
+        tail_envelope = window_envelope[-self.num_overlap_samples :]
+        # each from its own envelope: `1 - fade_out` loses its smallest values to float32 rounding
+        self.fade_out = tail_envelope / (tail_envelope + head_envelope)
+        self.fade_in = head_envelope / (tail_envelope + head_envelope)
+
+        self.cache: torch.Tensor | None = None
+        self.is_initialized = False
+
+    def lazy_initialization(self, audio: torch.Tensor):
+        self.cache = audio.new_zeros(audio.shape[0], self.num_overlap_samples)
+        self.fade_out = self.fade_out.to(audio)
+        self.fade_in = self.fade_in.to(audio)
+
+        if not is_torchdynamo_compiling():
+            torch._dynamo.mark_static_address(self.cache)
+
+        self.is_initialized = True
+
+    def update(self, audio: torch.Tensor) -> torch.Tensor:
+        """
+        Crossfades the cached samples with the start of a chunk, then caches its last ones. Returns the samples no
+        later chunk overlaps.
+        """
+        if self.is_initialized:
+            start = audio[:, : self.num_overlap_samples] * self.fade_in + self.cache * self.fade_out
+            audio = torch.cat([start, audio[:, self.num_overlap_samples :]], dim=1)
+        else:
+            self.lazy_initialization(audio)
+            # frames centred on hops: the stream starts `num_padding_samples` in
+            audio = audio[:, self.num_padding_samples :]
+
+        self.cache.copy_(audio[:, -self.num_overlap_samples :])
+        return audio[:, : -self.num_overlap_samples]
+
+    def flush(self) -> "LiquidCodecDecoderOutput":
+        """Ends the stream: last samples, up to the padding, then resets the cache."""
+        if not self.is_initialized:
+            raise ValueError("Nothing to flush: no chunk was decoded since the cache was created or last flushed.")
+
+        audio = self.cache[:, : self.num_padding_samples]
+
+        self.reset()
+        return LiquidCodecDecoderOutput(audio_values=audio)
+
+    def reset(self):
+        self.cache = None
+        self.is_initialized = False
+
+
+class LiquidCodecISTFTHead(nn.Module):
+    """
+    Vocos-style ISTFT head: hidden states -> spectrogram (magnitude + phase) -> istft -> audio
+
+    We cannot use `torch.istft` because we need frames centred on hops: T frames <-> T * hop_length samples,
+    so a token (a fixed number of frames, here 3) is a fixed number of samples.
+
+        hops    -2    -1     0     1     2     3     4     5     6     7     8
+        audio                ├────────────── audio ──────────────┤
+
+        torch.stft / torch.istft (center=True): pad n_fft // 2 per end
+        padded   ├─── pad ───┼────────────── audio ──────────────┼─── pad ───┤
+        frames            ├─ 0 ─┼─ 1 ─┼─ 2 ─┼─ 3 ─┼─ 4 ─┼─ 5 ─┼─ 6 ─┤   7 frames, centred on hop boundaries
+        tokens            ├──── token A ────┼──── token B ────┼─ ? ─┤   ✗ frame 6 in no token
+
+        ours: pad (n_fft - hop_length) // 2 per end
+        padded      ├─ pad ──┼────────────── audio ──────────────┼─ pad ──┤
+        frames               ├─ 0 ─┼─ 1 ─┼─ 2 ─┼─ 3 ─┼─ 4 ─┼─ 5 ─┤   6 frames, centred on hops
+        tokens               ├──── token A ────┼──── token B ────┤   ✓ 3 hops per token
+    """
+
+    def __init__(self, config: LiquidCodecConfig):
         super().__init__()
-        self.linear = nn.Linear(config.hidden_size, config.n_fft + 2)
         self.n_fft = config.n_fft
         self.hop_length = config.hop_length
-        self.padding = (self.n_fft - self.hop_length) // 2
+
         window = torch.hann_window(config.n_fft, dtype=torch.float32)
-        self.window = nn.Buffer(window)
+        self.window = nn.Buffer(window, persistent=False)
+        self.linear = nn.Linear(config.hidden_size, 2 * (config.n_fft // 2 + 1))
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        frames_mask: torch.Tensor | None = None,
-        overlap_add_cache: LiquidCodecOverlapAddCache | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        stft_pred = self.linear(hidden_states)
-        # Keep the frequency axis last for `torch.polar` compatibility with torch.compile
-        magnitude, phase = stft_pred.chunk(2, dim=-1)
-        # Cast to float32: complex exponential and irfft are not supported for fp16 (ComplexHalf)
-        magnitude = magnitude.float()
-        phase = phase.float()
-        # no clamp, unlike Xcodec2
-        magnitude = torch.exp(magnitude)
-        spectrogram_complex = torch.polar(magnitude, phase)
+        mask: torch.Tensor | None = None,
+        istft_cache: LiquidCodecISTFTCache | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        # float32: polar/irfft don't support ComplexHalf. No clamp, unlike Xcodec2
+        magnitude, phase = self.linear(hidden_states).float().chunk(2, dim=-1)
+        spectrogram = torch.polar(magnitude.exp(), phase)
 
-        # Back to audio (ISTFT with manual "same" padding: torch.istft lacks a native same-padding mode,
-        # so we use irfft + fold with explicit pre-computed padding to replicate it)
-        time_frames = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=-1, norm="backward")
-        time_frames = time_frames.transpose(1, 2)
-        time_frames = time_frames * self.window[None, :, None]
-        num_frames = spectrogram_complex.shape[1]
+        # per clip: own frames, own window envelope, as alone. Streaming: the cache trims the stream's edges
+        audio = self._istft(spectrogram, padding=istft_cache is None, mask=mask)
+        if istft_cache is not None:
+            audio = istft_cache.update(audio)
 
-        # per clip: own frames, own window envelope, as alone
-        has_mask = frames_mask is not None
-        if frames_mask is None:
-            frames_mask = self.window.new_ones((time_frames.shape[0], num_frames))
-        frames_mask = frames_mask.to(time_frames)
+        if mask is None:
+            return audio, None
+
         # a frame owns the `hop_length` samples at the center of its window
-        samples_mask = frames_mask.bool().repeat_interleave(self.hop_length, dim=-1)
-        samples_mask = F.pad(samples_mask, (self.padding, self.padding))
-        frames_mask = frames_mask[:, None, :]
-        output_size = (num_frames - 1) * self.hop_length + self.n_fft
-        audio = F.fold(
-            time_frames * frames_mask,
-            output_size=(1, output_size),
-            kernel_size=(1, self.n_fft),
-            stride=(1, self.hop_length),
+        samples_mask = mask.bool().repeat_interleave(self.hop_length, dim=-1)
+        return audio * samples_mask, samples_mask
+
+    # TODO: @eustlb, we might want to standardize this in audio_utils
+    def _istft(
+        self, spectrogram: torch.Tensor, padding: bool = True, mask: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        """
+        Inverse STFT of `spectrogram` (`(batch_size, num_frames, n_fft // 2 + 1)`). With `padding`, frames are
+        centred on hops: `num_frames * hop_length` samples; without, the edges are kept, for a stream chunk. With
+        `mask`, masked frames are left out: each signal as if alone.
+        """
+        time_frames = torch.fft.irfft(spectrogram, self.n_fft, dim=-1, norm="backward") * self.window
+        window_envelope = self.window.square().expand_as(time_frames)
+        if mask is not None:
+            mask = mask[..., None].to(time_frames.dtype)
+            time_frames = time_frames * mask
+            window_envelope = window_envelope * mask
+
+        frames = torch.cat([time_frames, window_envelope]).transpose(1, 2)
+        output_size = (spectrogram.shape[1] - 1) * self.hop_length + self.n_fft
+        overlap_added = F.fold(
+            frames, output_size=(1, output_size), kernel_size=(1, self.n_fft), stride=(1, self.hop_length)
         )[:, 0, 0]
+        # frames centred on hops: trim `(n_fft - hop_length) // 2` samples at each end, `num_frames * hop_length` left
+        num_padding_samples = (self.n_fft - self.hop_length) // 2 if padding else 0
+        overlap_added = overlap_added[:, num_padding_samples : output_size - num_padding_samples]
+        audio, window_envelope = overlap_added.chunk(2)
 
-        # Normalize
-        window_envelope = F.fold(
-            self.window.square()[None, :, None] * frames_mask,
-            output_size=(1, output_size),
-            kernel_size=(1, self.n_fft),
-            stride=(1, self.hop_length),
-        )[:, 0, 0]
-
-        if overlap_add_cache is None:
-            audio = audio[:, self.padding : -self.padding]
-            window_envelope = window_envelope[:, self.padding : -self.padding]
-            samples_mask = samples_mask[:, self.padding : -self.padding]
-        else:
-            audio, window_envelope, samples_mask = overlap_add_cache.update(
-                audio, window_envelope, samples_mask, has_mask=has_mask
-            )
-
-        return LiquidCodecOverlapAddCache.normalize(audio, window_envelope, samples_mask), samples_mask
+        # Clamp as in Vocos: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/spectral_ops.py#L78
+        return audio / window_envelope.clamp(min=1e-11)
 
 
 class LiquidCodecRotaryEmbedding(nn.Module):
@@ -872,8 +887,6 @@ class LiquidCodecPreTrainedModel(PreTrainedModel):
     }
     main_input_name = "input_features"
     input_modalities = "audio"
-    # the synthesis window loses precision in half precision
-    _keep_in_fp32_modules_strict = ["head.window"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -1016,7 +1029,7 @@ class LiquidCodecDecoderModel(LiquidCodecPreTrainedModel):
         latents_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
-        overlap_add_cache: LiquidCodecOverlapAddCache | None = None,
+        istft_cache: LiquidCodecISTFTCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> LiquidCodecDecoderOutput:
         r"""
@@ -1024,9 +1037,14 @@ class LiquidCodecDecoderModel(LiquidCodecPreTrainedModel):
             FSQ values from the quantizer, one per codec frame.
         latents_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
             Valid frames of each clip (right-padded): each clip decoded as alone; returns `audio_values_mask`.
-        overlap_add_cache ([`LiquidCodecOverlapAddCache`], *optional*):
-            Overlap-add cache from the previous chunk.
+        istft_cache ([`LiquidCodecISTFTCache`], *optional*):
+            ISTFT cache from the previous chunk.
         """
+        if istft_cache is not None and latents_mask is not None:
+            raise ValueError(
+                "Streaming decodes one stream per batch row: a frames mask (`audio_codes_mask`) is not supported."
+            )
+
         latents = latents.transpose(1, 2).to(self.quantizer_out_proj.weight.dtype)
         hidden_states = self.quantizer_out_proj(latents)
         hidden_states = self.upsampler(hidden_states)
@@ -1071,18 +1089,16 @@ class LiquidCodecDecoderModel(LiquidCodecPreTrainedModel):
 
         hidden_states = self.embedding_norm(hidden_states)
 
-        frames_mask = None
+        mask = None
         if latents_mask is not None:
-            frames_mask = latents_mask.repeat_interleave(self.config.upsampling_factor, dim=-1)
-        audio_values, audio_values_mask = self.head(
-            hidden_states, frames_mask=frames_mask, overlap_add_cache=overlap_add_cache
-        )
+            mask = latents_mask.repeat_interleave(self.config.upsampling_factor, dim=-1)
+        audio_values, audio_values_mask = self.head(hidden_states, mask=mask, istft_cache=istft_cache)
 
         return LiquidCodecDecoderOutput(
             audio_values=audio_values,
-            audio_values_mask=audio_values_mask if latents_mask is not None else None,
+            audio_values_mask=audio_values_mask,
             decoder_cache=cache,
-            overlap_add_cache=overlap_add_cache,
+            istft_cache=istft_cache,
         )
 
 
@@ -1144,7 +1160,7 @@ class LiquidCodecModel(LiquidCodecPreTrainedModel, PreTrainedAudioTokenizerBase)
         audio_codes: torch.LongTensor,
         audio_codes_mask: torch.Tensor | None = None,
         decoder_cache: Cache | None = None,
-        overlap_add_cache: LiquidCodecOverlapAddCache | None = None,
+        istft_cache: LiquidCodecISTFTCache | None = None,
         use_streaming: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> LiquidCodecDecoderOutput:
@@ -1152,15 +1168,15 @@ class LiquidCodecModel(LiquidCodecPreTrainedModel, PreTrainedAudioTokenizerBase)
         audio_codes (`torch.LongTensor` of shape `(batch_size, num_codebooks, num_frames)`):
             Codes to decode; `hop_length * upsampling_factor` samples per frame.
         audio_codes_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
-            Valid frames of each clip (right-padded): each clip decoded as alone; returns `audio_values_mask`.
-            When streaming: the chunk's frames.
+            Valid frames of each clip (right-padded): each clip decoded as alone; returns `audio_values_mask`. Not
+            supported when streaming, which decodes one stream per batch row.
         decoder_cache (`Cache`, *optional*):
             Decoder cache from the previous chunk.
-        overlap_add_cache ([`LiquidCodecOverlapAddCache`], *optional*):
-            Overlap-add cache from the previous chunk.
+        istft_cache ([`LiquidCodecISTFTCache`], *optional*):
+            ISTFT cache from the previous chunk.
         use_streaming (`bool`, *optional*, defaults to `False`):
             Decode chunk by chunk: caches created on the first chunk, returned with each. Trailing samples stay
-            in `overlap_add_cache` until `overlap_add_cache.flush()`.
+            in `istft_cache` until `istft_cache.flush()`.
 
         Decodes the codes into audio: the codes are dequantized into the latents of [`LiquidCodecDecoderModel.forward`].
         """
@@ -1171,8 +1187,8 @@ class LiquidCodecModel(LiquidCodecPreTrainedModel, PreTrainedAudioTokenizerBase)
 
         if use_streaming and decoder_cache is None:
             decoder_cache = DynamicCache(config=self.config.decoder_config)
-        if use_streaming and overlap_add_cache is None:
-            overlap_add_cache = LiquidCodecOverlapAddCache(config=self.config.decoder_config)
+        if use_streaming and istft_cache is None:
+            istft_cache = LiquidCodecISTFTCache(config=self.config.decoder_config)
 
         latents = self.quantizer.decode(audio_codes)
 
@@ -1180,7 +1196,7 @@ class LiquidCodecModel(LiquidCodecPreTrainedModel, PreTrainedAudioTokenizerBase)
             latents,
             latents_mask=audio_codes_mask,
             cache=decoder_cache,
-            overlap_add_cache=overlap_add_cache,
+            istft_cache=istft_cache,
             return_dict=True,
             **kwargs,
         )
@@ -1216,6 +1232,6 @@ __all__ = [
     "LiquidCodecDecoderModel",
     "LiquidCodecEncoderModel",
     "LiquidCodecModel",
-    "LiquidCodecOverlapAddCache",
+    "LiquidCodecISTFTCache",
     "LiquidCodecPreTrainedModel",
 ]

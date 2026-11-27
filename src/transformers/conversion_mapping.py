@@ -1514,7 +1514,6 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^decoder\.lfm\.(layers|embedding_norm)\.", target_patterns=r"decoder.\1."
             ),
             WeightRenaming(source_patterns=r"^decoder\.lin\.", target_patterns="decoder.head.linear."),
-            WeightRenaming(source_patterns=r"^decoder\.istft\.window", target_patterns="decoder.head.window"),
             WeightRenaming(source_patterns=r"^from_quantizer\.", target_patterns="decoder.upsampler.proj."),
             WeightRenaming(source_patterns=r"\.self_attn\.gate_proj\.", target_patterns=".self_attn.g_proj."),
         ],

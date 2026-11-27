@@ -241,7 +241,7 @@ class WavTokenizerISTFTHead(Xcodec2ISTFTHead):
     def __init__(self, config: WavTokenizerConfig):
         super().__init__(config)
         # WavTokenizer's decoder backbone dimension differs from the encoder latent dimension
-        self.linear = nn.Linear(config.decoder_hidden_size, config.n_fft + 2)
+        self.linear = nn.Linear(config.decoder_hidden_size, 2 * (config.n_fft // 2 + 1))
 
 
 class WavTokenizerPreTrainedModel(EncodecPreTrainedModel):

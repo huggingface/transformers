@@ -105,8 +105,9 @@ audio_values = [
 
 The decoder is causal, so audio can be synthesized chunk by chunk as the codes arrive. With `use_streaming=True`,
 `decode` returns two caches to pass to the next chunk: `decoder_cache`, the state of the decoder, and
-`overlap_add_cache`, the last samples of the chunk, which the next chunk still contributes to. At the end of the
-stream, `overlap_add_cache.flush()` returns those last samples.
+`istft_cache`, the last samples of the chunk, which the next chunk still contributes to. At the end of the
+stream, `istft_cache.flush()` returns those last samples. Streaming decodes one stream per batch row, so
+`audio_codes_mask` is not supported.
 
 ```python
 import torch
@@ -125,20 +126,20 @@ inputs = feature_extractor(
 audio_codes = model.encode(**inputs).audio_codes
 
 chunk_size = 4  # codec frames per chunk
-decoder_cache, overlap_add_cache = None, None
+decoder_cache, istft_cache = None, None
 chunks = []
 for start in range(0, audio_codes.shape[-1], chunk_size):
     outputs = model.decode(
         audio_codes[..., start : start + chunk_size],
         decoder_cache=decoder_cache,
-        overlap_add_cache=overlap_add_cache,
+        istft_cache=istft_cache,
         use_streaming=True,
     )
-    decoder_cache, overlap_add_cache = outputs.decoder_cache, outputs.overlap_add_cache
+    decoder_cache, istft_cache = outputs.decoder_cache, outputs.istft_cache
     chunks.append(outputs.audio_values)  # play or send this chunk
 
 # end of the stream
-chunks.append(overlap_add_cache.flush().audio_values)
+chunks.append(istft_cache.flush().audio_values)
 
 audio_values = torch.cat(chunks, dim=-1)
 print("Audio values shape:", audio_values.shape)
@@ -165,9 +166,9 @@ A batch can be streamed too: pass the `audio_codes_mask` of each chunk to `decod
 [[autodoc]] LiquidCodecFeatureExtractor
     - __call__
 
-## LiquidCodecOverlapAddCache
+## LiquidCodecISTFTCache
 
-[[autodoc]] LiquidCodecOverlapAddCache
+[[autodoc]] LiquidCodecISTFTCache
     - update
     - flush
 
