@@ -25,11 +25,12 @@ from parameterized import parameterized
 
 from transformers import GenerationConfig, set_seed
 from transformers.exporters.base import ExportedModel
-from transformers.exporters.decompose import decompose_multimodal, is_multimodal
+from transformers.exporters.decompose import _MODALITY_SPECS, decompose_multimodal, is_multimodal
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter
+from transformers.exporters.multimodal import ExportedMultimodalModel
 from transformers.exporters.utils import (
     cast_leaf_tensors,
     decompose_for_generation,
@@ -917,7 +918,7 @@ class ExportTesterMixin:
         scopes = ["exactness" if scope == "all" else f"{scope}.exactness" for scope in scopes]
         return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
-    def _prepare_export_model_and_inputs(self, model_class, dynamic=False, device=torch_device):
+    def _prepare_export_model_and_inputs(self, model_class, dynamic=False, device=torch_device, return_model=False):
         """Create the model and the inputs to export and check it on.
 
         ``device`` defaults to ``torch_device``; the ExecuTorch tests pass ``"cpu"`` since that
@@ -927,6 +928,7 @@ class ExportTesterMixin:
         Returns:
             `{name: (model, inputs, new_inputs)}`: one entry per component (a whole model, or decomposed submodels for
             a multimodal model), with the inputs to trace it on and new ones it never saw (`_new_inputs_model_tester`).
+            With ``return_model``, also the whole model and its inputs: `(components, model, inputs)`.
         """
         config, inputs_dict = self._model_tester_inputs(model_class, self.model_tester)
 
@@ -936,9 +938,13 @@ class ExportTesterMixin:
 
         _, new_inputs_dict = self._model_tester_inputs(model_class, self._new_inputs_model_tester(dynamic=dynamic))
 
+        inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
         components = self._split_for_export(model, inputs_dict)
         new_inputs = self._split_for_export(model, new_inputs_dict)
-        return {name: (component, inputs, new_inputs[name][1]) for name, (component, inputs) in components.items()}
+        components = {
+            name: (component, inputs, new_inputs[name][1]) for name, (component, inputs) in components.items()
+        }
+        return (components, model, inputs_dict) if return_model else components
 
     def _model_tester_inputs(self, model_class, model_tester):
         """`model_tester`'s config and forward inputs for `model_class`, cleaned for export."""
@@ -1003,7 +1009,7 @@ class ExportTesterMixin:
             set_seed(1234)
             outputs = exported(**copy.deepcopy(checked)) if run is None else run(exported, copy.deepcopy(checked))
             if outputs is None:
-                return
+                return None
             if type(outputs) is not dict:
                 self.assertIs(type(outputs), type(eager_outputs), msg)
             # A component may return a dict of nested outputs (Qwen3-VL's deepstack features): flattened like eager's
@@ -1014,6 +1020,57 @@ class ExportTesterMixin:
                 self._check_outputs_close(
                     actual, eager, atol=atol, rtol=rtol, check_device=check_device, inputs=checked, msg=msg
                 )
+        return exported
+
+    def _check_multimodal_runtime(self, exporter, exported, model, inputs, atol, rtol, check_exactness, check_device):
+        """The components of a multimodal model, exported one by one, run end to end through the runtime like the
+        whole model: its modality features scattered into placeholder tokens, which a dual encoder (CLIP) has none of.
+        A modality's encoder outputs come back as its features alone (`pooler_output`): the export keeps no other
+        state of the encoder."""
+        # A component the backend's runtime couldn't run leaves nothing to assemble
+        if "text_embeddings_model" not in exported or "language_model" not in exported or None in exported.values():
+            return
+        if all(getattr(model.config, spec.token_field, None) is None for spec in _MODALITY_SPECS):
+            return
+        # Image features turned into VQ token ids (GLM-Image), which the runtime refuses to assemble
+        if getattr(model.config, "vq_config", None) is not None:
+            return
+        # A modality encoded inside the model's forward (Qwen2-Audio's audio) has no component to feed it
+        if any(
+            spec.component not in exported and any(inputs.get(key) is not None for key in spec.feature_keys)
+            for spec in _MODALITY_SPECS
+        ):
+            return
+        multimodal = ExportedMultimodalModel(
+            {name: component.components["model"] for name, component in exported.items()},
+            exporter.export_format,
+            model.config,
+        )
+        with torch.no_grad():
+            set_seed(1234)
+            expected = model(**copy.deepcopy(inputs))
+        set_seed(1234)
+        outputs = multimodal(**copy.deepcopy(inputs))
+        self.assertIs(type(outputs), type(expected))
+        if check_exactness:
+            encoder_state = tuple(f"{spec.modality}_outputs." for spec in _MODALITY_SPECS)
+            expected = get_leaf_tensors(expected)
+            expected = {
+                key: value
+                for key, value in expected.items()
+                if not key.startswith(encoder_state) or key.endswith(".pooler_output")
+            }
+            # BLIP-2's vision tower and Q-Former outputs, under the features it scatters: no component returns them
+            internals = ("vision_outputs.", "qformer_outputs.")
+            expected = {key: value for key, value in expected.items() if not key.startswith(internals)}
+            self._check_outputs_close(
+                get_leaf_tensors(outputs),
+                expected,
+                atol=atol,
+                rtol=rtol,
+                check_device=check_device,
+                inputs=inputs,
+            )
 
     def _check_outputs_close(self, actual, expected, atol, rtol, check_device=True, inputs=None, msg=None):
         """Assert outputs are close, allowing up to 5% element-level mismatch. `msg` prefixes the failure.
@@ -1071,10 +1128,13 @@ class ExportTesterMixin:
                 continue
 
             check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic, backend="dynamo")
-            components = self._prepare_export_model_and_inputs(model_class, dynamic=dynamic)
+            components, full_model, full_inputs = self._prepare_export_model_and_inputs(
+                model_class, dynamic=dynamic, return_model=True
+            )
+            exported = {}
             for name, (model, inputs, new_inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    self._check_export(
+                    exported[name] = self._check_export(
                         exporter,
                         config,
                         model,
@@ -1083,6 +1143,12 @@ class ExportTesterMixin:
                         atol=atol,
                         rtol=rtol,
                         check_exactness=check_exactness,
+                    )
+
+            if len(components) > 1:
+                with self.subTest(f"{model_class.__name__}/end to end"):
+                    self._check_multimodal_runtime(
+                        exporter, exported, full_model, full_inputs, atol, rtol, check_exactness, check_device=True
                     )
 
     # ──────────────────────── ONNX tests ─────────────────────────
@@ -1110,10 +1176,13 @@ class ExportTesterMixin:
             config = OnnxConfig(dynamic=dynamic, optimize=optimize, ort_fusions=ort_fusions)
 
             check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic, backend="onnx")
-            components = self._prepare_export_model_and_inputs(model_class, dynamic=dynamic)
+            components, full_model, full_inputs = self._prepare_export_model_and_inputs(
+                model_class, dynamic=dynamic, return_model=True
+            )
+            exported = {}
             for name, (model, inputs, new_inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    self._check_export(
+                    exported[name] = self._check_export(
                         exporter,
                         config,
                         model,
@@ -1123,6 +1192,12 @@ class ExportTesterMixin:
                         rtol=rtol,
                         check_exactness=check_exactness,
                         check_device=False,
+                    )
+
+            if len(components) > 1:
+                with self.subTest(f"{model_class.__name__}/end to end"):
+                    self._check_multimodal_runtime(
+                        exporter, exported, full_model, full_inputs, atol, rtol, check_exactness, check_device=False
                     )
 
     # ──────────────────── OpenVINO tests ─────────────────────────
@@ -1144,10 +1219,13 @@ class ExportTesterMixin:
                 continue
 
             check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic, backend="openvino")
-            components = self._prepare_export_model_and_inputs(model_class, dynamic=dynamic)
+            components, full_model, full_inputs = self._prepare_export_model_and_inputs(
+                model_class, dynamic=dynamic, return_model=True
+            )
+            exported = {}
             for name, (model, inputs, new_inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    self._check_export(
+                    exported[name] = self._check_export(
                         exporter,
                         config,
                         model,
@@ -1158,6 +1236,12 @@ class ExportTesterMixin:
                         check_exactness=check_exactness,
                         check_device=False,
                         run=_run_openvino_program,
+                    )
+
+            if len(components) > 1:
+                with self.subTest(f"{model_class.__name__}/end to end"):
+                    self._check_multimodal_runtime(
+                        exporter, exported, full_model, full_inputs, atol, rtol, check_exactness, check_device=False
                     )
 
     # ──────────────────── ExecuTorch tests ───────────────────────

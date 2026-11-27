@@ -34,6 +34,7 @@ _import_structure = {
     "exporter_onnx": ["OnnxExporter"],
     "exporter_openvino": ["OpenVINOExporter"],
     "metadata": ["ExportMetadata"],
+    "multimodal": ["ExportedMultimodalModel"],
     "quantizers": [
         "ExportQuantizer",
         "NNCFOnnxQuantizer",
@@ -66,6 +67,7 @@ if TYPE_CHECKING:
     from .exporter_onnx import OnnxExporter
     from .exporter_openvino import OpenVINOExporter
     from .metadata import ExportMetadata
+    from .multimodal import ExportedMultimodalModel
     from .quantizers import (
         ExportQuantizer,
         NNCFOnnxQuantizer,

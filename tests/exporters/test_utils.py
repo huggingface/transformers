@@ -635,7 +635,11 @@ class DecomposeMultimodalTest(unittest.TestCase):
         with torch.no_grad():
             for count in (2, 3, 5):
                 pixel_values, grid = images(count)
-                feed = {"pixel_values": pixel_values, "grid_thw": grid, **model.model.visual.get_data_dependent_inputs(grid)}
+                feed = {
+                    "pixel_values": pixel_values,
+                    "grid_thw": grid,
+                    **model.model.visual.get_data_dependent_inputs(grid),
+                }
                 expected = torch.cat(model.model.get_image_features(pixel_values, grid).pooler_output)
                 torch.testing.assert_close(exported(**{k: v for k, v in feed.items() if k in vision.inputs}), expected)
 
