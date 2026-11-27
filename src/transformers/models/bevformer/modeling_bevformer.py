@@ -25,6 +25,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, is_torchvision_available
@@ -35,7 +36,7 @@ if is_torchvision_available():
     from torchvision.transforms.functional import rotate
 
 
-class BevformerFrozenBatchNorm2d(nn.Module):
+class BevformerRegFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
 
@@ -76,7 +77,7 @@ class BevformerFrozenBatchNorm2d(nn.Module):
 
 def replace_batch_norm(model):
     r"""
-    Recursively replace all `torch.nn.BatchNorm2d` with `BevformerFrozenBatchNorm2d`.
+    Recursively replace all `torch.nn.BatchNorm2d` with `BevformerRegFrozenBatchNorm2d`.
 
     Args:
         model (torch.nn.Module):
@@ -84,7 +85,7 @@ def replace_batch_norm(model):
     """
     for name, module in model.named_children():
         if isinstance(module, nn.BatchNorm2d):
-            new_module = BevformerFrozenBatchNorm2d(module.num_features)
+            new_module = BevformerRegFrozenBatchNorm2d(module.num_features)
 
             if module.weight.device != torch.device("meta"):
                 new_module.weight.copy_(module.weight)
@@ -294,8 +295,7 @@ class BevformerCanBusMLP(nn.Module):
     MLP encoder for ego-motion CAN bus signals in BEVFormer.
 
     Encodes vehicle translation, rotation, velocity and acceleration signals into an additive
-    conditioning embedding for the BEV query plane. Submodule naming aligns with upstream
-    `pts_bbox_head.transformer.encoder.can_bus_mlp.0` and `.2`.
+    conditioning embedding for the BEV query plane.
 
     Args:
         config ([`BevformerConfig`]):
@@ -307,13 +307,10 @@ class BevformerCanBusMLP(nn.Module):
     def __init__(self, config: BevformerConfig, can_bus_dim: int | None = None):
         super().__init__()
         self.config = config
-        can_bus_dim = can_bus_dim if can_bus_dim is not None else getattr(config, "can_bus_dim", 18)
-        self.can_bus_mlp = nn.Sequential(
-            nn.Linear(can_bus_dim, config.d_model // 2),
-            nn.ReLU(inplace=True),
-            nn.Linear(config.d_model // 2, config.d_model),
-            nn.ReLU(inplace=True),
-        )
+        can_bus_dim = can_bus_dim if can_bus_dim is not None else config.can_bus_dim
+        self.fc1 = nn.Linear(can_bus_dim, config.d_model // 2)
+        self.fc2 = nn.Linear(config.d_model // 2, config.d_model)
+        self.activation_fn = ACT2FN[config.activation_function]
         self.can_bus_norm = nn.LayerNorm(config.d_model) if config.can_bus_norm else None
 
     def forward(self, can_bus: torch.Tensor) -> torch.Tensor:
@@ -326,7 +323,8 @@ class BevformerCanBusMLP(nn.Module):
             `torch.Tensor` of shape `(batch_size, 1, d_model)`:
                 Encoded CAN bus conditioning embedding.
         """
-        can_bus_embed = self.can_bus_mlp(can_bus)
+        can_bus_embed = self.activation_fn(self.fc1(can_bus))
+        can_bus_embed = self.activation_fn(self.fc2(can_bus_embed))
         if self.can_bus_norm is not None:
             can_bus_embed = self.can_bus_norm(can_bus_embed)
         return can_bus_embed.unsqueeze(1)
@@ -337,7 +335,6 @@ class BevformerClsHead(nn.Module):
     Classification head for BEVFormer object detection.
 
     Projects transformer decoder hidden states into raw class logits (pre-sigmoid).
-    Matches upstream `pts_bbox_head.cls_branches.{layer_idx}` with 2 intermediate Linear+LN+ReLU layers.
 
     Args:
         config ([`BevformerConfig`]):
@@ -350,13 +347,12 @@ class BevformerClsHead(nn.Module):
         super().__init__()
         self.config = config
         num_classes = num_classes if num_classes is not None else len(config.id2label)
-        layers = []
-        for _ in range(2):
-            layers.append(nn.Linear(config.d_model, config.d_model))
-            layers.append(nn.LayerNorm(config.d_model))
-            layers.append(nn.ReLU(inplace=True))
-        layers.append(nn.Linear(config.d_model, num_classes))
-        self.layers = nn.Sequential(*layers)
+        self.fc1 = nn.Linear(config.d_model, config.d_model)
+        self.layer_norm1 = nn.LayerNorm(config.d_model)
+        self.fc2 = nn.Linear(config.d_model, config.d_model)
+        self.layer_norm2 = nn.LayerNorm(config.d_model)
+        self.fc_out = nn.Linear(config.d_model, num_classes)
+        self.activation_fn = ACT2FN[config.activation_function]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
@@ -368,49 +364,28 @@ class BevformerClsHead(nn.Module):
             `torch.Tensor` of shape `(batch_size, num_queries, num_classes)`:
                 Raw classification scores.
         """
-        return self.layers(hidden_states)
+        hidden_states = self.activation_fn(self.layer_norm1(self.fc1(hidden_states)))
+        hidden_states = self.activation_fn(self.layer_norm2(self.fc2(hidden_states)))
+        return self.fc_out(hidden_states)
 
 
 class BevformerRegHead(nn.Module):
     """
-    3D Bounding Box Regression MLP head for BEVFormer.
+    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
+    height and width of a bounding box w.r.t. an image.
 
-    Predicts 3D bounding box coordinates or coordinate refinement offsets.
-    Layer structure `(Linear -> ReLU -> Linear -> ReLU -> Linear)` preserves upstream
-    `pts_bbox_head.reg_branches.{layer_idx}.0`, `.2`, and `.4` key numbering.
-
-    Args:
-        config ([`BevformerConfig`]):
-            Configuration of the model.
-        code_size (`int`, *optional*, defaults to 10):
-            Number of output regression parameters `[cx, cy, w, l, cz, h, sin(yaw), cos(yaw), vx, vy]`.
-        num_layers (`int`, *optional*, defaults to 3):
-            Number of linear layers in the MLP.
     """
 
-    def __init__(self, config: BevformerConfig, code_size: int = 10, num_layers: int = 3):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
         super().__init__()
-        self.config = config
-        self.code_size = code_size
+        self.num_layers = num_layers
+        h = [hidden_dim] * (num_layers - 1)
+        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
 
-        layers = []
-        for _ in range(num_layers - 1):
-            layers.append(nn.Linear(config.d_model, config.d_model))
-            layers.append(nn.ReLU(inplace=True))
-        layers.append(nn.Linear(config.d_model, code_size))
-        self.layers = nn.Sequential(*layers)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(batch_size, num_queries, d_model)`):
-                Decoder hidden states.
-
-        Returns:
-            `torch.Tensor` of shape `(batch_size, num_queries, code_size)`:
-                Predicted bounding box offsets or parameters.
-        """
-        return self.layers(hidden_states)
+    def forward(self, x):
+        for i, layer in enumerate(self.layers):
+            x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+        return x
 
 
 class MultiScaleDeformableAttention(nn.Module):
@@ -1569,11 +1544,10 @@ class BevformerDecoderLayer(nn.Module):
         return query
 
 
-def inverse_sigmoid(x: torch.Tensor, eps: float = 1e-5) -> torch.Tensor:
-    """Inverse sigmoid function with clamping for numerical stability."""
-    x = x.clamp(min=0.0, max=1.0)
+def inverse_sigmoid(x, eps=1e-5):
+    x = x.clamp(min=0, max=1)
     x1 = x.clamp(min=eps)
-    x2 = (1.0 - x).clamp(min=eps)
+    x2 = (1 - x).clamp(min=eps)
     return torch.log(x1 / x2)
 
 
@@ -1737,7 +1711,9 @@ class BevformerFor3DObjectDetection(BevformerPreTrainedModel):
         self.decoder = BevformerDetrTransformerDecoder(config)
 
         self.cls_branches = nn.ModuleList([BevformerClsHead(config) for _ in range(config.decoder_layers)])
-        self.reg_branches = nn.ModuleList([BevformerRegHead(config) for _ in range(config.decoder_layers)])
+        self.reg_branches = nn.ModuleList(
+            [BevformerRegHead(config.d_model, config.d_model, 10, 3) for _ in range(config.decoder_layers)]
+        )
         self.post_init()
 
     def forward(
