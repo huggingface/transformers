@@ -77,12 +77,10 @@ With the default, [`~PreTrainedModel.save_pretrained`] writes the compressed ten
 
 ## NVFP4 weight-only loading
 
-Pass `weight_only=True` to load a compressed-tensors `nvfp4-pack-quantized` checkpoint into torchao's `NVFP4Tensor`. This mode preserves the original packed weights and block scales without requantizing or converting the entire model to BF16. Install `compressed-tensors>=0.15.0` and a compatible `torchao>=0.16.0` build exposing `torchao.prototype.mx_formats.nvfp4_tensor.NVFP4Tensor`.
-
-This mode enables reuse of existing NVFP4 checkpoints on supported devices without native NVFP4 GEMMs, retaining packed weight storage while executing Linear operations in BF16. Currently, `weight_only=True` supports only NVFP4; other quantized formats are rejected.
+Pass `weight_only=True` to reuse compressed-tensors `nvfp4-pack-quantized` checkpoints on supported devices without native NVFP4 GEMMs. Packed weights and block scales are preserved in torchao's `NVFP4Tensor` without requantization. Only NVFP4 is supported. Install `compressed-tensors>=0.15.0` and a compatible `torchao>=0.16.0` build exposing `torchao.prototype.mx_formats.nvfp4_tensor.NVFP4Tensor`.
 
 > [!WARNING]
-> This is an explicit change from W4A4 to W4A16: the checkpoint's input activation quantization is disabled, so outputs can differ from its original deployment. The current torchao weight-only path dequantizes each Linear weight for every forward call, then performs BF16 Linear. It is not a native or fused FP4 GEMM, and this loading mode does not imply a speedup. Temporary dequantization allocations also contribute to peak memory.
+> This mode disables input activation quantization (W4A4 becomes W4A16), so outputs can differ from the original deployment. Torchao dequantizes each Linear weight on every forward call and performs BF16 Linear: this is not a fused FP4 GEMM and does not imply a speedup.
 
 ```python
 import torch
@@ -101,13 +99,13 @@ outputs = model.generate(**inputs, max_new_tokens=8, do_sample=False)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
-Supported checkpoints contain static, symmetric float4 `tensor_group` weights with group size 16, optionally with local-dynamic NVFP4 input activation quantization. All quantized groups must use this format. Targets and ignore patterns select ordinary `torch.nn.Linear` modules; unquantized modules, such as embeddings and the output head, retain the normal loading path. Block scales use `float8_e4m3fn`, and the compressed-tensors FP32 global scale is inverted to obtain torchao's multiplicative per-tensor scale. Input global scales are optional; when present, they are validated and consumed but not used for inference.
+All quantized groups must contain static, symmetric float4 `tensor_group` weights with group size 16 and absent or local-dynamic NVFP4 input quantization. Targets and ignore patterns select ordinary `torch.nn.Linear` modules; unquantized modules load normally. FP8 block scales are preserved, FP32 global weight scales are inverted for torchao, and optional input global scales are validated but unused.
 
-Allocator planning accounts for the packed weights and their block/global scales rather than the logical BF16 weight size. Temporary dequantization tensors and the KV cache still require additional memory.
+Memory planning accounts for packed weights and scales; temporary dequantization tensors and the KV cache require additional memory.
 
-This mode requires `dtype=torch.bfloat16` and an explicit whole-model device (`device_map="xpu"`, `"cuda:0"`, or `"cpu"`). Omitting `device_map` loads on CPU, which is useful for small correctness tests. Automatic device placement, CPU/disk offload, mixed quantized formats, tied quantized weights, KV-cache quantization, sparsity, and transforms are not supported. Models requiring any model-level `WeightConverter` (including fused/grouped conversions for MoE experts) are rejected, even when the conversion only affects unquantized modules; weight renamings remain supported. Training, QAT, compilation, and saving the loaded quantized model are not supported either.
+Use `dtype=torch.bfloat16` and one device (`device_map="xpu"`, `"cuda:0"`, or `"cpu"`; omitted means CPU). Unsupported: automatic placement, CPU/disk offload, mixed quantized formats, tied quantized weights, KV-cache quantization, sparsity, transforms, training, QAT, compilation, and saving the loaded quantized model. Any model-level `WeightConverter` is rejected, even for unquantized modules; weight renamings remain supported.
 
-`weight_only` cannot be combined with `dequantize` or `use_optimized_inference`. Like the other compressed-tensors loading options, it is not written into checkpoint metadata. Set it explicitly each time you load the original checkpoint. Leave it unset to retain the existing compressed-tensors behavior, or use `dequantize=True` alone for a dense model that can be fine-tuned or saved.
+`weight_only` cannot be combined with `dequantize` or `use_optimized_inference` and is not saved in checkpoint metadata: set it on each load. Leave it unset for the default behavior, or use `dequantize=True` alone for a dense model that can be fine-tuned or saved.
 
 ## FP8 kernel acceleration
 

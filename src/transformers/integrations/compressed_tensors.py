@@ -46,9 +46,6 @@ class CompressedTensorsNVFP4Deserialize(ConversionOps):
 
         module_name, _, _ = full_layer_name.rpartition(".")
         module = model.get_submodule(module_name)
-        if module_name not in self.hf_quantizer.nvfp4_modules:
-            raise ValueError(f"NVFP4 conversion was requested for unselected module {module_name}.")
-
         required = {"weight_packed", "weight_scale", "weight_global_scale"}
         allowed = required | {"input_global_scale"}
         if not required <= tensors.keys() or tensors.keys() - allowed:
@@ -60,16 +57,10 @@ class CompressedTensorsNVFP4Deserialize(ConversionOps):
         scales = tensors["weight_scale"]
         global_scale = tensors["weight_global_scale"]
         n, k = module.out_features, module.in_features
-        if k % 16 or packed.dtype != torch.uint8 or packed.shape != (n, k // 2):
-            raise ValueError(
-                f"{module_name}.weight_packed must be uint8 with shape {(n, k // 2)} and K divisible by 16."
-            )
+        if packed.dtype != torch.uint8 or packed.shape != (n, k // 2):
+            raise ValueError(f"{module_name}.weight_packed must be uint8 with shape {(n, k // 2)}.")
         if scales.dtype != torch.float8_e4m3fn or scales.shape != (n, k // 16):
             raise ValueError(f"{module_name}.weight_scale must be float8_e4m3fn with shape {(n, k // 16)}.")
-        if any(tensor.device != packed.device for tensor in tensors.values()) or packed.device.type == "meta":
-            raise ValueError(f"All NVFP4 tensors for {module_name} must be materialized on the same device.")
-        if module.weight.dtype != torch.bfloat16:
-            raise ValueError(f"NVFP4 weight-only module {module_name} requires BF16.")
         for name in ("weight_global_scale", "input_global_scale"):
             if name not in tensors:
                 continue

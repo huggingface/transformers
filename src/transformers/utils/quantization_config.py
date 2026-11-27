@@ -1205,6 +1205,17 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                 self.use_optimized_inference = False
 
     def _validate_weight_only(self):
+        def is_nvfp4(args):
+            return (
+                args.type == "float"
+                and args.num_bits == 4
+                and args.strategy == "tensor_group"
+                and args.group_size == 16
+                and args.symmetric
+                and args.actorder is None
+                and args.block_structure is None
+            )
+
         config = self.quantization_config
         if (
             config is None
@@ -1222,14 +1233,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             if (
                 (group.format or config.format) != "nvfp4-pack-quantized"
                 or weights is None
-                or weights.type != "float"
-                or weights.num_bits != 4
-                or weights.strategy != "tensor_group"
-                or weights.group_size != 16
-                or not weights.symmetric
+                or not is_nvfp4(weights)
                 or weights.dynamic
-                or weights.actorder is not None
-                or weights.block_structure is not None
             ):
                 raise ValueError(
                     f"NVFP4 weight-only loading requires static symmetric float4 tensor_group weights with group_size=16 "
@@ -1237,17 +1242,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                 )
             activations = group.input_activations
             if group.output_activations is not None or (
-                activations is not None
-                and (
-                    activations.type != "float"
-                    or activations.num_bits != 4
-                    or activations.strategy != "tensor_group"
-                    or activations.group_size != 16
-                    or not activations.symmetric
-                    or activations.dynamic != "local"
-                    or activations.actorder is not None
-                    or activations.block_structure is not None
-                )
+                activations is not None and (not is_nvfp4(activations) or activations.dynamic != "local")
             ):
                 raise ValueError(
                     f"NVFP4 weight-only loading supports only absent or local-dynamic NVFP4 input quantization "

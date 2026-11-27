@@ -77,6 +77,13 @@ class NVFP4ConfigTest(unittest.TestCase):
         invalid = nvfp4_config() | {"format": "pack-quantized"}
         with self.assertRaisesRegex(ValueError, "nvfp4-pack-quantized"):
             CompressedTensorsConfig(**invalid, weight_only=True).post_init()
+        for target in ("weights", "input_activations"):
+            for field, value in (("group_size", 32), ("dynamic", "local" if target == "weights" else False)):
+                with self.subTest(target=target, field=field):
+                    config = CompressedTensorsConfig(**nvfp4_config(), weight_only=True)
+                    setattr(getattr(config.quantization_config.config_groups["nvfp4"], target), field, value)
+                    with self.assertRaisesRegex(ValueError, "unsupported group"):
+                        config.post_init()
         default_quantizer = CompressedTensorsHfQuantizer(CompressedTensorsConfig(**nvfp4_config()))
         self.assertIs(default_quantizer.is_qat_trainable, False)
 
