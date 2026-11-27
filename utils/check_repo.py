@@ -501,6 +501,7 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
 )
 
 DOC_MODEL_NAMES_NOT_IN_AUTO = {
+    "gs1",
     "llama2",
     "myt5",
     "ul2",

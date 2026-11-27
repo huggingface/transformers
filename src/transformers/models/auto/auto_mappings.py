@@ -312,6 +312,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("groupvit", "GroupViTConfig"),
         ("groupvit_text_model", "GroupViTTextConfig"),
         ("groupvit_vision_model", "GroupViTVisionConfig"),
+        ("gs1", "GS1Config"),
         ("gte", "GteConfig"),
         ("helium", "HeliumConfig"),
         ("hgnet_v2", "HGNetV2Config"),
