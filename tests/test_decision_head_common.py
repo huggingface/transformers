@@ -63,6 +63,7 @@ class DecisionHeadTesterMixin:
     `backbone_class` model.
     """
 
+    is_training = False
     model_tester = None
     backbone_class = Qwen2ForCausalLM if is_torch_available() else None
 
@@ -111,8 +112,8 @@ class DecisionHeadTesterMixin:
                 self.assertEqual([len(s) for s in scores], [len(question.options) for question in prompt.questions])
 
     def test_training(self):
-        if self.model_tester is None or not self.model_tester.is_training:
-            self.skipTest("Model tester is not configured to run training tests.")
+        if not self.is_training:
+            self.skipTest("Decision head is not configured to run training tests.")
 
         for model_class in self.all_model_classes:
             with self.subTest(model=model_class.__name__):

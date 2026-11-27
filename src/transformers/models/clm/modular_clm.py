@@ -210,8 +210,6 @@ class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
             of state-to-candidate cross entropy and candidate-to-state cross entropy. The reverse direction includes
             only candidates with positive target mass, normalized across their matching states.
         """
-        loss_kwargs = {name: kwargs.pop(name) for name in ("group_ids", "num_items_in_batch") if name in kwargs}
-
         if input_ids.shape[0] != 1:
             raise ValueError("CLM expects one packed prompt; pack multiple state-candidate pairs into that prompt.")
         marks, num_options = marks[0], num_options[0]  # a batch of one prompt
@@ -238,7 +236,7 @@ class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
             logits = scale * states @ options.T
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, **loss_kwargs)
+            loss = self.loss_function(logits=logits, labels=labels, **kwargs)
         return ClmDecisionOutput(loss=loss, logits=logits)
 
     @torch.no_grad()
