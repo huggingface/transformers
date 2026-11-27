@@ -22,6 +22,7 @@ from .base import HfQuantizer
 if is_torch_available():
     import torch
 
+    from ..integrations.gguf.gguf_config_mapping import resolve_gguf_architecture
     from ..integrations.gguf.kernels import get_gguf_kernel
     from ..integrations.gguf.reader import GgufHeader, load_gguf_state_dict, read_gguf_metadata
     from ..integrations.gguf.utils import (
@@ -103,7 +104,7 @@ class GgufHfQuantizer(HfQuantizer):
     def read_header(self, gguf_file: str):
         """Parse the file's metadata, once `from_pretrained` knows where the file is."""
         metadata, _ = read_gguf_metadata(gguf_file)
-        self.supported = is_gguf_arch_supported(metadata["general.architecture"])
+        self.supported = is_gguf_arch_supported(resolve_gguf_architecture(metadata))
         if self.supported:
             self.header = GgufHeader.from_file(gguf_file)
             self.validate_environment()

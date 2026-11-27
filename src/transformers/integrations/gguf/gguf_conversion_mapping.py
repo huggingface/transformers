@@ -22,6 +22,7 @@ import torch
 from ...core_model_loading import (
     Concatenate,
     ConversionOps,
+    MergeModulelist,
     WeightConverter,
     WeightRenaming,
     WeightTransform,
@@ -201,6 +202,49 @@ def _qwen35moe(config) -> list[WeightTransform]:
     return _qwen35(config) + routed + [fuse_gate_up, restore_gate]
 
 
+def _mixtral(config) -> list[WeightTransform]:
+    """Restore llama.cpp's rotary row ordering and fuse the stacked gate/up experts."""
+    renamings = DENSE_DECODER_RENAMINGS + [
+        WeightRenaming(r"^output_norm\.", "model.norm."),
+        WeightRenaming(r"\.attn_norm\.", ".input_layernorm."),
+        WeightRenaming(r"\.ffn_norm\.", ".post_attention_layernorm."),
+        WeightRenaming(r"\.ffn_gate_inp\.", ".mlp.gate."),
+        WeightRenaming(r"\.ffn_down_exps\.weight", ".mlp.experts.down_proj"),
+    ]
+    conversions = [
+        WeightConverter(
+            source_patterns=[r"\.ffn_gate_exps\.weight", r"\.ffn_up_exps\.weight"],
+            target_patterns=".mlp.experts.gate_up_proj",
+            operations=[ConcatenateRows(dim=1)],
+        ),
+        # Older GGUFs store one tensor per expert, with the index after the projection.
+        WeightConverter(
+            source_patterns=[r".mlp.gate_proj.*.weight", r".mlp.up_proj.*.weight"],
+            target_patterns=".mlp.experts.gate_up_proj",
+            operations=[StackExperts(), ConcatenateRows(dim=1)],
+        ),
+        WeightConverter(
+            source_patterns=r".mlp.down_proj.*.weight",
+            target_patterns=".mlp.experts.down_proj",
+            operations=[StackExperts()],
+        ),
+    ]
+    head_dim = config.head_dim or config.hidden_size // config.num_attention_heads
+    for projection, heads in (("q", config.num_attention_heads), ("k", config.num_key_value_heads)):
+        # llama.cpp changes [head, half, pair] to [head, pair, half]. Gather the inverse
+        # permutation on rows, so packed quantization blocks can remain intact as well.
+        rows = torch.arange(heads * head_dim, device="cpu").reshape(heads, head_dim // 2, 2)
+        permutation = rows.transpose(1, 2).reshape(-1)
+        conversions.append(
+            WeightConverter(
+                source_patterns=f"self_attn.{projection}_proj.weight",
+                target_patterns=f"self_attn.{projection}_proj.weight",
+                operations=[PermuteRows(permutation)],
+            )
+        )
+    return renamings + conversions
+
+
 def _lfm2(config) -> list[WeightTransform]:
     """LFM2: short-convolution blocks, with full attention on some layers.
 
@@ -233,8 +277,9 @@ def _lfm2(config) -> list[WeightTransform]:
     return renamings + [conv_kernel]
 
 
-# gguf `general.architecture` -> builder taking the model config
+# Resolved GGUF architecture -> builder taking the model config
 GGUF_ARCHS = {
+    "mixtral": _mixtral,
     "qwen35": _qwen35,
     "qwen35moe": _qwen35moe,
     "lfm2": _lfm2,
@@ -426,6 +471,12 @@ class ConcatenateRows(Concatenate):
     supports_packed = True
 
 
+class StackExperts(MergeModulelist):
+    """Stack individual expert matrices on dim 0 without changing their packed rows."""
+
+    supports_packed = True
+
+
 class Dequantize(ConversionOps):
     """Unpack GGUF blocks into values. First in its chain, since later transforms need dense values, and the ggml
     type is looked up per parameter.
@@ -452,7 +503,10 @@ class Dequantize(ConversionOps):
         block_elements, block_bytes = GGML_BLOCK[ggml_type]
         values = {}
         for key, tensors in input_dict.items():
-            blocks = tensors[0] if isinstance(tensors, list) else tensors
+            if isinstance(tensors, list):
+                blocks = tensors[0] if len(tensors) == 1 else torch.stack(tensors)
+            else:
+                blocks = tensors
             if blocks.dtype != torch.uint8:
                 raise ValueError(f"{key} is {blocks.dtype}, not torch.uint8")
             cols = blocks.shape[-1] // block_bytes * block_elements
