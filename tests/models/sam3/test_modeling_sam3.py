@@ -22,7 +22,9 @@ from transformers.image_utils import load_image
 from transformers.testing_utils import (
     backend_empty_cache,
     require_deterministic_for_xpu,
+    require_scipy,
     require_torch,
+    require_vision,
     slow,
     torch_device,
 )
@@ -38,6 +40,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
+    from transformers.loss.loss_sam3 import Sam3HungarianMatcher, Sam3Loss
     from transformers.models.sam3.configuration_sam3 import (
         Sam3Config,
         Sam3DETRDecoderConfig,
@@ -288,6 +291,21 @@ class Sam3ModelTester:
         config = self.get_config()
 
         return config, pixel_values, input_ids, attention_mask
+
+    def prepare_labels(self):
+        labels = []
+        for _ in range(self.batch_size):
+            num_boxes = 3
+            centers = torch.rand(num_boxes, 2, device=torch_device) * 0.6 + 0.2
+            sizes = torch.rand(num_boxes, 2, device=torch_device) * 0.3 + 0.1
+            boxes = torch.cat([centers, sizes], dim=-1)
+            # SAM3 mask decoder outputs masks at 1/4 of the input image resolution (stride 4)
+            masks = (
+                torch.rand(num_boxes, self.image_size // 4, self.image_size // 4, device=torch_device) > 0.5
+            ).float()
+            is_valid = torch.ones(num_boxes, dtype=torch.bool, device=torch_device)
+            labels.append({"boxes": boxes, "masks": masks, "is_valid_mask": is_valid})
+        return labels
 
     def get_config(self):
         backbone_config = Sam3ViTConfig(
@@ -731,6 +749,254 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     ):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
+    @require_scipy
+    @require_vision
+    def test_training(self):
+        """Override: Sam3Model IS in MODEL_MAPPING_NAMES so inherited test_training
+        skips it. Without this, training is never tested on this model."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            outputs = model(**inputs)
+
+            self.assertIsNotNone(outputs.loss)
+            self.assertIsNotNone(outputs.loss_dict)
+            for key in ("loss_ce", "loss_bbox", "loss_giou", "loss_mask", "loss_dice", "loss_presence"):
+                self.assertIn(key, outputs.loss_dict)
+            self.assertGreater(outputs.loss.item(), 0.0)
+
+            outputs.loss.backward()
+            has_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.parameters())
+            self.assertTrue(has_grad, "No non-zero gradients after backward")
+            self.assertIsNotNone(model.detr_decoder.presence_head.layer3.weight.grad)
+
+            # Verify Trainer tuple contract: loss is the first element when return_dict=False
+            with torch.no_grad():
+                tuple_outputs = model(**inputs, return_dict=False)
+            self.assertIsInstance(tuple_outputs, tuple)
+            self.assertEqual(tuple_outputs[0].ndim, 0)
+            self.assertGreater(tuple_outputs[0].item(), 0.0)
+
+    @require_scipy
+    @require_vision
+    def test_auxiliary_loss(self):
+        """Aux loss enabled + multilayers produces aux outputs, aux loss keys, and flowing gradients."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.detr_decoder_config.num_layers = 3
+        config.auxiliary_loss = True
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            outputs = model(**inputs)
+
+            self.assertIsNotNone(outputs.auxiliary_outputs)
+            self.assertEqual(len(outputs.auxiliary_outputs), 2)
+            for aux_out in outputs.auxiliary_outputs:
+                self.assertIn("logits", aux_out)
+                self.assertIn("pred_boxes", aux_out)
+                self.assertIn("presence_logits", aux_out)
+
+            for i in range(2):
+                for key in ("loss_ce", "loss_bbox", "loss_giou", "loss_presence"):
+                    self.assertIn(f"{key}_aux_{i}", outputs.loss_dict)
+                self.assertNotIn(f"loss_mask_aux_{i}", outputs.loss_dict)
+                self.assertNotIn(f"loss_dice_aux_{i}", outputs.loss_dict)
+
+            outputs.loss.backward()
+
+    @require_scipy
+    @require_vision
+    def test_loss_mixed_masks_and_detection_only(self):
+        """Verify loss handling for mixed-mask batches (with upsampling and is_valid_mask), detection-only, and empty targets."""
+        config = Sam3Config()
+        loss_fn = Sam3Loss(config)
+
+        b0_boxes = torch.tensor([[0.25, 0.25, 0.3, 0.3], [0.65, 0.65, 0.3, 0.3]], device=torch_device)
+        b0_masks = torch.ones(2, 32, 32, device=torch_device)
+        b0_valid = torch.tensor([True, False], device=torch_device)
+        b1_boxes = torch.tensor([[0.4, 0.4, 0.4, 0.4]], device=torch_device)
+
+        # Mixed-mask batch (image 0 has masks at 32x32 + partial is_valid_mask, image 1 has masks=None)
+        labels_mixed = [
+            {"boxes": b0_boxes, "masks": b0_masks, "is_valid_mask": b0_valid},
+            {"boxes": b1_boxes, "masks": None},
+        ]
+        pred_logits = torch.randn(2, 5, device=torch_device, requires_grad=True)
+        pred_boxes = (torch.rand(2, 5, 4, device=torch_device) * 0.5 + 0.25).requires_grad_(True)
+        pred_masks = torch.randn(2, 5, 16, 16, device=torch_device, requires_grad=True)
+        presence_logits = torch.randn(2, 1, device=torch_device, requires_grad=True)
+
+        loss_dict_mixed = loss_fn(
+            {
+                "logits": pred_logits,
+                "pred_boxes": pred_boxes,
+                "pred_masks": pred_masks,
+                "presence_logits": presence_logits,
+            },
+            labels_mixed,
+        )
+        loss_mixed = sum(loss_dict_mixed.values())
+
+        self.assertGreater(loss_mixed.item(), 0.0)
+        self.assertGreater(loss_dict_mixed["loss_mask"].item(), 0.0)
+        self.assertGreater(loss_dict_mixed["loss_dice"].item(), 0.0)
+        self.assertGreater(loss_dict_mixed["loss_presence"].item(), 0.0)
+
+        loss_mixed.backward()
+        self.assertIsNotNone(pred_logits.grad)
+        self.assertIsNotNone(pred_boxes.grad)
+        self.assertIsNotNone(pred_masks.grad)
+        self.assertIsNotNone(presence_logits.grad)
+
+        # Detection-only batch (no masks)
+        labels_det = [{"boxes": b0_boxes}, {"boxes": b1_boxes}]
+        pred_logits_det = torch.randn(2, 5, device=torch_device, requires_grad=True)
+        pred_boxes_det = (torch.rand(2, 5, 4, device=torch_device) * 0.5 + 0.25).requires_grad_(True)
+        pred_masks_det = torch.randn(2, 5, 16, 16, device=torch_device, requires_grad=True)
+        presence_logits_det = torch.randn(2, 1, device=torch_device, requires_grad=True)
+
+        loss_dict_det = loss_fn(
+            {
+                "logits": pred_logits_det,
+                "pred_boxes": pred_boxes_det,
+                "pred_masks": pred_masks_det,
+                "presence_logits": presence_logits_det,
+            },
+            labels_det,
+        )
+        loss_det = sum(loss_dict_det.values())
+
+        self.assertGreater(loss_det.item(), 0.0)
+        self.assertEqual(loss_dict_det["loss_mask"].item(), 0.0)
+        self.assertEqual(loss_dict_det["loss_dice"].item(), 0.0)
+        self.assertGreater(loss_dict_det["loss_bbox"].item(), 0.0)
+        self.assertGreater(loss_dict_det["loss_giou"].item(), 0.0)
+        self.assertGreater(loss_dict_det["loss_ce"].item(), 0.0)
+        loss_det.backward()
+        self.assertIsNotNone(pred_logits_det.grad)
+        self.assertIsNotNone(pred_boxes_det.grad)
+
+        # Negative-prompt batch (0 GT boxes in every image): query CE/box/mask losses are 0, presence loss is active
+        labels_empty = [
+            {"boxes": torch.zeros(0, 4, device=torch_device)},
+            {"boxes": torch.zeros(0, 4, device=torch_device)},
+        ]
+        pred_logits_empty = torch.randn(2, 5, device=torch_device, requires_grad=True)
+        pred_boxes_empty = (torch.rand(2, 5, 4, device=torch_device) * 0.5 + 0.25).requires_grad_(True)
+        pred_masks_empty = torch.randn(2, 5, 16, 16, device=torch_device, requires_grad=True)
+        presence_logits_empty = torch.randn(2, 1, device=torch_device, requires_grad=True)
+
+        loss_dict_empty = loss_fn(
+            {
+                "logits": pred_logits_empty,
+                "pred_boxes": pred_boxes_empty,
+                "pred_masks": pred_masks_empty,
+                "presence_logits": presence_logits_empty,
+            },
+            labels_empty,
+        )
+        loss_empty = sum(loss_dict_empty.values())
+        self.assertEqual(loss_dict_empty["loss_ce"].item(), 0.0)
+        self.assertEqual(loss_dict_empty["loss_bbox"].item(), 0.0)
+        self.assertEqual(loss_dict_empty["loss_mask"].item(), 0.0)
+        self.assertGreater(loss_dict_empty["loss_presence"].item(), 0.0)
+        loss_empty.backward()
+        self.assertIsNotNone(presence_logits_empty.grad)
+
+    @require_scipy
+    @require_vision
+    def test_loss_dict_matches_reference(self):
+        """Verify that Sam3Loss matches reference loss values from Meta SAM3 original implementation."""
+        loss_fn = Sam3Loss(Sam3Config())
+
+        pred_logits = torch.tensor(
+            [[[1.2], [-0.5], [0.1], [-1.0]], [[-0.8], [0.9], [-0.2], [-1.5]]],
+            dtype=torch.float32,
+            requires_grad=True,
+        )
+        pred_boxes = torch.tensor(
+            [
+                [[0.52, 0.48, 0.39, 0.41], [0.22, 0.19, 0.21, 0.18], [0.8, 0.8, 0.2, 0.2], [0.5, 0.5, 0.8, 0.8]],
+                [[0.3, 0.3, 0.3, 0.3], [0.68, 0.72, 0.42, 0.38], [0.1, 0.9, 0.1, 0.1], [0.5, 0.5, 0.2, 0.2]],
+            ],
+            dtype=torch.float32,
+            requires_grad=True,
+        )
+        pred_masks = torch.tensor(
+            [
+                [[[0.8] * 8] * 8, [[-0.5] * 8] * 8, [[0.1] * 8] * 8, [[-1.2] * 8] * 8],
+                [[[-0.3] * 8] * 8, [[1.1] * 8] * 8, [[-0.9] * 8] * 8, [[0.4] * 8] * 8],
+            ],
+            dtype=torch.float32,
+            requires_grad=True,
+        )
+        presence_logits = torch.tensor([[0.7], [-0.4]], dtype=torch.float32, requires_grad=True)
+
+        outputs = {
+            "logits": pred_logits,
+            "pred_boxes": pred_boxes,
+            "pred_masks": pred_masks,
+            "presence_logits": presence_logits,
+        }
+
+        labels = [
+            {
+                "boxes": torch.tensor([[0.5, 0.5, 0.4, 0.4], [0.2, 0.2, 0.2, 0.2]], dtype=torch.float32),
+                "masks": torch.ones(2, 8, 8, dtype=torch.float32),
+                "is_valid_mask": torch.tensor([True, True]),
+            },
+            {
+                "boxes": torch.tensor([[0.7, 0.7, 0.4, 0.4]], dtype=torch.float32),
+                "masks": torch.ones(1, 8, 8, dtype=torch.float32),
+                "is_valid_mask": torch.tensor([True]),
+            },
+        ]
+
+        loss_dict = loss_fn(outputs, labels)
+        total_loss = sum(loss_dict.values())
+
+        # Reference from facebookresearch/sam3
+        expected_loss_dict = {
+            "loss_ce": torch.tensor(46.2093773),
+            "loss_bbox": torch.tensor(0.3333333),
+            "loss_giou": torch.tensor(0.4183969),
+            "loss_mask": torch.tensor(7.1833558),
+            "loss_dice": torch.tensor(2.5666299),
+            "loss_presence": torch.tensor(6.5810065),
+        }
+        expected_total = torch.tensor(63.2921004)
+
+        for k, expected_v in expected_loss_dict.items():
+            self.assertIn(k, loss_dict)
+            torch.testing.assert_close(loss_dict[k], expected_v, atol=1e-5, rtol=1e-5)
+
+        torch.testing.assert_close(total_loss, expected_total, atol=1e-5, rtol=1e-5)
+
+        total_loss.backward()
+        self.assertIsNotNone(pred_logits.grad)
+        self.assertIsNotNone(pred_boxes.grad)
+        self.assertIsNotNone(pred_masks.grad)
+        self.assertIsNotNone(presence_logits.grad)
+
+    @require_scipy
+    @require_vision
+    def test_matcher_with_nan_logits(self):
+        """NaN costs must not crash linear_sum_assignment and must only match if no finite query remains."""
+        matcher = Sam3HungarianMatcher(Sam3Config())
+        logits = torch.tensor([[float("nan"), float("nan"), 0.5, -0.5]])
+        pred_boxes = torch.rand(1, 4, 4) * 0.5 + 0.25
+        targets = [{"boxes": torch.rand(2, 4) * 0.5 + 0.25}]
+
+        indices = matcher({"logits": logits, "pred_boxes": pred_boxes}, targets)
+        source_indices, target_indices = indices[0]
+        self.assertEqual(source_indices.tolist(), [2, 3])
+        self.assertEqual(sorted(target_indices.tolist()), [0, 1])
+
     def test_forward_with_text_embeds(self):
         """Test that text_embeds parameter works correctly."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -973,6 +1239,9 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 inputs_dict["input_ids"] = torch.randint(0, vocab_size, (batch_size, 16), device=torch_device)
             if "attention_mask" not in inputs_dict or inputs_dict.get("attention_mask") is None:
                 inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["input_ids"])
+
+        if return_labels:
+            inputs_dict["labels"] = self.model_tester.prepare_labels()
 
         return inputs_dict
 
