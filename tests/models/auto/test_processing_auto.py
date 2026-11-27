@@ -376,7 +376,9 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
         try:
             AutoConfig.register("custom", CustomConfig)
-            AutoImageProcessor.register(CustomConfig, image_processor_classes={"pil": CustomImageProcessor})
+            AutoImageProcessor.register(
+                CustomConfig, image_processor_classes={"pil": CustomImageProcessor, "foo": CustomImageProcessor}
+            )
             AutoVideoProcessor.register(CustomConfig, CustomVideoProcessor)
 
             processor = CustomMultimodalProcessor(
