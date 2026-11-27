@@ -145,6 +145,8 @@ class CacheAllocator(ABC):
     supports_block_table: bool
     rows_per_token: int
     layer_type: str
+    # Whether the read and write indices hold one entry per sequence of the batch rather than one per token
+    indexes_by_sequence: bool = False
     # These attributes are only known once the cache tensor is registered
     blocks_per_sector: int
     num_pages: int
