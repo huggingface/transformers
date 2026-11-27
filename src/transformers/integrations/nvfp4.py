@@ -97,6 +97,20 @@ def dequantize_nvfp4(packed: torch.Tensor, scales: torch.Tensor, scale_2) -> tor
     return (weight * scales * scale_2).flatten(1)
 
 
+def swizzle_sf(sf_rowmajor: torch.Tensor) -> torch.Tensor:
+    """
+    The block-scaled GEMM layout of row-major FP8 block scales `(..., rows, cols)`, flattened per leading index:
+    padded to 128-row x 4-column tiles, each tile stored as 32x16 bytes (rows `r`, `r + 32`, `r + 64`, `r + 96`
+    interleaved).
+    """
+    *batch, rows, cols = sf_rowmajor.shape
+    row_tiles, col_tiles = -(-rows // 128), -(-cols // 4)
+    padded = sf_rowmajor.new_zeros(*batch, row_tiles * 128, col_tiles * 4)
+    padded[..., :rows, :cols] = sf_rowmajor
+    tiles = padded.view(*batch, row_tiles, 128, col_tiles, 4).transpose(-3, -2)
+    return tiles.reshape(*batch, -1, 4, 32, 4).transpose(-3, -2).reshape(*batch, -1)
+
+
 def nvfp4_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -177,182 +191,6 @@ class NVFP4Linear(nn.Module):
         return f"in_features={self.in_features}, out_features={self.out_features}, nvfp4"
 
 
-def _frozen(*shape, dtype: torch.dtype) -> nn.Parameter:
-    """An uninitialized parameter loading quantized data, so without gradients"""
-    return nn.Parameter(torch.empty(*shape, dtype=dtype), requires_grad=False)
-
-
-def _scale_gate_up(output: torch.Tensor, scales: torch.Tensor) -> torch.Tensor:
-    """Scale each half of `output` (e.g. gate, up) by its own column of `scales` `(rows, num_halves)`"""
-    return (output.unflatten(-1, (scales.shape[-1], -1)) * scales.unsqueeze(-1)).flatten(-2)
-
-
-class NVFP4Experts(nn.Module):
-    """
-    Fused experts from per-expert ModelOpt NVFP4 checkpoints, merged by the model's converters. Per projection of
-    `(num_experts, out_features, in_features)`: e2m1 `{proj}` (two per byte), FP8 block scales `{proj}_scale` and
-    their swizzled `{proj}_sf`, per-tensor `{proj}_scale_2` and `{proj}_input_scale` (`(num_experts, 2)` for gate, up).
-    """
-
-    def __init__(self, config, has_gate: bool = True, has_bias: bool = False, weight_only: bool = False):
-        super().__init__()
-        if has_bias:
-            raise ValueError("NVFP4Experts does not support bias")
-
-        self.config = config
-        self.has_gate = has_gate
-        # Weight-only (W4A16): each hit expert's weights are dequantized in its forward, the activations stay in full
-        # precision
-        self.weight_only = weight_only
-
-        self.act_fn = ACT2FN[getattr(config, "hidden_activation", None) or config.hidden_act]
-        self.limit = getattr(config, "swiglu_limit", None)
-        self.num_experts = getattr(config, "num_local_experts", None) or config.num_experts
-
-        hidden = config.hidden_size
-        intermediate = getattr(config, "moe_intermediate_size", None) or config.intermediate_size
-        self.in_proj = "gate_up_proj" if has_gate else "up_proj"
-        in_proj_shape = (self.num_experts, 2 * intermediate if has_gate else intermediate, hidden)
-        self.projections = {self.in_proj: in_proj_shape, "down_proj": (self.num_experts, hidden, intermediate)}
-
-        # Parameters, not buffers: expert parallelism shards them along their first axis, the experts'
-        for name, (num_experts, out_features, in_features) in self.projections.items():
-            self.register_parameter(name, _frozen(num_experts, out_features, in_features // 2, dtype=torch.uint8))
-            sf_shape = swizzled_sf_shape(out_features, in_features)
-            self.register_parameter(f"{name}_sf", _frozen(num_experts, *sf_shape, dtype=torch.int32))
-
-            block_scales = _frozen(num_experts, out_features, in_features // SF_VEC_SIZE, dtype=torch.uint8)
-            self.register_parameter(f"{name}_scale", block_scales)
-            scales_shape = (num_experts, 2) if name == "gate_up_proj" else (num_experts,)
-            self.register_parameter(f"{name}_scale_2", _frozen(*scales_shape, dtype=torch.float32))
-            # Weight-only checkpoints save it too, unused
-            self.register_parameter(f"{name}_input_scale", _frozen(*scales_shape, dtype=torch.float32))
-
-    def _activate(self, up: torch.Tensor) -> torch.Tensor:
-        if not self.has_gate:
-            return self.act_fn(up)
-        gate, up = up.chunk(2, dim=-1)
-        if self.limit is not None:
-            gate, up = gate.clamp(max=self.limit), up.clamp(min=-self.limit, max=self.limit)
-        return self.act_fn(gate) * up
-
-    def scales(self, name: str, expert_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """The activation scale `(rows,)` and the weight scales `(rows, num_halves)` of the experts `expert_ids`"""
-        # gate and up read the same activations: one scale, the largest (they match in ModelOpt)
-        input_scale = getattr(self, f"{name}_input_scale").view(self.num_experts, -1).amax(-1)
-        return input_scale[expert_ids], getattr(self, f"{name}_scale_2").view(self.num_experts, -1)[expert_ids]
-
-    def linear(self, name: str, expert_idx: torch.Tensor, input: torch.Tensor) -> torch.Tensor:
-        if self.weight_only:
-            weight = dequantize_nvfp4(getattr(self, name)[expert_idx], getattr(self, f"{name}_scale")[expert_idx], 1.0)
-            scale_2 = getattr(self, f"{name}_scale_2").view(self.num_experts, -1)[expert_idx.reshape(1)]
-            return _scale_gate_up(nn.functional.linear(input, weight.to(input.dtype)), scale_2).to(input.dtype)
-
-        _, out_features, in_features = self.projections[name]
-        input_scale, scale_2 = self.scales(name, expert_idx.reshape(1))
-        output = nvfp4_linear(
-            input,
-            getattr(self, name)[expert_idx],
-            getattr(self, f"{name}_sf")[expert_idx],
-            getattr(self, f"{name}_scale")[expert_idx],
-            torch.ones(1, device=input.device),  # the global scales are applied to the output, per half
-            out_features,
-            in_features,
-            input_scale,
-        )
-        return _scale_gate_up(output, scale_2).to(input.dtype)
-
-    def grouped_linear(self, name, input, expert_ids, tokens_per_expert, offsets) -> torch.Tensor:
-        """W4A4 `scaled_grouped_mm` over rows sorted by expert, each divided by its expert's static activation scale"""
-        from torch.nn.functional import ScalingType, SwizzleType, scaled_grouped_mm
-
-        input_scale, scale_2 = self.scales(name, expert_ids)
-        qinput, input_sf = load_nvfp4_kernel().scaled_fp4_quant(
-            (input.float() / input_scale[:, None]).to(torch.bfloat16).contiguous(),
-            torch.ones(1, device=input.device),
-            False,
-        )
-
-        # The grouped GEMM wants each expert's block scales on a new 128-row tile; static size, so no host sync
-        input_sf = input_sf.view(torch.uint8)
-        padding = -tokens_per_expert % 128
-        rows = torch.arange(input_sf.shape[0], device=input.device) + (torch.cumsum(padding, 0) - padding)[expert_ids]
-        grouped_sf = input_sf.new_zeros(input_sf.shape[0] + 127 * self.num_experts, input_sf.shape[1])
-        grouped_sf[rows] = input_sf
-
-        fp4 = torch.float4_e2m1fn_x2
-        # torch's NVFP4 grouped GEMM takes a global scale per operand too: ones, the global scales scale the output
-        ones = torch.ones(self.num_experts, device=input.device)
-        output = scaled_grouped_mm(
-            qinput.view(fp4),
-            getattr(self, name).view(fp4).transpose(-2, -1),
-            [swizzle_sf(grouped_sf).view(-1, -(-input_sf.shape[1] // 4) * 4).view(_FP8_DTYPE), ones[:1]],
-            [ScalingType.BlockWise1x16, ScalingType.TensorWise],
-            [getattr(self, f"{name}_sf").view(self.num_experts, -1).view(_FP8_DTYPE), ones],
-            [ScalingType.BlockWise1x16, ScalingType.TensorWise],
-            swizzle_a=SwizzleType.SWIZZLE_32_4_4,
-            swizzle_b=SwizzleType.SWIZZLE_32_4_4,
-            offs=offsets,
-            output_dtype=torch.bfloat16,
-        )
-
-        return _scale_gate_up(output, input_scale[:, None] * scale_2).to(input.dtype)
-
-    def eager_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
-        """One NVFP4 GEMM per hit expert"""
-        final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
-        for expert_idx in top_k_index.unique():
-            if expert_idx >= self.num_experts:  # another rank's, under expert parallelism
-                continue
-            token_idx, top_k_pos = torch.where(top_k_index == expert_idx)
-            current = self._activate(self.linear(self.in_proj, expert_idx, hidden_states[token_idx]))
-            current = self.linear("down_proj", expert_idx, current) * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current.to(final_hidden_states.dtype))
-        return final_hidden_states.to(hidden_states.dtype)
-
-    def forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
-        # The eager implementation: `quantized_module` wraps the class to dispatch to `ALL_NVFP4_EXPERTS_FUNCTIONS`
-        return self.eager_forward(hidden_states, top_k_index, top_k_weights)
-
-
-def nvfp4_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
-    """Tokens sorted by expert, one grouped NVFP4 GEMM per projection"""
-    if self.weight_only:  # the grouped GEMM quantizes activations
-        return self.eager_forward(hidden_states, top_k_index, top_k_weights)
-    # torch's grouped NVFP4 GEMM only runs on sm90 / sm100 (e.g. not on sm120): one GEMM per expert elsewhere
-    if hidden_states.is_cuda and torch.cuda.get_device_capability(hidden_states.device) not in ((9, 0), (10, 0)):
-        return self.eager_forward(hidden_states, top_k_index, top_k_weights)
-
-    expert_ids, perm = torch.sort(top_k_index.reshape(-1))
-    # histc instead of bincount avoids cuda graph issues; CPU and MPS only support float input
-    histc_input = expert_ids.float() if hidden_states.device.type in ("cpu", "mps") else expert_ids.int()
-    tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1).long()
-
-    # Expert parallelism marks other ranks' routes with ids past `num_experts`: sorted last, past every group, so
-    # the GEMM leaves their rows unwritten. Their ids are clamped for the scale lookups and their rows zeroed.
-    on_rank = expert_ids < self.num_experts
-    expert_ids = expert_ids.clamp(max=self.num_experts - 1)
-    grouped = (expert_ids, tokens_per_expert, torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32))
-
-    hidden = hidden_states[perm // top_k_index.shape[-1]]
-    hidden = self._activate(self.grouped_linear(self.in_proj, hidden, *grouped))
-    hidden = self.grouped_linear("down_proj", hidden, *grouped) * top_k_weights.reshape(-1)[perm, None]
-    hidden = hidden.masked_fill(~on_rank[:, None], 0.0)
-
-    output = torch.empty_like(hidden, dtype=torch.float32)
-    output[perm] = hidden.to(output.dtype)  # back to the token order
-    return output.view(*top_k_index.shape, -1).sum(dim=1).to(hidden_states.dtype)
-
-
-class NVFP4ExpertsInterface(ExpertsInterface):
-    """Interface for registering custom NVFP4 experts forward functions; `eager` is `NVFP4Experts.eager_forward`."""
-
-    # No batched NVFP4 GEMM: `generate`'s decode-time switch to `batched_mm` keeps the grouped one
-    _global_mapping = {"grouped_mm": nvfp4_grouped_mm_experts_forward, "batched_mm": nvfp4_grouped_mm_experts_forward}
-
-
-ALL_NVFP4_EXPERTS_FUNCTIONS = NVFP4ExpertsInterface()
-
 
 class NVFP4Quantize(ConversionOps):
     """Pack a floating-point checkpoint weight into the buffers used by `NVFP4Linear`."""
@@ -387,22 +225,12 @@ def swizzled_sf_shape(out_features: int, in_features: int) -> tuple[int, int]:
     return -(-out_features // 128) * 128, -(-in_features // (SF_VEC_SIZE * 4))
 
 
-def swizzle_sf(sf_rowmajor: torch.Tensor) -> torch.Tensor:
-    """
-    The block-scaled GEMM layout of row-major FP8 block scales `(..., rows, cols)`, flattened per leading index:
-    padded to 128-row x 4-column tiles, each tile stored as 32x16 bytes (rows `r`, `r + 32`, `r + 64`, `r + 96`
-    interleaved).
-    """
-    *batch, rows, cols = sf_rowmajor.shape
-    row_tiles, col_tiles = -(-rows // 128), -(-cols // 4)
-    padded = sf_rowmajor.new_zeros(*batch, row_tiles * 128, col_tiles * 4)
-    padded[..., :rows, :cols] = sf_rowmajor
-    tiles = padded.view(*batch, row_tiles, 128, col_tiles, 4).transpose(-3, -2)
-    return tiles.reshape(*batch, -1, 4, 32, 4).transpose(-3, -2).reshape(*batch, -1)
-
-
 class NVFP4Deserialize(ConversionOps):
-    """ModelOpt's FP8 block scales `*_scale` as bytes, plus their swizzled `*_sf` for the kernel"""
+    """
+    ModelOpt's FP8 block scales `*_scale` as bytes, plus their swizzled `*_sf` for the kernel
+    TODO: check why we need to rename weight_scale_2 to input scale?
+
+    """
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
@@ -428,7 +256,9 @@ class NVFP4Deserialize(ConversionOps):
 
 
 class NVFP4Dequantize(ConversionOps):
-    """Dense weights, `fp4 * weight_scale * weight_scale_2` (two e2m1 values per byte, low nibble first)"""
+    """
+    Dense weights, `fp4 * weight_scale * weight_scale_2` (two e2m1 values per byte, low nibble first)
+    """
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
@@ -457,15 +287,10 @@ class NVFP4Dequantize(ConversionOps):
 
 
 def is_nvfp4_compatible(module: nn.Module) -> bool:
-    """
-    A bias-free linear, or fused experts with `(num_experts, out_features, in_features)` weights, with 16-aligned
-    dims
-    """
     if isinstance(module, nn.Linear):
         weights = [module.weight] if module.bias is None else []
     elif getattr(module, "has_bias", False) or getattr(module, "is_transposed", False):
         weights = []
     else:
-        weights = [module._parameters.get(name) for name in ("gate_up_proj", "up_proj", "down_proj")]
-        weights = [weight for weight in weights if weight is not None]
+        weights = []
     return bool(weights) and all(w.shape[-1] % SF_VEC_SIZE == 0 and w.shape[-2] % 16 == 0 for w in weights)
