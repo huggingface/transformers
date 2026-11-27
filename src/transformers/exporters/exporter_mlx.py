@@ -127,8 +127,11 @@ def _mlx_decompositions() -> dict:
 
 
 def _encode(value) -> Any:
-    """A node's argument as JSON: `{"__node__": name}` for another node's value, `{"__dtype__": name}` for a dtype."""
+    """A node's argument as JSON: `{"__node__": name}` for another node's value, `{"__dtype__": name}` for a dtype,
+    `{"__graph__": graph}` for a submodule (a loop's condition or body)."""
     if isinstance(value, torch.fx.Node):
+        if value.op == "get_attr":
+            return {"__graph__": _subgraph(getattr(value.graph.owning_module, value.target).graph)}
         return {"__node__": value.name}
     if isinstance(value, torch.dtype):
         return {"__dtype__": str(value).removeprefix("torch.")}
@@ -146,6 +149,30 @@ def _target_name(target) -> str:
     if isinstance(target, torch._ops.OpOverload):
         return str(target)
     return f"{'operator' if target.__module__ == '_operator' else target.__module__}.{target.__name__}"
+
+
+def _nodes(graph: torch.fx.Graph) -> list[dict]:
+    return [
+        {
+            "name": node.name,
+            "target": _target_name(node.target),
+            "args": _encode(node.args),
+            "kwargs": _encode(node.kwargs),
+        }
+        for node in graph.nodes
+        if node.op == "call_function"
+    ]
+
+
+def _subgraph(graph: torch.fx.Graph) -> dict:
+    """A submodule's graph, which takes all its inputs as arguments."""
+    outputs = graph.output_node().args[0]
+    return {
+        "inputs": [node.name for node in graph.nodes if node.op == "placeholder"],
+        "constants": {},
+        "nodes": _nodes(graph),
+        "outputs": [node.name for node in (outputs if isinstance(outputs, (list, tuple)) else [outputs])],
+    }
 
 
 def _tensor_key(tensor: torch.Tensor) -> tuple:
@@ -172,13 +199,17 @@ def _to_mlx_program(exported_program: ExportedProgram, mlx_arrays: dict[tuple, t
     The graph returns the mutated inputs' new values (a `StaticCache` write), then the tensor outputs, as the program
     does: runners unflatten the outputs from the end."""
     from torch.export.graph_signature import InputKind, OutputKind, TensorArgument
+    from torch.fx.experimental.symbolic_shapes import free_unbacked_symbols
 
     signature = exported_program.graph_signature
     if any(spec.kind == OutputKind.BUFFER_MUTATION for spec in signature.output_specs):
         raise NotImplementedError("The MLX exporter can't export a model that mutates its own buffers yet.")
     graph = exported_program.graph
-    nodes = [node for node in graph.nodes if node.op == "call_function"]
-    unsupported = sorted({_target_name(node.target) for node in nodes} - set(MLX_OPS))
+    modules = [
+        module for module in exported_program.graph_module.modules() if isinstance(module, torch.fx.GraphModule)
+    ]
+    calls = [node for module in modules for node in module.graph.nodes if node.op == "call_function"]
+    unsupported = sorted({_target_name(node.target) for node in calls} - set(MLX_OPS))
     if unsupported:
         raise NotImplementedError(f"The MLX exporter has no conversion for {unsupported}.")
 
@@ -205,17 +236,15 @@ def _to_mlx_program(exported_program: ExportedProgram, mlx_arrays: dict[tuple, t
     program_graph = {
         "inputs": inputs,
         "constants": constants,
-        "nodes": [
-            {
-                "name": node.name,
-                "target": _target_name(node.target),
-                "args": _encode(node.args),
-                "kwargs": _encode(node.kwargs),
-            }
-            for node in nodes
-        ],
+        "nodes": _nodes(graph),
         "outputs": outputs,
         # The input each of the first outputs is the new value of (the cache the graph writes)
         "mutations": [spec.target for spec in signature.output_specs if spec.kind == OutputKind.USER_INPUT_MUTATION],
+        # Whether `mx.compile` can trace it: not when it reads values on the host, for a size that depends on them
+        # (`.item()`, a boolean mask's selection) or a loop's condition
+        "compiled": not any(
+            free_unbacked_symbols(node.meta.get("val")) or node.target == torch.ops.higher_order.while_loop
+            for node in calls
+        ),
     }
     return MLXProgram(program_graph, weights), out_constants

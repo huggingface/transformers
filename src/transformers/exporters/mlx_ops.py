@@ -56,6 +56,8 @@ def _decode(value, values: dict[str, Any]):
     if isinstance(value, dict):
         if "__node__" in value:
             return values[value["__node__"]]
+        if "__graph__" in value:
+            return functools.partial(run_graph, value["__graph__"], {})
         if "__dtype__" in value:
             return mlx_dtype(value["__dtype__"])
         return {key: _decode(item, values) for key, item in value.items()}
@@ -64,8 +66,9 @@ def _decode(value, values: dict[str, Any]):
     return value
 
 
-def run_graph(graph: dict[str, Any], weights: dict[str, mx.array], arrays) -> tuple:
-    """The graph's outputs for its tensor inputs `arrays`, as MLX's lazy arrays."""
+def run_graph(graph: dict[str, Any], weights: dict[str, mx.array], *arrays) -> tuple:
+    """The graph's outputs for its inputs `arrays`, as MLX's lazy arrays. `{"__graph__": graph}` arguments are the
+    graphs of a loop's condition and body, which take their inputs as arrays too."""
     values = {**weights, **graph["constants"], **dict(zip(graph["inputs"], arrays))}
     for node in graph["nodes"]:
         args, kwargs = _decode(node["args"], values), _decode(node["kwargs"], values)
@@ -127,12 +130,35 @@ def _cat(tensors, dim=0):
     return mx.concatenate(kept, axis=dim) if len(kept) > 1 else kept[0]
 
 
+def _positions(indices) -> tuple:
+    """Torch's `indices` as MLX's: a boolean mask as the positions it selects, read on the host (MLX indexes with
+    integers only)."""
+    import numpy as np
+
+    index = []
+    for i in indices:
+        if i is not None and i.dtype == mx.bool_:
+            index.extend(mx.array(positions) for positions in np.nonzero(np.asarray(i)))
+        else:
+            index.append(slice(None) if i is None else i)
+    return tuple(index)
+
+
 def _index(x, indices):
-    return x[tuple(slice(None) if i is None else i for i in indices)]
+    return x[_positions(indices)]
 
 
 def _index_put(x, indices, values, accumulate=False):
-    index = tuple(slice(None) if i is None else i for i in indices)
+    masks = [axis for axis, i in enumerate(indices) if i is not None and i.dtype == mx.bool_]
+    if not accumulate and len(masks) == 1 and all(i is None for i in indices[: masks[0]]):
+        # `x[mask] = values` with one value for every masked row: a select, without reading the mask on the host
+        mask = indices[masks[0]]
+        rest = x.ndim - masks[0] - mask.ndim
+        if values.ndim <= rest or values.shape[0] == 1:
+            return mx.where(
+                mask.reshape(mask.shape + (1,) * rest), values.reshape(values.shape[-rest:] if rest else ()), x
+            )
+    index = _positions(indices)
     # MLX's GPU scatter takes no 64-bit integers (positions, ids): those scatter on the CPU, which shares the memory
     with mx.stream(mx.cpu) if x.dtype in (mx.int64, mx.uint64) else contextlib.nullcontext():
         if accumulate:
@@ -409,6 +435,72 @@ def _grouped_mm(x, weight, offs=None, bias=None, out_dtype=None):
     return _astype(mx.where((expert < experts)[:, None], rows, 0), out_dtype or x.dtype)
 
 
+def _while_loop(cond_fn, body_fn, carried_inputs, additional_inputs):
+    carried = tuple(carried_inputs)
+    while cond_fn(*carried, *additional_inputs)[0].item():
+        carried = body_fn(*carried, *additional_inputs)
+    return carried
+
+
+def _flip(x, dims):
+    return x[
+        tuple(slice(None, None, -1) if axis in {d % x.ndim for d in dims} else slice(None) for axis in range(x.ndim))
+    ]
+
+
+def _unfold(x, dimension, size, step):
+    """Windows of `size` every `step` along `dimension`, as a new last axis."""
+    count = (x.shape[dimension] - size) // step + 1
+    windows = mx.take(x, mx.arange(count)[:, None] * step + mx.arange(size), axis=dimension)
+    return mx.moveaxis(windows, dimension % x.ndim + 1, -1)
+
+
+def _native_group_norm(x, weight, bias, batch, channels, spatial, groups, eps):
+    grouped = x.reshape(batch, groups, -1).astype(mx.float32)
+    mean = grouped.mean(axis=-1, keepdims=True)
+    rstd = mx.rsqrt(grouped.var(axis=-1, keepdims=True) + eps)
+    out = ((grouped - mean) * rstd).reshape(x.shape).astype(x.dtype)
+    affine_shape = (channels,) + (1,) * (x.ndim - 2)
+    if weight is not None:
+        out = out * weight.reshape(affine_shape)
+    if bias is not None:
+        out = out + bias.reshape(affine_shape)
+    return out, mean.squeeze(-1).astype(x.dtype), rstd.squeeze(-1).astype(x.dtype)
+
+
+def _upsample_nearest(x, output_size, scale_factors=None):
+    """Torch's nearest source index `min(floor(i * scale), size - 1)` on each upsampled axis, `scale` the inverse of the
+    `scale_factors` given, else `size / output_size`."""
+    axes = len(output_size) if output_size is not None else len(scale_factors)
+    for index, axis in enumerate(range(x.ndim - axes, x.ndim)):
+        size = x.shape[axis]
+        if output_size is not None:
+            out_size, scale = output_size[index], size / output_size[index]
+        else:
+            out_size, scale = math.floor(size * scale_factors[index]), 1 / scale_factors[index]
+        source = mx.minimum(mx.floor(mx.arange(out_size, dtype=mx.float32) * scale).astype(mx.int32), size - 1)
+        x = mx.take(x, source, axis=axis)
+    return x
+
+
+def _bucketize(x, boundaries, out_int32=False, right=False):
+    passed = (x[..., None] >= boundaries) if right else (x[..., None] > boundaries)
+    return passed.sum(axis=-1).astype(mx.int32 if out_int32 else mx.int64)
+
+
+def _unique_consecutive(x, return_inverse=False, return_counts=False, dim=None):
+    """On the host, as its output's size depends on the values."""
+    import numpy as np
+
+    if dim is not None:
+        raise NotImplementedError("The MLX exporter has no conversion for `unique_consecutive` along a dim.")
+    flat = np.asarray(x).reshape(-1)
+    starts = np.concatenate([[True], flat[1:] != flat[:-1]]) if flat.size else np.zeros(0, dtype=bool)
+    inverse = (np.cumsum(starts) - 1).reshape(x.shape)
+    counts = np.diff(np.append(np.flatnonzero(starts), flat.size))
+    return mx.array(flat[starts]), mx.array(inverse.astype(np.int64)), mx.array(counts.astype(np.int64))
+
+
 def _identity(x, *_, **__):
     return x
 
@@ -437,7 +529,11 @@ if is_mlx_available():
         "operator.le": operator.le,
         "operator.gt": operator.gt,
         "operator.ge": operator.ge,
+        "operator.and_": operator.and_,
+        "operator.or_": operator.or_,
+        "torch.sym_not": operator.not_,
         "torch.sym_ite": lambda condition, true, false: true if condition else false,
+        "torch.ops.higher_order.while_loop": _while_loop,
         # A value read on the host (`.item()`): the runner runs such a graph without `mx.compile`
         "aten._local_scalar_dense.default": lambda x: x.item(),
         "aten._is_all_true.default": mx.all,
@@ -488,6 +584,10 @@ if is_mlx_available():
         "aten.index_put.default": _index_put,
         "aten.index_select.default": lambda x, dim, index: mx.take(x, index, axis=dim),
         "aten.gather.default": lambda x, dim, index, **_: mx.take_along_axis(x, index, axis=dim),
+        "aten.flip.default": _flip,
+        "aten.unfold.default": _unfold,
+        "aten.bucketize.Tensor": _bucketize,
+        "aten.unique_consecutive.default": _unique_consecutive,
         "aten.tril.default": lambda x, diagonal=0: mx.tril(x, diagonal),
         "aten.triu.default": lambda x, diagonal=0: mx.triu(x, diagonal),
         "aten.where.self": mx.where,
@@ -578,6 +678,7 @@ if is_mlx_available():
         "aten.scaled_dot_product_attention.default": _sdpa,
         "aten.native_layer_norm.default": _native_layer_norm,
         "aten.layer_norm.default": _layer_norm,
+        "aten.native_group_norm.default": _native_group_norm,
         "aten.rms_norm.default": _rms_norm,
         "aten.linear.default": _linear,
         "aten._grouped_mm.default": _grouped_mm,
@@ -590,6 +691,9 @@ if is_mlx_available():
         "aten.avg_pool3d.default": functools.partial(_avg_pool, 3),
         "aten.max_pool2d_with_indices.default": functools.partial(_max_pool_with_indices, 2),
         "aten.max_pool3d_with_indices.default": functools.partial(_max_pool_with_indices, 3),
+        "aten.upsample_nearest1d.vec": _upsample_nearest,
+        "aten.upsample_nearest2d.vec": _upsample_nearest,
+        "aten.upsample_nearest3d.vec": _upsample_nearest,
         # Fusions (`mlx_fusions`)
         "transformers.exporters.mlx_ops.rms_norm": rms_norm,
         "transformers.exporters.mlx_ops.swiglu": swiglu,

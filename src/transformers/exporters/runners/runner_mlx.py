@@ -61,9 +61,8 @@ class MLXModelRunner(ModelRunner):
         }
         self.state: dict[int, mx.array] = {}
         graph, weights = {**program.graph, "outputs": outputs}, program.weights
-        self.function = lambda *arrays: run_graph(graph, weights, arrays)
-        # A graph reading values on the host (`.item()`, sizes that depend on the data) runs op by op
-        if not any(node["target"] == "aten._local_scalar_dense.default" for node in graph["nodes"]):
+        self.function = lambda *arrays: run_graph(graph, weights, *arrays)
+        if graph["compiled"]:
             self.function = mx.compile(self.function)
 
     @property

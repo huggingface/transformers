@@ -295,7 +295,12 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
                     for layer_type, value in mask.items()
                 }
         stateful = runner.stateful
-        inputs = {name: value for name, value in kwargs.items() if name in traced}
+        # An input traced as `None` (an unpadded prompt's mask) is a constant of the graph, which reads nothing there
+        inputs = {
+            name: None if traced[name] == {"value": None} else value
+            for name, value in kwargs.items()
+            if name in traced
+        }
         # While generating, a graph replayed from its capture (a CUDA graph) hands out its own output buffers too: the
         # logits are read before the next step, and the cache it returns is copied into the capture's inputs before the
         # next step overwrites them.
