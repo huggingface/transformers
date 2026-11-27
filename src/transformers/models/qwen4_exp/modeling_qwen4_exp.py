@@ -581,11 +581,11 @@ class Qwen4ExpTextGatedDeltaNet(nn.Module):
         self.in_proj_b = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
         self.in_proj_a = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
 
-    def cache_states(self) -> dict[str, tuple[tuple[int, ...], torch.dtype]]:
-        """The shape and dtype of the states continuous batching keeps per request for this layer: the last inputs of
-        the causal convolution and the recurrent state."""
+    def cache_states(self) -> dict[str, tuple[tuple[int, ...], torch.dtype | None]]:
+        """The shape and dtype (None for the cache dtype) of the states continuous batching keeps per request for this
+        layer: the last inputs of the causal convolution and the recurrent state."""
         return {
-            "conv": ((self.conv_dim, self.conv_kernel_size - 1), self.conv1d.weight.dtype),
+            "conv": ((self.conv_dim, self.conv_kernel_size - 1), None),
             "recurrent": ((self.num_v_heads, self.head_k_dim, self.head_v_dim), torch.float32),
         }
 

@@ -116,13 +116,13 @@ class CacheAllocator(ABC):
     attention, MLA, ...). The cache allocators partition the memory using the following hierarchy:
 
     PAGE:
-        A page is a unit of the cache dedicated to one layer. It stores "page_size" tokens for one layer. For example,
-        for a full attention layer, the page holds the cache of "page_size" tokens for both keys and values. A page
-        looks like this:
+        A page is a unit of the cache dedicated to one layer. It stores "page_size" tokens for one layer, one row per
+        token for each tensor the layer caches (the keys and the values of an attention layer). The rows are declared
+        by the layer, so they can differ in shape and dtype. A page looks like this:
 
             [  TOKEN 0  |  TOKEN 1  |  TOKEN 2  |  ...  |  TOKEN PAGE_SIZE  ]
 
-        The stride between two tokens depends on the attention type, and is called "block_physical_stride".
+        A token is addressed by its block and its slot in the page: "block * tokens_per_page + slot".
 
     BLOCK:
         A block is a unit of cache dedicated to one request. For a given attention type, if the model has X layers with
@@ -143,13 +143,11 @@ class CacheAllocator(ABC):
     # These attributes depend on the attention type
     supports_block_sharing: bool
     supports_block_table: bool
-    rows_per_token: int
     layer_type: str
     # Whether the read and write indices hold one entry per sequence of the batch rather than one per token
     indexes_by_sequence: bool = False
     # These attributes are only known once the cache tensor is registered
     blocks_per_sector: int
-    num_pages: int
     num_blocks: int
     _copy_view: torch.Tensor  # cache tensor viewed as [num_blocks, bytes_per_block] for copying
 
@@ -160,7 +158,7 @@ class CacheAllocator(ABC):
         index: int,
         layer_indices: list[int],
         tokens_per_page: int,
-        bytes_per_page: int,
+        bytes_per_block: int,
         allow_block_sharing: bool,
     ) -> None:
         """Initializes the cache allocator before the cache tensor is registered. Since cache allocators can differ
@@ -171,10 +169,7 @@ class CacheAllocator(ABC):
         self.pages_per_block = len(layer_indices)
         # Cache dimensions attributes
         self.tokens_per_page = tokens_per_page
-        self.tokens_per_block = tokens_per_page * self.pages_per_block
-        self.block_physical_stride = self.rows_per_token * self.tokens_per_block
-        self.bytes_per_page = bytes_per_page
-        self.bytes_per_block = bytes_per_page * self.pages_per_block
+        self.bytes_per_block = bytes_per_block
         # Bookkeeping attributes
         self.block_table: dict[str, list[int]] = {}
         # Ledger of the logical block states: reference counts, content hashes and cached blocks
@@ -193,10 +188,8 @@ class CacheAllocator(ABC):
         """Initializes the cache allocator after the cache tensor is registered. It consitutes the second part of the
         initialization. Afterwards, the cache allocator is ready to be used."""
         # Cache dimensions attributes
-        self.num_pages = exact_div(non_trash_bytes, self.bytes_per_page)
-        self.num_blocks = exact_div(self.num_pages, self.pages_per_block)
+        self.num_blocks = exact_div(non_trash_bytes, self.bytes_per_block)
         self.blocks_per_sector = exact_div(bytes_per_sector, self.bytes_per_block)
-        # Cache is a static tensor with shape [num_pages * tokens_per_page, ...]
         self.cache_tensor = cache_tensor
         torch._dynamo.mark_static_address(self.cache_tensor)
         # Cache pool to keep track of the free blocks
@@ -206,9 +199,10 @@ class CacheAllocator(ABC):
         # Sector 0 holds the read trash, from which padding tokens read their (zeroed, never written) cache, and the
         # sentinel index, marking where to insert the new key or value states for sliding window attention groups.
         # Sector 1 holds the write trash, where padding tokens can safely write their cache (it is never read from).
+        # Indices address a token by block and slot: block * tokens_per_page + slot.
         self.read_trash_index = 0
         self.sentinel_index = 1
-        self.write_trash_index = self.block_physical_stride * self.blocks_per_sector
+        self.write_trash_index = self.blocks_per_sector * self.tokens_per_page
 
     # _________________________________________________ SECTOR LEVEL _________________________________________________ #
 
@@ -357,15 +351,14 @@ class CacheAllocator(ABC):
     @abstractmethod
     def update(
         self,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
+        rows: dict[str, torch.Tensor],
         layer_idx: int,
         read_index: torch.Tensor,
         write_index: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Writes the new key and value states in the cache for the given layer and retrieves the KV states needed for
-        the attention computation, as indicated by the read and write indices."""
+    ) -> dict[str, torch.Tensor]:
+        """Writes the new rows, by name (for an attention layer, its key and value states), in the cache for the given
+        layer and retrieves the rows needed for the computation, as indicated by the read and write indices."""
 
     @abstractmethod
-    def get_cache_for_block_table(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        """Returns the K and V cache views for a block table update."""
+    def get_cache_for_block_table(self, layer_idx: int) -> dict[str, torch.Tensor]:
+        """Returns the cache views of the layer's rows, by name, for a block table update."""
