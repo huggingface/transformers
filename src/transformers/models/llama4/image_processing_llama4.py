@@ -327,11 +327,10 @@ class Llama4ImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of patches per image, including the global tile when the image is split into tiles.
         """
-        images_kwargs = images_kwargs or {}
-        size = images_kwargs.get("size", None) or self.size
-        size = SizeDict(**size) if isinstance(size, dict) else size
-        max_patches = images_kwargs.get("max_patches", None) or self.max_patches
-        resize_to_max_canvas = images_kwargs.get("resize_to_max_canvas", self.resize_to_max_canvas)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        size = images_kwargs["size"]
+        max_patches = images_kwargs["max_patches"]
+        resize_to_max_canvas = images_kwargs["resize_to_max_canvas"]
 
         possible_resolutions = torch.tensor(find_supported_resolutions(max_num_chunks=max_patches, patch_size=size))
         target_size = get_best_fit((height, width), possible_resolutions, resize_to_max_canvas=resize_to_max_canvas)

@@ -146,8 +146,10 @@ class Llama4Processor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
-            size = images_kwargs.get("size", None) or self.image_processor.size
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
+            size = images_kwargs["size"]
             num_patches_per_chunk = (
                 (size["height"] // self.patch_size) * (size["width"] // self.patch_size) // self.downsample_ratio
             )
