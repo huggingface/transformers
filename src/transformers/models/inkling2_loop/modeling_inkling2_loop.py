@@ -971,6 +971,7 @@ class Inkling2LoopSlidingLoopDecoderLayer(GradientCheckpointingLayer):
         self.post_mlp_convolution = Inkling2LoopShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
         ).to(dtype=torch.float32)
+        self.loop_layer_idx = layer_idx - config.loop_layer_index_start
         self.q_message_gate = Inkling2LoopMessageGate(config)
         self.k_message_gate = Inkling2LoopMessageGate(config)
         self.v_message_gate = Inkling2LoopMessageGate(config)
@@ -981,7 +982,9 @@ class Inkling2LoopSlidingLoopDecoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         block_states: torch.Tensor,
-        messages: torch.Tensor | None = None,
+        previous_block_states: torch.Tensor | None = None,
+        previous_hidden_states: torch.Tensor | None = None,
+        compute_messages: Callable | None = None,
         attention_mask: torch.Tensor | None = None,
         relative_distance: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
@@ -990,14 +993,24 @@ class Inkling2LoopSlidingLoopDecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
-        messages (`torch.Tensor` of shape `(batch_size, sequence_length, 4, hidden_size)`, *optional*):
-            Messages of the previous pass through the loop layers for the query, key, value and MLP inputs, in the
-            passes after the first.
+        previous_block_states (`torch.Tensor` of shape `(batch_size, sequence_length, num_blocks, hidden_size)`, *optional*):
+            Block states of the previous pass through the loop layers, in the passes after the first.
+        previous_hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Hidden states at the end of the previous pass through the loop layers, in the passes after the first.
+        compute_messages (`Callable`, *optional*):
+            Computes this layer's messages for the query, key, value and MLP inputs from `previous_block_states`,
+            `previous_hidden_states` and the loop layer index (the model's `message_input`). They are computed here,
+            not by the caller, so that gradient checkpointing recomputes them with the layer instead of keeping them
+            until the backward pass.
         cache_offset (`int`, *optional*, defaults to 0):
             Offset added to `layer_idx` to get the cache layer holding the keys, values and convolution states of
             this call.
         """
         dtype = hidden_states.dtype
+        messages = None
+        if compute_messages is not None:
+            messages = compute_messages(previous_block_states, previous_hidden_states, self.loop_layer_idx)
+            messages = messages.to(hidden_states.device)
         block_residual = hidden_states
         hidden_states = self.attention_input(block_states, hidden_states)[0]
 
@@ -1125,6 +1138,7 @@ class Inkling2LoopFullLoopDecoderLayer(GradientCheckpointingLayer):
         self.post_mlp_convolution = Inkling2LoopShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
         ).to(dtype=torch.float32)
+        self.loop_layer_idx = layer_idx - config.loop_layer_index_start
         self.q_message_gate = Inkling2LoopMessageGate(config)
         self.k_message_gate = Inkling2LoopMessageGate(config)
         self.v_message_gate = Inkling2LoopMessageGate(config)
@@ -1135,7 +1149,9 @@ class Inkling2LoopFullLoopDecoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         block_states: torch.Tensor,
-        messages: torch.Tensor | None = None,
+        previous_block_states: torch.Tensor | None = None,
+        previous_hidden_states: torch.Tensor | None = None,
+        compute_messages: Callable | None = None,
         attention_mask: torch.Tensor | None = None,
         relative_distance: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
@@ -1144,14 +1160,24 @@ class Inkling2LoopFullLoopDecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
-        messages (`torch.Tensor` of shape `(batch_size, sequence_length, 4, hidden_size)`, *optional*):
-            Messages of the previous pass through the loop layers for the query, key, value and MLP inputs, in the
-            passes after the first.
+        previous_block_states (`torch.Tensor` of shape `(batch_size, sequence_length, num_blocks, hidden_size)`, *optional*):
+            Block states of the previous pass through the loop layers, in the passes after the first.
+        previous_hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Hidden states at the end of the previous pass through the loop layers, in the passes after the first.
+        compute_messages (`Callable`, *optional*):
+            Computes this layer's messages for the query, key, value and MLP inputs from `previous_block_states`,
+            `previous_hidden_states` and the loop layer index (the model's `message_input`). They are computed here,
+            not by the caller, so that gradient checkpointing recomputes them with the layer instead of keeping them
+            until the backward pass.
         cache_offset (`int`, *optional*, defaults to 0):
             Offset added to `layer_idx` to get the cache layer holding the keys, values and convolution states of
             this call.
         """
         dtype = hidden_states.dtype
+        messages = None
+        if compute_messages is not None:
+            messages = compute_messages(previous_block_states, previous_hidden_states, self.loop_layer_idx)
+            messages = messages.to(hidden_states.device)
         block_residual = hidden_states
         query_hidden_states, key_hidden_states, value_hidden_states = self.attention_input(block_states, hidden_states)
 
@@ -1446,12 +1472,14 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
 
             # Each pass uses its own copies of the loop cache layers, appended after the model's layers
             cache_offset = self.config.num_hidden_layers + (loop_idx - 1) * num_loop_layers - loop_start
-            for loop_layer_idx, decoder_layer in enumerate(self.layers[loop_start:loop_end]):
-                messages = self.message_input(previous_block_states, previous_hidden_states, loop_layer_idx)
+            for decoder_layer in self.layers[loop_start:loop_end]:
                 new_hidden_states = decoder_layer(
                     hidden_states,
                     block_states,
-                    messages,
+                    previous_block_states,
+                    previous_hidden_states,
+                    # The module's bound __call__, not the module: offloading hooks move module arguments
+                    compute_messages=self.message_input.__call__,
                     attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                     relative_distance=relative_distance_mapping[decoder_layer.attention_type],
                     conv_mask=causal_mask_mapping["linear_attention"],
