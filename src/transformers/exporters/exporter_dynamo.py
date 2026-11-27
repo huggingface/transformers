@@ -656,6 +656,64 @@ def _patch_mamba_selective_scan(_original):
     return patch
 
 
+@register_patch(
+    "dynamo",
+    "transformers.models.bamba.modeling_bamba.mamba2_chunk_scan",
+    "transformers.models.falcon_h1.modeling_falcon_h1.mamba2_chunk_scan",
+    "transformers.models.granitemoehybrid.modeling_granitemoehybrid.mamba2_chunk_scan",
+    "transformers.models.mamba2.modeling_mamba2.mamba2_chunk_scan",
+    "transformers.models.nemotron_h.modeling_nemotron_h.mamba2_chunk_scan",
+    "transformers.models.zamba2.modeling_zamba2.mamba2_chunk_scan",
+)
+def _patch_mamba2_chunk_scan(original):
+    """Mamba2's chunked scan for any sequence length: its padding branches on the traced length, and a trace on a
+    single chunk specializes the chunk axis to 1, so it runs on inputs zero-padded to at least two whole chunks."""
+
+    def patch(
+        hidden_states,
+        dt,
+        A,
+        B,
+        C,
+        chunk_size,
+        D=None,
+        dt_bias=None,
+        initial_states=None,
+        dt_softplus=False,
+        dt_limit=(0.0, float("inf")),
+        return_final_states=False,
+        **kwargs,
+    ):
+        if dt_bias is not None:
+            dt = dt + dt_bias.to(dt.dtype)
+        if dt_softplus:
+            dt = torch.nn.functional.softplus(dt)
+        dt = torch.clamp(dt, min=dt_limit[0], max=dt_limit[1])
+        # Zero steps (`dt = 0`) through one chunk past the last, which leave the outputs and final state unchanged
+        sequence_length = hidden_states.shape[1]
+        pad_size = (-sequence_length) % chunk_size + chunk_size
+        hidden_states, dt, B, C = (
+            torch.nn.functional.pad(x, (0, 0) * (x.dim() - 2) + (0, pad_size)) for x in (hidden_states, dt, B, C)
+        )
+        outputs = original(
+            hidden_states,
+            dt,
+            A,
+            B,
+            C,
+            chunk_size,
+            D=D,
+            initial_states=initial_states,
+            return_final_states=return_final_states,
+            **kwargs,
+        )
+        if return_final_states:
+            return outputs[0][:, :sequence_length], outputs[1]
+        return outputs[:, :sequence_length]
+
+    return patch
+
+
 def _scan(combine_fn, init, xs):
     """`torch`'s `scan` of `combine_fn` over the leading dim of `xs`, which a backend that can't lower it patches.
 
