@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import json
 import tempfile
 import unittest
@@ -21,10 +22,14 @@ from huggingface_hub import hf_hub_download
 from safetensors.torch import save_file
 
 from transformers import AutoProcessor, is_torch_available, pipeline
-from transformers.decision import DecisionConfig
+from transformers.decision import DecisionConfig, Question
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision, slow
 
-from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision, render
+from ...test_decision_head_common import (
+    DecisionHeadTesterMixin,
+    check_decision,
+    render,
+)
 
 
 if is_torch_available():
@@ -33,11 +38,59 @@ if is_torch_available():
     from transformers import JevForDecision
 
 
+class JevModelTester:
+    def __init__(self, config, prompt):
+        self.config = config
+        self.prompt = prompt
+
+    def prepare_config_and_inputs_for_training(self):
+        prompt = self.prompt
+        counts = torch.tensor([[len(q.options) for q in prompt.questions]])
+        types = torch.tensor([[Question.questions_types.index(q.type) for q in prompt.questions]])
+        generator = torch.Generator().manual_seed(0)
+        labels = (torch.rand(counts.shape, generator=generator) * counts).long()
+        inputs = {
+            **prompt.inputs,
+            "marks": prompt.inputs["marks"][None],
+            "num_options": counts,
+            "question_type_ids": types,
+            "labels": labels,
+            "loss_weights": torch.full_like(counts, 0.5, dtype=torch.float32),
+        }
+        return copy.deepcopy(self.config), inputs
+
+
 @require_torch
 class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (JevForDecision,) if is_torch_available() else ()
+    is_training = True
     decision_repo = "hf-internal-testing/decision-gev"
     tiny_sizes = {"hidden_size": 16}
+
+    def setUp(self):
+        self.model_tester = JevModelTester(self.config, self.prompts[0])
+
+    def test_training_loss_on_packed_questions(self):
+        model = JevForDecision(copy.deepcopy(self.config)).train()
+        choice_target = torch.tensor([1.0, 0.0])
+        score_target = torch.tensor([0.25, 0.75, 0.0])
+        outputs = model(
+            input_ids=torch.tensor([[1, 2, 3, 4, 5, 6]]),
+            marks=torch.tensor([[3, 6]]),
+            num_options=torch.tensor([[2, 3]]),
+            question_type_ids=torch.tensor([[Question.questions_types.index(kind) for kind in ("choice", "score")]]),
+            labels=torch.cat((choice_target, score_target))[None],
+            loss_weights=torch.tensor([[0.5, 2.0]]),
+            num_items_in_batch=3,
+        )
+
+        choice_logits, score_logits = outputs.logits.detach().split((2, 3))
+        choice_kl = torch.nn.functional.cross_entropy(choice_logits, choice_target)
+        score_log_probs = score_logits.log_softmax(-1)
+        score_kl = torch.nn.functional.kl_div(score_log_probs, score_target, reduction="sum")
+        score_rps = (score_log_probs.exp().cumsum(0)[:-1] - score_target.cumsum(0)[:-1]).square().mean()
+        expected_loss = (0.5 * choice_kl + 2 * (score_kl + 0.5 * score_rps)) / 3
+        torch.testing.assert_close(outputs.loss, expected_loss)
 
     @require_vision
     def test_chat_template_reproduces_the_model_code(self):

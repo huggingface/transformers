@@ -195,6 +195,10 @@ class AssistedCandidateGenerator(CandidateGenerator):
             self.probs = []
             self.matches = []
 
+        # This will keep track of the last drafted length and be updated inside `get_candidates` every iteration, to be able to
+        # rollback the Cache inside `_update_past_and_masks` afterwards
+        self._last_ids_length = 0
+
     def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.Tensor]:
         """
         Fetches the candidates to be tried for the current input.
@@ -218,6 +222,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Generate candidates
         generation_args = self._prepare_generation_args(input_ids, min_new_tokens, max_new_tokens)
         candidate_ids, candidate_logits = self._generate_candidates(generation_args)
+
+        # Keep track of the last drafted length to rollback the Cache
+        self._last_ids_length = candidate_ids.shape[-1]
         return candidate_ids, candidate_logits
 
     def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.Tensor, num_matches: int):
@@ -289,15 +296,11 @@ class AssistedCandidateGenerator(CandidateGenerator):
         min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
         return min_new_tokens, max_new_tokens
 
-    def _update_past_and_masks(
-        self, input_ids: torch.LongTensor, remove_from_pkv: int = 0, num_added_tokens: int = 1
-    ) -> bool:
+    def _update_past_and_masks(self, input_ids: torch.LongTensor, num_extra_tokens_to_remove: int = 0) -> bool:
         """Update past key values and attention masks for subsequent generation rounds."""
         has_cache = self.assistant_kwargs.get("cache", None) is not None
         if has_cache:
-            target_cache_size = input_ids.shape[-1] - 1 - remove_from_pkv - num_added_tokens
-            current_cache_size = self.assistant_kwargs["cache"].get_seq_length()
-            tokens_to_remove = current_cache_size - target_cache_size
+            tokens_to_remove = self._last_ids_length - input_ids.shape[-1] + num_extra_tokens_to_remove
             if tokens_to_remove >= 0:
                 self.assistant_kwargs["cache"].crop(-tokens_to_remove)
             self.assistant_kwargs = _prepare_attention_mask(
@@ -337,6 +340,11 @@ class AssistedCandidateGenerator(CandidateGenerator):
         candidate_logits = torch.stack(assistant_output.scores, dim=1)
         candidate_ids = assistant_output.sequences
         return candidate_ids, candidate_logits
+
+    @property
+    def num_drafting_tokens(self):
+        """Describe how many new tokens will be drafted by this CandidateGenerator every iteration"""
+        return self.num_assistant_tokens
 
 
 class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
@@ -518,14 +526,14 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             return input_ids, None
 
         input_ids = input_ids.to(self.assistant_model.device)
-        remove_from_pkv = 0
+        num_extra_tokens_to_remove = 0
 
-        assistant_input_ids, remove_from_pkv = self._prepare_assistant_input_ids(input_ids)
+        assistant_input_ids, num_extra_tokens_to_remove = self._prepare_assistant_input_ids(input_ids)
         self.prev_assistant_ids = assistant_input_ids
 
         min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - assistant_input_ids.shape[-1]), 0)
 
-        self._update_past_and_masks(assistant_input_ids, remove_from_pkv)
+        self._update_past_and_masks(assistant_input_ids, num_extra_tokens_to_remove)
         generation_args = self._prepare_generation_args(assistant_input_ids, min_new_tokens, max_new_tokens)
         self.assistant_kwargs.pop("attention_mask", None)
         self.assistant_kwargs.pop("position_ids", None)
@@ -538,6 +546,11 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.assistant_kwargs["cache"] = assistant_output.cache
         self.prev_assistant_ids = assistant_output.sequences
 
+        # Keep track of the last drafted length to rollback the Cache
+        self._last_ids_length = (
+            input_ids.shape[-1] if self.prev_target_ids_len >= new_target_ids.shape[1] else new_target_ids.shape[-1]
+        )
+
         if self.prev_target_ids_len >= new_target_ids.shape[1]:
             return input_ids, None
 
@@ -549,7 +562,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             "source_tokenizer": self.target_tokenizer,
             "destination_tokenizer": self.assistant_tokenizer,
         }
-        remove_from_pkv = 0
+        num_extra_tokens_to_remove = 0
 
         if self.prev_assistant_ids is not None and self.prev_target_ids_len > self.target_lookbehind:
             # input_ids contains all target prompt input ids and some new target input ids
@@ -576,7 +589,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
                         assistant_input_ids = assistant_input_ids[:, :-discrepancy_length_diff]
                         assistant_input_ids[:, -discrepancy_only.shape[1] :] = discrepancy_only
 
-                    remove_from_pkv = discrepancy_length
+                    num_extra_tokens_to_remove = discrepancy_length
 
                 if new_tokens_only.shape[1] > 0:
                     assistant_input_ids = torch.cat([assistant_input_ids, new_tokens_only], dim=-1)
@@ -587,7 +600,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             assistant_input_ids = self.convert_source_tokens_to_target_tokens(input_ids, **convert_kwargs)
             self.prev_target_ids_len = input_ids.shape[1]
 
-        return assistant_input_ids, remove_from_pkv
+        return assistant_input_ids, num_extra_tokens_to_remove
 
     def _process_assistant_outputs(
         self, input_ids: torch.LongTensor, assistant_sequences: torch.LongTensor
@@ -940,7 +953,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         if max_new_tokens == 0:
             return input_ids, None
 
-        self._update_past_and_masks(assistant_input_ids, num_added_tokens=num_added_tokens)
+        self._update_past_and_masks(assistant_input_ids)
         generation_args = self._prepare_generation_args(assistant_input_ids, min_new_tokens, max_new_tokens)
 
         # Ensure scores are returned
@@ -959,9 +972,12 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         self._target_seq_len_with_candidates = target_candidate_ids.shape[-1]
         target_candidate_logits = self._atm_translator.get_target_logits(assistant_candidate_logits)
 
+        # Keep track of the last drafted length to rollback the Cache
+        self._last_ids_length = target_candidate_ids.shape[-1]
+
         return target_candidate_ids, target_candidate_logits
 
-    def _update_past_and_masks(self, assistant_input_ids: torch.LongTensor, num_added_tokens: int = 1) -> bool:
+    def _update_past_and_masks(self, assistant_input_ids: torch.LongTensor) -> bool:
         if self._prev_assistant_ids is None:
             # Prepare attention mask for the first generation.
             # For subsequent generations, the attention mask is updated in super()_update_past_and_masks.
@@ -971,7 +987,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             self.assistant_kwargs = _prepare_position_ids(
                 self.assistant_kwargs, assistant_input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
-        return super()._update_past_and_masks(assistant_input_ids, num_added_tokens=num_added_tokens)
+        return super()._update_past_and_masks(assistant_input_ids)
 
     def _prepare_assistant_input_ids(self, target_input_ids: torch.LongTensor) -> torch.LongTensor:
         """
@@ -1153,6 +1169,11 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         # assisted_generation expects logits as well, but we don't have those here, so returning None
         return candidate_input_ids, None
 
+    @property
+    def num_drafting_tokens(self):
+        """Describe how many new tokens will be drafted by this CandidateGenerator every iteration"""
+        return self.num_output_tokens
+
 
 class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
     """
@@ -1207,6 +1228,9 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
         base_model.config.num_hidden_layers = self.assistant_early_exit
         candidate_ids, candidate_logits = super().get_candidates(input_ids)
         base_model.config.num_hidden_layers = original_num_hidden_layers
+
+        # Keep track of the last drafted length to rollback the Cache
+        self._last_ids_length = candidate_ids.shape[-1]
         return candidate_ids, candidate_logits
 
 
@@ -1358,6 +1382,11 @@ class SinglePositionMultiTokenCandidateGenerator(CandidateGenerator):
         candidate_logits = torch.cat(drafted_logits, dim=1)
         return candidate_ids, candidate_logits
 
+    @property
+    def num_drafting_tokens(self):
+        """Describe how many new tokens will be drafted by this CandidateGenerator every iteration"""
+        return self.num_assistant_tokens
+
 
 class MTPCandidateGenerator(CandidateGenerator):
     requires_model_outputs: bool = True
@@ -1392,7 +1421,7 @@ class MTPCandidateGenerator(CandidateGenerator):
 
         # Create the mtp cache and allow it to keep its past before we crop it
         self.mtp_cache = MtpCache(config=main_model.config.get_mtp_config())
-        self.mtp_cache.activate_past_recording()
+        self.mtp_cache.activate_past_recording(recurrent_states_to_keep=self.num_drafting_tokens)
 
         # Save those to know how to decode mtp tokens
         self.do_sample = generation_config.do_sample
@@ -1490,6 +1519,11 @@ class MTPCandidateGenerator(CandidateGenerator):
         candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
         return candidate_ids, candidate_logits
 
+    @property
+    def num_drafting_tokens(self):
+        """Describe how many new tokens will be drafted by this CandidateGenerator every iteration"""
+        return self.num_mtp_layers
+
 
 class DFlashTokenCandidateGenerator(CandidateGenerator):
     """
@@ -1541,7 +1575,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         # Prepare a cache for the assistant, and activate the past recording
         self.cache = DFlashCache(config=self.assistant_model.config)
-        self.cache.activate_past_recording()
+        self.cache.activate_past_recording(recurrent_states_to_keep=self.num_drafting_tokens)
 
         # Save those to allow logits manipulations
         self.do_sample = generation_config.do_sample
@@ -1675,6 +1709,11 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
 
         return candidate_ids, candidate_logits
+
+    @property
+    def num_drafting_tokens(self):
+        """Describe how many new tokens will be drafted by this CandidateGenerator every iteration"""
+        return self.block_size
 
 
 def _prepare_attention_mask(model_kwargs: dict[str, Any], new_length: int, is_encoder_decoder: bool) -> dict[str, Any]:

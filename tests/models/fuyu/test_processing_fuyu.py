@@ -200,13 +200,20 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
 
         image_token = getattr(self, "image_token", "")
         text = [f"This is an image {image_token}"] * len(image_inputs)
-        inputs = processor(
-            text=text, images=image_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
-        )
+        # Fuyu only downscales to `size`, so the nested one is below the images' size
+        for kwargs in ({}, {"images_kwargs": {"size": {"height": 90, "width": 120}}}):
+            inputs = processor(
+                text=text,
+                images=image_inputs,
+                **kwargs,
+                padding=True,
+                return_text_replacement_offsets=True,
+                return_tensors="pt",
+            )
 
-        num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
-        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
-        self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
+            num_image_tokens_from_call = self._count_embed_tokens(processor, inputs, "image")
+            num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes, **kwargs)
+            self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
 
     def test_legacy_processor_inputs(self):
         """

@@ -364,6 +364,20 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         batched = pipe(text=messages, batch_size=2, generate_kwargs=kwargs, return_full_text=False)
         self.assertEqual(batched, single)
 
+    @require_torchvision
+    def test_batched_text_generation_with_right_padding_feature_extractor(self):
+        # Qwen2.5-Omni pads its text and audio features on the right, only the text has to move to the left
+        pipe = pipeline("any-to-any", model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration")
+        messages = [
+            [{"role": "user", "content": [{"type": "text", "text": text}]}]
+            for text in ("Hello!", "Hello, how are you doing on this fine spring morning?")
+        ]
+        kwargs = {"generation_mode": "text", "thinker_max_new_tokens": 5, "thinker_do_sample": False}
+
+        single = [pipe(text=chat, generate_kwargs=kwargs, return_full_text=False) for chat in messages]
+        batched = pipe(text=messages, batch_size=2, generate_kwargs=kwargs, return_full_text=False)
+        self.assertEqual(batched, single)
+
     @slow
     def test_small_model_pt_token_text_only(self):
         pipe = pipeline("any-to-any", model="google/gemma-3n-E4B-it")

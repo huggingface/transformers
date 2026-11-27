@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Union
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
 from ...processing_utils import (
+    MultiModalData,
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
@@ -175,6 +176,34 @@ class Idefics2Processor(ProcessorMixin):
             inputs.update(image_inputs)
 
         return BatchFeature(inputs, tensor_type=return_tensors)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
+            do_image_splitting = images_kwargs["do_image_splitting"]
+
+            # Image splitting yields 4 crops + the original image
+            num_patches = 5 if do_image_splitting else 1
+            num_image_tokens = [self.image_seq_len * num_patches] * len(image_sizes)
+            num_image_patches = [num_patches] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
 
 __getattr__ = deprecate_attr(__name__, rename={"Idefics2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})

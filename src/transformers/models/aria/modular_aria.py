@@ -484,10 +484,10 @@ class AriaImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of patches per image.
         """
-        images_kwargs = images_kwargs or {}
-        split_image = images_kwargs.get("split_image", self.split_image)
-        max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
-        split_resolutions = images_kwargs.get("split_resolutions", self.split_resolutions)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        split_image = images_kwargs["split_image"]
+        max_image_size = images_kwargs["max_image_size"]
+        split_resolutions = images_kwargs["split_resolutions"]
 
         resized_height, resized_width = select_best_resolution((height, width), split_resolutions)
         num_patches = (
@@ -570,9 +570,11 @@ class AriaProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
 
-            max_size = images_kwargs.get("max_image_size", None) or self.image_processor.max_image_size
+            max_size = images_kwargs["max_image_size"]
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
                 for image_size in image_sizes
@@ -688,7 +690,7 @@ class AriaTextMoELayer(nn.Module):
 
 
 class AriaTextAttention(LlamaAttention):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    pass
 
 
 class AriaTextDecoderLayer(LlamaDecoderLayer):
@@ -736,10 +738,8 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 
 class AriaPreTrainedModel(LlamaPreTrainedModel):
     config: AriaConfig
-    base_model_prefix = "model"
     _no_split_modules = ["AriaTextDecoderLayer"]
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (dynamic slicing)
-    _supports_attention_backend = True
     input_modalities = ("image", "text")
 
     def _init_weights(self, module):
@@ -900,8 +900,6 @@ class AriaModel(LlavaModel):
     """
 )
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-
     @auto_docstring
     def get_image_features(
         self,

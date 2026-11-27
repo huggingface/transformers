@@ -144,15 +144,17 @@ def pad_collate_fn(tokenizer, feature_extractor):
         f_padding_value = getattr(feature_extractor, "padding_value", None)
         f_padding_side = getattr(feature_extractor, "padding_side", None)
 
-    if t_padding_side is not None and f_padding_side is not None and t_padding_side != f_padding_side:
-        raise ValueError(
-            f"The feature extractor, and tokenizer don't agree on padding side {t_padding_side} != {f_padding_side}"
-        )
     padding_side = "right"
     if t_padding_side is not None:
         padding_side = t_padding_side
     if f_padding_side is not None:
         padding_side = f_padding_side
+    # Multimodal processors can pad text and audio on different sides. Only the feature extractor's own inputs
+    # follow its side then, all other inputs line up with the text. Processors rename its attention mask to these.
+    feature_keys = set(getattr(feature_extractor, "model_input_names", None) or [])
+    feature_keys |= {"input_features_mask", "feature_attention_mask"}
+    if tokenizer is not None:
+        feature_keys -= set(tokenizer.model_input_names)
 
     def inner(items):
         keys = set(items[0].keys())
@@ -162,6 +164,7 @@ def pad_collate_fn(tokenizer, feature_extractor):
                     f"The elements of the batch contain different keys. Cannot batch them ({set(item.keys())} !="
                     f" {keys})"
                 )
+        text_padding_side = t_padding_side if t_padding_side is not None and "input_ids" in keys else padding_side
         # input_values, input_pixels, input_ids, ...
         padded = {}
         for key in keys:
@@ -180,7 +183,8 @@ def pad_collate_fn(tokenizer, feature_extractor):
             else:
                 # This is likely another random key maybe even user provided
                 _padding_value = 0
-            padded[key] = _pad(items, key, _padding_value, padding_side)
+            side = padding_side if key in feature_keys else text_padding_side
+            padded[key] = _pad(items, key, _padding_value, side)
         return padded
 
     return inner

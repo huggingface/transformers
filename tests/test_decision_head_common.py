@@ -63,6 +63,8 @@ class DecisionHeadTesterMixin:
     `backbone_class` model.
     """
 
+    is_training = False
+    model_tester = None
     backbone_class = Qwen2ForCausalLM if is_torch_available() else None
 
     @classmethod
@@ -108,6 +110,25 @@ class DecisionHeadTesterMixin:
             for prompt, scores, loaded_scores in zip(self.prompts, self.scores(model), self.scores(loaded)):
                 torch.testing.assert_close(loaded_scores, scores)
                 self.assertEqual([len(s) for s in scores], [len(question.options) for question in prompt.questions])
+
+    def test_training(self):
+        if not self.is_training:
+            self.skipTest("Decision head is not configured to run training tests.")
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model=model_class.__name__):
+                config, inputs = self.model_tester.prepare_config_and_inputs_for_training()
+                model = model_class(config).to(torch_device).train()
+                inputs = {name: tensor.to(torch_device) for name, tensor in inputs.items()}
+
+                loss = model(**inputs).loss
+                self.assertEqual(loss.ndim, 0)
+                self.assertTrue(torch.isfinite(loss))
+                loss.backward()
+
+                gradients = [parameter.grad for parameter in model.parameters() if parameter.grad is not None]
+                self.assertTrue(all(torch.isfinite(grad).all() for grad in gradients))
+                self.assertTrue(any(torch.count_nonzero(grad) for grad in gradients))
 
 
 def check_decision(

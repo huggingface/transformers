@@ -21,6 +21,7 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    skip_tpu,
     slow,
     torch_device,
 )
@@ -290,6 +291,7 @@ class LongformerModelTester(ModelTesterConfigMixin):
 
 
 @require_torch
+@skip_tpu("model aborts in the sliding chunks attention")
 class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     model_tester_class = LongformerModelTester
 
@@ -408,6 +410,7 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 @require_torch
 @require_sentencepiece
 @require_tokenizers
+@skip_tpu("model aborts in the sliding chunks attention")
 class LongformerModelIntegrationTest(unittest.TestCase):
     def _get_hidden_states(self):
         return torch.tensor(

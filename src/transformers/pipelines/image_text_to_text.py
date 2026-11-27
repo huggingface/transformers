@@ -129,10 +129,8 @@ class ImageTextToTextPipeline(Pipeline):
         self.check_model_type(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES)
         # Decoder-only models require left-padding for correct batched generation. Encoder-decoder models are
         # untouched, and so are processors with another component that sets its own padding side, because the
-        # collator pads all inputs on one side.
-        components = [self.feature_extractor, self.image_processor]
-        for name in ("feature_extractor", "image_processor", "audio_processor", "qformer_tokenizer"):
-            components.append(getattr(self.processor, name, None))
+        # collator only knows the tokenizer and one feature extractor or image processor.
+        components = [getattr(self.processor, name, None) for name in ("audio_processor", "qformer_tokenizer")]
         if (
             self.tokenizer is not None
             and self.tokenizer.padding_side == "right"

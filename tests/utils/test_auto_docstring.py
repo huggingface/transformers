@@ -23,12 +23,15 @@ import tempfile
 import textwrap
 import time
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
+from unittest.mock import patch
 
 import torch
 from huggingface_hub.dataclasses import strict
 
 from transformers.configuration_utils import PretrainedConfig
+from transformers.generation.utils import GenerateDecoderOnlyOutput
 from transformers.image_processing_backends import TorchvisionBackend
 from transformers.image_processing_utils import BatchFeature
 from transformers.image_utils import ImageInput
@@ -423,6 +426,17 @@ class DummyStrictConfig(PretrainedConfig):
     extra_param: str = "test"
 
 
+@auto_docstring
+@dataclass
+class DummyGenerateOutput(GenerateDecoderOnlyOutput):
+    r"""
+    extra (`int`, *optional*):
+        An extra output.
+    """
+
+    extra: int | None = None
+
+
 @require_torch
 class TestFullDocstringGeneration(unittest.TestCase):
     """
@@ -447,6 +461,16 @@ Args:
         A custom parameter unique to this config, not inherited from PreTrainedConfig.
 """
         self.assertEqual(actual_docstring, expected_docstring)
+
+    def test_arg_description_starting_with_returns_is_not_a_returns_section(self):
+        """An arg description starting with "Returns ..." must not end the parsing of the args."""
+        docstring = DummyGenerateOutput.__doc__
+        self.assertIn(
+            "    cache (`Cache`, *optional*, returned when `use_cache=True`):\n"
+            "        Returns the model cache, used to speed up decoding.",
+            docstring,
+        )
+        self.assertIn("\n    extra (`int`, *optional*):\n        An extra output.\n", docstring)
 
     def test_dummy_model_complete_docstring(self):
         self.maxDiff = None
@@ -838,6 +862,9 @@ class TestAutoDocstringPerformance:
     # Relative metric; robust across CI vs local. Catches serious regressions.
     AUTO_DOCSTRING_COST_PCT_UPPER_BOUND = 80.0
 
+    # The test re-imports the model modules after removing them from `sys.modules`. Restore the original modules
+    # afterwards: other tests in the same process hold their classes, and new copies would break `isinstance` checks
+    @patch.dict(sys.modules)
     def test_auto_docstring_import_time_upper_bound(self):
         """
         Asserts that auto_docstring overhead stays below a percentage of total
