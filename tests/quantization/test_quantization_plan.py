@@ -230,6 +230,34 @@ class QuantizationPlanTest(unittest.TestCase):
         self.assertIsNone(plan["lm_head"])
         self.assertEqual(repr(plan["*"]), repr(NVFP4Config()))
 
+    def test_modelopt_single_algo_mixed_checkpoint(self):
+        # thinkingmachines/Inkling-2-Mini: `quant_algo: NVFP4` for the whole model, but its tensors store NVFP4 and
+        # MXFP8 experts next to bf16 layers: the plan comes from their dtypes
+        saved = {"quant_method": "modelopt", "quant_algo": "NVFP4"}
+        dtypes = {
+            "model.llm.layers.0.self_attn.wq.weight": "BF16",
+            "model.llm.layers.0.mlp.experts.w13_weight": "U8",
+            "model.llm.layers.0.mlp.experts.w13_weight_scale": "F8_E4M3",
+            "model.llm.layers.0.mlp.experts.w13_weight_amax": "F32",
+            "model.llm.layers.23.mlp.experts.w13_weight": "F8_E4M3",
+            "model.llm.layers.23.mlp.experts.w13_weight_scale": "U8",
+        }
+        config = DeepseekV4Config(**TINY_DEEPSEEK, quantization_config=dict(saved))
+        with patch.object(QuantizationPlanHfQuantizer, "validate_environment"):
+            plan = get_hf_quantizer(config, None, None, True, {}, checkpoint_dtypes=lambda: dtypes)[0]
+        self.assertEqual(
+            list(plan.quantization_config), ["model.llm.layers.0.mlp.experts", "model.llm.layers.23.mlp.experts"]
+        )
+        self.assertEqual(repr(plan.quantization_config["model.llm.layers.0.mlp.experts"]), repr(NVFP4Config()))
+        mxfp8 = FineGrainedFP8Config(weight_block_size=(1, 32), scale_fmt="ue8m0")
+        self.assertEqual(repr(plan.quantization_config["model.llm.layers.23.mlp.experts"]), repr(mxfp8))
+        # a single stored format keeps the config's plan
+        single = {key: value for key, value in dtypes.items() if ".23." not in key}
+        with patch.object(QuantizationPlanHfQuantizer, "validate_environment"):
+            config = DeepseekV4Config(**TINY_DEEPSEEK, quantization_config=dict(saved))
+            plan = get_hf_quantizer(config, None, None, True, {}, checkpoint_dtypes=lambda: single)[0]
+        self.assertEqual(repr(plan.quantization_config), repr(NVFP4Config()))
+
     def test_modelopt_weight_only_nvfp4(self):
         # W4A16 NVFP4 keeps its activations in full precision, and the dropped KV cache quantization is not silent
         saved = {"quant_method": "modelopt", "quant_algo": "W4A16_NVFP4", "kv_cache_quant_algo": "FP8"}

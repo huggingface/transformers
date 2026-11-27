@@ -57,6 +57,13 @@ class NVFP4HfQuantizer(HfQuantizer):
         if self.pre_quantized and (self.quantization_config.dequantize or self.quantization_config.weight_only):
             return  # the `dequantize` load operation and the weight-only forward are pure torch
 
+        from ..integrations.metal_quantization import metal_fp4_experts_available
+
+        # Apple Silicon: pre-quantized experts run on the `metal-moe-decode` kernels
+        self.metal = self.pre_quantized and metal_fp4_experts_available(device_map)
+        if self.metal:
+            return
+
         if not is_kernels_available():
             raise ImportError(
                 "NVFP4 quantization requires the `kernels` package. "
@@ -138,6 +145,10 @@ class NVFP4HfQuantizer(HfQuantizer):
 
         if self.pre_quantized and self.quantization_config.dequantize:
             return None
+        if getattr(self, "metal", False):
+            from ..integrations.metal_quantization import metal_fp4_module
+
+            return metal_fp4_module(name, module, "nvfp4")
         weight_only = self.quantization_config.weight_only
         if name.endswith(".experts") and self.pre_quantized and is_nvfp4_compatible(module):
             # TODO: quantize experts from a full-precision checkpoint too

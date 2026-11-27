@@ -987,6 +987,30 @@ def get_kernel(
     )
 
 
+# Metal kernels for Apple Silicon, pinned
+_METAL_KERNELS = {
+    "metal-moe-decode": ("ArthurZ/metal-moe-decode", "02f4bde7619c6197e4969f49e02980a8ea4cadd1"),
+}
+
+
+@functools.cache
+def metal_kernel(name: str):
+    """The pinned hub kernel `name` of `_METAL_KERNELS`, or None where it does not load (no `kernels`, not MPS, no
+    build for this torch / Python)."""
+    if not (is_kernels_available() and torch.backends.mps.is_available()):
+        return None
+    from kernels import (
+        get_kernel as get_hub_kernel,
+    )  # the library's own: pinned revision, a trusted non-community repo
+
+    repo_id, revision = _METAL_KERNELS[name]
+    try:
+        return get_hub_kernel(repo_id, revision=revision, trust_remote_code=True)
+    except Exception as error:  # noqa: BLE001
+        logger.warning_once(f"Could not load the Metal kernel {repo_id}: {error}")
+        return None
+
+
 def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, internal_path: str | None = None):
     """
     The same as `use_kernel_forward_from_hub` but with the optional fallback to an original package if it exists, e.g.,
