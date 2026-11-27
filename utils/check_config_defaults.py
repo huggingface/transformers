@@ -127,7 +127,12 @@ class ConfigCheckResult:
     detail: str = ""
 
 
-FAILING_STATUSES = (CheckStatus.MISMATCH, CheckStatus.NO_CHECKPOINT, CheckStatus.CONFIG_NOT_FOUND, CheckStatus.DEFAULT_INIT_ERROR)
+FAILING_STATUSES = (
+    CheckStatus.MISMATCH,
+    CheckStatus.NO_CHECKPOINT,
+    CheckStatus.CONFIG_NOT_FOUND,
+    CheckStatus.DEFAULT_INIT_ERROR,
+)
 
 
 def normalize(value):
@@ -362,7 +367,9 @@ def build_failure_error(failed_results):
         )
         sections.append("\n".join(lines))
 
-    no_checkpoint = [r for r in failed_results if r.status in [CheckStatus.NO_CHECKPOINT, CheckStatus.CONFIG_NOT_FOUND]]
+    no_checkpoint = [
+        r for r in failed_results if r.status in [CheckStatus.NO_CHECKPOINT, CheckStatus.CONFIG_NOT_FOUND]
+    ]
     if no_checkpoint:
         names = "\n".join(f"- {r.model_type}" for r in no_checkpoint)
         sections.append(
