@@ -317,6 +317,10 @@ class Dots3NoteHubIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                     "\ufffd3\u0229\u0016\ufffd\ufffd\ufffd<no_think>\ufffd<dots_function_response>H\u001f"
                     "\ufffd1\ufffd(\u007fj\ufffd<dots_function_response>H\u001f\ufffdG\ufffd\u007fj\ufffd"
                 ),
+                ("xpu", None): (
+                    "\ufffd3\u0229\u0016\ufffd\ufffd\ufffd<no_think>\ufffd<dots_function_response>H\u001f"
+                    "\ufffd1\ufffd(\u007fj\ufffd<dots_function_response>H\u001f\ufffdG\ufffd\u007fj\ufffd"
+                ),
             }
         )
         self._check_generation("text", None, "Briefly introduce yourself.", expected)
@@ -329,6 +333,11 @@ class Dots3NoteHubIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                     "ts_function_response>H\u001f\ufffd1\ufffd\u0016H\u001f\ufffd1\ufffd\u0016"
                 ),
                 ("cuda", None): (
+                    "\ufffd3\u0229\u0016\ufffd\ufffd\ufffd<no_think>\ufffd<dots_function_response>H\u001f"
+                    "\ufffdG\ufffd\u007fj\ufffd<dots_function_response>H\u001f\ufffdG\ufffd\u007fj\ufffd<do"
+                    "ts_function_response>H"
+                ),
+                ("xpu", None): (
                     "\ufffd3\u0229\u0016\ufffd\ufffd\ufffd<no_think>\ufffd<dots_function_response>H\u001f"
                     "\ufffdG\ufffd\u007fj\ufffd<dots_function_response>H\u001f\ufffdG\ufffd\u007fj\ufffd<do"
                     "ts_function_response>H"
@@ -358,6 +367,11 @@ class Dots3NoteHubIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                     "\ufffd\ufffdd!\u0014\ufffdo\u001f\ufffd1\ufffd\u0016H\u001f\ufffd"
                 ),
                 ("cuda", None): (
+                    "\ufffd3\u0229(\u007fj\ufffd<dots_function_response>H\u001f\ufffd1\ufffd\ufffd\ufffd"
+                    "\ufffd<no_think>\ufffd<dots_function_response>H\u001f\ufffdG\ufffd\u007fj\ufffd<dots_f"
+                    "unction_response>H"
+                ),
+                ("xpu", None): (
                     "\ufffd3\u0229(\u007fj\ufffd<dots_function_response>H\u001f\ufffd1\ufffd\ufffd\ufffd"
                     "\ufffd<no_think>\ufffd<dots_function_response>H\u001f\ufffdG\ufffd\u007fj\ufffd<dots_f"
                     "unction_response>H"

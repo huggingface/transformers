@@ -23,6 +23,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -80,10 +81,22 @@ class Exaone4IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
 
-        EXPECTED_MEAN = torch.tensor([[22.1993, 8.5845, 10.0401, 12.4262, 9.3112, 29.7933, 8.2628]])
-        EXPECTED_SLICE = torch.tensor(
-            [20.6250, 19.6250, 14.5000, 21.1250, 24.5000, 22.1250, 24.0000, 24.8750, 25.0000, 25.3750]
-        )
+        EXPECTED_MEAN = Expectations(
+            {
+                ("cuda", None): torch.tensor([[22.1993, 8.5845, 10.0401, 12.4262, 9.3112, 29.7933, 8.2628]]),
+                ("xpu", None): torch.tensor([[22.2139, 8.4230, 10.0247, 11.9252, 9.2355, 29.5519, 7.8491]]),
+            }
+        ).get_expectation()
+        EXPECTED_SLICE = Expectations(
+            {
+                ("cuda", None): torch.tensor(
+                    [20.6250, 19.6250, 14.5000, 21.1250, 24.5000, 22.1250, 24.0000, 24.8750, 25.0000, 25.3750]
+                ),
+                ("xpu", None): torch.tensor(
+                    [20.6250, 19.6250, 14.5625, 21.1250, 24.5000, 22.1250, 24.0000, 25.0000, 25.0000, 25.3750]
+                ),
+            }
+        ).get_expectation()
 
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         torch.testing.assert_close(out[0, 0, :10], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
