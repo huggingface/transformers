@@ -28,7 +28,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ChannelDimension, ImageInput, ImageType, SizeDict, get_image_type
-from ...integrations import use_experts_implementation, use_kernelized_func
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import (
     create_causal_mask,
@@ -334,7 +334,9 @@ class Inkling2LogScaledL2Clip(nn.Module):
         return self.log_scale(hidden_states, position_ids)
 
 
-def get_relative_distance(inputs_embeds: torch.Tensor, cache: Cache | None, is_sliding: bool) -> torch.Tensor:
+def get_relative_distance(
+    inputs_embeds: torch.Tensor, cache: Cache | None, is_sliding: bool, **kwargs: Unpack[TransformersKwargs]
+) -> torch.Tensor:
     """
     Distance from each query position to each key position, of shape `(query_length, key_length)`, for the full or
     sliding attention layers. The sizes and offsets come from the same cache layer as for the attention masks.
@@ -356,6 +358,31 @@ def get_relative_distance(inputs_embeds: torch.Tensor, cache: Cache | None, is_s
     return q_positions[:, None] - kv_positions[None, :]
 
 
+@use_kernel_forward_from_hub("relative_position_bias_forward")
+def relative_position_bias_forward(
+    rel_logits: torch.Tensor, relative_distance: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+) -> torch.Tensor:
+    """
+    Relative position bias of the attention scores. Layers list it in `use_kernelized_func`, so that `kernelize` can
+    replace it, e.g. with an attention that reads the bias profiles at each pair's distance itself.
+
+    Args:
+        rel_logits (`torch.Tensor` of shape `(batch_size, num_heads, query_length, rel_extent)`):
+            Each query's bias for each backward distance.
+        relative_distance (`torch.Tensor` of shape `(query_length, key_length)`):
+            Distance from each query position to each key position, see `get_relative_distance`.
+
+    Returns:
+        `torch.Tensor` of shape `(batch_size, num_heads, query_length, key_length)`: the bias, zero outside
+        `0 <= distance < rel_extent`.
+    """
+    rel_extent = rel_logits.shape[-1]
+    gather_index = relative_distance.clamp(0, rel_extent - 1).expand(*rel_logits.shape[:2], -1, -1)
+    position_bias = rel_logits.gather(-1, gather_index)
+    return position_bias.masked_fill((relative_distance < 0) | (relative_distance >= rel_extent), 0.0)
+
+
+@use_kernelized_func(relative_position_bias_forward)
 class Inkling2RelativePositionBias(nn.Module):
     """
     Hidden-states conditioned relative position bias. `linear` and `norm` give each token per-head `relative_states`
@@ -378,16 +405,14 @@ class Inkling2RelativePositionBias(nn.Module):
         self.proj = nn.Parameter(torch.empty(config.d_rel, rel_extent))
 
     def forward(
-        self, hidden_states: torch.Tensor, relative_distance: torch.Tensor, position_ids: torch.Tensor
+        self, hidden_states: torch.Tensor, relative_distance: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> torch.Tensor:
         relative_states = self.linear(hidden_states).view(*hidden_states.shape[:-1], self.num_heads, -1)
-        relative_states = self.norm(relative_states, position_ids)
+        relative_states = self.norm(relative_states, kwargs["position_ids"])
 
-        # relative_states: [batch, q_len, num_heads, d_rel] -> bias: [batch, num_heads, q_len, kv_len]
+        # relative_states: [batch, q_len, num_heads, d_rel] -> rel_logits: [batch, num_heads, q_len, rel_extent]
         rel_logits = (relative_states @ self.proj).transpose(1, 2)
-        gather_index = relative_distance.clamp(0, self.rel_extent - 1).expand(*rel_logits.shape[:2], -1, -1)
-        position_bias = rel_logits.gather(-1, gather_index)
-        return position_bias.masked_fill((relative_distance < 0) | (relative_distance >= self.rel_extent), 0.0)
+        return relative_position_bias_forward(rel_logits, relative_distance, **kwargs)
 
 
 @use_kernelized_func([causal_conv1d_update, causal_conv1d_forward, causal_conv1d_fn])
@@ -432,6 +457,53 @@ class Inkling2ShortConvolution(InklingShortConvolution):
         return hidden_states.to(dtype=input_dtype)
 
 
+@use_kernel_forward_from_hub("dynamic_causal_conv1d_forward")
+def dynamic_causal_conv1d_forward(
+    hidden_states: torch.Tensor,
+    weights: torch.Tensor,
+    cache: Cache | None,
+    layer_idx: int,
+    state_idx: int = 0,
+    **kwargs: Unpack[TransformersKwargs],
+) -> torch.Tensor:
+    """
+    Causal depthwise convolution whose taps change with each token, reading and updating its conv state in `cache`.
+    Layers list it in `use_kernelized_func`, so that `kernelize` can replace it, e.g. with a runtime that manages the
+    conv state itself.
+
+    Args:
+        hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, channels)`):
+            The input to the convolution.
+        weights (`torch.Tensor` of shape `(batch_size, seq_len, num_heads, channels // num_heads, kernel_size)`):
+            The taps of each token, `weights[..., lag]` weighting the token `lag` steps back.
+        cache (`Cache`, *optional*):
+            The cache holding the conv state, updated in place.
+        layer_idx (`int`):
+            The index of the layer in `cache`.
+        state_idx (`int`, *optional*, defaults to 0):
+            Which of the layer's conv states to use.
+
+    Returns:
+        `torch.Tensor` of shape `(batch_size, seq_len, channels)`: The output of the convolution.
+    """
+    batch_size, seq_len, channels = hidden_states.shape
+    kernel_size = weights.shape[-1]
+    context = hidden_states.transpose(1, 2)
+    if cache is not None:
+        context = cache.update_conv_state(context, layer_idx, state_idx=state_idx, conv_kernel_size=kernel_size)
+    context = F.pad(context, (kernel_size - 1, 0))[..., -(seq_len + kernel_size - 1) :]
+    # windows[..., lag] is the token `lag` steps back
+    windows = context.unfold(-1, kernel_size, 1).flip(-1).transpose(1, 2)
+    windows = windows.reshape(*weights.shape)
+    if (seq_idx := kwargs.get("seq_idx")) is not None:
+        seq_idx = seq_idx.to(windows.device)
+        context_seq_idx = torch.cat([seq_idx[:, :1].expand(-1, kernel_size - 1), seq_idx], dim=1)
+        window_seq_idx = context_seq_idx.unfold(-1, kernel_size, 1).flip(-1)
+        windows = windows * (window_seq_idx == seq_idx[..., None])[:, :, None, None, :]
+    return (windows * weights).sum(-1).reshape(batch_size, seq_len, channels)
+
+
+@use_kernelized_func(dynamic_causal_conv1d_forward)
 class Inkling2DynamicShortConvolution(nn.Module):
     """
     Short causal convolution whose taps are the sum of static per-channel weights and per-token weights projected from
@@ -465,31 +537,21 @@ class Inkling2DynamicShortConvolution(nn.Module):
             Offset added to `layer_idx` to get the cache layer holding the state of this call.
         """
         input_dtype = hidden_states.dtype
-        batch_size, seq_len, hidden_size = hidden_states.shape
+        batch_size, seq_len, _ = hidden_states.shape
         dynamic_weights = self.weight_proj(dynamic_input).float()
         dynamic_weights = dynamic_weights.view(batch_size, seq_len, self.num_heads, 1, self.conv_kernel_size)
         weights = self.static_weight.float().T.view(self.num_heads, -1, self.conv_kernel_size) + dynamic_weights
 
         hidden_states = hidden_states.float()
         residual = hidden_states
-        context = apply_mask_to_padding_states(hidden_states, conv_mask).transpose(1, 2)
-        if cache is not None:
-            context = cache.update_conv_state(
-                context,
-                self.layer_idx + cache_offset,
-                state_idx=self.conv_idx,
-                conv_kernel_size=self.conv_kernel_size,
-            )
-        context = F.pad(context, (self.conv_kernel_size - 1, 0))[..., -(seq_len + self.conv_kernel_size - 1) :]
-        # windows[..., lag] is the token `lag` steps back
-        windows = context.unfold(-1, self.conv_kernel_size, 1).flip(-1).transpose(1, 2)
-        windows = windows.reshape(batch_size, seq_len, self.num_heads, -1, self.conv_kernel_size)
-        if (seq_idx := kwargs.get("seq_idx")) is not None:
-            seq_idx = seq_idx.to(windows.device)
-            context_seq_idx = torch.cat([seq_idx[:, :1].expand(-1, self.conv_kernel_size - 1), seq_idx], dim=1)
-            window_seq_idx = context_seq_idx.unfold(-1, self.conv_kernel_size, 1).flip(-1)
-            windows = windows * (window_seq_idx == seq_idx[..., None])[:, :, None, None, :]
-        hidden_states = (windows * weights).sum(-1).reshape(batch_size, seq_len, hidden_size)
+        hidden_states = dynamic_causal_conv1d_forward(
+            apply_mask_to_padding_states(hidden_states, conv_mask),
+            weights,
+            cache,
+            self.layer_idx + cache_offset,
+            state_idx=self.conv_idx,
+            **kwargs,
+        )
         hidden_states = (hidden_states + residual) / math.sqrt(2 * self.conv_kernel_size + 1)
         return hidden_states.to(input_dtype)
 
@@ -683,7 +745,7 @@ class Inkling2SlidingAttention(InklingAttention):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        position_bias = self.relative_position_bias(hidden_states, relative_distance, kwargs["position_ids"])
+        position_bias = self.relative_position_bias(hidden_states, relative_distance, **kwargs)
         sinks = self.sink_proj(hidden_states).transpose(1, 2).unsqueeze(-1)
         attn_output, attn_weights = attention_interface(
             self,
@@ -769,7 +831,7 @@ class Inkling2FullAttention(InklingAttention):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        position_bias = self.relative_position_bias(hidden_states, relative_distance, kwargs["position_ids"])
+        position_bias = self.relative_position_bias(hidden_states, relative_distance, **kwargs)
         sinks = self.sink_proj(hidden_states).transpose(1, 2).unsqueeze(-1)
         attn_output, attn_weights = attention_interface(
             self,
@@ -1226,8 +1288,8 @@ class Inkling2TextModel(InklingTextModel):
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
         relative_distance_mapping = {
-            "full_attention": get_relative_distance(inputs_embeds, cache, is_sliding=False),
-            "sliding_attention": get_relative_distance(inputs_embeds, cache, is_sliding=True),
+            "full_attention": get_relative_distance(inputs_embeds, cache, is_sliding=False, **kwargs),
+            "sliding_attention": get_relative_distance(inputs_embeds, cache, is_sliding=True, **kwargs),
         }
 
         hidden_states = inputs_embeds

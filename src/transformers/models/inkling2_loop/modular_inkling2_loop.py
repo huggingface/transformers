@@ -480,8 +480,8 @@ class Inkling2LoopTextModel(Inkling2TextModel):
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
         relative_distance_mapping = {
-            "full_attention": get_relative_distance(inputs_embeds, cache, is_sliding=False),
-            "sliding_attention": get_relative_distance(inputs_embeds, cache, is_sliding=True),
+            "full_attention": get_relative_distance(inputs_embeds, cache, is_sliding=False, **kwargs),
+            "sliding_attention": get_relative_distance(inputs_embeds, cache, is_sliding=True, **kwargs),
         }
 
         loop_start = self.config.loop_layer_index_start
