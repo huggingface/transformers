@@ -103,17 +103,24 @@ class ClmForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         self.config = copy.deepcopy(type(self).config)
         self.inputs = self.model_tester.prepare_inputs()
 
-    def test_training_loss_with_grouped_candidates(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_training()
-        model = ClmForDecision(config).train()
-        outputs = model(**inputs, num_items_in_batch=5)
+    def test_training_loss_with_shared_candidates(self):
+        model = ClmForDecision(self.config).train()
+        prompts = []
+        for state, options in (("An invoice", ["billing", "delivery"]), ("A parcel", ["delivery", "returns"])):
+            request = {"state": state, "questions": {"team": {"type": "choice", "criteria": dict.fromkeys(options)}}}
+            prompts.extend(self.decision_config.prepare_inputs(request, self.tokenizer))
 
-        logits = outputs.logits.detach().clone()
-        logits[0, 1] = logits[1, 0] = -torch.inf
-        labels = inputs["labels"]
-        state_loss = F.cross_entropy(logits, labels, reduction="sum")
-        candidate_loss = F.cross_entropy(logits.T, labels, reduction="sum")
-        torch.testing.assert_close(outputs.loss, (state_loss + candidate_loss) / 10)
+        targets = [[0.0, 0.75, 0.25], [0.0, 0.5, 0.5]]
+        inputs = model.prepare_decision_inputs(prompts, targets=targets)
+        outputs = model(**inputs, num_items_in_batch=3)
+
+        expected_targets = torch.tensor([[0.75, 0.25, 0.0], [0.0, 0.5, 0.5]])
+        expected_mask = expected_targets > 0
+        torch.testing.assert_close(inputs["option_mask"], expected_mask)
+        reverse_targets = expected_targets.T / expected_targets.sum(0)[:, None]
+        state_loss = F.cross_entropy(outputs.logits, expected_targets)
+        candidate_loss = F.cross_entropy(outputs.logits.T, reverse_targets)
+        torch.testing.assert_close(outputs.loss, (state_loss + candidate_loss) / 3)
 
     def test_candidate_permutation(self):
         model = ClmForDecision(self.config).eval()

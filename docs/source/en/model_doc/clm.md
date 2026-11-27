@@ -28,24 +28,22 @@ otherwise its key is used. Candidates do not see the current state or other cand
 
 ## Training
 
-CLM uses bidirectional InfoNCE over the candidates in each forward pass. After converting the checkpoint below,
-pack each state followed by its matching candidate and mark the end of each segment.
+CLM uses bidirectional InfoNCE over the candidates in each forward pass. Pass rendered prompts and targets to
+`prepare_decision_inputs` to pack the states and build a shared candidate pool.
 
 ```python
-import torch
 from transformers import AutoModelForDecision, AutoTokenizer
 
 model = AutoModelForDecision.from_pretrained("clm-8b")
 tokenizer = AutoTokenizer.from_pretrained("clm-8b")
-segments = tokenizer(["I was charged twice.", "Billing", "Where is my parcel?", "Delivery"]).input_ids
+request = {
+    "state": "I was charged twice.",
+    "questions": {"team": {"type": "choice", "criteria": {"billing": None, "delivery": None}}},
+}
+prompts = model.decision_config.prepare_inputs(request, tokenizer)
+batch = model.prepare_decision_inputs(prompts, targets=[[0.0, 1.0, 0.0]])
 model.train()
-output = model(
-    input_ids=torch.tensor([[token for segment in segments for token in segment]]),
-    marks=torch.tensor([[len(segment) for segment in segments]]).cumsum(dim=-1),
-    num_options=torch.tensor([[1, 1]]),
-    labels=torch.tensor([0, 1]),
-)
-output.loss.backward()
+model(**batch).loss.backward()
 ```
 
 Use a `group_ids` tensor of shape `(num_questions,)` in paired batches to exclude same-group false negatives in both
@@ -79,5 +77,6 @@ answers = decide({"state": "My invoice was charged twice.", "questions": {
 ## ClmForDecision
 
 [[autodoc]] ClmForDecision
+    - prepare_decision_inputs
     - forward
     - decide

@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import torch
@@ -206,6 +207,71 @@ class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, **kwargs)
         return ClmDecisionOutput(loss=loss, logits=logits)
+
+    def prepare_decision_inputs(
+        self,
+        prompts: Sequence[tuple[dict, list[Question]]],
+        *,
+        targets: Sequence[Sequence[float]] | None = None,
+        max_state_length: int | None = None,
+        max_option_length: int | None = None,
+        truncation: str = "error",
+    ) -> dict:
+        """Pack rendered CLM prompts into a single model input.
+
+        Args:
+            prompts (`Sequence[tuple[dict, list[Question]]]`):
+                One marked state and its marked options per prompt, from [`DecisionConfig.prepare_inputs`].
+            targets (`Sequence[Sequence[float]]`, *optional*):
+                One target distribution per question, with zero null probability first. Supplying targets builds a
+                pool of distinct candidates for the batch and returns labels and a mask of each question's options.
+            max_state_length (`int`, *optional*):
+                Maximum length of each state span, in tokens.
+            max_option_length (`int`, *optional*):
+                Maximum length of each option span, in tokens.
+            truncation (`str`, *optional*, defaults to `"error"`):
+                Use `"left"` or `"right"` to truncate overflowing spans on that side.
+        """
+        spans = self._split_decision_spans(prompts, max_state_length, max_option_length, truncation)
+        segments, counts = [], []
+        pool, option_columns = {}, []
+        for state, options, question in spans:
+            segments.append(state)
+            if targets is None:
+                segments.extend(options)
+                counts.append(len(options))
+                continue
+
+            if question.allow_null:
+                raise ValueError("CLM does not support nullable decisions.")
+            start = len(pool)
+            columns = []
+            for option in options:
+                key = tuple(option.tolist())
+                if key not in pool:
+                    pool[key] = len(pool)
+                    segments.append(option)
+                columns.append(pool[key])
+            counts.append(len(pool) - start)
+            option_columns.append(columns)
+
+        input_ids = torch.cat(segments)[None]
+        batch = {
+            "input_ids": input_ids,
+            "marks": input_ids.new_tensor([[len(segment) for segment in segments]]).cumsum(-1),
+            "num_options": input_ids.new_tensor([counts]),
+        }
+        if targets is not None:
+            labels = input_ids.new_zeros((len(spans), len(pool)), dtype=torch.float32)
+            option_mask = torch.zeros_like(labels, dtype=torch.bool)
+            for row, (target, columns) in enumerate(zip(targets, option_columns, strict=True)):
+                if len(target) != len(columns) + 1 or target[0] != 0:
+                    raise ValueError("Expected zero null probability followed by one probability per option.")
+                indices = input_ids.new_tensor(columns)
+                labels[row].scatter_add_(0, indices, labels.new_tensor(target[1:]))
+                option_mask[row, indices] = True
+            batch.update(labels=labels, option_mask=option_mask)
+        return batch
 
     @torch.no_grad()
     def decide(
