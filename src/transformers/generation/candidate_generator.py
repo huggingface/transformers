@@ -195,6 +195,10 @@ class AssistedCandidateGenerator(CandidateGenerator):
             self.probs = []
             self.matches = []
 
+        # This will keep track of the last drafted length and be updated inside `get_candidates` every iteration, to be able to
+        # rollback the Cache inside `_update_past_and_masks` afterwards
+        self._last_ids_length = 0
+
     def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.Tensor]:
         """
         Fetches the candidates to be tried for the current input.
