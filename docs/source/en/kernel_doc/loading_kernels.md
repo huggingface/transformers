@@ -48,7 +48,9 @@ PyTorch.
 | MoE MLP | `kernels-community/megablocks` | `kernels-community/megablocks` | `kernels-community/megablocks` |
 | MLP (SwiGLU, GeGLU) | `kernels-community/liger-kernels` | — | — |
 | Linear | `kernels-community/liger-kernels` | — | — |
-| Activations (GELU variants, SiLU) | `kernels-community/activation` | — | — |
+| Activations (GELU variants, SiLU) | `kernels-community/activation` | `kernels-community/activation` | `kernels-community/activation` |
+| Mamba SSM (causal conv1d, selective scan, chunked scan) | `kernels-community/mamba-ssm` | `kernels-community/mamba-ssm` | `kernels-community/mamba-ssm` |
+| Linear attention (Gated DeltaNet, Kimi Delta Attention, gated RMSNorm) | `kernels-community/fla` | `kernels-community/fla` | `kernels-community/fla` |
 | Rotary embeddings | `kernels-community/rotary` | `kernels-community/aiter-rope` | `kernels-community/rotary` |
 | Causal LM loss | `kernels-community/liger-kernels` | — | — |
 | Deformable attention | `kernels-community/deformable-detr` | — | — |

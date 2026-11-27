@@ -8,7 +8,13 @@ Hub layout (like the daily CI's `hf-internal-testing/transformers_daily_ci`):
 File names are those of the reports without their date suffix (e.g. `failing_tests.json`).
 
 Usage:
-  python utils/ci_report_notify.py --reports-dir <DIR> --hub-repo <ORG/NAME> --slack-channel <#channel> [--dry-run]
+  python utils/ci_report_notify.py --reports-dir <DIR> --hub-repo <ORG/NAME> --slack-channel <#channel> \
+      [--commit <NAME>=<OWNER>/<REPO>@<SHA> ...] [--commit-date <NAME>=<DATE> ...] [--dry-run]
+
+Below its title, the Slack message shows the transformers commit of the run, followed by one line per
+--commit (e.g. `--commit vllm=vllm-project/vllm@<SHA>` for the vLLM commit that was tested). Each commit is
+a link to it on GitHub, showing its first 12 characters. A commit's date, given with --commit-date
+(e.g. `--commit-date transformers=<DATE>`), is shown after it.
 
 Environment:
   TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN   Hub token with write access to --hub-repo
@@ -82,8 +88,27 @@ def _button(text, url):
     return {"type": "button", "text": {"type": "plain_text", "text": text}, "url": url}
 
 
-def build_slack_blocks(job_results, new_failing, categories, hub_url, new_failures_url):
+def _commit_line(name, repo, sha, date):
+    """E.g. "vllm commit: <link to the commit on GitHub, showing its first 12 characters> (<date>)"."""
+    name, repo, sha, date = (_escape(value) if value else value for value in (name, repo, sha, date))
+    if not sha:
+        text = "(unknown)"
+    elif repo:
+        text = f"<https://github.com/{repo}/commit/{sha}|{sha[:12]}>"
+    else:
+        text = sha[:12]
+    return f"{name} commit: {text}" + (f" ({date})" if date else "")
+
+
+def build_slack_blocks(job_results, new_failing, categories, hub_url, new_failures_url, commits=(), commit_dates=None):
+    """
+    `commits`: (name, repo, sha) tuples shown after the transformers commit, e.g. [("vllm", "vllm-project/vllm", "<SHA>")].
+    `commit_dates`: name -> date shown after the commit of that name, e.g. {"transformers": "<DATE>"}.
+    """
+    commit_dates = commit_dates or {}
     run = job_results["run"]
+    # The run's repo, from its URL "https://github.com/<OWNER>/<REPO>/actions/runs/<ID>".
+    run_repo = "/".join(run["url"].split("/")[3:5])
     jobs = job_results["jobs"]
 
     title = run["workflow"] if run["event"] == "schedule" else f"{run['workflow']} ({run['event']} on {run['branch']})"
@@ -103,6 +128,12 @@ def build_slack_blocks(job_results, new_failing, categories, hub_url, new_failur
 
     blocks = [
         {"type": "header", "text": {"type": "plain_text", "text": title[:150]}},
+        _section(
+            "\n".join(
+                _commit_line(name, repo, sha, commit_dates.get(name))
+                for name, repo, sha in [("transformers", run_repo, run["head_sha"]), *commits]
+            )
+        ),
         {
             "type": "section",
             "text": {"type": "mrkdwn", "text": status},
@@ -167,8 +198,36 @@ def main():
         "--hub-repo", required=True, help="Hub dataset repo, e.g. hf-internal-testing/transformers_vllm_ci"
     )
     parser.add_argument("--slack-channel", required=True, help="Slack channel, e.g. #transformers-ci-vllm")
+    parser.add_argument(
+        "--commit",
+        action="append",
+        default=[],
+        metavar="NAME=OWNER/REPO@SHA",
+        help="Commit of another tested project to show (as a link) in the Slack message, e.g. "
+        "vllm=vllm-project/vllm@<SHA>. Can be repeated.",
+    )
+    parser.add_argument(
+        "--commit-date",
+        action="append",
+        default=[],
+        metavar="NAME=DATE",
+        help="Date shown after the commit of NAME (`transformers` or a --commit NAME). Can be repeated.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Don't upload or post; print the Slack payload")
     args = parser.parse_args()
+    commits = []
+    for value in args.commit:
+        name, sep, repo_sha = value.partition("=")
+        repo, at, sha = repo_sha.rpartition("@")
+        if not sep or not name or not at or not repo:
+            parser.error(f"--commit must be NAME=OWNER/REPO@SHA, got {value!r}")
+        commits.append((name, repo, sha))
+    commit_dates = {}
+    for value in args.commit_date:
+        name, sep, date = value.partition("=")
+        if not sep or not name:
+            parser.error(f"--commit-date must be NAME=DATE, got {value!r}")
+        commit_dates[name] = date
 
     job_results = _load(args.reports_dir, "job_results")
     if job_results is None:
@@ -189,7 +248,9 @@ def main():
         f"https://huggingface.co/datasets/{args.hub_repo}/blob/{revision}/{folder}/new_failing_tests_with_trace.json"
     )
 
-    title, blocks = build_slack_blocks(job_results, new_failing, categories, hub_url, new_failures_url)
+    title, blocks = build_slack_blocks(
+        job_results, new_failing, categories, hub_url, new_failures_url, commits, commit_dates
+    )
     if args.dry_run:
         print(
             json.dumps({"channel": args.slack_channel, "text": title, "blocks": blocks}, indent=2, ensure_ascii=False)

@@ -43,7 +43,7 @@ from ...masking_utils import (
 from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import slice_logits_to_keep
-from ...processing_utils import ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import (
     TensorType,
@@ -240,18 +240,59 @@ class UnlimitedOcrProcessor(DeepseekOcr2Processor):
         )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> TextInput:
-        image_size = kwargs.get("size") or self.image_processor.size
-        tile_size = kwargs.get("tile_size") or self.image_processor.tile_size
+        patches_grid = (
+            image_inputs["patches_grid"][image_idx] if image_inputs["num_local_patches"][image_idx] else None
+        )
+        return self.image_token * self._get_num_image_tokens(patches_grid, **kwargs)
+
+    def _get_num_image_tokens(self, patches_grid, size=None, tile_size=None, **kwargs) -> int:
+        image_size = size or self.image_processor.size
+        tile_size = tile_size or self.image_processor.tile_size
         size = max(image_size["height"], image_size["width"])
 
         num_queries_global = math.ceil(size // self.patch_size / self.downsample_ratio)
         num_queries_local = math.ceil(tile_size // self.patch_size / self.downsample_ratio)
 
-        num_columns, num_rows = image_inputs["patches_grid"][image_idx]
         num_tokens = num_queries_global * (num_queries_global + 1) + 1
-        if image_inputs["num_local_patches"][image_idx] > 0:
+        if patches_grid is not None:
+            num_columns, num_rows = patches_grid
             num_tokens += (num_rows * num_queries_local) * (num_columns * num_queries_local + 1)
-        return self.image_token * num_tokens
+        return num_tokens
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
+            min_patches = images_kwargs["min_patches"]
+            max_patches = images_kwargs["max_patches"]
+            tile_size = images_kwargs["tile_size"]
+            crop_to_patches = images_kwargs["crop_to_patches"]
+
+            num_image_tokens = []
+            for height, width in image_sizes:
+                # Images larger than a tile are also cropped into a grid of local patches
+                patches_grid = None
+                if crop_to_patches and max(height, width) > tile_size:
+                    patches_grid = get_optimal_tiled_canvas(
+                        (height, width), (tile_size, tile_size), min_patches, max_patches
+                    )
+                num_image_tokens.append(self._get_num_image_tokens(patches_grid, **images_kwargs))
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, return_detections: bool = False, **kwargs):
         """
@@ -1028,10 +1069,6 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             return False
         return self.prefill_max_cache_len <= self.prefill_length
 
-    # We never want to set it, but this is needed as the parent tries it - so just do nothing
-    @is_croppable.setter
-    def is_croppable(self, x): ...
-
 
 def create_reference_sliding_window_causal_mask(
     config: PreTrainedConfig,
@@ -1268,8 +1305,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 

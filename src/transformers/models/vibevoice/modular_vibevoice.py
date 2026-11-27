@@ -21,14 +21,16 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPoolingAndSplitSizes,
+)
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from ..clip.modeling_clip import CLIPMLP
-from ..llama.modeling_llama import LlamaMLP
-from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
+from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 from ..voxtral.modeling_voxtral import (
     VoxtralModel,
     VoxtralMultiModalProjector,
@@ -66,7 +68,7 @@ class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
     audio_features: torch.Tensor | None = None
 
 
-class VibeVoiceRMSNorm(Qwen2RMSNorm):
+class VibeVoiceRMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -206,13 +208,13 @@ class VibeVoiceModel(VoxtralModel):
         custom_intro="This method is used to get the audio embeddings (that replace placeholder audio tokens in the "
         "input sequence) and the acoustic features (used as diffusion target) from the input audio waveform."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_values: torch.Tensor,
         padding_mask: torch.Tensor,
         sample: bool = True,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_values (`torch.Tensor`):
             Float values of (normalized) audio waveform.
@@ -238,9 +240,11 @@ class VibeVoiceModel(VoxtralModel):
         padding_mask = (positions < num_audio_tokens[:, None]).cpu()
 
         pooler_output = self.multi_modal_projector(acoustic_features)
-        return BaseModelOutputWithPooling(
+        pooler_output = pooler_output[padding_mask]
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=acoustic_features[padding_mask],
-            pooler_output=pooler_output[padding_mask],
+            pooler_output=pooler_output,
+            split_sizes=num_audio_tokens,
         )
 
     def forward(
@@ -265,7 +269,7 @@ class VibeVoiceModel(VoxtralModel):
 
         audio_features = None
         if input_values is not None:
-            audio_outputs = self.get_audio_features(input_values, padding_mask, sample=sample)
+            audio_outputs = self.get_audio_embeddings(input_values, padding_mask, sample=sample)
             audio_embeds = audio_outputs.pooler_output
             audio_features = audio_outputs.last_hidden_state
 

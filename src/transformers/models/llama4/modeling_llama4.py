@@ -29,10 +29,11 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_chunked_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
@@ -104,19 +105,23 @@ class Llama4TextMLP(nn.Module):
         return self.down_proj(down_proj)
 
 
-class Llama4TextL2Norm(torch.nn.Module):
+class Llama4TextWeightlessRMSNorm(torch.nn.Module):
     def __init__(self, eps: float = 1e-6):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
 
     def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.variance_epsilon)
 
     def forward(self, x):
         return self._norm(x.float()).type_as(x)
 
     def extra_repr(self):
-        return f"eps={self.eps}"
+        return f"eps={self.variance_epsilon}"
+
+
+# Deprecated alias, kept for BC
+Llama4TextL2Norm = Llama4TextWeightlessRMSNorm
 
 
 class Llama4TextRMSNorm(nn.Module):
@@ -125,18 +130,18 @@ class Llama4TextRMSNorm(nn.Module):
         Llama4RMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
         self.weight = nn.Parameter(torch.ones(hidden_size))
 
     def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.variance_epsilon)
 
     def forward(self, x):
         output = self._norm(x.float()).type_as(x)
         return output * self.weight
 
     def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.eps}"
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class Llama4Router(nn.Linear):
@@ -330,7 +335,7 @@ class Llama4TextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         if self.config.use_qk_norm and self.use_rope:
-            self.qk_norm = Llama4TextL2Norm(config.rms_norm_eps)
+            self.qk_norm = Llama4TextWeightlessRMSNorm(config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -662,6 +667,8 @@ class Llama4CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
             "`image_hidden_states` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
+        if self.image_outputs is None:
+            return None
         return self.image_outputs.pooler_output
 
 
@@ -1038,13 +1045,13 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         """
         return self.patch_embedding
 
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling | tuple[torch.Tensor, ...]:
         r"""
@@ -1076,7 +1083,6 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # num_concurrent_media and num_chunks are both currently 1
         batch_size_times_num_tiles, num_channels, height, width = pixel_values.shape
@@ -1111,6 +1117,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             freqs_ci=freqs_ci,
+            return_dict=True,
         )
 
         hidden_state = output.last_hidden_state
@@ -1124,13 +1131,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
 
         hidden_states = output.hidden_states if output_hidden_states else None
 
-        if output_attentions:
-            attentions = output[2]
-        else:
-            attentions = None
-
-        if not return_dict:
-            return tuple(v for v in [hidden_state, hidden_states, attentions] if v is not None)
+        attentions = output.attentions if output_attentions else None
 
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_state,
@@ -1177,11 +1178,14 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, MultimodalMixin, Gen
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
-        image_features, image_outputs.split_sizes = flatten_items(image_outputs.last_hidden_state)
-        image_outputs.pooler_output = self.multi_modal_projector(image_features)
-        return image_outputs
+        last_hidden_state = image_outputs.last_hidden_state
+        split_sizes = torch.full(
+            last_hidden_state.shape[:1], last_hidden_state.shape[1], device=last_hidden_state.device
+        )
+        image_outputs.pooler_output = self.multi_modal_projector(last_hidden_state.flatten(0, 1))
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -1263,11 +1267,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, MultimodalMixin, Gen
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if pixel_values is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
-            )
-
         if pixel_values is not None and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
@@ -1317,7 +1316,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, MultimodalMixin, Gen
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_outputs=outputs.image_outputs,
+            image_outputs=mm_encoder_outputs.get("image"),
             router_logits=outputs.router_logits,
         )
 

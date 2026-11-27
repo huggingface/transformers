@@ -25,7 +25,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_recurrent_attention_mask
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -40,7 +40,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ModelOutputWithPast,
     AudioFlamingo3PreTrainedModel,
 )
-from ..auto import AutoConfig, AutoModelForAudioFrameClassification
+from ..auto import AutoConfig, AutoModel, AutoModelForAudioFrameClassification
 from ..glmasr.modeling_glmasr import apply_rotary_pos_emb, eager_attention_forward
 from ..nemotron3_diarization.configuration_nemotron3_diarization import Nemotron3DiarizationAudioConfig
 from ..nemotron3_diarization.modeling_nemotron3_diarization import (
@@ -300,11 +300,11 @@ class Nemotron3_5TranscribeCausalLMOutputWithPast(AudioFlamingo3CausalLMOutputWi
 
 @auto_docstring
 @dataclass
-class Nemotron3_5TranscribeAudioModelOutput(BaseModelOutputWithPooling):
+class Nemotron3_5TranscribeAudioModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     pooler_output (`torch.Tensor` of shape `(num_audio_tokens, text_config.hidden_size)`, *optional*):
         Projected audio embeddings of the valid encoder frames of every recording, in batch order: the embeddings that
-        replace the audio tokens of the prompt. Returned by `get_audio_features`.
+        replace the audio tokens of the prompt. Returned by `get_audio_embeddings`.
     asr_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_frames, audio_config.hidden_size)`):
         Output of the speech recognition encoder, before its normalization and the speaker embeddings: the input of
         [`~Nemotron3_5TranscribeForConditionalGeneration.get_word_timestamp_logits`].
@@ -318,7 +318,6 @@ class Nemotron3_5TranscribeAudioModelOutput(BaseModelOutputWithPooling):
 
 class Nemotron3_5TranscribePreTrainedModel(AudioFlamingo3PreTrainedModel):
     _no_split_modules = None
-    _is_stateful = True
     _keys_to_ignore_on_load_unexpected = [
         r"^llm\.mtp\.",
         r"^perception\.preprocessor\.",
@@ -631,7 +630,10 @@ class Nemotron3_5TranscribeModel(AudioFlamingo3Model):
 
     def __init__(self, config: Nemotron3_5TranscribeConfig):
         super().__init__(config)
-        self.multi_modal_projector = nn.Linear(config.audio_config.hidden_size, config.text_config.hidden_size)
+        self.audio_tower = AutoModel.from_config(config.audio_config).to(dtype=torch.float32)
+        self.multi_modal_projector = nn.Linear(
+            config.audio_config.hidden_size, config.text_config.hidden_size, dtype=torch.float32
+        )
         self.word_timestamp_encoder = Nemotron3_5TranscribeWordTimestampModel(config.word_timestamp_config)
 
     def _embed_input_ids(self, input_ids: torch.LongTensor) -> torch.Tensor:
@@ -686,7 +688,7 @@ class Nemotron3_5TranscribeModel(AudioFlamingo3Model):
         r"""
         asr_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_frames, audio_config.hidden_size)`):
             Output of the speech recognition encoder before its normalization and the speaker embeddings, as returned
-            by [`~Nemotron3_5TranscribeModel.get_audio_features`] for `input_features_mask`.
+            by [`~Nemotron3_5TranscribeModel.get_audio_embeddings`] for `input_features_mask`.
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask of the valid spectrogram frames. Padding must be on the right.
 
@@ -723,14 +725,6 @@ class Nemotron3_5TranscribeForConditionalGeneration(AudioFlamingo3ForConditional
         )
         self.post_init()
 
-    @auto_docstring
-    def get_audio_features(self, input_features, input_features_mask, **kwargs):
-        r"""
-        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
-            Mask of the valid spectrogram frames. Padding must be on the right.
-        """
-        return self.model.get_audio_features(input_features, input_features_mask, **kwargs)
-
     @auto_docstring(
         custom_intro="""
         Logits of the word timestamp head on the speech recognition encoder states, which
@@ -743,7 +737,7 @@ class Nemotron3_5TranscribeForConditionalGeneration(AudioFlamingo3ForConditional
         r"""
         asr_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_frames, audio_config.hidden_size)`):
             Output of the speech recognition encoder before its normalization and the speaker embeddings, as returned
-            by [`~Nemotron3_5TranscribeForConditionalGeneration.get_audio_features`] for `input_features_mask`.
+            by [`~Nemotron3_5TranscribeForConditionalGeneration.get_audio_embeddings`] for `input_features_mask`.
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask of the valid spectrogram frames. Padding must be on the right.
 
@@ -778,7 +772,7 @@ class Nemotron3_5TranscribeForConditionalGeneration(AudioFlamingo3ForConditional
             raise ValueError("`return_word_timestamp_logits=True` needs the cache and one sequence per recording.")
 
         # the audio model runs once: its embeddings fill the prompt, its states feed the word timestamp head
-        audio_outputs = self.get_audio_features(input_features, input_features_mask)
+        audio_outputs = self.get_audio_embeddings(input_features, input_features_mask)
         inputs_embeds = self.model._embed_input_ids(input_ids)
         audio_embeds = audio_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
         special_audio_mask = self.model.get_placeholder_mask(input_ids, inputs_embeds, audio_embeds)

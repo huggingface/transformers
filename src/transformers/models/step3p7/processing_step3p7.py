@@ -18,7 +18,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessorMixin
 from ...utils import auto_docstring
 
 
@@ -58,6 +58,37 @@ class Step3p7Processor(ProcessorMixin):
                 repl += "<patch_newline>"
         repl += f"<im_start>{self.image_feature_placeholder}<im_end>"
         return repl
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+
+            num_local_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [
+                self.num_image_feature_size + num_patches * self.num_patch_feature_size
+                for num_patches in num_local_patches
+            ]
+            # `pixel_values` holds one global view per image, local patches go to `pixel_values_local`
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
 
 __all__ = ["Step3p7Processor"]

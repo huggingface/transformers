@@ -86,7 +86,6 @@ print(transcription)
 
 [[autodoc]] MoonshineModel
     - forward
-    - _mask_input_features
 
 ## MoonshineForConditionalGeneration
 

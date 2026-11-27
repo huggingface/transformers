@@ -27,7 +27,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import DoryForCausalLM, DoryModel
+    from transformers import DoryForCausalLM, DoryModel, DynamicCache, StaticCache
 
 
 class DoryModelTester(CausalLMModelTester):
@@ -67,6 +67,27 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
                 outputs = model(input_ids[:, position : position + 1], cache=outputs.cache)
                 logits.append(outputs.logits)
         torch.testing.assert_close(torch.cat(logits, dim=1), full_logits, rtol=1e-4, atol=1e-4)
+
+    def test_static_cache_matches_dynamic_with_loops(self):
+        # `last_loop` loops before the last read the cache without writing, which must match across cache types, also
+        # past the sliding window
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_hidden_layers, config.layer_types, config.rope_parameters = 4, None, None
+        config.n_input_layers, config.n_recurrent_layers, config.n_output_layers, config.n_recurrent_loops = 1, 2, 1, 3
+        config.sliding_window = 4
+        input_ids = inputs_dict["input_ids"][:1].repeat(1, 2)[:, :12]
+        for mode in ("per_loop", "last_loop"):
+            with self.subTest(mode=mode):
+                config.recurrent_kv_cache_mode = mode
+                config.__post_init__()
+                model = DoryForCausalLM(config).to(torch_device).eval()
+                dynamic, static = DynamicCache(config=config), StaticCache(config=config, max_cache_len=16)
+                with torch.no_grad():
+                    for start, end in ((0, 2), (2, 4), (4, 7), (7, 8), (8, 12)):
+                        expected = model(input_ids[:, start:end], cache=dynamic).logits
+                        actual = model(input_ids[:, start:end], cache=static).logits
+                        torch.testing.assert_close(actual, expected, rtol=1e-4, atol=1e-4)
+                self.assertTrue(all(layer.get_seq_length() == 12 for layer in static.layers))
 
     def test_prompt_lookup_past_sliding_window_with_loops(self):
         # Assisted decoding rolls the cache back: the later loops' sliding layers must record their past too
@@ -126,14 +147,14 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
                 torch.testing.assert_close(restored(input_ids, use_cache=False).logits, expected[..., :retained])
 
     def test_recurrent_cache_layout(self):
-        # Plain cache layers: `per_loop` appends one copy of the recurrent layers per extra loop, `last_loop` adds none
+        # Plain cache layers: `per_loop` appends one copy of the recurrent layers per extra loop, `last_loop` one read-only view of them
         config = self.model_tester_class(
             self, num_hidden_layers=4, n_input_layers=1, n_output_layers=1, n_recurrent_loops=3
         ).get_config()
         input_ids = torch.tensor([[1, 2, 3]])
         for mode, expected in [
             ("per_loop", ["DynamicSlidingWindowLayer"] * 3 + ["DynamicLayer"] + ["DynamicSlidingWindowLayer"] * 4),
-            ("last_loop", ["DynamicSlidingWindowLayer"] * 3 + ["DynamicLayer"]),
+            ("last_loop", ["DynamicSlidingWindowLayer"] * 3 + ["DynamicLayer"] + ["DoryPastReader"] * 2),
         ]:
             config.recurrent_kv_cache_mode = mode
             cache = DoryModel(config).eval()(input_ids, use_cache=True).cache

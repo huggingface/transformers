@@ -105,7 +105,9 @@ print(output_text)
 
 [[autodoc]] Qwen3VLMoeModel
     - forward
+    - get_video_embeddings
     - get_video_features
+    - get_image_embeddings
     - get_image_features
 
 ## Qwen3VLMoeForConditionalGeneration

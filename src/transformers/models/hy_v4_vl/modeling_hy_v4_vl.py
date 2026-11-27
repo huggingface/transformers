@@ -36,12 +36,13 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, yarn_apply_mscale
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
@@ -51,7 +52,13 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import get_max_seqlen, is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    get_max_seqlen,
+    is_flash_attention_requested,
+    maybe_autocast,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
@@ -129,8 +136,8 @@ class HYV4VLIndexer(nn.Module):
 
         self.wq_b = nn.Linear(self.q_lora_rank, self.n_heads * self.head_dim, bias=False)
         self.wk = nn.Linear(self.hidden_size, self.head_dim, bias=False)
-        self.k_norm = nn.LayerNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
+        self.k_norm = nn.LayerNorm(self.head_dim, eps=config.rms_norm_eps, dtype=torch.float32)
+        self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False, dtype=torch.float32)
         self.softmax_scale = self.head_dim**-0.5
 
     @torch.no_grad()
@@ -254,21 +261,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
-
-
-def yarn_apply_mscale(rope_parameters, scaling):
-    if rope_parameters.get("rope_type", "default") != "default":
-        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
-        if mscale_all_dim:
-            mscale = yarn_get_mscale(rope_parameters["factor"], mscale_all_dim)
-            scaling = scaling * mscale * mscale
-    return scaling
-
-
 class HYV4VLAttention(nn.Module):
     """
     DeepSeek-V3.2 DSA extended with **cross-layer top-k sharing**.
@@ -324,7 +316,7 @@ class HYV4VLAttention(nn.Module):
         self.indexer = None if self.skip_topk else HYV4VLIndexer(config, layer_idx)
         self.gate_projection_size = self.v_head_dim
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.gate_projection_size, bias=False)
-        self.sinks = nn.Parameter(torch.full((self.num_heads,), config.learnable_sink_init))
+        self.sinks = nn.Parameter(torch.full((self.num_heads,), config.learnable_sink_init, dtype=torch.float32))
 
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
@@ -438,11 +430,11 @@ class HYV4VLAttention(nn.Module):
 class HYV4VLUnweightedRMSNorm(nn.Module):
     def __init__(self, eps: float = 1.0e-6):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # We compute the inverse (i.e. we do not apply `x * ...`)
-        return torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
+        return torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.variance_epsilon).to(x.dtype)
 
 
 class HYV4VLMLP(nn.Module):
@@ -467,7 +459,7 @@ class HYV4VLTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
@@ -577,9 +569,11 @@ class HYV4VLHyperConnection(nn.Module):
         self.hc_eps = config.hc_eps
         self.input_norm = HYV4VLUnweightedRMSNorm(eps=config.rms_norm_eps)
         concatenated_weights_size = 2 * self.hc_mult  # noqa: F841
-        self.fn = nn.Parameter(torch.empty(concatenated_weights_size, self.hc_mult * config.hidden_size))
-        self.base = nn.Parameter(torch.empty(concatenated_weights_size))
-        self.scale = nn.Parameter(torch.empty(2))
+        self.fn = nn.Parameter(
+            torch.empty(concatenated_weights_size, self.hc_mult * config.hidden_size, dtype=torch.float32)
+        )
+        self.base = nn.Parameter(torch.empty(concatenated_weights_size, dtype=torch.float32))
+        self.scale = nn.Parameter(torch.empty(2, dtype=torch.float32))
         self.hc_post_magnitude = config.hc_magnitude
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -612,9 +606,9 @@ class HYV4VLHyperHead(nn.Module):
         self.hc_mult = config.hc_mult
         self.input_norm = HYV4VLUnweightedRMSNorm(eps=config.rms_norm_eps)
         self.eps = config.hc_eps
-        self.hc_fn = nn.Parameter(torch.empty(self.hc_mult, self.hc_mult * config.hidden_size))
-        self.hc_base = nn.Parameter(torch.empty(self.hc_mult))
-        self.hc_scale = nn.Parameter(torch.empty(1))
+        self.hc_fn = nn.Parameter(torch.empty(self.hc_mult, self.hc_mult * config.hidden_size, dtype=torch.float32))
+        self.hc_base = nn.Parameter(torch.empty(self.hc_mult, dtype=torch.float32))
+        self.hc_scale = nn.Parameter(torch.empty(1, dtype=torch.float32))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Key difference is to force fp32 in any case
@@ -638,8 +632,8 @@ class HYV4VLDecoderLayer(GradientCheckpointingLayer):
         self.mlp = HYV4VLMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV4VLMLP(config)
         self.input_layernorm = HYV4VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = HYV4VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attn_hc = HYV4VLHyperConnection(config)
-        self.ffn_hc = HYV4VLHyperConnection(config)
+        self.attn_hc = HYV4VLHyperConnection(config).to(dtype=torch.float32)
+        self.ffn_hc = HYV4VLHyperConnection(config).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -702,6 +696,7 @@ class HYV4VLPreTrainedModel(PreTrainedModel):
     }
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
+        "gate.weight",
         "fn",
         "scale",
         "base",
@@ -1038,9 +1033,9 @@ class HYV4VLVisionModel(HYV4VLPreTrainedModel):
         self.post_init()
 
     def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
-        """What the forward derives from `grid_thw` with data-dependent ops: the attention's
-        `cu_seqlens` and `max_seqlen`, the position table's `interp_indices` and `interp_weights`, and the patch
-        merger's `pixel_shuffle_index` and `merger_layout_index`."""
+        """What the forward derives from `grid_thw` with data-dependent ops: the attention's `cu_seqlens` and
+        `max_seqlen`, the position table's `interp_indices` and `interp_weights`, and the patch merger's
+        `pixel_shuffle_index` and `merger_layout_index` (without begin and end tokens)."""
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
             grid_thw, self.embeddings.position_edge, mode=self.config.interpolate_mode
@@ -1052,7 +1047,7 @@ class HYV4VLVisionModel(HYV4VLPreTrainedModel):
             "interp_indices": interp_indices,
             "interp_weights": interp_weights,
             "pixel_shuffle_index": get_vision_pixel_shuffle_index(grid_thw, merge_size),
-            "merger_layout_index": get_vision_merger_layout_index(grid_thw, merge_size),
+            "merger_layout_index": get_vision_merger_layout_index(grid_thw, merge_size, begin_end=False),
         }
 
     @capture_outputs
@@ -1416,16 +1411,7 @@ class HYV4VLModel(HYV4VLPreTrainedModel, MultimodalMixin):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
-    @can_return_tuple
-    @auto_docstring
-    def get_video_embeddings(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
-
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_embeddings(
@@ -1433,14 +1419,24 @@ class HYV4VLModel(HYV4VLPreTrainedModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         vision_outputs = self.vision_tower(pixel_values.to(self.vision_tower.dtype), grid_thw=image_grid_thw, **kwargs)
         vision_outputs.pooler_output = vision_outputs.pooler_output.squeeze(0)
-        merge_size = self.config.vision_config.spatial_merge_size
-        frames, height, width = image_grid_thw.unbind(-1)
         # Each merged row carries one extra newline token
-        vision_outputs.split_sizes = frames * (height // merge_size) * (width // merge_size + 1)
-        return vision_outputs
+        merge = self.config.vision_config.spatial_merge_size
+        split_sizes = image_grid_thw[:, 0] * (image_grid_thw[:, 1] // merge) * (image_grid_thw[:, 2] // merge + 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
+
+    @accepts_precomputed_kwargs(modality="video")
+    @can_return_tuple
+    @auto_docstring
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     def get_placeholder_mask(
         self,
@@ -1657,7 +1653,9 @@ class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, MultimodalMixin, Gen
     def __init__(self, config: HYV4VLConfig):
         super().__init__(config)
         self.model = HYV4VLModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(
+            config.text_config.hidden_size, config.text_config.vocab_size, bias=False, dtype=torch.float32
+        )
 
         self.post_init()
 

@@ -219,6 +219,7 @@ model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
 
 [[autodoc]] DeepseekVLHybridModel
     - forward
+    - get_image_embeddings
     - get_image_features
 
 ## DeepseekVLHybridForConditionalGeneration

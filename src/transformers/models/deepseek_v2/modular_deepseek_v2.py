@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from collections.abc import Callable
 
 import torch
@@ -23,7 +22,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
+from ...modeling_rope_utils import RopeParameters, dynamic_rope_update, yarn_apply_mscale
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -76,9 +75,6 @@ class DeepseekV2Config(LlamaConfig):
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -168,6 +164,7 @@ class DeepseekV2TopkRouter(Qwen2MoeTopKRouter):
         self.topk_method = config.topk_method
         self.num_group = config.n_group
         self.topk_group = config.topk_group
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -230,21 +227,6 @@ class DeepseekV2RotaryEmbedding(LlamaRotaryEmbedding):
         freqs_cis = freqs_cis * self.attention_scaling
 
         return freqs_cis
-
-
-def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
-
-
-def yarn_apply_mscale(rope_parameters, scaling):
-    if rope_parameters.get("rope_type", "default") != "default":
-        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
-        if mscale_all_dim:
-            mscale = yarn_get_mscale(rope_parameters["factor"], mscale_all_dim)
-            scaling = scaling * mscale * mscale
-    return scaling
 
 
 class DeepseekV2Attention(nn.Module):
@@ -396,6 +378,7 @@ class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
         "attentions": DeepseekV2Attention,
         "router_logits": OutputRecorder(DeepseekV2TopkRouter, index=0),
     }
+    _keep_in_fp32_modules_strict = ["gate.weight"]
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)

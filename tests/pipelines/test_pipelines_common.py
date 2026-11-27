@@ -38,7 +38,7 @@ from transformers import (
     pipeline,
 )
 from transformers.pipelines import PIPELINE_REGISTRY, REMOVED_TASKS, check_task, get_task
-from transformers.pipelines.base import Pipeline, _pad
+from transformers.pipelines.base import Pipeline, _pad, pad_collate_fn
 from transformers.testing_utils import (
     TOKEN,
     USER,
@@ -482,11 +482,40 @@ class PipelinePadTest(unittest.TestCase):
                 torch.LongTensor([[10, 10, 1, 23, 24, 2], [1, 23, 24, 43, 44, 2]]),
             )
         )
+        empty = [{"input_ids": torch.LongTensor([[]])}, {"input_ids": torch.LongTensor([[1, 2]])}]
+        self.assertTrue(torch.equal(_pad(empty, "input_ids", 10, "left"), torch.LongTensor([[10, 10], [1, 2]])))
         self.assertTrue(
             torch.allclose(
                 _pad(items, "attention_mask", 0, "right"), torch.LongTensor([[0, 1, 1, 0, 0, 0], [0, 1, 1, 1, 1, 0]])
             )
         )
+
+    @require_torch
+    def test_pipeline_padding_text_left_and_audio_features_right(self):
+        import torch
+
+        tokenizer = mock.Mock(pad_token_id=0, padding_side="left", model_input_names=["input_ids", "attention_mask"])
+        feature_extractor = mock.Mock(padding_value=0.0, padding_side="right", model_input_names=["input_features"])
+        items = [
+            {
+                "input_ids": torch.LongTensor([[5]]),
+                "attention_mask": torch.LongTensor([[1]]),
+                "input_features": torch.ones(1, 1, 2),
+                "input_features_mask": torch.LongTensor([[1]]),
+            },
+            {
+                "input_ids": torch.LongTensor([[5, 6]]),
+                "attention_mask": torch.LongTensor([[1, 1]]),
+                "input_features": torch.ones(1, 2, 2),
+                "input_features_mask": torch.LongTensor([[1, 1]]),
+            },
+        ]
+
+        batch = pad_collate_fn(tokenizer, feature_extractor)(items)
+        self.assertTrue(torch.equal(batch["input_ids"], torch.LongTensor([[0, 5], [5, 6]])))
+        self.assertTrue(torch.equal(batch["attention_mask"], torch.LongTensor([[0, 1], [1, 1]])))
+        self.assertTrue(torch.equal(batch["input_features"][:, :, 0], torch.tensor([[1.0, 0.0], [1.0, 1.0]])))
+        self.assertTrue(torch.equal(batch["input_features_mask"], torch.LongTensor([[1, 0], [1, 1]])))
 
     @require_torch
     def test_pipeline_image_padding(self):

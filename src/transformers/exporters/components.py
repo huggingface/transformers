@@ -44,7 +44,7 @@ class Component:
 
 class _ModelComponent(torch.nn.Module):
     """Wraps a model so a single method can be exported on its own. Missing attributes fall through to the
-    model, so the export precompute introspects the component exactly as it would the model."""
+    model, so the export introspects the component exactly as it would the model."""
 
     def __init__(self, model: PreTrainedModel):
         super().__init__()
@@ -101,7 +101,7 @@ class ModalityEncoder(_ModelComponent):
     def forward(self, **kwargs):
         if self._grid_kwarg is not None and "grid_thw" in kwargs:
             kwargs[self._grid_kwarg] = kwargs.pop("grid_thw")
-        # The precompute may offer kwargs the getter never takes (`window_index` on minicpmv4_6).
+        # `get_data_dependent_inputs` may offer kwargs the getter never takes (`window_index` on minicpmv4_6).
         getter = getattr(self.model, self._getter)
         parameters = inspect.signature(getter).parameters
         if not any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
@@ -165,7 +165,7 @@ class PatchVisionEncoder(_ModelComponent):
 
 class TokenEmbedder(_ModelComponent):
     """`input_ids -> inputs_embeds`, zeroing the placeholder ids first as a VLM `forward` does. Wraps the
-    text decoder, never the outer VLM, so the precompute's `get_rope_index` branch stays off.
+    text decoder, never the outer VLM, whose `get_data_dependent_inputs` would add its M-RoPE positions.
 
     A decoder with per-layer embeddings (gemma3n) otherwise recovers them from `inputs_embeds` by a
     data-dependent reverse lookup that breaks once features are scattered in, so `per_layer_inputs` is

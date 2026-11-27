@@ -37,7 +37,21 @@ class Glm5NextProcessor(ProcessorMixin):
     }
     videos_kwargs = {"return_metadata": True}
 
-    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        video_processor=None,
+        chat_template=None,
+        reorder_tool_results_in_template_order: bool = True,
+        **kwargs,
+    ):
+        r"""
+        reorder_tool_results_in_template_order (`bool`, *optional*, defaults to `True`):
+            Whether to reorder consecutive tool messages and expand aggregated `{"id": ..., "output": [...]}`
+            results to match the preceding assistant's `tool_calls` order when extracting multimodal inputs from
+            conversations.
+        """
         self.image_token = "<|image|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
         self.image_token_id = (
@@ -53,6 +67,7 @@ class Glm5NextProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
         self.video_start_id = tokenizer.convert_tokens_to_ids("<|begin_of_video|>")
         self.video_end_id = tokenizer.convert_tokens_to_ids("<|end_of_video|>")
+        self.reorder_tool_results_in_template_order = reorder_tool_results_in_template_order
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2
@@ -106,8 +121,10 @@ class Glm5NextProcessor(ProcessorMixin):
         merged_kwargs = self._merge_kwargs(**kwargs)
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = merged_kwargs.get("images_kwargs", {})
-            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **merged_kwargs.get("images_kwargs", {})
+            )
+            merge_size = images_kwargs["merge_size"]
 
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
@@ -117,8 +134,10 @@ class Glm5NextProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = merged_kwargs.get("videos_kwargs", {})
-            merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
+            videos_kwargs = self.video_processor._merge_and_standardize_kwargs(
+                **merged_kwargs.get("videos_kwargs", {})
+            )
+            merge_size = videos_kwargs["merge_size"]
             num_video_patches = [
                 self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
             ]

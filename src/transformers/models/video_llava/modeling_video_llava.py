@@ -23,9 +23,10 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -157,7 +158,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel, MultimodalMixin):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_images (`torch.Tensor` of shape `(batch_size, channels, height, width)`)
             The tensors corresponding to the input images.
@@ -185,10 +186,9 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel, MultimodalMixin):
             selected_hidden_state = torch.cat(hs_pool, dim=-1)
 
         image_features = self.multi_modal_projector(selected_hidden_state)
-        image_outputs.pooler_output = image_features
-
-        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
-        return image_outputs
+        split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
+        image_outputs.pooler_output = image_features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -201,7 +201,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel, MultimodalMixin):
         pixel_values_videos: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         batch_size_vid, num_frames, channels, height, width = pixel_values_videos.shape
 
         pixel_values = pixel_values_videos.reshape(batch_size_vid * num_frames, channels, height, width)
@@ -221,10 +221,10 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel, MultimodalMixin):
 
         video_features = self.multi_modal_projector(video_features)
         video_outputs.pooler_output = video_features.flatten(0, 1)
-        video_outputs.split_sizes = video_features.new_full(
+        split_sizes = video_features.new_full(
             (batch_size_vid,), num_frames * video_features.shape[1], dtype=torch.long
         )
-        return video_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**video_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -309,8 +309,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -322,8 +321,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("video") is not None:
-            video_features = mm_encoder_outputs["video"].pooler_output
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_features = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
             )

@@ -89,6 +89,8 @@ NAMES_TO_NEVER_REPLACE = (
     "mamba2_split_conv1d_scan_combined",
     "mamba2_selective_state_update",
     "mamba2_chunk_scan",
+    "mamba_scan_forward",
+    "mamba2_scan_forward",
 )
 
 
@@ -1063,9 +1065,7 @@ def replace_class_node(
         new_class_bases.append(new_base)
     # Add potential additional classes that may not be inherited as the parent does not use them, and that were not
     # already replaced above
-    new_class_bases.extend(
-        [all_new_bases[added_base] for added_base in additional_bases if added_base not in original_bases]
-    )
+    new_class_bases.extend([all_new_bases[added_base] for added_base in additional_bases])
     # If we have both `nn.Module` and `GradientCheckpointingLayer`, remove `nn.Module`
     new_class_bases_names = {get_full_attribute_name(k.value) for k in new_class_bases}
     if "nn.Module" in new_class_bases_names and "GradientCheckpointingLayer" in new_class_bases_names:

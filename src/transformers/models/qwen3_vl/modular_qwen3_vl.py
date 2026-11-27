@@ -13,6 +13,7 @@
 # limitations under the License.
 """PyTorch Qwen3-VL model."""
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -31,12 +32,13 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
-from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
+from ...processing_utils import _UNMARKED, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...utils import auto_docstring, is_torchvision_available, logging
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import (
@@ -85,7 +87,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @dataclass
-class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
+class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     deepstack_features (`List[torch.Tensor]`, *optional*):
         List of hidden-states (feature maps) from deepstack layers.
@@ -668,16 +670,8 @@ class Qwen3VLModel(Qwen2VLModel):
         vision_output: BaseModelOutputWithDeepstackFeatures = self.visual(
             pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs
         )
-        vision_output.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        vision_output.split_sizes = image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
         return vision_output
-
-    def get_video_embeddings(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -940,6 +934,36 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
             video_placeholder += self.vision_start_token + self.video_token * frame_seqlen + self.vision_end_token
         return video_placeholder
 
+    def get_text_with_replacements(
+        self,
+        text: list[str],
+        images_replacements: list[str] = [],
+        videos_replacements: list[str] = [],
+        audio_replacements: list[str] = [],
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        # `replace_video_token` already wraps every frame in `<|vision_start|>...<|vision_end|>`, so collapse the chat
+        # template's outer wrapper into a bare video token to avoid an extra vision start/end pair around all frames
+        wrapper = self.vision_start_token + self.video_token + self.vision_end_token
+        pattern = re.compile(_UNMARKED + re.escape(wrapper) if len(videos_replacements) > 0 else r"(?!)")
+        wrapper_starts = [{m.start() for m in pattern.finditer(sample)} for sample in text]
+        text = [pattern.sub(self.video_token, sample) for sample in text]
+        text, batch_offsets = ProcessorMixin.get_text_with_replacements(
+            self, text, images_replacements, videos_replacements, audio_replacements
+        )
+
+        # Map the spans back to the uncollapsed text, which is what `return_assistant_tokens_mask` aligns against
+        removed = len(wrapper) - len(self.video_token)
+        for starts, offsets in zip(wrapper_starts, batch_offsets):
+            shift = 0
+            for offset in offsets:
+                start, end = offset["span"]
+                is_wrapper = start + shift in starts
+                offset["span"] = (start + shift, end + shift + removed * is_wrapper)
+                if is_wrapper:
+                    offset["text"] = wrapper
+                    shift += removed
+        return text, batch_offsets
+
     def _calculate_timestamps(self, indices: list[int] | np.ndarray, video_fps: float, merge_size: int = 2):
         if not isinstance(indices, list):
             indices = indices.tolist()
@@ -1064,14 +1088,14 @@ class Qwen3VLVideoProcessor(Qwen2VLVideoProcessor):
         Returns:
             `int`: Number of video patches per video.
         """
-        videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
-        size = videos_kwargs.get("size", None) or self.size
+        videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
+        size = videos_kwargs["size"]
         min_pixels = size["shortest_edge"]
         max_pixels = size["longest_edge"]
-        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
-        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
-        cap_pixels_per_frame = videos_kwargs.get("cap_pixels_per_frame", None) or self.cap_pixels_per_frame
+        patch_size = videos_kwargs["patch_size"]
+        merge_size = videos_kwargs["merge_size"]
+        temporal_patch_size = videos_kwargs["temporal_patch_size"]
+        cap_pixels_per_frame = videos_kwargs["cap_pixels_per_frame"]
 
         factor = patch_size * merge_size
         if cap_pixels_per_frame:

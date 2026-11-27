@@ -48,6 +48,7 @@ class Glm5NextImageProcessorKwargs(ImagesKwargs, total=False):
     patch_size: int
     temporal_patch_size: int
     merge_size: int
+
     patch_expand_factor: int
 
     min_image_tokens: int
@@ -297,13 +298,13 @@ class Glm5NextImageProcessorPil(PilBackend):
         Returns:
             `int`: Number of image patches per image.
         """
-        images_kwargs = images_kwargs or {}
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        merge_size = images_kwargs.get("merge_size", self.merge_size)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        patch_size = images_kwargs["patch_size"]
+        merge_size = images_kwargs["merge_size"]
 
         # Key difference is the dynamically based resize on min/max image tokens
-        min_image_tokens = images_kwargs.get("min_image_tokens", self.min_image_tokens)
-        max_image_tokens = images_kwargs.get("max_image_tokens", self.max_image_tokens)
+        min_image_tokens = images_kwargs["min_image_tokens"]
+        max_image_tokens = images_kwargs["max_image_tokens"]
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
