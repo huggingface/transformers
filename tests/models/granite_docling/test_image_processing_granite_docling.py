@@ -191,6 +191,16 @@ class GraniteDoclingImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
                 [[True, True, True, True], [True, False, False, False]],
             )
 
+    def test_auto_fine_route(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**{**self.image_processor_dict, "crop_to_patches": True})
+            square_image = np.random.randint(0, 255, size=(20, 20, 3), dtype=np.uint8)
+            encoding = image_processor([[square_image], [square_image]], return_tensors="pt", fine_route="auto")
+            self.assertEqual(encoding["auto_fine_route"].tolist(), [True, True])
+            self.assertNotIn("tile_fine_mask", encoding)
+            with self.assertRaisesRegex(ValueError, "`fine_route` must be"):
+                image_processor(square_image, return_tensors="pt", fine_route="always")
+
     def test_backends_equivalence_tiled(self):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")

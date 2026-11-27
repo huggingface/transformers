@@ -30,6 +30,15 @@ if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
 
 
+def fine_route_key(fine_route: bool | str) -> str | None:
+    """The model input that carries `fine_route`: `tile_fine_mask`, `auto_fine_route` (`"auto"`) or none."""
+    if isinstance(fine_route, str):
+        if fine_route != "auto":
+            raise ValueError(f'`fine_route` must be `True`, `False` or `"auto"`, got {fine_route!r}.')
+        return "auto_fine_route"
+    return "tile_fine_mask" if fine_route else None
+
+
 @auto_docstring
 class GraniteDoclingProcessor(ProcessorMixin):
     # rows/cols build the prompt. They are ragged across a batch, so they stay Python lists and are dropped
@@ -57,7 +66,10 @@ class GraniteDoclingProcessor(ProcessorMixin):
         r"""
         Returns:
             [`BatchEncoding`]: The tokenized prompts with `pixel_values` and `pixel_attention_mask`, and
-            `tile_fine_mask` when `fine_route=True`. The tile grids only build the prompt and are not returned.
+            `tile_fine_mask` when `fine_route=True` or `auto_fine_route` when `fine_route="auto"`. With `"auto"`
+            the prompts have the image tokens of the coarse path; `generate` adds the image tokens of the pages
+            that the density router sends to the fine path. The tile grids only build the prompt and are not
+            returned.
         """
         outputs = super().__call__(images=images, text=text, **kwargs)
         # The tile grids only build the prompt
@@ -153,7 +165,8 @@ class GraniteDoclingProcessor(ProcessorMixin):
             for height, width in image_sizes:
                 num_rows, num_cols = self.image_processor.get_tile_grid(height, width, kwargs)
                 image_inputs = {"rows": [[num_rows]], "cols": [[num_cols]]}
-                if fine_route:
+                # With "auto" the prompt has the image tokens of the coarse path
+                if fine_route_key(fine_route) == "tile_fine_mask":
                     image_inputs["tile_fine_mask"] = None
                 image_prompt = self.replace_image_token(image_inputs, 0)
                 num_image_tokens.append(len(self.tokenizer(image_prompt, add_special_tokens=False)["input_ids"]))

@@ -28,9 +28,9 @@ rendered properly in your Markdown viewer.
 
 The page is split into tiles of 512x512 pixels laid out on the grid that best matches its aspect ratio, plus a thumbnail of the whole page when there is more than one tile. A vision encoder embeds every tile, and a pixel-shuffle connector maps vision patches to image tokens. Intermediate vision encoder states are projected as well and added to the image tokens after the first decoder layers. A dense Granite-style text decoder then generates the DocLang.
 
-GraniteDocling is released as two models. The 500M model uses 64 image tokens per tile and can switch a dense page to 256; a router chooses that per page. The 2B model uses a pixel-shuffle ratio of 2, which is 256 image tokens per tile, the same density as the 500M fine path.
+GraniteDocling is the architecture of the Granite Docling v2 models, which are released in two sizes: [`ibm-granite/granite-docling-v2-500m`](https://huggingface.co/ibm-granite/granite-docling-v2-500m) and [`ibm-granite/granite-docling-v2-2b`](https://huggingface.co/ibm-granite/granite-docling-v2-2b). The 500M model uses 64 image tokens per tile and can switch a dense page to 256; a router chooses that per page. The 2B model uses a pixel-shuffle ratio of 2, which is 256 image tokens per tile, the same density as the 500M fine path.
 
-The [Docling project](https://huggingface.co/docling-project) created GraniteDocling. Both models are published on the [IBM Granite](https://huggingface.co/ibm-granite) organization.
+The [Docling project](https://huggingface.co/docling-project) created Granite Docling v2. Both models are published on the [IBM Granite](https://huggingface.co/ibm-granite) organization.
 
 GraniteDocling is a different architecture from [granite-docling-258M](https://huggingface.co/ibm-granite/granite-docling-258M), which keeps loading through [Idefics3](./idefics3).
 
@@ -44,7 +44,7 @@ GraniteDocling is a different architecture from [granite-docling-258M](https://h
 - Prompt the model through the chat template. `<doclang>` converts the full page. Append a bracket list to request a subset of elements, for example `<doclang> [<ocr>]` or `<doclang> [<ocr>, <layout>, <picture>]`.
 - Decode with `skip_special_tokens=False` if you will parse the string as DocLang. Dedicated markup tokens are otherwise stripped.
 - On the 500M model, pass `fine_route=True` for dense pages (small print, long tables, multi-column text). That path uses four times as many image tokens, so the prompt is longer and inference is slower. The 2B model already uses that token density and has no second path, so `fine_route=True` raises an error for it.
-- The 500M model includes a density router, which decides that for you: [`~GraniteDoclingModel.predict_fine_route`] returns which pages of a batch need the fine path.
+- The 500M model includes a density router, which decides that for you: pass `fine_route="auto"` and [`~GraniteDoclingForConditionalGeneration.generate`] gives each page the path the router chooses, from a single pass of the vision encoder. [`~GraniteDoclingModel.predict_fine_route`] returns the same decision for a batch.
 
 The examples below convert page 1 of the [Docling Technical Report](https://huggingface.co/papers/2408.09869) (`arXiv:2408.09869`). Change only the text prompt to switch task; the model returns DocLang filtered to the requested elements.
 
@@ -73,13 +73,13 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="image-text-to-text",
-    model="ibm-granite/granite-for-docling-500m",
+    model="ibm-granite/granite-docling-v2-500m",
 )
 messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "url": "https://huggingface.co/ibm-granite/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png"},
+            {"type": "image", "url": "https://huggingface.co/ibm-granite/granite-docling-v2-500m/resolve/main/docling_technical_report_p1.png"},
             {"type": "text", "text": "<doclang>"},
         ],
     }
@@ -94,7 +94,7 @@ pipe(text=messages, max_new_tokens=4096, return_full_text=False, skip_special_to
 ```python
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
-model_id = "ibm-granite/granite-for-docling-500m"
+model_id = "ibm-granite/granite-docling-v2-500m"
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForImageTextToText.from_pretrained(model_id, device_map="auto")
@@ -103,7 +103,7 @@ conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "url": "https://huggingface.co/ibm-granite/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png"},
+            {"type": "image", "url": "https://huggingface.co/ibm-granite/granite-docling-v2-500m/resolve/main/docling_technical_report_p1.png"},
             {"type": "text", "text": "<doclang>"},
         ],
     },
@@ -145,20 +145,25 @@ inputs = processor.apply_chat_template(
 output = model.generate(**inputs, max_new_tokens=4096)
 ```
 
-The 500M model (`config.density_router_hidden_size` is set) predicts which pages need the fine path from its default image tokens:
+The 500M model (`config.density_router_hidden_size` is set) has a density router that predicts from the vision encoder output which pages need the fine path. With `fine_route="auto"`, `generate` runs the vision encoder once, asks the router and gives each page the image tokens of the path it chooses:
+
+```python
+inputs = processor.apply_chat_template(
+    conversation,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+    processor_kwargs={"fine_route": "auto"},
+).to(model.device)
+output = model.generate(**inputs, max_new_tokens=4096)
+print(processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False))
+```
+
+The prompt from the processor has the image tokens of the coarse path, and `generate` adds those of the fine path where the router chooses it. The returned sequences start with the prompt as it was passed, so the new tokens start at `inputs["input_ids"].shape[1]`. Only `generate` resolves `"auto"`. For a forward pass, [`~GraniteDoclingModel.predict_fine_route`] returns the router's decision, and the processor called with `fine_route=True` builds the inputs of the fine path:
 
 ```python
 needs_fine = model.model.predict_fine_route(inputs["pixel_values"], inputs["pixel_attention_mask"])  # (batch_size,) bool
-if needs_fine[0]:
-    inputs = processor.apply_chat_template(
-        conversation,
-        add_generation_prompt=True,
-        tokenize=True,
-        return_dict=True,
-        return_tensors="pt",
-        processor_kwargs={"fine_route": True},
-    ).to(model.device)
-output = model.generate(**inputs, max_new_tokens=4096)
 ```
 
 ### Batched inference
@@ -167,8 +172,8 @@ Pages get different tile grids, so `pixel_values` is padded to the largest tile 
 
 ```python
 pages = [
-    "https://huggingface.co/ibm-granite/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png",
-    "https://huggingface.co/ibm-granite/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png",
+    "https://huggingface.co/ibm-granite/granite-docling-v2-500m/resolve/main/docling_technical_report_p1.png",
+    "https://huggingface.co/ibm-granite/granite-docling-v2-500m/resolve/main/docling_technical_report_p1.png",
 ]
 conversations = [
     [{"role": "user", "content": [{"type": "image", "url": url}, {"type": "text", "text": "<doclang>"}]}]
@@ -189,7 +194,7 @@ for row in output:
     print(doclang.removesuffix(processor.tokenizer.eos_token).strip())
 ```
 
-Add `"fine_route": True` to `processor_kwargs` to route the whole batch through the fine path; the processor then returns `tile_fine_mask`. A batch takes one path, so run the pages the router sends to the fine path as their own batch.
+Add `"fine_route": True` to `processor_kwargs` to route the whole batch through the fine path; the processor then returns `tile_fine_mask`. With `"fine_route": True` a batch takes one path. With `"fine_route": "auto"` the router chooses the path of each page, also within a batch.
 
 ### Export DocLang with Docling
 
@@ -217,7 +222,7 @@ The [DocLang](https://doclang.ai/) spec and `doclang` toolkit (validate / pack) 
 - A full page is long: budget `max_new_tokens` in the thousands, otherwise the DocLang is cut off silently.
 - Tiles are 512x512, laid out on the grid that best matches the page's aspect ratio, capped by `max_patches` (default 32) and 16 tiles per side. A page that fits in one tile gets no thumbnail.
 - A checkpoint can carry a spread rule in its image processor config: `dense_max_patches` tiles instead of `max_patches` for a wide landscape page (`dense_min_aspect` < width/height <= `dense_max_aspect`) that the `max_patches` grid would shrink below `dense_max_scale`. Newspaper spreads are the typical case. The rule is off by default (`dense_max_patches=0`) and must match what the checkpoint was trained with.
-- On the 500M model the fine path quadruples the image tokens per tile, from 64 to 256. Use it for dense pages only, or let the router decide with [`~GraniteDoclingModel.predict_fine_route`]. The 2B model uses 256 image tokens per tile throughout (pixel-shuffle ratio 2).
+- On the 500M model the fine path quadruples the image tokens per tile, from 64 to 256. Use it for dense pages only, or let the router decide with `fine_route="auto"`. The 2B model uses 256 image tokens per tile throughout (pixel-shuffle ratio 2).
 
 ## GraniteDoclingConfig
 
