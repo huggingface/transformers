@@ -1235,7 +1235,8 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_ids = self.get_image_tokens(mm_encoder_outputs["image"].pooler_output)
+            source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
+            image_ids = self.get_image_tokens(mm_encoder_outputs["image"].pooler_output, source_grids)
             image_ids = image_ids.view(-1).to(input_ids.device)
             special_image_mask = self.get_placeholder_mask(input_ids, image_ids)
             input_ids = input_ids.masked_scatter(special_image_mask, image_ids)
@@ -1282,12 +1283,12 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
             image_tokens (`torch.LongTensor` of shape `(total_patches,)`):
                 Discrete token indices from the VQVAE codebook.
         """
-        # Each image's rows, as `get_image_features` returns them
-        if isinstance(hidden_states, (list, tuple)):
-            hidden_states = torch.cat(hidden_states)
-        # The tokenizer reads each position alone (a 1x1 conv, then the nearest code): every image in one call
-        vqmodel_outputs: GlmImageVQVAEModelOutput = self.vqmodel.encode(hidden_states.T[None, :, :, None])
-        return vqmodel_outputs.image_tokens
+        # One encode per image, as one call over all images holds all their [positions, codes] distances at once
+        if isinstance(hidden_states, torch.Tensor):
+            hidden_states = hidden_states.split(
+                (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+            )
+        return torch.cat([self.vqmodel.encode(states.T[None, :, :, None]).image_tokens for states in hidden_states])
 
     def get_image_grids_for_generation(
         self,
