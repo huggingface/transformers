@@ -1,4 +1,4 @@
-# Copyright 2022 The HuggingFace Inc. team.
+# Copyright 2026 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -127,7 +127,7 @@ class ConfigCheckResult:
     detail: str = ""
 
 
-FAILING_STATUSES = (CheckStatus.MISMATCH, CheckStatus.NO_CHECKPOINT, CheckStatus.DEFAULT_INIT_ERROR)
+FAILING_STATUSES = (CheckStatus.MISMATCH, CheckStatus.NO_CHECKPOINT, CheckStatus.CONFIG_NOT_FOUND, CheckStatus.DEFAULT_INIT_ERROR)
 
 
 def normalize(value):
@@ -362,12 +362,12 @@ def build_failure_error(failed_results):
         )
         sections.append("\n".join(lines))
 
-    no_checkpoint = [r for r in failed_results if r.status == CheckStatus.NO_CHECKPOINT]
+    no_checkpoint = [r for r in failed_results if r.status in [CheckStatus.NO_CHECKPOINT, CheckStatus.CONFIG_NOT_FOUND]]
     if no_checkpoint:
         names = "\n".join(f"- {r.model_type}" for r in no_checkpoint)
         sections.append(
             f"{len(no_checkpoint)} config(s) have no valid checkpoint link in their docstring:\n{names}\n\n"
-            "How to fix: add a link like [myorg/mymodel](https://huggingface.co/myorg/mymodel) to the config "
+            "How to fix: add a valid link like [myorg/mymodel](https://huggingface.co/myorg/mymodel) to the config "
             "class docstring. The link text must match the URL. See `utils/check_config_docstrings.py`."
         )
 
