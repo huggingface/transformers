@@ -251,6 +251,10 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
             if self.eos_token_id is None or isinstance(self.eos_token_id, list) and not self.eos_token_id:
                 raise ValueError("eos_token_id must be set when Qwen4-Exp PLE layers are enabled.")
 
+    @property
+    def index_group_size(self) -> int:
+        return self.indexer_compress_ratio
+
 
 @auto_docstring(checkpoint="Qwen/Qwen4-Exp")
 @strict

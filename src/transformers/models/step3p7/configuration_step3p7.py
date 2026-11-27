@@ -282,6 +282,10 @@ class Step3p7TextConfig(PreTrainedConfig):
             if rope_scaling and "full_attention" in self.rope_parameters:
                 self.rope_parameters["full_attention"].update(rope_scaling)
 
+    @property
+    def index_group_size(self) -> int:
+        return 1
+
 
 @auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
 @strict

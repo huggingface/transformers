@@ -50,9 +50,8 @@ if is_torch_available():
 
 
 class Qwen4ExpTextModelTester(CausalLMModelTester):
-    if is_torch_available():
-        base_model_class = Qwen4ExpTextModel
-        causal_lm_class = Qwen4ExpForCausalLM
+    base_model_class = Qwen4ExpTextModel
+    causal_lm_class = Qwen4ExpForCausalLM
 
     small_config_overrides = {
         "hidden_act": "silu",
@@ -90,7 +89,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.8, 0.9]
     # QSA indexer parameters are trained through a separate objective rather than the causal-LM loss.
     test_all_params_have_gradient = False
-    is_indexer_based = True
+    is_compression_based = True
     test_torch_exportable = False  # TODO(vasqu): Needs investigation on what fails
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
@@ -336,9 +335,8 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 class Qwen4ExpVisionText2TextModelTester(VLMModelTester):
-    base_model_class = Qwen4ExpModel
     config_class = Qwen4ExpConfig
-
+    base_model_class = Qwen4ExpModel
     conditional_generation_class = Qwen4ExpForConditionalGeneration
 
     small_config_overrides = {
@@ -440,7 +438,7 @@ class Qwen4ExpVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Qwen4ExpVisionText2TextModelTester
     model_split_percents = [0.5, 0.8, 0.9]
     test_all_params_have_gradient = False
-    is_indexer_based = True
+    is_compression_based = True
     test_torch_exportable = False  # TODO(vasqu): Needs investigation on what fails
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):

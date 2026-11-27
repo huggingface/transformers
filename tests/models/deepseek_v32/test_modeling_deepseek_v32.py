@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-from parameterized import parameterized
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, skip_tpu, slow
@@ -129,7 +128,7 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    is_indexer_based = True
+    is_compression_based = True
     test_all_params_have_gradient = False
     model_tester_class = DeepseekV32ModelTester
     model_split_percents = [0.5, 0.7, 0.8]
@@ -146,26 +145,9 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         if hasattr(torch.compiler.config, "force_cudagraph_gc"):
             self.enterContext(torch.compiler.config.patch(force_cudagraph_gc=True))
 
-    @parameterized.expand([("random",), ("same",)])
-    @unittest.skip("DeepseekV32 uses MLA so it is not compatible with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @unittest.skip("DeepseekV32 uses MLA so it is not compatible with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
-
     @unittest.skip("Dynamic control flow in MoE")
     @pytest.mark.torch_compile_test
     def test_torch_compile_for_training(self):
-        pass
-
-    @unittest.skip("DSA hard top-k selection is sensitive to sequence packing (selection can flip).")
-    def test_eager_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("DSA hard top-k selection is sensitive to sequence packing (selection can flip).")
-    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
     @unittest.skip("MoE routing on a tiny randomly-initialized model makes the overfit target unstable.")

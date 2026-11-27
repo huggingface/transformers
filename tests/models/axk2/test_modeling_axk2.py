@@ -34,8 +34,7 @@ if is_torch_available():
 
 
 class AXK2ModelTester(CausalLMModelTester):
-    if is_torch_available():
-        base_model_class = AXK2Model
+    base_model_class = AXK2Model
 
     small_config_overrides = {
         "n_routed_experts": 8,
@@ -56,16 +55,9 @@ class AXK2ModelTester(CausalLMModelTester):
 @require_torch
 class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
+    is_compression_based = True
     model_tester_class = AXK2ModelTester
     model_split_percents = [0.5, 0.7, 0.8]
-
-    @unittest.skip("Fundamentally incompatible with indexer as there is no boundary between sequences")
-    def test_eager_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("Fundamentally incompatible with indexer as there is no boundary between sequences")
-    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
-        pass
 
     @unittest.skip("Mask is built per layer no matter what but FA backend needs no mask")
     def test_sdpa_can_dispatch_on_flash(self):

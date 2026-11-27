@@ -197,5 +197,9 @@ class Kolibri1_1Config(PreTrainedConfig):
             for layer_idx, source in enumerate(self.kv_source_layers)
         ]
 
+    @property
+    def index_group_size(self) -> int:
+        return self.index_compression
+
 
 __all__ = ["Kolibri1_1Config"]

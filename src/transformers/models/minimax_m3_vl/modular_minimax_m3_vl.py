@@ -157,6 +157,10 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
     def convert_rope_params_to_dict(self, **kwargs):
         raise NotImplementedError("No need to inherit")
 
+    @property
+    def index_group_size(self) -> int:
+        return 1
+
 
 # NOTE: can copy from qwen vision config!
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")

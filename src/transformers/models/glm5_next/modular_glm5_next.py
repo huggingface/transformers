@@ -253,6 +253,10 @@ class Glm5NextTextConfig(GlmMoeDsaConfig):
                 f"Expecting NoPE for the DSA attention layers, but got {self.qk_rope_head_dim} as RoPE dim."
             )
 
+    @property
+    def index_group_size(self) -> int:
+        return self.index_kpool
+
 
 @auto_docstring(checkpoint="zai-org/GLM-5.3-Flash")
 @strict

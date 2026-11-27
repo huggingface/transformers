@@ -165,6 +165,10 @@ class DeepseekV32Config(Glm4MoeLiteConfig):
             self.n_routed_experts = num_experts
         PreTrainedConfig.__post_init__(self, **kwargs)
 
+    @property
+    def index_group_size(self) -> int:
+        return 1
+
 
 class DeepseekV32RMSNorm(LlamaRMSNorm):
     pass

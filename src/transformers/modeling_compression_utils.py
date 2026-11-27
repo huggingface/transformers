@@ -51,7 +51,7 @@ def build_attention_mask_from_topk(
     Convert topk_indices into the mask expected by the active backend.
     SDPA and Eager return a full 4D mask while FA(4) can consume the indices directly (no mask).
 
-    NOTE: Causality and padding is accounted for by previous modules, e.g. an indexer.
+    NOTE: Causality and padding are accounted for by previous modules, e.g. an indexer.
     """
     if is_flash_attention_requested(config):
         return None
@@ -99,18 +99,26 @@ def prepare_compression_groups(
         - Groups `(batch_size, ceil(seq_length / group_size), (1 + overlap_groups) * group_size, dim)`
         - Tails `(batch_size, (1 + overlap_groups) * group_size, dim)`
 
-    NOTE: We keep incomplete groups into uniform shapes across the batch (unused slots == 0).
+    NOTE:
+        - We keep incomplete groups into uniform shapes across the batch (unused slots == 0).
           They will be filtered out later on in `select_compression_indices` by default.
+        - Packed sequences may introduce additional candidate groups at sequence boundaries.
     """
+    if overlap_groups and attention_mask.ndim == 1:
+        raise NotImplementedError("Packed sequences with overlapping compression groups are not supported.")
+
     batch_size, seq_length, dim = states.shape
     device = states.device
 
-    counts = attention_mask[:, -(seq_length + 1) :]
+    # Packed masks reserve additional capacity in their negative prefix
+    candidate_length = attention_mask.shape[-1] - 1 if attention_mask.ndim == 1 else seq_length
+    num_candidates = (candidate_length + group_size - 1) // group_size
+
+    counts = torch.atleast_2d(attention_mask[..., -(seq_length + 1) :])
     history_length = (1 + overlap_groups) * group_size
 
     past_groups = counts[:, :1] // group_size
     new_groups = counts[:, -1:] // group_size - past_groups
-    num_candidates = (seq_length + group_size - 1) // group_size
 
     if tail is None:
         window = states.new_zeros(batch_size, history_length + num_candidates * group_size, dim)
@@ -158,30 +166,39 @@ def select_compression_indices(
         - `deterministic=True`, ties are broken towards earlier groups.
 
     Example with group_size=2 and budget=2:
-        Tokens:            [PAD, A, B, PAD, C, D, E]
-        Cumulative mask:   [0, 0, 1, 2, 2, 3, 4, 5]
-        Complete groups:   [AB, CD]
-        Selected group:    1 [CD]
-        Valid-token ranks in mask: [2, 3]
-        Physical indices:  [4, 5]
-        Tail indices:      [6]
-        Final selection:   [4, 5, 6]
+        Tokens:                     [PAD, A, B, PAD, C, D, E]
+        Cumulative mask:            [0, 0, 1, 2, 2, 3, 4, 5]
+        Complete groups:            [AB, CD]
+        Selected group:             1 [CD]
+        Valid-token ranks in mask:  [2, 3]
+        Physical indices:           [4, 5]
+        Tail indices:               [6]
+        Final selection:            [4, 5, 6]
 
     Finally, we pad unavailable token selections with -1 to keep uniform shapes.
     """
     if include_tail and allow_partial_groups:
         raise ValueError("`include_tail` and `allow_partial_groups` are mutually exclusive.")
 
-    counts = attention_mask[:, -(scores.shape[-2] + 1) :]
-    query_counts = counts[:, 1:].masked_fill(counts.diff(dim=1) == 0, 0).unsqueeze(-1)
+    attention_mask = torch.atleast_2d(attention_mask)
+    counts = attention_mask[:, -(scores.shape[-2] + 1) :, None]
+    increments = counts.diff(dim=1)
+    query_counts = counts[:, 1:].masked_fill(increments == 0, 0)
+
+    # A jump in the counts marks a new packed sequence
+    sequence_starts = torch.where(increments > 1, query_counts - 1, 0).cummax(dim=1)[0]
+    first_group = sequence_starts // group_size
+
+    # Only complete groups are visible, unless partial groups are explicitly allowed
     complete_groups = query_counts // group_size
-    eligible_groups = (query_counts + group_size - 1) // group_size if allow_partial_groups else complete_groups
+    group_end = (query_counts + group_size - 1) // group_size if allow_partial_groups else complete_groups
 
-    # Select only eligible causal groups
-    invalid = torch.arange(scores.shape[-1], device=scores.device) >= eligible_groups
+    candidates = torch.arange(scores.shape[-1], device=scores.device)
+    invalid = (candidates < first_group) | (candidates >= group_end)
     scores = scores.masked_fill(invalid, float("-inf"))
-    k = min(budget if return_groups else budget // group_size, scores.shape[-1])
 
+    group_budget = budget if return_groups else budget // group_size
+    k = min(group_budget, scores.shape[-1])
     if deterministic:
         top_scores, groups = scores.sort(dim=-1, descending=True, stable=True)
         top_scores, groups = top_scores[..., :k], groups[..., :k]

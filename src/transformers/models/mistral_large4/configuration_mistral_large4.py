@@ -184,6 +184,10 @@ class MistralLarge4TextConfig(PreTrainedConfig):
             self.n_routed_experts = num_experts
         super().__post_init__(**kwargs)
 
+    @property
+    def index_group_size(self) -> int:
+        return 1
+
     def validate_architecture(self):
         # Validate KV sharing patterns
         if len(self.kv_source_layers) != self.num_hidden_layers:

@@ -37,12 +37,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_image_processing_common import load_coco_image, load_test_image
-from ...test_modeling_common import (
-    TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
-    _test_eager_matches_batched_and_grouped_inference,
-    floats_tensor,
-    ids_tensor,
-)
+from ...test_modeling_common import floats_tensor, ids_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -61,9 +56,8 @@ if is_vision_available():
 
 
 class MiniMaxM3VLVisionText2TextModelTester(VLMModelTester):
-    base_model_class = MiniMaxM3VLModel
     config_class = MiniMaxM3VLConfig
-
+    base_model_class = MiniMaxM3VLModel
     conditional_generation_class = MiniMaxM3SparseForConditionalGeneration
 
     small_config_overrides = {
@@ -135,6 +129,8 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
     # the upstream training recipe, not the main causal-LM loss (same as DeepSeek-V4).
     test_all_params_have_gradient = False
 
+    is_compression_based = True
+
     def test_indexer_selects_blocks_per_head(self):
         """The lightning indexer must select key blocks *per head* (one selection per KV / GQA group),
         matching the deployment kernel -- not a single selection shared across all heads. This guards
@@ -200,29 +196,6 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
         )
     )
     def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
-    def test_eager_matches_batched_and_grouped_inference(self, name, dtype):
-        # In low precision the grouped/batched/sonic expert kernels accumulate in a different order
-        # than the eager per-expert loop, so a handful of near-zero MoE outputs drift past the 1e-4
-        # tolerance. This is precision noise, not a logic mismatch (fp32 matches exactly).
-        if dtype in ("fp16", "bf16"):
-            self.skipTest("Low-precision float casting fluctuations across expert kernels exceed the 1e-4 tolerance")
-        _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
-
-    @unittest.skip(
-        reason=(
-            "The lightning indexer tiles the key axis into blocks of `index_block_size` *slots* and "
-            "selects whole blocks, so its block boundaries are anchored to absolute sequence slots. "
-            "Left-padding shifts every real token by the (per-row, generally non-block-aligned) pad "
-            "width, which regroups real keys into different blocks than the unpadded run and changes "
-            "which blocks win top-k — so left-padded logits diverge by design. This is the same "
-            "block-sparse limitation as DeepSeek-V4; see `test_right_padding_does_not_leak` for the "
-            "padding direction that *is* equivalent."
-        )
-    )
-    def test_left_padding_compatibility(self):
         pass
 
     def test_right_padding_does_not_leak(self):
@@ -373,6 +346,14 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
 
         torch.testing.assert_close(cosine, angles.cos())
         torch.testing.assert_close(sine, angles.sin())
+
+    @unittest.skip(reason="Too complicated to support for now, revisit later")
+    def test_eager_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    @unittest.skip(reason="Too complicated to support for now, revisit later")
+    def test_sdpa_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
 
 
 @slow

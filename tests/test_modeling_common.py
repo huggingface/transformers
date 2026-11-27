@@ -763,7 +763,7 @@ class ModelTesterMixin(ExportTesterMixin):
     test_can_init_all_missing_weights_before_2023 = False
     is_encoder_decoder = False
     # DSA or compressed variations of it
-    is_indexer_based = False
+    is_compression_based = False
     has_attentions = True
     _is_composite = False
     model_split_percents = [0.5, 0.7, 0.9]
@@ -4109,7 +4109,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_accelerator
     @slow
     def test_sdpa_can_dispatch_on_flash(self):
-        if self.is_indexer_based:
+        if self.is_compression_based:
             self.skipTest(reason="Model architecture (indexer) cannot support FA backend via SDPA")
 
         if not self.has_attentions:

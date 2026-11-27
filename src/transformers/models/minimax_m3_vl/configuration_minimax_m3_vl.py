@@ -143,6 +143,10 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["sparse"] * self.num_hidden_layers
 
+    @property
+    def index_group_size(self) -> int:
+        return 1
+
 
 # NOTE: can copy from qwen vision config!
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")

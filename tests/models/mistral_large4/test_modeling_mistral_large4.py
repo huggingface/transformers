@@ -106,16 +106,7 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
     skip_test_image_features_output_shape = True
     # The DSA indexer runs under `torch.no_grad`
     test_all_params_have_gradient = False
-    is_indexer_based = True
-
-    @parameterized.expand([("random",), ("same",)])
-    @unittest.skip("DSA is not compatible with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @unittest.skip("DSA is not compatible with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
+    is_compression_based = True
 
     @parameterized.expand([("no_checkpointing", False), ("checkpointing", True)])
     def test_lerope_training(self, name, activation_checkpointing):

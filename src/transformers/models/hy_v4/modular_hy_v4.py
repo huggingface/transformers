@@ -25,7 +25,11 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_compression_mask
-from ...modeling_compression_utils import build_attention_mask_from_topk
+from ...modeling_compression_utils import (
+    build_attention_mask_from_topk,
+    prepare_compression_groups,
+    select_compression_indices,
+)
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -184,6 +188,10 @@ class HYV4Config(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+    @property
+    def index_group_size(self) -> int:
+        return 1
+
 
 class HYV4RMSNorm(LlamaRMSNorm):
     pass
@@ -213,7 +221,6 @@ class HYV4Indexer(DeepseekV32Indexer):
         q_resid: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
-        position_ids: torch.Tensor,  # Kept for BC
         cache: Cache | None = None,
     ) -> torch.Tensor:
         batch_size, seq_len, _ = hidden_states.shape
@@ -233,8 +240,11 @@ class HYV4Indexer(DeepseekV32Indexer):
         q = torch.cat([q_pass, q_rot], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_pass, k_rot], dim=-1).squeeze(2)  # [B, S, D]
 
+        groups, _ = prepare_compression_groups(k, attention_mask)
+        k = groups.squeeze(2)
+
         if cache is not None:
-            k = cache.update_indexer(k, self.layer_idx)
+            k = cache.layers[self.layer_idx].update_compressed_states(k, attention_mask, seq_len)
 
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
         scores = F.relu(scores)
@@ -248,14 +258,7 @@ class HYV4Indexer(DeepseekV32Indexer):
         )
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask.dtype == torch.bool:
-            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
-        else:
-            index_scores = index_scores + attention_mask
-
-        topk = min(self.index_topk, index_scores.shape[-1])
-        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
+        return select_compression_indices(index_scores, attention_mask, self.index_topk)
 
 
 class HYV4Attention(GlmMoeDsaAttention):

@@ -147,7 +147,7 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.8, 0.9]
     # FIXME: export is very sensitive to any shape changes
     test_torch_exportable = False
-    is_indexer_based = True
+    is_compression_based = True
 
     @pytest.mark.generate
     @skip_tpu("test aborts")
@@ -404,14 +404,6 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
         for name, parameter in layer.named_parameters():
             self.assertIsNotNone(parameter.grad, f"missing gradient for `{name}`")
             self.assertTrue(torch.isfinite(parameter.grad).all(), f"non-finite gradient for `{name}`")
-
-    @unittest.skip("Fundamentally incompatible with indexer - indexer has no boundary offset telling sequences apart")
-    def test_eager_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("Fundamentally incompatible with indexer - indexer has no boundary offset telling sequences apart")
-    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
-        pass
 
     @unittest.skip("MLA creates different head dims which avoids invoking the FA backend")
     def test_sdpa_can_dispatch_on_flash(self):

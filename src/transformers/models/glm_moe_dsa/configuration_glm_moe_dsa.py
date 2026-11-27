@@ -158,5 +158,9 @@ class GlmMoeDsaConfig(PreTrainedConfig):
             self.n_routed_experts = num_experts
         super().__post_init__(**kwargs)
 
+    @property
+    def index_group_size(self) -> int:
+        return 1
+
 
 __all__ = ["GlmMoeDsaConfig"]

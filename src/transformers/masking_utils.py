@@ -1552,25 +1552,38 @@ def create_recurrent_attention_mask(
 
 
 def _create_varlen_compression_mask(
+    inputs_embeds: torch.Tensor,
     cu_seq_lens_q: torch.IntTensor,
-    query_length: int,
-    device: torch.device,
+    group_size: int,
 ) -> torch.Tensor:
     """
-    Create cumulative valid-token counts for packed sequences, inserting one separator between consecutive sequences.
+    Create cumulative valid-token counts aligned to compression group boundaries.
 
-    Example with cu_seq_lens_q=[0, 3, 5]:
-        Tokens:          [A, B, C, D, E]
-        Virtual tokens:  [A, B, C, PAD, D, E]
-        Cumulative mask: [0, 1, 2, 3, 3, 4, 5]
+    Example with group_size=4:
+        Packed tokens:   [A, B, C, D, E]
+        cu_seq_lens_q:   [0, 3, 5]
+        Cumulative mask: [-4, -3, -2, -1, 0, 1, 2, 3, 5, 6]
+
+    Each sequence starts at a new group, leaving at least one unused slot between
+    sequences so that sequence boundaries can be recovered from jumps in the counts.
+    Negative entries reserve additional capacity for alignment.
     """
+    query_length = inputs_embeds.shape[1]
+    device = inputs_embeds.device
+
     cu_seq_lens_q = cu_seq_lens_q.to(device=device, dtype=torch.long)
+    lengths = cu_seq_lens_q.diff()
+
+    # Align each sequence to the next compression group boundary
+    offsets = F.pad((lengths // group_size + 1).cumsum(0), (1, 0)) * group_size - cu_seq_lens_q
+
     positions = torch.arange(query_length, device=device)
     sequence_ids = torch.searchsorted(cu_seq_lens_q[1:], positions, right=True)
+    counts = positions + offsets[sequence_ids] + 1
 
-    mask = torch.zeros(query_length + cu_seq_lens_q.numel() - 2, device=device, dtype=torch.long)
-    mask.scatter_(0, positions + sequence_ids, 1)
-    return F.pad(mask.cumsum(0), (1, 0))
+    # Each sequence boundary may introduce up to group_size unused slots
+    capacity = (cu_seq_lens_q.numel() - 2) * group_size
+    return torch.cat((torch.arange(-capacity, 1, device=device), counts))
 
 
 def create_compression_mask(
@@ -1579,6 +1592,7 @@ def create_compression_mask(
     attention_mask: torch.Tensor | None,
     cache: Cache | None = None,
     layer_idx: int | None = None,
+    group_size: int | None = None,
     cu_seq_lens_q: torch.IntTensor | None = None,
     **kwargs,
 ) -> torch.Tensor:
@@ -1593,11 +1607,12 @@ def create_compression_mask(
     The last query_length (+1) entries describe the current query boundaries.
     NOTE: Negative entries represent unused static capacity.
     """
+    if cu_seq_lens_q is not None:
+        group_size = config.get_text_config().index_group_size if group_size is None else group_size
+        return _create_varlen_compression_mask(inputs_embeds, cu_seq_lens_q, group_size)
+
     batch_size, query_length = inputs_embeds.shape[:2]
     device = inputs_embeds.device
-
-    if cu_seq_lens_q is not None:
-        return _create_varlen_compression_mask(cu_seq_lens_q, query_length, device)
 
     q_offset = 0
     kv_length = query_length

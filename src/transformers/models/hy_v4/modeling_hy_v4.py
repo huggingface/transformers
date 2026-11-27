@@ -31,7 +31,11 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_compression_mask
-from ...modeling_compression_utils import build_attention_mask_from_topk
+from ...modeling_compression_utils import (
+    build_attention_mask_from_topk,
+    prepare_compression_groups,
+    select_compression_indices,
+)
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, yarn_apply_mscale
@@ -193,7 +197,6 @@ class HYV4Indexer(nn.Module):
         q_resid: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
-        position_ids: torch.Tensor,  # Kept for BC
         cache: Cache | None = None,
     ) -> torch.Tensor:
         """
@@ -236,8 +239,11 @@ class HYV4Indexer(nn.Module):
         q = torch.cat([q_pass, q_rot], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_pass, k_rot], dim=-1).squeeze(2)  # [B, S, D]
 
+        groups, _ = prepare_compression_groups(k, attention_mask)
+        k = groups.squeeze(2)
+
         if cache is not None:
-            k = cache.update_indexer(k, self.layer_idx)
+            k = cache.layers[self.layer_idx].update_compressed_states(k, attention_mask, seq_len)
 
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
         scores = F.relu(scores)
@@ -251,14 +257,7 @@ class HYV4Indexer(nn.Module):
         )
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask.dtype == torch.bool:
-            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
-        else:
-            index_scores = index_scores + attention_mask
-
-        topk = min(self.index_topk, index_scores.shape[-1])
-        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
+        return select_compression_indices(index_scores, attention_mask, self.index_topk)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
