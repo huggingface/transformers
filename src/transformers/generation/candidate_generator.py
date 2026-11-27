@@ -292,11 +292,11 @@ class AssistedCandidateGenerator(CandidateGenerator):
         min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
         return min_new_tokens, max_new_tokens
 
-    def _update_past_and_masks(self, input_ids: torch.LongTensor, remove_from_cache: int = 0) -> bool:
+    def _update_past_and_masks(self, input_ids: torch.LongTensor, num_extra_tokens_to_remove: int = 0) -> bool:
         """Update past key values and attention masks for subsequent generation rounds."""
         has_cache = self.assistant_kwargs.get("cache", None) is not None
         if has_cache:
-            tokens_to_remove = self._last_length - input_ids.shape[-1] + remove_from_cache
+            tokens_to_remove = self._last_length - input_ids.shape[-1] + num_extra_tokens_to_remove
             if tokens_to_remove >= 0:
                 self.assistant_kwargs["cache"].crop(-tokens_to_remove)
             self.assistant_kwargs = _prepare_attention_mask(
@@ -522,14 +522,14 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             return input_ids, None
 
         input_ids = input_ids.to(self.assistant_model.device)
-        remove_from_cache = 0
+        num_extra_tokens_to_remove = 0
 
-        assistant_input_ids, remove_from_cache = self._prepare_assistant_input_ids(input_ids)
+        assistant_input_ids, num_extra_tokens_to_remove = self._prepare_assistant_input_ids(input_ids)
         self.prev_assistant_ids = assistant_input_ids
 
         min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - assistant_input_ids.shape[-1]), 0)
 
-        self._update_past_and_masks(assistant_input_ids, remove_from_cache)
+        self._update_past_and_masks(assistant_input_ids, num_extra_tokens_to_remove)
         generation_args = self._prepare_generation_args(assistant_input_ids, min_new_tokens, max_new_tokens)
         self.assistant_kwargs.pop("attention_mask", None)
         self.assistant_kwargs.pop("position_ids", None)
@@ -558,7 +558,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             "source_tokenizer": self.target_tokenizer,
             "destination_tokenizer": self.assistant_tokenizer,
         }
-        remove_from_cache = 0
+        num_extra_tokens_to_remove = 0
 
         if self.prev_assistant_ids is not None and self.prev_target_ids_len > self.target_lookbehind:
             # input_ids contains all target prompt input ids and some new target input ids
@@ -585,7 +585,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
                         assistant_input_ids = assistant_input_ids[:, :-discrepancy_length_diff]
                         assistant_input_ids[:, -discrepancy_only.shape[1] :] = discrepancy_only
 
-                    remove_from_cache = discrepancy_length
+                    num_extra_tokens_to_remove = discrepancy_length
 
                 if new_tokens_only.shape[1] > 0:
                     assistant_input_ids = torch.cat([assistant_input_ids, new_tokens_only], dim=-1)
@@ -596,7 +596,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             assistant_input_ids = self.convert_source_tokens_to_target_tokens(input_ids, **convert_kwargs)
             self.prev_target_ids_len = input_ids.shape[1]
 
-        return assistant_input_ids, remove_from_cache
+        return assistant_input_ids, num_extra_tokens_to_remove
 
     def _process_assistant_outputs(
         self, input_ids: torch.LongTensor, assistant_sequences: torch.LongTensor
