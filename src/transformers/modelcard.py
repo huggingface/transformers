@@ -184,6 +184,7 @@ class TrainingSummary:
     eval_lines: list[str] | None = None
     hyperparameters: dict[str, Any] | None = None
     source: str | None = "trainer"
+    hf_jobs_flavor: str | None = None
 
     def __post_init__(self):
         # Infer default license from the checkpoint used, if possible.
@@ -323,6 +324,8 @@ class TrainingSummary:
         model_card += "\n## Training and evaluation data\n\nMore information needed\n"
 
         model_card += "\n## Training procedure\n"
+        if self.hf_jobs_flavor is not None:
+            model_card += f"\nTrained with Hugging Face Jobs on `{self.hf_jobs_flavor}` hardware.\n"
         model_card += "\n### Training hyperparameters\n"
         if self.hyperparameters is not None:
             model_card += "\nThe following hyperparameters were used during training:\n"
@@ -413,6 +416,14 @@ class TrainingSummary:
         elif "generated_from_trainer" not in tags:
             tags.append("generated_from_trainer")
 
+        # Hugging Face Jobs sets `HF_JOB_ID` and `HF_JOB_FLAVOR` (the hardware, e.g. `a10g-small`) inside a Job.
+        hf_jobs_flavor = None
+        if "HF_JOB_ID" in os.environ:
+            tags = _listify(tags)
+            if "hf_jobs" not in tags:
+                tags.append("hf_jobs")
+            hf_jobs_flavor = os.environ.get("HF_JOB_FLAVOR")
+
         _, eval_lines, eval_results = parse_log_history(trainer.state.log_history)
         hyperparameters = extract_hyperparameters_from_trainer(trainer)
 
@@ -430,6 +441,7 @@ class TrainingSummary:
             eval_results=eval_results,
             eval_lines=eval_lines,
             hyperparameters=hyperparameters,
+            hf_jobs_flavor=hf_jobs_flavor,
         )
 
 

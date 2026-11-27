@@ -114,6 +114,10 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_if_input_has_mismatching_tokens_and_mm_data(self):
         pass
 
+    @unittest.skip("GotOcr2Processor requires images and can't be called with text only")
+    def test_processor_single_text_same_as_batched(self):
+        pass
+
     def test_subprocessor_defaults_1_images(self):
         parameterized_config = MODALITY_TEST_SPECS["images"]
         subprocessor = self.get_component(parameterized_config["component_key"])

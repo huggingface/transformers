@@ -56,7 +56,6 @@ class Gemma2ModelTester(CausalLMModelTester):
 
 @require_torch
 class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
-    _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = Gemma2ModelTester
 

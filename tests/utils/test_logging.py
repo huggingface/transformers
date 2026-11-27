@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging as std_logging
 import os
 import unittest
+from unittest.mock import patch
 
 from huggingface_hub.utils import are_progress_bars_disabled
 
@@ -114,13 +116,17 @@ class HfArgumentParserTest(unittest.TestCase):
         logger = logging.get_logger("transformers.models.roberta.tokenization_roberta")
         msg = "Testing 1, 2, 3"
 
-        with mockenv_context(TRANSFORMERS_NO_ADVISORY_WARNINGS="1"):
+        # Other libraries (e.g. `diffusers`, imported by some test modules) replace `logging.Logger.warning_advice`
+        # with their own version, keyed on their own env var: pin the transformers one for this test
+        warning_advice_patch = patch.object(std_logging.Logger, "warning_advice", logging.warning_advice)
+
+        with warning_advice_patch, mockenv_context(TRANSFORMERS_NO_ADVISORY_WARNINGS="1"):
             # nothing should be logged as env var disables this method
             with CaptureLogger(logger) as cl:
                 logger.warning_advice(msg)
             self.assertEqual(cl.out, "")
 
-        with mockenv_context(TRANSFORMERS_NO_ADVISORY_WARNINGS=""):
+        with warning_advice_patch, mockenv_context(TRANSFORMERS_NO_ADVISORY_WARNINGS=""):
             # should log normally as TRANSFORMERS_NO_ADVISORY_WARNINGS is unset
             with CaptureLogger(logger) as cl:
                 logger.warning_advice(msg)

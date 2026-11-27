@@ -237,12 +237,12 @@ class Phi4MultimodalConfig(PreTrainedConfig):
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", default_theta))
         self.rope_parameters.setdefault("partial_rotary_factor", kwargs.get("partial_rotary_factor", 1.0))
-        self.standardize_rope_params()
 
         # For backward compatibility if previous version used "su" or "yarn"
-        rope_parameters_type = self.rope_parameters.get("rope_type", None)
+        rope_parameters_type = self.rope_parameters.get("rope_type", self.rope_parameters.get("type"))
         if rope_parameters_type is not None and rope_parameters_type in ["su", "yarn"]:
             self.rope_parameters["rope_type"] = "longrope"
+        self.standardize_rope_params()
         return kwargs
 
     def validate_rope(self):

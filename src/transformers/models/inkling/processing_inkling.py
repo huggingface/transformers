@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, is_torch_available, logging
 from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
@@ -107,6 +107,30 @@ class InklingProcessor(ProcessorMixin):
         else:
             num_soft_tokens = int(audio_inputs["audio_input_ids"][audio_idx].shape[-2])
         return self.audio_token * num_soft_tokens
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            vision_data.update({"num_image_tokens": num_image_patches, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     @property
     def unused_input_names(self) -> list[str]:
