@@ -95,7 +95,7 @@ class JevaForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             self.tokenizer,
         )
         targets = [[0.2, 0.3, 0.5], [0.0, 0.1, 0.3, 0.6]]
-        inputs = model.prepare_decision_inputs([first, second], targets=targets)
+        inputs = model.prepare_inputs_for_decision([first, second], targets=targets)
         outputs = model(**inputs, num_items_in_batch=3)
 
         first_candidates = torch.nn.functional.cross_entropy(outputs.logits[0, :2], torch.tensor(targets[0][1:]))

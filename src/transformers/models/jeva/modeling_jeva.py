@@ -321,7 +321,7 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
             )
         return JevaDecisionOutput(loss=loss, logits=log_q, coverage_logits=coverage_logit)
 
-    def prepare_decision_inputs(
+    def prepare_inputs_for_decision(
         self,
         prompts: Sequence[tuple[dict, list[Question]]],
         *,
@@ -391,7 +391,7 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
     def decide(self, input_ids, marks, decision_questions, decision_config=None, **kwargs):
         """Return conditional option scores for a question rendered with the Jeva decision template."""
         decision_config = decision_config or self.decision_config
-        inputs = self.prepare_decision_inputs([({"input_ids": input_ids, "marks": marks}, decision_questions)])
+        inputs = self.prepare_inputs_for_decision([({"input_ids": input_ids, "marks": marks}, decision_questions)])
         output = self(**{key: value.to(self.device) for key, value in inputs.items()}, return_dict=True)
         scores = process_scores(decision_config, input_ids, marks, decision_questions, [output.logits[0]])
         if decision_questions[0].allow_null:

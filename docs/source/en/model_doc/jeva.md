@@ -50,7 +50,7 @@ request = {
     },
 }
 prompts = model.decision_config.prepare_inputs(request, tokenizer)
-batch = model.prepare_decision_inputs(prompts, targets=[[0.2, 0.8, 0.0]])
+batch = model.prepare_inputs_for_decision(prompts, targets=[[0.2, 0.8, 0.0]])
 model.train()
 model(**batch).loss.backward()
 ```
@@ -79,5 +79,5 @@ decide("My card was charged twice.", questions={
 ## JevaForDecision
 
 [[autodoc]] JevaForDecision
-    - prepare_decision_inputs
+    - prepare_inputs_for_decision
     - forward
