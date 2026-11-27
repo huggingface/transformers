@@ -713,16 +713,14 @@ class GlmImageModel(Glm4vModel):
         images_per_sample: torch.Tensor,
         image_grid_thw: torch.Tensor,
     ) -> torch.Tensor:
-        # Process source images (image-to-image mode)
-        # Source images are identified by counting image_end_token_id in input_ids
-        if images_per_sample is not None:
-            grids_per_sample = torch.split(image_grid_thw, images_per_sample.tolist())
-            source_grids_list = [grids[:-1] for grids in grids_per_sample]
-            source_grids = torch.cat(source_grids_list, dim=0)
-        else:
-            # Fallback for batch_size=1: all but last grid are source images
-            source_grids = image_grid_thw[:-1]
-        return source_grids
+        # Each sample's grids end with its target's: the source grids are all the others
+        if images_per_sample is None:
+            return image_grid_thw[:-1]
+        is_target = torch.zeros(image_grid_thw.shape[0], dtype=torch.long, device=image_grid_thw.device)
+        is_target[images_per_sample.cumsum(0) - 1] = 1
+        # A stable sort puts the sources first, in order: no host sync, and as many as the shapes say
+        sources = is_target.argsort(stable=True)[: image_grid_thw.shape[0] - images_per_sample.shape[0]]
+        return image_grid_thw[sources]
 
     def get_placeholder_mask(
         self,
