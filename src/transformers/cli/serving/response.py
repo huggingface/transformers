@@ -104,7 +104,7 @@ class _ResponseStreamBuilder:
         self.msg_id = f"msg_{request_id}"
         self.reasoning_id = f"rs_{request_id}"
         self.seq = 0
-        self.output_index = 0
+        self.message_index = 0
         self.content = ""
         self.full_reasoning = ""
         self.reasoning_open = False
@@ -146,7 +146,7 @@ class _ResponseStreamBuilder:
                 ResponseOutputItemAddedEvent(
                     type="response.output_item.added",
                     sequence_number=self.seq,
-                    output_index=self.output_index,
+                    output_index=0,
                     item=ResponseReasoningItem(
                         id=self.reasoning_id, type="reasoning", summary=[], content=[], status="in_progress"
                     ),
@@ -162,7 +162,7 @@ class _ResponseStreamBuilder:
                     type="response.reasoning_text.delta",
                     item_id=self.reasoning_id,
                     sequence_number=self.seq,
-                    output_index=self.output_index,
+                    output_index=0,
                     content_index=0,
                     delta=text,
                 )
@@ -183,7 +183,7 @@ class _ResponseStreamBuilder:
                     type="response.reasoning_text.done",
                     item_id=self.reasoning_id,
                     sequence_number=self.seq,
-                    output_index=self.output_index,
+                    output_index=0,
                     content_index=0,
                     text=self.full_reasoning,
                 )
@@ -192,23 +192,23 @@ class _ResponseStreamBuilder:
                 ResponseOutputItemDoneEvent(
                     type="response.output_item.done",
                     sequence_number=self.seq,
-                    output_index=self.output_index,
+                    output_index=0,
                     item=self.reasoning_item,
                 )
             ),
         ]
         self.reasoning_open = False
-        self.output_index += 1
         return parts
 
     def start_message(self) -> list[str]:
         self.message_open = True
+        self.message_index = int(self.reasoning_item is not None)
         return [
             self._emit(
                 ResponseOutputItemAddedEvent(
                     type="response.output_item.added",
                     sequence_number=self.seq,
-                    output_index=self.output_index,
+                    output_index=self.message_index,
                     item=ResponseOutputMessage(
                         id=self.msg_id, type="message", status="in_progress", role="assistant", content=[]
                     ),
@@ -219,7 +219,7 @@ class _ResponseStreamBuilder:
                     type="response.content_part.added",
                     item_id=self.msg_id,
                     sequence_number=self.seq,
-                    output_index=self.output_index,
+                    output_index=self.message_index,
                     content_index=0,
                     part=ResponseOutputText(type="output_text", text="", annotations=[]),
                 )
@@ -234,7 +234,7 @@ class _ResponseStreamBuilder:
                     type="response.output_text.delta",
                     item_id=self.msg_id,
                     sequence_number=self.seq,
-                    output_index=self.output_index,
+                    output_index=self.message_index,
                     content_index=0,
                     delta=text,
                     logprobs=[],
@@ -258,7 +258,7 @@ class _ResponseStreamBuilder:
                     type="response.output_text.done",
                     item_id=self.msg_id,
                     sequence_number=self.seq,
-                    output_index=self.output_index,
+                    output_index=self.message_index,
                     content_index=0,
                     text=self.content,
                     logprobs=[],
@@ -269,7 +269,7 @@ class _ResponseStreamBuilder:
                     type="response.content_part.done",
                     item_id=self.msg_id,
                     sequence_number=self.seq,
-                    output_index=self.output_index,
+                    output_index=self.message_index,
                     content_index=0,
                     part=output_text_part,
                 )
@@ -278,7 +278,7 @@ class _ResponseStreamBuilder:
                 ResponseOutputItemDoneEvent(
                     type="response.output_item.done",
                     sequence_number=self.seq,
-                    output_index=self.output_index,
+                    output_index=self.message_index,
                     item=self.message_item,
                 )
             ),
@@ -287,7 +287,8 @@ class _ResponseStreamBuilder:
         return parts
 
     def tool_call(self, tc_id: str, name: str, arguments: str) -> list[str]:
-        self.output_index += 1
+        # Match the output order in completed(): optional reasoning, the assistant message, then tool calls.
+        index = self.message_index + 1 + len(self.tool_calls)
         item = ResponseFunctionToolCall(
             id=tc_id,
             call_id=tc_id,
@@ -302,7 +303,7 @@ class _ResponseStreamBuilder:
                 ResponseOutputItemAddedEvent(
                     type="response.output_item.added",
                     sequence_number=self.seq,
-                    output_index=self.output_index,
+                    output_index=index,
                     item=item,
                 )
             ),
@@ -311,7 +312,7 @@ class _ResponseStreamBuilder:
                     type="response.function_call_arguments.done",
                     sequence_number=self.seq,
                     item_id=tc_id,
-                    output_index=self.output_index,
+                    output_index=index,
                     arguments=arguments,
                     name=name,
                 )
@@ -320,7 +321,7 @@ class _ResponseStreamBuilder:
                 ResponseOutputItemDoneEvent(
                     type="response.output_item.done",
                     sequence_number=self.seq,
-                    output_index=self.output_index,
+                    output_index=index,
                     item=item,
                 )
             ),
@@ -624,12 +625,11 @@ class ResponseHandler(BaseHandler):
                             yield "".join(parts)
                             return
                         if isinstance(item, ToolCall):
-                            # Make sure any open content/reasoning items are closed
-                            # before emitting the tool call so output ordering stays valid.
                             if builder.reasoning_open:
                                 parts.extend(builder.finish_reasoning())
-                            if builder.message_open:
-                                parts.extend(builder.finish_message())
+                            # The assistant message precedes tools in the output and may receive more text later.
+                            if not builder.message_open:
+                                parts.extend(builder.start_message())
                             parts.extend(
                                 builder.tool_call(
                                     f"{request_id}_tool_call_{tool_call_index}", item.name, item.arguments
