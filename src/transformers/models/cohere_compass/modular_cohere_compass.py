@@ -163,6 +163,9 @@ class CohereCompassProcessor(Qwen3VLProcessor):
         self.vision_start_token = "<|VISION_START|>"
         self.vision_end_token = "<|VISION_END|>"
 
+    def get_text_with_replacements(self):
+        raise AttributeError("CohereCompass expects the chat template's outer vision wrapper, so it uses the default")
+
 
 # Same mrope interleaving pattern as Qwen3VL but this model has layer-types
 class CohereCompassRotaryEmbedding(Gemma3RotaryEmbedding):
