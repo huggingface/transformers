@@ -121,6 +121,7 @@ from .utils import (
     is_liger_kernel_available,
     is_lomo_available,
     is_mistral_common_available,
+    is_mlx_available,
     is_multipart_available,
     is_natten_available,
     is_nltk_available,
@@ -637,6 +638,10 @@ def require_executorch(test_case):
 
 def require_openvino(test_case):
     return unittest.skipUnless(is_openvino_available(), "test requires OpenVINO")(test_case)
+
+
+def require_mlx(test_case):
+    return unittest.skipUnless(is_mlx_available(), "test requires MLX")(test_case)
 
 
 def require_nncf(test_case):

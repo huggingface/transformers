@@ -34,6 +34,7 @@ from transformers.exporters.decompose import (
 )
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
+from transformers.exporters.exporter_mlx import MLXConfig, MLXExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter
 from transformers.exporters.multimodal import ExportedMultimodalModel
@@ -46,6 +47,7 @@ from transformers.exporters.utils import (
 )
 from transformers.testing_utils import (
     require_executorch,
+    require_mlx,
     require_onnxruntime,
     require_onnxscript,
     require_openvino,
@@ -1349,6 +1351,51 @@ class ExportTesterMixin:
                         exporter, exported, full_model, full_inputs, atol, rtol, check_exactness, check_device=False
                     )
 
+    # ──────────────────────── MLX tests ──────────────────────────
+
+    @DYNAMIC_EXPORT_PARAMS
+    @slow
+    @require_mlx
+    @pytest.mark.mlx_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_mlx_export(self, dynamic, atol=1e-3, rtol=1e-3):
+        """Export each model class to MLX and check it against eager, on its traced inputs and on new ones."""
+        self._skip_if_not_exportable()
+
+        exporter = MLXExporter()
+        config = MLXConfig(dynamic=dynamic)
+
+        for model_class in self.all_model_classes:
+            if self._should_skip(model_class, dynamic=dynamic, backend="mlx"):
+                continue
+
+            check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic, backend="mlx")
+            components, full_model, full_inputs = self._prepare_export_model_and_inputs(
+                model_class, dynamic=dynamic, return_model=True
+            )
+            exported = {}
+            for name, (model, inputs, new_inputs) in components.items():
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    exported[name] = self._check_export(
+                        exporter,
+                        config,
+                        model,
+                        inputs,
+                        new_inputs,
+                        atol=atol,
+                        rtol=rtol,
+                        check_exactness=check_exactness,
+                        check_device=False,
+                    )
+
+            if len(components) > 1:
+                with self.subTest(f"{model_class.__name__}/end to end"):
+                    self._check_multimodal_runtime(
+                        exporter, exported, full_model, full_inputs, atol, rtol, check_exactness, check_device=False
+                    )
+
     # ──────────────────── ExecuTorch tests ───────────────────────
 
     @EXECUTORCH_EXPORT_PARAMS
@@ -1728,6 +1775,61 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                         served=self._calls_served(components, name),
                         check_device=False,
                         run=_run_openvino_program,
+                    )
+
+            with self.subTest(f"{model_class.__name__}/generate"):
+                self._check_generate(
+                    exporter, config, full_model, full_inputs, generation_config, dynamic, check_exactness
+                )
+
+    # ──────────────────────── MLX tests ──────────────────────────
+
+    @GENERATE_EXPORT_PARAMS
+    @slow
+    @require_mlx
+    @pytest.mark.mlx_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_mlx_export_generate(self, dynamic, generation_config, atol=1e-3, rtol=1e-3):
+        """Export each generation component to MLX and check it against eager, on its traced inputs and on new
+        ones."""
+        self._skip_if_not_exportable()
+        exporter = MLXExporter()
+        config = MLXConfig(dynamic=dynamic)
+
+        for model_class in self.all_generative_model_classes:
+            if self._should_skip(
+                model_class, generate=True, dynamic=dynamic, backend="mlx", generation_config=generation_config
+            ):
+                continue
+
+            check_exactness = not self._should_skip_exactness(
+                model_class, generate=True, dynamic=dynamic, backend="mlx", generation_config=generation_config
+            )
+            components, full_model, full_inputs = self._prepare_export_generate_model_and_inputs(
+                model_class,
+                dynamic=dynamic,
+                generation_config=generation_config,
+                multi_token_decode=dynamic,
+                return_model=True,
+                device=torch_device,
+            )
+            for name, (model, inputs, new_inputs) in components.items():
+                if name == "prefill":
+                    continue
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    self._check_export(
+                        exporter,
+                        config,
+                        model,
+                        inputs,
+                        new_inputs,
+                        atol=atol,
+                        rtol=rtol,
+                        check_exactness=check_exactness,
+                        served=self._calls_served(components, name),
+                        check_device=False,
                     )
 
             with self.subTest(f"{model_class.__name__}/generate"):
