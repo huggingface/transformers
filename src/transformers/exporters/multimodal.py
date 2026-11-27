@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..modeling_outputs import BaseModelOutputWithPooling
 from ..utils import is_torch_available
 from .base import ExportedModel
 from .decompose import (
@@ -95,7 +96,12 @@ class ExportedMultimodalModel(ExportedModel):
             **{name: value for name, value in inputs.items() if name in traced},
         )
         fields = getattr(outputs, "__dataclass_fields__", {})
-        # The model returns its image features too, which the language model never sees.
+        # The model returns each modality's features too, which the language model never sees: as its encoder's
+        # `pooler_output` (`image_outputs`, ...), or as `image_hidden_states` where a model still returns those.
+        for spec in _MODALITY_SPECS:
+            modality_outputs = spec.token_field.replace("_token_id", "_outputs")
+            if features.get(spec.component) is not None and modality_outputs in fields:
+                outputs[modality_outputs] = BaseModelOutputWithPooling(pooler_output=features[spec.component].clone())
         if features.get("vision_embeddings_model") is not None and "image_hidden_states" in fields:
             outputs["image_hidden_states"] = features["vision_embeddings_model"].clone()
         # And Granite4-Vision its per-layer ones.
