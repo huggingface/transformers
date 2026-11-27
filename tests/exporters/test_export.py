@@ -74,14 +74,6 @@ from transformers.utils import is_executorch_available
 EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Every backend, every variant.
     "all": {
-        "HunYuanVLModel": ("Dynamically pools image embeddings based on THW and has packed attention."),
-        "HunYuanVLForConditionalGeneration": (
-            "Dynamically pools image embeddings based on THW and has packed attention."
-        ),
-        "HYV4VLModel": ("Dynamically pools image embeddings based on THW and has packed attention."),
-        "HYV4VLForConditionalGeneration": (
-            "Dynamically pools image embeddings based on THW and has packed attention."
-        ),
         "VideoMAEForPreTraining": (
             "Computes loss even when `return_loss=False`, hitting a data-dependent guard in "
             "`mse_loss`. TODO: skip loss when labels aren't provided."
@@ -95,14 +87,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "OpenAIPrivacyFilterForTokenClassification": (
             "Same root cause as `OpenAIPrivacyFilterModel` — eager experts implementation."
         ),
-        "GlmImageModel": (
-            "Vision attention does a data-dependent chunked split (`torch.split(..., lengths.tolist())` "
-            "over `cu_seqlens`), which hits `GuardOnDataDependentSymNode: u0 > 1` — it needs the shared "
-            "vision-attention export patch, and even with it the export runs long (further guards / slow "
-            "symbolic lowering). Not worth the model-specific export support for a diffusers-pipeline "
-            "model. TODO: revisit on demand."
-        ),
-        "GlmImageForConditionalGeneration": "Same as `GlmImageModel`.",
     },
     # Exported and run as usual, but not compared against eager (see the ``.exactness`` note above).
     "exactness": {
@@ -199,6 +183,11 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # query axis symbolic. Backend-agnostic (it's in the shared decomposition). Static generate, which
     # captures a single-token decode with no merge, still runs.
     "generate.dynamic": {
+        "Glm5NextForConditionalGeneration": (
+            "With a static cache, the text model's sparse indexer reads the local padding mask (`[B, S]`) of the "
+            "captured call, which the multi-token merge doesn't grow with the query axis (`size 2 vs 1` in "
+            "`torch.cat`). Fails in the eager reference already. TODO: grow it in `_merge_decode_calls`."
+        ),
         "MllamaForConditionalGeneration": (
             "Cross-attention decode indexes `cross_attention_mask[:, :, arange(seq) + past_seen_tokens]`; "
             "the multi-token merge grows the query axis but not the captured cross-attention mask, so the "
@@ -217,6 +206,14 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "with an unconditional call, mismatching the query and cache axes (`size 5 vs 3` in attention). "
             "Single-token static generate is fine (it captures a conditional decode step). "
             "TODO: make the capture branch-aware."
+        ),
+    },
+    # Every backend, static-cache generate only.
+    "static-cache": {
+        "GlmImageForConditionalGeneration": (
+            "`prepare_inputs_for_generation` drops `position_ids`, so every decode step recomputes the M-RoPE "
+            "positions from the cache length, which a static cache only knows at runtime "
+            "(`GuardOnDataDependentSymNode: Eq(u0, 1)`). The dynamic-cache generate exports work."
         ),
     },
     # ONNX, every variant.

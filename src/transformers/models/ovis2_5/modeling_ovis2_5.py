@@ -19,6 +19,7 @@
 # limitations under the License.
 
 from collections.abc import Callable
+from typing import Any
 
 import torch
 from torch import nn
@@ -53,7 +54,9 @@ from ...utils.generic import (
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
+    get_vision_cu_seqlens,
     get_vision_interpolation_indices_and_weights,
+    get_vision_pixel_shuffle_index,
     get_vision_position_ids,
     get_vision_window_index,
 )
@@ -512,6 +515,31 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.rotary_emb = Ovis2_5VisionRotaryEmbedding(config)
         self.post_init()
+
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` with data-dependent ops: the full and window attention's
+        `cu_seqlens`, `window_index` and `cu_window_seqlens`, the position table's `interp_indices` and
+        `interp_weights`, the rotary `position_ids` and the merger's `pixel_shuffle_index`."""
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        window_index, cu_window_seqlens = get_vision_window_index(
+            grid_thw,
+            spatial_merge_size=self.spatial_merge_size,
+            window_size=self.window_size,
+            patch_size=self.patch_size,
+            kwargs=kwargs,
+        )
+        interp_indices, interp_weights = self.patch_embedder.get_interpolation_inputs(grid_thw, kwargs=kwargs)
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=self.spatial_merge_size, kwargs=kwargs)
+        pixel_shuffle_index = get_vision_pixel_shuffle_index(grid_thw, self.merge_size, kwargs=kwargs)
+        return {
+            "cu_seqlens": cu_seqlens,
+            "window_index": window_index,
+            "cu_window_seqlens": cu_window_seqlens,
+            "interp_indices": interp_indices,
+            "interp_weights": interp_weights,
+            "position_ids": position_ids,
+            "pixel_shuffle_index": pixel_shuffle_index,
+        }
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)

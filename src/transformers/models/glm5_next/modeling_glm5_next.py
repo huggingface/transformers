@@ -20,6 +20,7 @@
 
 import math
 from collections.abc import Callable
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -1899,6 +1900,7 @@ class Glm5NextVisionModel(Glm5NextPreTrainedModel):
         "hidden_states": Glm5NextVisionBlock,
         "attentions": Glm5NextVisionAttention,
     }
+    _supports_flash_attn = True
 
     def __init__(self, config: Glm5NextVisionConfig) -> None:
         super().__init__(config)
@@ -1924,6 +1926,13 @@ class Glm5NextVisionModel(Glm5NextPreTrainedModel):
 
         self.gradient_checkpointing = False
         self.post_init()
+
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` with data-dependent ops: the rotary `position_ids` and the
+        attention's `cu_seqlens` and `max_seqlen`."""
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        return {"position_ids": position_ids, "cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen}
 
     @merge_with_config_defaults
     @capture_outputs
@@ -2076,6 +2085,21 @@ class Glm5NextModel(Glm5NextPreTrainedModel, MultimodalMixin):
                 f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
         return special_image_mask, special_video_mask
+
+    def get_data_dependent_inputs(
+        self,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """The vision tower's inputs (see [`Glm5NextVisionModel.get_data_dependent_inputs`]) prefixed `image_` and
+        `video_`, as `get_image_embeddings` and `get_video_embeddings` take them. The text model takes plain positions."""
+        inputs = {}
+        for prefix, grid_thw in (("image_", image_grid_thw), ("video_", video_grid_thw)):
+            if grid_thw is not None:
+                tower_inputs = self.get_encoder(modality="image").get_data_dependent_inputs(grid_thw)
+                inputs.update({prefix + name: value for name, value in tower_inputs.items()})
+        return inputs
 
     @can_return_tuple
     @auto_docstring

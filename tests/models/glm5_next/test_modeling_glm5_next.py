@@ -145,8 +145,6 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Glm5NextVisionText2TextModelTester
     test_all_params_have_gradient = False  # MoE
     model_split_percents = [0.5, 0.8, 0.9]
-    # FIXME: export is very sensitive to any shape changes
-    test_torch_exportable = False
 
     @pytest.mark.generate
     @skip_tpu("test aborts")

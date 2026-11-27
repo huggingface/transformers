@@ -19,6 +19,7 @@
 # limitations under the License.
 
 from collections.abc import Callable
+from typing import Any
 
 import torch
 from torch import nn
@@ -346,19 +347,29 @@ class LlavaOnevision15VisionClassEmbeddings(nn.Module):
         self.class_pos_emb = nn.Parameter(torch.empty(1, config.hidden_size // config.num_heads // 2))
 
     def forward(
-        self, hidden_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, frame_lengths: list[int]
+        self,
+        hidden_states: torch.Tensor,
+        cos: torch.Tensor,
+        sin: torch.Tensor,
+        cls_index: torch.Tensor,
+        patch_index: torch.Tensor,
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         cls_freqs = torch.cat((self.class_pos_emb, self.class_pos_emb), dim=-1).to(cos.dtype)
-        hidden_states = self.prepend_cls(hidden_states, self.class_embedding[None, :], frame_lengths)
-        cos = self.prepend_cls(cos, cls_freqs.cos(), frame_lengths)
-        sin = self.prepend_cls(sin, cls_freqs.sin(), frame_lengths)
+        hidden_states = self.prepend_cls(hidden_states, self.class_embedding[None, :], cls_index, patch_index)
+        cos = self.prepend_cls(cos, cls_freqs.cos(), cls_index, patch_index)
+        sin = self.prepend_cls(sin, cls_freqs.sin(), cls_index, patch_index)
         return hidden_states, (cos, sin)
 
     @staticmethod
-    def prepend_cls(hidden_states: torch.Tensor, cls_states: torch.Tensor, frame_lengths: list[int]) -> torch.Tensor:
-        """Prepend a class token, cast to the input dtype, to each frame's patches."""
-        cls_states = cls_states.to(hidden_states.dtype)
-        return torch.cat([torch.cat((cls_states, frame)) for frame in hidden_states.split(frame_lengths)])
+    def prepend_cls(
+        hidden_states: torch.Tensor, cls_states: torch.Tensor, cls_index: torch.Tensor, patch_index: torch.Tensor
+    ) -> torch.Tensor:
+        """Prepend a class token, cast to the input dtype, to each frame's patches: the class tokens at `cls_index`,
+        the patches at `patch_index`."""
+        with_cls = hidden_states.new_empty(hidden_states.shape[0] + cls_index.shape[0], hidden_states.shape[-1])
+        with_cls[patch_index] = hidden_states
+        with_cls[cls_index] = cls_states.to(hidden_states.dtype).expand(cls_index.shape[0], -1)
+        return with_cls
 
 
 @auto_docstring
@@ -382,13 +393,6 @@ class LlavaOnevision15PreTrainedModel(PreTrainedModel):
             init.normal_(module.class_pos_emb, mean=0.0, std=std)
 
 
-def get_vision_frame_lengths(grid_thw: torch.Tensor, kwargs: dict | None = None) -> list[int]:
-    """Get patch counts per frame, or consume geometry prepared before graph capture."""
-    if kwargs is not None and (frame_lengths := kwargs.pop("frame_lengths", None)) is not None:
-        return frame_lengths
-    return torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).tolist()
-
-
 @auto_docstring
 class LlavaOnevision15VisionModel(LlavaOnevision15PreTrainedModel):
     config: LlavaOnevision15VisionConfig
@@ -410,6 +414,16 @@ class LlavaOnevision15VisionModel(LlavaOnevision15PreTrainedModel):
         self.merger = LlavaOnevision15VisionPatchMerger(config)
         self.post_init()
 
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` with data-dependent ops: the rotary `position_ids` of the patches,
+        and the attention's `cu_seqlens` and `max_seqlen`."""
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        return {
+            "position_ids": get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs),
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": max_seqlen,
+        }
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -430,14 +444,18 @@ class LlavaOnevision15VisionModel(LlavaOnevision15PreTrainedModel):
         cos, sin = self.rotary_pos_emb(hidden_states, position_ids)
 
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
-        frame_lengths = get_vision_frame_lengths(grid_thw, kwargs=kwargs)
         # Each image/video frame gets one prepended CLS token, increasing its length by one.
         # Cumulative boundaries shift by the number of preceding frames, and max_seqlen increases by one.
+        positions = torch.arange(hidden_states.shape[0], device=cu_seqlens.device, dtype=cu_seqlens.dtype)
+        # Each patch moves past its own frame's CLS token and those of the frames before it
+        patch_index = positions + torch.searchsorted(cu_seqlens[1:], positions, right=True) + 1
         cu_seqlens = cu_seqlens + torch.arange(cu_seqlens.shape[0], device=cu_seqlens.device, dtype=cu_seqlens.dtype)
         if max_seqlen is not None:
             max_seqlen += 1
 
-        hidden_states, position_embeddings = self.cls_embeddings(hidden_states, cos, sin, frame_lengths)
+        hidden_states, position_embeddings = self.cls_embeddings(
+            hidden_states, cos, sin, cls_index=cu_seqlens[:-1], patch_index=patch_index
+        )
 
         hidden_states = self.pre_layernorm(hidden_states)
         for block in self.blocks:
@@ -445,9 +463,7 @@ class LlavaOnevision15VisionModel(LlavaOnevision15PreTrainedModel):
                 hidden_states, cu_seqlens, position_embeddings=position_embeddings, max_seqlen=max_seqlen, **kwargs
             )
 
-        hidden_states = torch.cat(
-            [frame[1:] for frame in torch.split(hidden_states, [length + 1 for length in frame_lengths])], dim=0
-        )
+        hidden_states = hidden_states[patch_index]
         pooled_states = self.merger(hidden_states)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=pooled_states)
 
@@ -530,6 +546,42 @@ class LlavaOnevision15Model(LlavaOnevision15PreTrainedModel, MultimodalMixin):
                 f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
         return special_image_mask, special_video_mask
+
+    def get_data_dependent_inputs(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """What the forward derives from the processor's outputs with data-dependent ops: the M-RoPE
+        `position_ids`, the vision tower's inputs (see
+        [`Qwen2VisionTransformerPretrainedModel.get_data_dependent_inputs`]) prefixed `image_` and `video_`, as
+        `get_image_embeddings` and `get_video_embeddings` take them."""
+        inputs = {}
+        for prefix, grid_thw in (("image_", image_grid_thw), ("video_", video_grid_thw)):
+            if grid_thw is not None:
+                tower_inputs = self.get_encoder(modality="image").get_data_dependent_inputs(grid_thw)
+                inputs.update({prefix + name: value for name, value in tower_inputs.items()})
+        has_vision = image_grid_thw is not None or video_grid_thw is not None
+        if position_ids is None and input_ids is not None and mm_token_type_ids is not None and has_vision:
+            vision_position_ids, _ = self.get_rope_index(
+                input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                attention_mask=attention_mask,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+            if attention_mask is not None:
+                text_position_ids = (attention_mask.long().cumsum(-1) - 1).masked_fill(attention_mask == 0, 0)
+            else:
+                text_position_ids = torch.arange(input_ids.shape[1], device=input_ids.device).expand_as(input_ids)
+            # The text positions first: the text model builds the attention mask from them
+            inputs["position_ids"] = torch.cat([text_position_ids[None], vision_position_ids], dim=0)
+        return inputs
 
     @can_return_tuple
     @auto_docstring

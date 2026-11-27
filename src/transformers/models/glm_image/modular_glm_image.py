@@ -14,6 +14,7 @@
 
 import math
 from collections.abc import Callable
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -474,6 +475,31 @@ class GlmImageModel(Glm4vModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_data_dependent_inputs(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        images_per_sample: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """What the forward derives from the processor's outputs with data-dependent ops: the M-RoPE `position_ids`,
+        and the vision tower's (see [`GlmImageVisionModel.get_data_dependent_inputs`]) for the source images in
+        `pixel_values`, prefixed `image_`, as `get_image_embeddings` takes them."""
+        inputs = {}
+        if pixel_values is not None and image_grid_thw is not None:
+            source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
+            inputs = {
+                f"image_{name}": value for name, value in self.visual.get_data_dependent_inputs(source_grids).items()
+            }
+        if position_ids is None and input_ids is not None and image_grid_thw is not None:
+            inputs["position_ids"], _ = self.get_rope_index(
+                input_ids, image_grid_thw, images_per_sample, attention_mask
+            )
+        return inputs
+
     def get_rope_index(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -696,16 +722,14 @@ class GlmImageModel(Glm4vModel):
         images_per_sample: torch.Tensor,
         image_grid_thw: torch.Tensor,
     ) -> torch.Tensor:
-        # Process source images (image-to-image mode)
-        # Source images are identified by counting image_end_token_id in input_ids
-        if images_per_sample is not None:
-            grids_per_sample = torch.split(image_grid_thw, images_per_sample.tolist())
-            source_grids_list = [grids[:-1] for grids in grids_per_sample]
-            source_grids = torch.cat(source_grids_list, dim=0)
-        else:
-            # Fallback for batch_size=1: all but last grid are source images
-            source_grids = image_grid_thw[:-1]
-        return source_grids
+        # Each sample's grids end with its target's: the source grids are all the others
+        if images_per_sample is None:
+            return image_grid_thw[:-1]
+        is_target = torch.zeros(image_grid_thw.shape[0], dtype=torch.long, device=image_grid_thw.device)
+        is_target[images_per_sample.cumsum(0) - 1] = 1
+        # A stable sort puts the sources first, in order: no host sync, and as many as the shapes say
+        sources = is_target.argsort(stable=True)[: image_grid_thw.shape[0] - images_per_sample.shape[0]]
+        return image_grid_thw[sources]
 
     def get_placeholder_mask(
         self,
@@ -860,6 +884,27 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         self.post_init()
 
     @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        images_per_sample: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
+        r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            Each image's grid, each sample's target image last: the target grids are dropped, as `pixel_values` holds
+            the source images only.
+        images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            The number of images per sample, its target image included. Without it, the batch is one sample.
+        """
+        return self.model.get_image_embeddings(pixel_values, image_grid_thw, images_per_sample, **kwargs)
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`GlmImageModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
+
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -972,7 +1017,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         if "pixel_values" in model_kwargs:
             if model_kwargs["mm_encoder_outputs"].get("image") is not None:
                 raise ValueError("You cannot pass both: raw pixels and pre-computed embeddings for input image")
-            model_kwargs["mm_encoder_outputs"]["image"] = self.model.get_image_embeddings(
+            model_kwargs["mm_encoder_outputs"]["image"] = self.get_image_embeddings(
                 model_kwargs["pixel_values"],
                 model_kwargs.get("image_grid_thw"),
                 model_kwargs.get("images_per_sample"),

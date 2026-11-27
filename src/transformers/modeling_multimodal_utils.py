@@ -16,6 +16,7 @@ and the conversion of `mm_encoder_outputs` between the two layouts."""
 
 import copy
 import functools
+from typing import Any
 
 import torch
 
@@ -55,10 +56,11 @@ class MultimodalMixin:
     """
     `get_image_features`, `get_video_features` and `get_audio_features` from a model's flat `get_image_embeddings`,
     `get_video_embeddings` and `get_audio_embeddings`, split per item by the `split_sizes` they return. A model with a
-    head reaches its base model's.
+    head reaches its base model's getters and `get_data_dependent_inputs`.
     """
 
     model: "MultimodalMixin"
+    base_model: "MultimodalMixin"
 
     def _base_model_getter(self, name: str):
         # Only a head has a base model to reach: a base model without its own getter takes no such input
@@ -89,6 +91,15 @@ class MultimodalMixin:
     def get_audio_features(self, *args, **kwargs):
         """Each audio's features, from `get_audio_embeddings`."""
         return split_modality_outputs(self.get_audio_embeddings(*args, return_dict=True, **kwargs))
+
+    def get_data_dependent_inputs(self, **kwargs) -> dict[str, Any]:
+        """The inputs the forward computes with data-dependent ops (host syncs, loops over images). Passed back to it,
+        they keep it traceable by `torch.compile(fullgraph=True)` and `torch.export`. None unless the model computes
+        some."""
+        base_model = self.base_model
+        if base_model is self or not hasattr(base_model, "get_data_dependent_inputs"):
+            return {}
+        return base_model.get_data_dependent_inputs(**kwargs)
 
 
 def merge_modality_outputs(outputs):

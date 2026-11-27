@@ -352,6 +352,7 @@ class FunAsrNanoMultiModalProjector(nn.Module):
 
     def __init__(self, config: FunAsrNanoConfig):
         super().__init__()
+        self.config = config.adaptor_config
         self.linear_1 = nn.Linear(config.audio_config.hidden_size, config.adaptor_config.projector_hidden_size)
         self.act = ACT2FN[config.adaptor_config.projector_hidden_act]
         self.linear_2 = nn.Linear(config.adaptor_config.projector_hidden_size, config.adaptor_config.hidden_size)
@@ -361,7 +362,6 @@ class FunAsrNanoMultiModalProjector(nn.Module):
                 for _ in range(config.adaptor_config.num_hidden_layers)
             ]
         )
-        self.config = config.adaptor_config
 
     def forward(
         self,
@@ -500,7 +500,7 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel, MultimodalMixin):
         audio_embeds = None
         if input_features is not None and input_ids is not None:
             audio_embeds = self.get_audio_embeddings(
-                input_features, input_features_mask, return_dict=True
+                input_features, input_features_mask, return_dict=True, **kwargs
             ).pooler_output
 
             # replace text-audio token placeholders with audio embeddings

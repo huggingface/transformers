@@ -462,6 +462,7 @@ class FunAsrNanoMultiModalProjector(nn.Module):
 
     def __init__(self, config: FunAsrNanoConfig):
         super().__init__()
+        self.config = config.adaptor_config
         self.linear_1 = nn.Linear(config.audio_config.hidden_size, config.adaptor_config.projector_hidden_size)
         self.act = ACT2FN[config.adaptor_config.projector_hidden_act]
         self.linear_2 = nn.Linear(config.adaptor_config.projector_hidden_size, config.adaptor_config.hidden_size)
@@ -471,7 +472,6 @@ class FunAsrNanoMultiModalProjector(nn.Module):
                 for _ in range(config.adaptor_config.num_hidden_layers)
             ]
         )
-        self.config = config.adaptor_config
 
     def forward(
         self,

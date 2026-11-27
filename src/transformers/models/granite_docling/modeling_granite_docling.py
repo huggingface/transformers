@@ -20,6 +20,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 from torch import nn
@@ -1034,6 +1035,45 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel, MultimodalMixin):
 
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
+
+    def get_real_images_mask(self, pixel_values: torch.Tensor) -> torch.BoolTensor:
+        """Which of the flattened `(batch_size * num_images)` images are real, padding images being all zeros."""
+        return pixel_values.flatten(1).any(-1)
+
+    def get_real_images_and_patch_mask(
+        self,
+        pixel_values: torch.Tensor,
+        pixel_attention_mask: torch.LongTensor | None = None,
+        real_images_index: torch.LongTensor | None = None,
+    ) -> tuple[torch.LongTensor, torch.BoolTensor]:
+        """The indices of the real images in the flattened `(batch_size * num_images)` images, and their patch mask:
+        whether each patch has a pixel inside the image."""
+        pixel_values = pixel_values.flatten(0, 1)
+        if real_images_index is None:
+            real_images_index = self.get_real_images_mask(pixel_values).nonzero().squeeze(-1)
+
+        if pixel_attention_mask is None:
+            pixel_attention_mask = torch.ones(
+                size=(real_images_index.shape[0], *pixel_values.shape[2:]),
+                dtype=torch.bool,
+                device=pixel_values.device,
+            )
+        else:
+            pixel_attention_mask = pixel_attention_mask.flatten(0, 1)[real_images_index]
+
+        patch_size = self.config.vision_config.patch_size
+        patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
+        patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
+        patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
+        return real_images_index, patch_attention_mask
+
+    def get_data_dependent_inputs(self, pixel_values: torch.Tensor | None = None, **kwargs) -> dict[str, Any]:
+        """What `get_image_embeddings` derives from the pixels with data-dependent ops: the real images' indices,
+        prefixed `image_`."""
+        if pixel_values is None:
+            return {}
+        real_images_index = self.get_real_images_mask(pixel_values.flatten(0, 1)).nonzero().squeeze(-1)
+        return {"image_real_images_index": real_images_index}
 
     @can_return_tuple
     @auto_docstring
