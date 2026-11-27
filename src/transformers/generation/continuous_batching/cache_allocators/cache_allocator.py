@@ -47,6 +47,8 @@ class BlockLedger:
         self.block_to_hash: dict[int, int] = {}
         # Blocks referenced by no request but kept for their reusable content (dict used as an ordered set)
         self.cached_blocks: dict[int, None] = {}
+        # Root of every hash chain. Bumping it makes the blocks hashed before unreachable to new prefix matches
+        self.epoch = 0
 
     def reset(self) -> None:
         """Forgets all reference counts, hashes and cached blocks."""
@@ -269,7 +271,7 @@ class CacheAllocator(ABC):
         """Matches the longest prefix of the prompt against the ledger's hashed blocks, block by block. Returns the list
         of matched blocks."""
         matched_blocks = []
-        current_hash = None
+        current_hash = self.ledger.epoch or None
         for b in range((len(prompt_ids) - 1) // self.tokens_per_page):
             tokens = prompt_ids[b * self.tokens_per_page : (b + 1) * self.tokens_per_page]
             current_hash = compute_block_hash(current_hash, tokens)
@@ -292,7 +294,7 @@ class CacheAllocator(ABC):
         table from the start so each hash chains to its parent's. A block whose content duplicates an already-hashed
         block is de-duplicated on the spot: the request adopts the existing block and releases its duplicate."""
         block_table = self.block_table[request_id]
-        parent_hash = None
+        parent_hash = self.ledger.epoch or None
         for i, block_id in enumerate(block_table):
             block_hash = self.ledger.block_to_hash.get(block_id)
             if block_hash is None:
