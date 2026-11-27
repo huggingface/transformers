@@ -2113,10 +2113,15 @@ class ProcessorMixin(PushToHubMixin):
                     )
                     auto_processor_class = cls.get_possibly_dynamic_module(sub_processor_class_name)
 
-                sub_processor, unused_kwargs = auto_processor_class.from_pretrained(
+                sub_processor = auto_processor_class.from_pretrained(
                     pretrained_model_name_or_path,
                     processor_config=sub_processor_config,
                     **{**kwargs, "return_unused_kwargs": True},
+                )
+                # Remote-code sub-processors may override `from_dict` / `from_pretrained` without supporting
+                # `return_unused_kwargs` and return the bare object: then none of the kwargs counts as used.
+                sub_processor, unused_kwargs = (
+                    sub_processor if isinstance(sub_processor, tuple) else (sub_processor, kwargs)
                 )
                 keys_to_remove.update({k for k in kwargs if k not in unused_kwargs and k not in processor_sig})
                 processor_dict[sub_processor_type] = sub_processor
