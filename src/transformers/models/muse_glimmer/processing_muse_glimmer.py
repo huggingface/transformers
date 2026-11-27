@@ -59,8 +59,9 @@ class MuseGlimmerProcessor(ProcessorMixin):
         vision_data = {}
         if image_sizes is not None:
             merge_size = self.image_processor.merge_size
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
             num_image_patches = [
-                self.image_processor.get_number_of_image_patches(height, width, kwargs)
+                self.image_processor.get_number_of_image_patches(height, width, images_kwargs)
                 for height, width in image_sizes
             ]
             num_image_tokens = [patches // merge_size**2 for patches in num_image_patches]

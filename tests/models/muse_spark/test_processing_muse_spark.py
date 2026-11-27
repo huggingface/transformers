@@ -32,6 +32,8 @@ from ...test_processing_common import ProcessorTesterMixin
 class MuseSparkProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MuseSparkProcessor
     model_id = "hf-internal-testing/tiny-muse-spark"
+    # MUSE has no `size`, so the count test checks the token budget it resizes to
+    num_image_tokens_images_kwargs = {"max_image_tokens": 10}
     audio_input_name = "input_values"
 
     @classmethod

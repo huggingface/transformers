@@ -979,10 +979,11 @@ class HYV4VLProcessor(Qwen2VLProcessor):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
         """
+        merged_kwargs = self._merge_kwargs(**kwargs)
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = {**kwargs, **kwargs.get("images_kwargs", {})}
-            merge_size = images_kwargs.get("merge_size") or self.image_processor.merge_size
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(**merged_kwargs["images_kwargs"])
+            merge_size = images_kwargs["merge_size"]
             grids = [
                 self.image_processor.get_number_of_image_patches(height, width, images_kwargs)
                 for height, width in image_sizes
@@ -990,8 +991,8 @@ class HYV4VLProcessor(Qwen2VLProcessor):
             vision_data["num_image_patches"] = [grid_h * grid_w for grid_h, grid_w in grids]
             vision_data["num_image_tokens"] = [self._num_frame_tokens(*grid, merge_size) for grid in grids]
         if video_sizes is not None:
-            videos_kwargs = {**kwargs, **kwargs.get("videos_kwargs", {})}
-            merge_size = videos_kwargs.get("merge_size") or self.video_processor.merge_size
+            videos_kwargs = self.video_processor._merge_and_standardize_kwargs(**merged_kwargs["videos_kwargs"])
+            merge_size = videos_kwargs["merge_size"]
             num_video_tokens = []
             for num_frames, height, width in video_sizes:
                 _, grid_t, grid_h, grid_w = self.video_processor.get_num_of_video_patches(

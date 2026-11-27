@@ -1878,9 +1878,24 @@ class ProcessorTesterMixin:
                 # Only image processors have both backends, so don't apply it to the other components
                 image_processor = AutoImageProcessor.from_pretrained(self.tmpdirname, backend=backend)
                 processor = self.processor_class.from_pretrained(self.tmpdirname, image_processor=image_processor)
-                self._check_num_image_tokens_match_processor_call(processor)
+                self._check_num_image_tokens_match_processor_call(processor, **self.num_image_tokens_images_kwargs)
 
-    def _check_num_image_tokens_match_processor_call(self, processor):
+                # The count must follow the kwargs passed at call time: if the image processor has a `size`, load it
+                # with another one and pass the tested `size` flat (another `size` at call time may not fit the
+                # tester, e.g. LLaVA-NeXT's grid pinpoints), then pass the tested kwargs nested
+                kwargs = dict(self.num_image_tokens_images_kwargs)
+                if (size := kwargs.get("size", image_processor.size)) is not None:
+                    kwargs["size"] = dict(size)
+                    image_processor = AutoImageProcessor.from_pretrained(
+                        self.tmpdirname,
+                        backend=backend,
+                        size={key: 2 * value for key, value in kwargs["size"].items()},
+                    )
+                    processor = self.processor_class.from_pretrained(self.tmpdirname, image_processor=image_processor)
+                    self._check_num_image_tokens_match_processor_call(processor, **kwargs)
+                self._check_num_image_tokens_match_processor_call(processor, images_kwargs=kwargs)
+
+    def _check_num_image_tokens_match_processor_call(self, processor, **kwargs):
         if processor.tokenizer.pad_token_id is None:
             processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
 
@@ -1894,16 +1909,14 @@ class ProcessorTesterMixin:
         inputs = processor(
             text=text,
             images=image_inputs,
-            **self.num_image_tokens_images_kwargs,
+            **kwargs,
             padding=True,
             return_text_replacement_offsets=True,
             return_tensors="pt",
         )
 
         num_image_tokens_from_call = self._count_embed_tokens(processor, inputs, "image")
-        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(
-            image_sizes=image_sizes, **self.num_image_tokens_images_kwargs
-        )
+        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes, **kwargs)
         self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
 
         # Test with two images per single text
@@ -1911,16 +1924,14 @@ class ProcessorTesterMixin:
         inputs = processor(
             text=text,
             images=image_inputs * 2,
-            **self.num_image_tokens_images_kwargs,
+            **kwargs,
             padding=True,
             return_text_replacement_offsets=True,
             return_tensors="pt",
         )
 
         num_image_tokens_from_call = self._count_embed_tokens(processor, inputs, "image")
-        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(
-            image_sizes=image_sizes * 2, **self.num_image_tokens_images_kwargs
-        )
+        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes * 2, **kwargs)
         self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
 
     def test_get_num_multimodal_tokens_matches_processor_call_video(self):
@@ -1930,9 +1941,6 @@ class ProcessorTesterMixin:
 
         if not hasattr(processor, "_get_num_multimodal_tokens"):
             self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
-
-        if processor.tokenizer.pad_token_id is None:
-            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
 
         if getattr(processor, "video_processor", None) is None:
             self.skipTest("Processor has no video processor")
@@ -1952,11 +1960,30 @@ class ProcessorTesterMixin:
         if num_video_tokens_from_helper["num_video_tokens"] is None:
             self.skipTest("Processor doesn't count video tokens yet")
 
+        self._check_num_video_tokens_match_processor_call(processor, video_inputs)
+
+        # Load the video processor with another `size` and pass the tested one at call time, flat and nested: the
+        # count must follow the call's `size`
+        if (size := processor.video_processor.size) is not None:
+            size = dict(size)
+            video_processor = self.get_component(
+                "video_processor", size={key: 2 * value for key, value in size.items()}
+            )
+            processor = self.processor_class.from_pretrained(self.tmpdirname, video_processor=video_processor)
+            self._check_num_video_tokens_match_processor_call(processor, video_inputs, size=size)
+            self._check_num_video_tokens_match_processor_call(processor, video_inputs, videos_kwargs={"size": size})
+
+    def _check_num_video_tokens_match_processor_call(self, processor, video_inputs, **kwargs):
+        if processor.tokenizer.pad_token_id is None:
+            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        video_sizes = [(len(video), *get_video_size(video)) for video in video_inputs]
         video_token = getattr(self, "video_token", "")
         text = [f"This is a video {video_token}"] * len(video_inputs)
         inputs = processor(
             text=text,
             videos=video_inputs,
+            **kwargs,
             padding=True,
             do_sample_frames=False,
             return_text_replacement_offsets=True,
@@ -1964,6 +1991,7 @@ class ProcessorTesterMixin:
         )
 
         num_video_tokens_from_call = self._count_embed_tokens(processor, inputs, "video")
+        num_video_tokens_from_helper = processor._get_num_multimodal_tokens(video_sizes=video_sizes, **kwargs)
         self.assertListEqual(num_video_tokens_from_call, num_video_tokens_from_helper["num_video_tokens"])
 
         # Test with two videos per single text
@@ -1971,6 +1999,7 @@ class ProcessorTesterMixin:
         inputs = processor(
             text=text,
             videos=video_inputs * 2,
+            **kwargs,
             padding=True,
             do_sample_frames=False,
             return_text_replacement_offsets=True,
@@ -1978,7 +2007,7 @@ class ProcessorTesterMixin:
         )
 
         num_video_tokens_from_call = self._count_embed_tokens(processor, inputs, "video")
-        num_video_tokens_from_helper = processor._get_num_multimodal_tokens(video_sizes=video_sizes * 2)
+        num_video_tokens_from_helper = processor._get_num_multimodal_tokens(video_sizes=video_sizes * 2, **kwargs)
         self.assertListEqual(num_video_tokens_from_call, num_video_tokens_from_helper["num_video_tokens"])
 
     def test_get_num_multimodal_tokens_matches_processor_call_audio(self):

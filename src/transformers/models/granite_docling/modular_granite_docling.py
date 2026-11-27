@@ -672,15 +672,20 @@ class GraniteDoclingProcessor(Idefics3Processor):
         if image_sizes is not None:
             num_image_tokens = []
             num_image_patches = []
-            fine_route = kwargs.get("fine_route", self.image_processor.fine_route)
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
+            fine_route = images_kwargs["fine_route"]
             for height, width in image_sizes:
-                num_rows, num_cols = self.image_processor.get_tile_grid(height, width, kwargs)
+                num_rows, num_cols = self.image_processor.get_tile_grid(height, width, images_kwargs)
                 image_inputs = {"rows": [[num_rows]], "cols": [[num_cols]]}
                 if fine_route:
                     image_inputs["tile_fine_mask"] = None
                 image_prompt = self.replace_image_token(image_inputs, 0)
                 num_image_tokens.append(len(self.tokenizer(image_prompt, add_special_tokens=False)["input_ids"]))
-                num_image_patches.append(self.image_processor.get_number_of_image_patches(height, width, kwargs))
+                num_image_patches.append(
+                    self.image_processor.get_number_of_image_patches(height, width, images_kwargs)
+                )
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
         return MultiModalData(**vision_data)
 
