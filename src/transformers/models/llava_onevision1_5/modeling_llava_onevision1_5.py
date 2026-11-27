@@ -411,6 +411,17 @@ class LlavaOnevision15VisionModel(LlavaOnevision15PreTrainedModel):
         self.merger = LlavaOnevision15VisionPatchMerger(config)
         self.post_init()
 
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` with data-dependent ops: the rotary `position_ids` of the patches,
+        the attention's `cu_seqlens` and `max_seqlen`, and each frame's patch count `frame_lengths`."""
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        return {
+            "position_ids": get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs),
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": max_seqlen,
+            "frame_lengths": get_vision_frame_lengths(grid_thw, kwargs=kwargs),
+        }
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
