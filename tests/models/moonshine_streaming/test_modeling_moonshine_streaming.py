@@ -182,6 +182,22 @@ class MoonshineStreamingModelTest(ModelTesterMixin, PipelineTesterMixin, unittes
             self.assertTrue(torch.allclose(out.loss, aligned_ce(out.logits, lbl)))
             self.assertFalse(torch.allclose(out.loss, double_shift_ce(out.logits, lbl)))
 
+    def test_encoder_sliding_windows_without_attention_mask(self):
+        # the encoder's sliding windows must apply without an attention mask too: no mask == all-ones mask
+        config = self.model_tester.get_config()
+        model = MoonshineStreamingModel(config).to(torch_device).eval()
+        # 1 s of audio, long enough for the windows to restrict attention (the tester's inputs are only 4 frames)
+        input_values = floats_tensor([self.model_tester.batch_size, 16000], scale=1.0)
+        attention_mask = torch.ones_like(input_values, dtype=torch.long)
+
+        with torch.no_grad():
+            with_mask = model.encoder(input_values, attention_mask=attention_mask).last_hidden_state
+            without_mask = model.encoder(input_values).last_hidden_state
+
+        left_window, right_window = config.encoder_config.sliding_windows[0]
+        self.assertGreater(with_mask.shape[1], left_window + right_window)
+        torch.testing.assert_close(without_mask, with_mask)
+
     def test_can_init_all_missing_weights(self):
         self.skipTest("MoonshineStreaming uses special parameter initialization that conflicts with this test")
 

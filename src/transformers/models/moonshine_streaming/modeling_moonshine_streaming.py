@@ -406,25 +406,25 @@ class MoonshineStreamingEncoder(MoonshineStreamingPreTrainedModel):
         """
         inputs_embeds, attention_mask = self.embedder(input_values, padding_mask=attention_mask)
 
-        if attention_mask is not None:
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-            }
-            per_layer_attention_mask = [
-                create_bidirectional_mask(
-                    and_mask_function=sliding_window_mask_function(self.config.sliding_windows[layer_idx]),
-                    **mask_kwargs,
-                )
-                for layer_idx in range(self.config.num_hidden_layers)
-            ]
+        # The sliding windows are part of the model, so the per-layer masks are needed even without padding
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+        }
+        per_layer_attention_mask = [
+            create_bidirectional_mask(
+                and_mask_function=sliding_window_mask_function(self.config.sliding_windows[layer_idx]),
+                **mask_kwargs,
+            )
+            for layer_idx in range(self.config.num_hidden_layers)
+        ]
 
         hidden_states = inputs_embeds
         for layer_idx, encoder_layer in enumerate(self.layers):
             hidden_states = encoder_layer(
                 hidden_states,
-                attention_mask=per_layer_attention_mask[layer_idx] if attention_mask is not None else None,
+                attention_mask=per_layer_attention_mask[layer_idx],
                 **kwargs,
             )
 
@@ -921,15 +921,15 @@ class MoonshineStreamingModel(MoonshineStreamingPreTrainedModel):
         >>> from transformers import AutoFeatureExtractor, MoonshineStreamingModel
         >>> from datasets import load_dataset
 
-        >>> model = MoonshineStreamingModel.from_pretrained("UsefulSensors/moonshine_streaming-tiny")
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("UsefulSensors/moonshine_streaming-tiny")
+        >>> model = MoonshineStreamingModel.from_pretrained("moonshine-ai/moonshine-streaming-tiny")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("moonshine-ai/moonshine-streaming-tiny")
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
         >>> input_values = inputs.input_values
         >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
         >>> last_hidden_state = model(input_values, decoder_input_ids=decoder_input_ids).last_hidden_state
         >>> list(last_hidden_state.shape)
-        [1, 2, 288]
+        [1, 2, 320]
         ```
         """
         if encoder_outputs is None:
@@ -1036,8 +1036,8 @@ class MoonshineStreamingForConditionalGeneration(MoonshineStreamingPreTrainedMod
         >>> from transformers import AutoProcessor, MoonshineStreamingForConditionalGeneration
         >>> from datasets import load_dataset
 
-        >>> processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine_streaming-tiny")
-        >>> model = MoonshineStreamingForConditionalGeneration.from_pretrained("UsefulSensors/moonshine_streaming-tiny")
+        >>> processor = AutoProcessor.from_pretrained("moonshine-ai/moonshine-streaming-tiny")
+        >>> model = MoonshineStreamingForConditionalGeneration.from_pretrained("moonshine-ai/moonshine-streaming-tiny")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
@@ -1048,7 +1048,7 @@ class MoonshineStreamingForConditionalGeneration(MoonshineStreamingPreTrainedMod
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
-        'Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
+        'Mr. Quilter is the apostle of the Middle Classes, and we are glad to welcome his gospel.'
         ```"""
 
         # `shift_labels` is consumed here (the decoder inputs are already right-shifted), so pop it before the
