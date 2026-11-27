@@ -18,6 +18,7 @@ import itertools
 import math
 from collections.abc import Callable
 
+import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
@@ -792,15 +793,19 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         if metadata.duration is None:
             metadata.duration = metadata.total_num_frames / metadata.fps
 
+        total = metadata.total_num_frames
         if fps is not None:
             target_num_frames = int(metadata.duration * fps)
         else:
-            target_num_frames = num_frames if num_frames is not None else self.num_frames
-            if max_fps is not None and metadata.fps > max_fps:
-                target_num_frames = min(target_num_frames, int(metadata.duration * max_fps))
+            # Like the allenai Hub processor's `sample_frames`: every `metadata.fps / max_fps`-th frame plus the last,
+            # or `num_frames` from first to last for a longer video. Unlike it, below `max_fps` frames don't repeat.
+            num_frames = num_frames if num_frames is not None else self.num_frames
+            if total / metadata.fps > (num_frames - 1) / max_fps:
+                return np.linspace(0, total - 1, min(num_frames, total)).astype(int)
+            indices = np.arange(0, total - 1, metadata.fps / max_fps)
+            return np.unique(np.append(indices, total - 1).round().astype(int))
 
         target_num_frames = max(min(target_num_frames, metadata.total_num_frames), 1)
-        total = metadata.total_num_frames
         return torch.arange(0, total, total / target_num_frames).int()
 
     def _build_video_patches(

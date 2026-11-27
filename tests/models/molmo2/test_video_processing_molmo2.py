@@ -19,6 +19,7 @@ import numpy as np
 from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torchvision_available, is_vision_available
+from transformers.video_utils import VideoMetadata
 
 from ...test_video_processing_common import VideoProcessingTestMixin, prepare_video_inputs
 
@@ -195,6 +196,16 @@ class Molmo2VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
             self._assert_patchified_output(outputs, 2)
             self.assertEqual(outputs["video_grids"][:, 0].tolist(), [15, 7])
+
+    def test_sample_frames_like_hub_processor(self):
+        # Indices the allenai Hub processor gives for a 9.72s video at 25 fps
+        metadata = VideoMetadata(total_num_frames=243, fps=25.0)
+        for video_processing_class in self.video_processor_list:
+            video_processing = video_processing_class(**self.video_processor_dict)
+            expected = [0, 12, 25, 38, 50, 62, 75, 88, 100, 112, 125, 138, 150, 162, 175, 188, 200, 212, 225, 238, 242]
+            self.assertEqual(video_processing.sample_frames(metadata, num_frames=384).tolist(), expected)
+            expected = [0, 34, 69, 103, 138, 172, 207, 242]
+            self.assertEqual(video_processing.sample_frames(metadata, num_frames=8).tolist(), expected)
 
     def test_nested_input(self):
         for video_processing_class in self.video_processor_list:
