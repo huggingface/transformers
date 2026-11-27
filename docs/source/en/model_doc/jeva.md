@@ -43,24 +43,21 @@ Jeva combines candidate cross-entropy with binary coverage loss for nullable dec
 With the model and tokenizer above, give the first option 80% target probability and null 20%.
 
 ```python
-import torch
-
+request = {
+    "state": "My card was charged twice.",
+    "questions": {
+        "intent": {"type": "choice", "criteria": {"refund": None, "delivery": None}, "allow_null": True},
+    },
+}
+prompts = model.decision_config.prepare_inputs(request, tokenizer)
+batch = model.prepare_decision_inputs(prompts, targets=[[0.2, 0.8, 0.0]])
 model.train()
-state = tokenizer(["My card was charged twice."], return_tensors="pt")
-options = tokenizer(["Refund", "Delivery"], padding=True, return_tensors="pt")
-output = model(
-    **state,
-    option_input_ids=options.input_ids,
-    option_attention_mask=options.attention_mask,
-    num_options=torch.tensor([2]),
-    labels=torch.tensor([[0.2, 0.8, 0.0]]),
-    allow_null=torch.tensor([True]),
-)
-output.loss.backward()
+model(**batch).loss.backward()
 ```
 
-Use right padding and put null probability first in `labels`. Training updates the encoder and head by default.
-Pass the boolean `allow_null` tensor to train coverage for selected decisions. If your `Trainer` dataset has an
+The helper right-pads states and options and reads the coverage flags from the questions. Training updates the encoder
+and head by default. When passing tensors directly, put null probability first in `labels` and supply `allow_null`
+to train coverage for selected decisions. If your `Trainer` dataset has an
 `allow_null` column, set `remove_unused_columns=False` to pass it through.
 
 For exact weighting across uneven microbatches in a custom loop, pass the total decision count as
@@ -82,4 +79,5 @@ decide("My card was charged twice.", questions={
 ## JevaForDecision
 
 [[autodoc]] JevaForDecision
+    - prepare_decision_inputs
     - forward

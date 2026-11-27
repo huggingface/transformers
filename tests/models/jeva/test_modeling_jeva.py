@@ -83,15 +83,25 @@ class JevaForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         self.inputs = self.model_tester.prepare_inputs()
 
     def test_training_loss_with_nullable_decisions(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_training()
-        model = JevaForDecision(config).train()
+        model = JevaForDecision(self.config).train()
+        first, second = self.decision_config.prepare_inputs(
+            {
+                "state": self.request["state"],
+                "questions": {
+                    "intent": {**self.request["questions"]["intent"], "allow_null": True},
+                    "urgency": {"type": "score", "criteria": ["Low", "Medium", "High"]},
+                },
+            },
+            self.tokenizer,
+        )
+        targets = [[0.2, 0.3, 0.5], [0.0, 0.1, 0.3, 0.6]]
+        inputs = model.prepare_decision_inputs([first, second], targets=targets)
         outputs = model(**inputs, num_items_in_batch=3)
 
-        targets = inputs["labels"][:, 1:]
-        first_candidates = torch.nn.functional.cross_entropy(outputs.logits[0, :2], targets[0, :2])
-        second_candidates = torch.nn.functional.cross_entropy(outputs.logits[1], targets[1])
+        first_candidates = torch.nn.functional.cross_entropy(outputs.logits[0, :2], torch.tensor(targets[0][1:]))
+        second_candidates = torch.nn.functional.cross_entropy(outputs.logits[1], torch.tensor(targets[1][1:]))
         coverage = torch.nn.functional.binary_cross_entropy_with_logits(
-            outputs.coverage_logits[0], 1 - inputs["labels"][0, 0]
+            outputs.coverage_logits[0], torch.tensor(1 - targets[0][0])
         )
         torch.testing.assert_close(outputs.loss, (first_candidates + second_candidates + coverage) / 3)
 

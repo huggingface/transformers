@@ -22,6 +22,7 @@
 # Copyright 2026 Qi Li and Xinchao Wang.
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import torch
@@ -30,7 +31,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...decision import DecisionConfig, DecisionMixin, process_scores
+from ...decision import DecisionConfig, DecisionMixin, Question, process_scores
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ..auto import AutoModel
@@ -320,34 +321,78 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
             )
         return JevaDecisionOutput(loss=loss, logits=log_q, coverage_logits=coverage_logit)
 
+    def prepare_decision_inputs(
+        self,
+        prompts: Sequence[tuple[dict, list[Question]]],
+        *,
+        targets: Sequence[Sequence[float]] | None = None,
+        max_state_length: int | None = None,
+        max_option_length: int | None = None,
+        truncation: str = "error",
+        pad_token_id: int | None = None,
+        option_chunk_size: int | None = None,
+    ) -> dict:
+        """Right-pad states and flattened options for a batch of rendered Jeva prompts.
+
+        Args:
+            prompts (`Sequence[tuple[dict, list[Question]]]`):
+                One marked state and its marked options per prompt, from [`DecisionConfig.prepare_inputs`].
+            targets (`Sequence[Sequence[float]]`, *optional*):
+                One target distribution per question, with null probability first. Supplies labels and coverage flags.
+            max_state_length (`int`, *optional*):
+                Maximum length of each state span, in tokens.
+            max_option_length (`int`, *optional*):
+                Maximum length of each option span, in tokens.
+            truncation (`str`, *optional*, defaults to `"error"`):
+                Use `"left"` or `"right"` to truncate overflowing spans on that side.
+            pad_token_id (`int`, *optional*):
+                Override the encoder's padding token ID.
+            option_chunk_size (`int`, *optional*):
+                Number of options to encode in each chunk.
+        """
+        if option_chunk_size is not None and option_chunk_size < 1:
+            raise ValueError("option_chunk_size must be positive.")
+        spans = self._split_decision_spans(prompts, max_state_length, max_option_length, truncation)
+        states, options, questions = zip(*spans)
+        pad_token_id = (self.config.text_config.pad_token_id or 0) if pad_token_id is None else pad_token_id
+
+        def pad_segments(segments):
+            ids = nn.utils.rnn.pad_sequence(segments, batch_first=True, padding_value=pad_token_id)
+            lengths = ids.new_tensor([len(segment) for segment in segments])
+            mask = torch.arange(ids.shape[1], device=ids.device)[None] < lengths[:, None]
+            return {"input_ids": ids, "attention_mask": mask.long()}
+
+        num_options = states[0].new_tensor([len(row) for row in options])
+        state_inputs = pad_segments(states)
+        option_inputs = pad_segments([option for row in options for option in row])
+        batch = {
+            **state_inputs,
+            **{f"option_{key}": value for key, value in option_inputs.items()},
+            "num_options": num_options,
+            "option_mask": torch.arange(num_options.max(), device=num_options.device)[None] < num_options[:, None],
+        }
+        if option_chunk_size is not None:
+            batch["option_chunk_size"] = option_chunk_size
+        if targets is not None:
+            labels = []
+            for target, question in zip(targets, questions, strict=True):
+                if len(target) != len(question.options) + 1:
+                    raise ValueError("Expected a null probability followed by one probability per option.")
+                if target[0] != 0 and not question.allow_null:
+                    raise ValueError("Null targets require a nullable question.")
+                labels.append(num_options.new_tensor(target, dtype=torch.float32))
+            batch["labels"] = nn.utils.rnn.pad_sequence(labels, batch_first=True)
+            batch["allow_null"] = num_options.new_tensor(
+                [question.allow_null for question in questions], dtype=torch.bool
+            )
+        return batch
+
     @torch.no_grad()
     def decide(self, input_ids, marks, decision_questions, decision_config=None, **kwargs):
         """Return conditional option scores for a question rendered with the Jeva decision template."""
         decision_config = decision_config or self.decision_config
-        if len(decision_questions) != 1 or len(marks) != len(decision_questions[0].options) + 1:
-            raise ValueError("Jeva expects one state span followed by one span per option, each ending in <|mark|>")
-        segments = input_ids[0, : int(marks[-1])].split(torch.diff(marks, prepend=marks.new_zeros(1)).tolist())
-
-        def pad_segments(segments):
-            lengths = torch.tensor([len(segment) for segment in segments], device=self.device)
-            ids = nn.utils.rnn.pad_sequence(
-                [segment.to(self.device) for segment in segments],
-                batch_first=True,
-                padding_value=self.config.text_config.pad_token_id or 0,
-            )
-            mask = torch.arange(ids.shape[1], device=self.device)[None] < lengths[:, None]
-            return {"input_ids": ids, "attention_mask": mask.long()}
-
-        num_options = torch.tensor([len(segments) - 1], device=self.device)
-        state_inputs = pad_segments(segments[:1])
-        option_inputs = pad_segments(segments[1:])
-        output = self(
-            **state_inputs,
-            **{f"option_{key}": value for key, value in option_inputs.items()},
-            num_options=num_options,
-            option_mask=torch.ones(1, num_options.item(), dtype=torch.bool, device=self.device),
-            return_dict=True,
-        )
+        inputs = self.prepare_decision_inputs([({"input_ids": input_ids, "marks": marks}, decision_questions)])
+        output = self(**{key: value.to(self.device) for key, value in inputs.items()}, return_dict=True)
         scores = process_scores(decision_config, input_ids, marks, decision_questions, [output.logits[0]])
         if decision_questions[0].allow_null:
             scores = [
