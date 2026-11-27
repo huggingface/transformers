@@ -218,6 +218,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Generate candidates
         generation_args = self._prepare_generation_args(input_ids, min_new_tokens, max_new_tokens)
         candidate_ids, candidate_logits = self._generate_candidates(generation_args)
+
+        # Keep track of the last drafted length to rollback the Cache
+        self._last_length = candidate_ids.shape[-1]
         return candidate_ids, candidate_logits
 
     def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.Tensor, num_matches: int):
@@ -289,13 +292,11 @@ class AssistedCandidateGenerator(CandidateGenerator):
         min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
         return min_new_tokens, max_new_tokens
 
-    def _update_past_and_masks(
-        self, input_ids: torch.LongTensor, remove_from_cache: int = 0, num_added_tokens: int = 1
-    ) -> bool:
+    def _update_past_and_masks(self, input_ids: torch.LongTensor, remove_from_cache: int = 0) -> bool:
         """Update past key values and attention masks for subsequent generation rounds."""
         has_cache = self.assistant_kwargs.get("cache", None) is not None
         if has_cache:
-            tokens_to_remove = remove_from_cache + num_added_tokens
+            tokens_to_remove = self._last_length - input_ids.shape[-1] + remove_from_cache
             if tokens_to_remove >= 0:
                 self.assistant_kwargs["cache"].crop(-tokens_to_remove)
             self.assistant_kwargs = _prepare_attention_mask(
@@ -540,6 +541,11 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.prev_target_ids_len = input_ids.shape[1]
         self.assistant_kwargs["cache"] = assistant_output.cache
         self.prev_assistant_ids = assistant_output.sequences
+
+        # Keep track of the last drafted length to rollback the Cache
+        self._last_length = (
+            input_ids.shape[-1] if self.prev_target_ids_len >= new_target_ids.shape[1] else new_target_ids.shape[-1]
+        )
 
         if self.prev_target_ids_len >= new_target_ids.shape[1]:
             return input_ids, None
@@ -943,7 +949,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         if max_new_tokens == 0:
             return input_ids, None
 
-        self._update_past_and_masks(assistant_input_ids, num_added_tokens=num_added_tokens)
+        self._update_past_and_masks(assistant_input_ids)
         generation_args = self._prepare_generation_args(assistant_input_ids, min_new_tokens, max_new_tokens)
 
         # Ensure scores are returned
@@ -962,9 +968,12 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         self._target_seq_len_with_candidates = target_candidate_ids.shape[-1]
         target_candidate_logits = self._atm_translator.get_target_logits(assistant_candidate_logits)
 
+        # Keep track of the last drafted length to rollback the Cache
+        self._last_length = target_candidate_ids.shape[-1]
+
         return target_candidate_ids, target_candidate_logits
 
-    def _update_past_and_masks(self, assistant_input_ids: torch.LongTensor, num_added_tokens: int = 1) -> bool:
+    def _update_past_and_masks(self, assistant_input_ids: torch.LongTensor) -> bool:
         if self._prev_assistant_ids is None:
             # Prepare attention mask for the first generation.
             # For subsequent generations, the attention mask is updated in super()_update_past_and_masks.
@@ -974,7 +983,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             self.assistant_kwargs = _prepare_position_ids(
                 self.assistant_kwargs, assistant_input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
-        return super()._update_past_and_masks(assistant_input_ids, num_added_tokens=num_added_tokens)
+        return super()._update_past_and_masks(assistant_input_ids)
 
     def _prepare_assistant_input_ids(self, target_input_ids: torch.LongTensor) -> torch.LongTensor:
         """
@@ -1148,11 +1157,15 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
 
         # In case we didn't find a match return the input sequence unchanged, reverts back to autoregressive decoding
         if not match_found or chosen_ids is None or len(chosen_ids) == 0:
+            self._last_length = input_ids.shape[-1]
             return input_ids, None
 
         # Now need extend input_ids with chosen_ids
         chosen_ids = chosen_ids.unsqueeze(0)
         candidate_input_ids = torch.cat((input_ids, chosen_ids), dim=1)
+
+        # Keep track of the last drafted length to rollback the Cache
+        self._last_length = candidate_input_ids.shape[-1]
         # assisted_generation expects logits as well, but we don't have those here, so returning None
         return candidate_input_ids, None
 
@@ -1215,6 +1228,9 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
         base_model.config.num_hidden_layers = self.assistant_early_exit
         candidate_ids, candidate_logits = super().get_candidates(input_ids)
         base_model.config.num_hidden_layers = original_num_hidden_layers
+
+        # Keep track of the last drafted length to rollback the Cache
+        self._last_length = candidate_ids.shape[-1]
         return candidate_ids, candidate_logits
 
 
