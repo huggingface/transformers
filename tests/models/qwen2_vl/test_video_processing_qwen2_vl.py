@@ -481,6 +481,20 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             self.assertEqual(capped_out.shape[0], self._expected_capped_seq_len(8, 256, size, total_seq_len=128))
             self.assertLess(capped_out.shape[0], default_out.shape[0])
 
+    def test_max_video_tokens_call_time_override(self):
+        size = {"longest_edge": 1024 * 28 * 28, "shortest_edge": 28 * 28}
+        config = {"size": size, "do_sample_frames": False, "cap_pixels_per_frame": True}
+        video = np.zeros((8, 256, 256, 3), dtype=np.uint8)
+        for video_processing_class in self.video_processor_list:
+            processor = video_processing_class(**config)
+            capped_processor = video_processing_class(**config, max_video_tokens=128)
+            expected = capped_processor(video, return_tensors="pt")[self.input_name].shape[0]
+            default = processor(video, return_tensors="pt")[self.input_name].shape[0]
+            self.assertLess(expected, default)
+
+            result = processor(video, max_video_tokens=128, return_tensors="pt")[self.input_name]
+            self.assertEqual(result.shape[0], expected)
+
     def test_cap_pixels_per_frame_unset_warns_and_false_is_silent(self):
         from transformers.utils import logging as transformers_logging
 
