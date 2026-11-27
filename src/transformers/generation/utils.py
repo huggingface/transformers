@@ -425,7 +425,10 @@ class DeferredStopCheck(StopCheck):
         # outputs or if the user passed an explicit Cache object
         self.cache = cache if cache_is_returned else None
         if self.cache is not None:
-            self.cache.activate_past_recording()
+            # If not already set, we only need to crop at most 1 token
+            self.cache.activate_past_recording(
+                recurrent_states_to_keep=max(1, self.cache.get_recurrent_states_to_keep())
+            )
         pinned = input_ids.device.type == "cuda"
         self.slots = deque(
             (
@@ -1882,12 +1885,6 @@ class GenerationMixin(ContinuousMixin):
                     "num_return_sequences has to be 1 when doing assisted generate, "
                     f"but is {generation_config.num_return_sequences}."
                 )
-            if self._is_stateful:
-                # In assisted generation we need the ability to confirm whether the model would pick certain tokens,
-                # which is not possible with stateful models (they can't reset to a previous subset of generated text)
-                raise ValueError(
-                    f"assisted generation is not supported with stateful models, such as {self.__class__.__name__}"
-                )
 
         if (
             assistant_model := generation_mode_kwargs.get("assistant_model")
@@ -2337,7 +2334,9 @@ class GenerationMixin(ContinuousMixin):
 
         # If we just created a cache for an assistant model, mark it for past recording, as we will need to rollback it
         if generation_config.is_assistant:
-            model_kwargs["cache"].activate_past_recording()
+            model_kwargs["cache"].activate_past_recording(
+                recurrent_states_to_keep=generation_config.num_assistant_tokens
+            )
 
     def _supports_logits_to_keep(self: "GenerativePreTrainedModel") -> bool:
         """
@@ -3976,11 +3975,9 @@ class GenerationMixin(ContinuousMixin):
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
-        # Make sure we can record past on the cache
         cache = model_kwargs.get("cache")
         if cache is None:
             raise RuntimeError("Assisted decoding requires a cache")
-        cache.activate_past_recording()
 
         # Same tensor the stopping criteria are built from
         eos_token_id = getattr(generation_config, "_eos_token_tensor", None)
@@ -3996,6 +3993,10 @@ class GenerationMixin(ContinuousMixin):
             assistant_tokenizer=assistant_tokenizer,
             model_kwargs=model_kwargs,
         )
+
+        # Make sure we can record past on the cache
+        cache.activate_past_recording(recurrent_states_to_keep=candidate_generator.num_drafting_tokens)
+
         # init values
         do_sample = generation_config.do_sample
         output_attentions = generation_config.output_attentions
@@ -4217,7 +4218,7 @@ class GenerationMixin(ContinuousMixin):
                             is_decoder_attention=True,
                         )
                     # some (V)LLMs have hard requirement on SDPA and thus never return attn
-                    elif outputs.attentions[0] is not None:
+                    elif outputs.attentions and outputs.attentions[0] is not None:
                         decoder_attentions = _split_model_outputs(
                             decoder_attentions,
                             outputs.attentions,
@@ -4231,8 +4232,16 @@ class GenerationMixin(ContinuousMixin):
                             decoder_hidden_states, outputs.decoder_hidden_states, cur_len, newly_added_length
                         )
                     else:
+                        input_shape = (
+                            candidate_input_ids.shape[0],
+                            candidate_input_ids.shape[1] if is_first_iteration else candidate_length + 1,
+                        )
                         decoder_hidden_states = _split_model_outputs(
-                            decoder_hidden_states, outputs.hidden_states, cur_len, newly_added_length
+                            decoder_hidden_states,
+                            outputs.hidden_states,
+                            cur_len,
+                            newly_added_length,
+                            input_shape=input_shape,
                         )
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
@@ -4509,7 +4518,22 @@ def _speculative_sampling(
     return valid_tokens, n_matches
 
 
-def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_attention=False):
+def _get_seq_len_dim(hidden_states: torch.Tensor, input_shape: tuple[int, int]) -> int:
+    """
+    Hidden states are usually 3D with [batch, seq_len, hidden_size], but for some models they are 4D with [x, batch, seq_len, y] (gemma3n)
+    or 4D with [batch, seq_len, x, y] (glm5_next), so find the sequence length dim dynamically.
+    """
+    batch_size, seq_len = input_shape
+    for dim in range(1, hidden_states.ndim - 1):
+        if hidden_states.shape[dim - 1 : dim + 1] == (batch_size, seq_len):
+            return dim
+    raise ValueError(
+        f"Could not find a `(batch_size, seq_len) = {(batch_size, seq_len)}` pair of dims in hidden states of shape "
+        f"{tuple(hidden_states.shape)}"
+    )
+
+
+def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_attention=False, input_shape=None):
     """
     Given the (decoder/cross attentions)/(decoder hidden states) for multiple generated tokens, splits it into a tuple
     where each member corresponds to a single generated token.
@@ -4519,8 +4543,11 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
     if len(outputs) == 0:
         new_tuple = ()
         for layer in new_outputs:
-            last_dim_size = cur_len if is_decoder_attention else layer.shape[-1]
-            new_tuple += (layer[..., :cur_len, :last_dim_size],)
+            if is_decoder_attention:
+                new_tuple += (layer[..., :cur_len, :cur_len],)
+            else:
+                dim = 1 if input_shape is None else _get_seq_len_dim(layer, input_shape)
+                new_tuple += (layer.narrow(dim, 0, cur_len),)
         outputs += (new_tuple,)
         # The first iteration contains the prompt + 1 generated token, let's update the length variables accordingly
         cur_len += 1
@@ -4529,7 +4556,10 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
     for i in range(added_len):
         new_tuple = ()
         for layer in new_outputs:
-            last_dim_size = cur_len + i if is_decoder_attention else layer.shape[-1]
-            new_tuple += (layer[..., i : i + 1, :last_dim_size],)
+            if is_decoder_attention:
+                new_tuple += (layer[..., i : i + 1, : cur_len + i],)
+            else:
+                dim = 1 if input_shape is None else _get_seq_len_dim(layer, input_shape)
+                new_tuple += (layer.narrow(dim, i, 1),)
         outputs += (new_tuple,)
     return outputs

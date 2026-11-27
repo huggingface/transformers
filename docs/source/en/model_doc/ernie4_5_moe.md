@@ -160,6 +160,14 @@ output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
 generate_text = tokenizer.decode(output_ids, skip_special_tokens=True)
 ```
 
+### Speculative decoding with multi-token prediction
+
+The ERNIE 4.5 MoE checkpoints ship a multi-token prediction (MTP) layer, which [`~GenerationMixin.generate`] can use as a draft model for speculative decoding.
+
+```python
+generated_ids = model.generate(**model_inputs, max_new_tokens=32, use_mtp=True)
+```
+
 This model was contributed by [Anton Vlasjuk](https://huggingface.co/AntonV).
 The original code can be found [here](https://github.com/PaddlePaddle/ERNIE).
 

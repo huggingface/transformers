@@ -185,13 +185,10 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_token = f"{self.image_start_token}{self.image_token}{self.image_end_token}"
         text = [f"This is an image {image_token}"] * len(image_inputs)
         inputs = processor(
-            text=text, images=image_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+            text=text, images=image_inputs, padding=True, return_text_replacement_offsets=True, return_tensors="pt"
         )
 
-        if "mm_token_type_ids" not in inputs:
-            self.skipTest("Processor doesn't support `mm_token_type_ids`")
-
-        num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+        num_image_tokens_from_call = self._count_embed_tokens(processor, inputs, "image")
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
         self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
 
@@ -201,13 +198,13 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text=text,
             images=image_inputs * 2,
             padding=True,
-            return_mm_token_type_ids=True,
+            return_text_replacement_offsets=True,
             return_tensors="pt",
         )
 
-        num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+        num_image_tokens_from_call = self._count_embed_tokens(processor, inputs, "image")
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes * 2)
-        self.assertEqual(sum(num_image_tokens_from_call), sum(num_image_tokens_from_helper["num_image_tokens"]))
+        self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
 
     def _test_apply_chat_template(
         self,

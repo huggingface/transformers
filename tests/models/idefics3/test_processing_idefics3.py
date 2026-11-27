@@ -103,10 +103,13 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
                 text = [f"This is an image {processor.image_token}"] * len(image_inputs)
                 inputs = processor(
-                    text=text, images=image_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+                    text=text,
+                    images=image_inputs,
+                    padding=True,
+                    return_text_replacement_offsets=True,
+                    return_tensors="pt",
                 )
-
-                num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+                num_image_tokens_from_call = self._count_embed_tokens(processor, inputs, "image")
                 num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
                 self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
 
@@ -116,15 +119,12 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     text=text,
                     images=image_inputs * 2,
                     padding=True,
-                    return_mm_token_type_ids=True,
+                    return_text_replacement_offsets=True,
                     return_tensors="pt",
                 )
-
-                num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+                num_image_tokens_from_call = self._count_embed_tokens(processor, inputs, "image")
                 num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes * 2)
-                self.assertEqual(
-                    sum(num_image_tokens_from_call), sum(num_image_tokens_from_helper["num_image_tokens"])
-                )
+                self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
 
     def get_split_image_expected_tokens(self, processor, image_rows, image_cols):
         text_split_images = []

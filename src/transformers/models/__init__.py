@@ -290,6 +290,7 @@ if TYPE_CHECKING:
     from .llava_next import *
     from .llava_next_video import *
     from .llava_onevision import *
+    from .llava_onevision1_5 import *
     from .longcat_flash import *
     from .longformer import *
     from .longt5 import *
@@ -382,6 +383,7 @@ if TYPE_CHECKING:
     from .openai_privacy_filter import *
     from .opt import *
     from .ovis2 import *
+    from .ovis2_5 import *
     from .owlv2 import *
     from .owlvit import *
     from .paddleocr_vl import *

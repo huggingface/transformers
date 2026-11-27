@@ -125,6 +125,22 @@ class InklingTextModelTests(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(weights.dtype, dtype)
         self.assertEqual(gammas.dtype, dtype)
 
+    def test_generate_static_cache_matches_dynamic_cache(self):
+        """
+        Verify that greedy generation with `cache_implementation="static"` succeeds and matches
+        `cache_implementation="dynamic"` when sequence length exceeds `sliding_window_size` on `hybrid_sliding` layers.
+        """
+        config, input_ids, *_ = self.model_tester.prepare_config_and_inputs()
+        config.sliding_window = 4
+        config.sliding_window_size = 4
+        config._attn_implementation = "eager"
+
+        model = InklingForCausalLM(config).to(torch_device).eval()
+
+        out_dynamic = model.generate(input_ids, max_new_tokens=5, cache_implementation="dynamic", do_sample=False)
+        out_static = model.generate(input_ids, max_new_tokens=5, cache_implementation="static", do_sample=False)
+        torch.testing.assert_close(out_static, out_dynamic)
+
 
 class InklingAudio2TextModelTester(ALMModelTester):
     base_model_class = InklingModel
@@ -353,6 +369,14 @@ class InklingVision2TextModelTest(VLMModelTest, unittest.TestCase):
         inputs.pop("pixel_values", None)
         loss = model(**inputs).loss
         loss.backward()
+
+    def test_bfloat16_model_with_float32_pixel_values(self):
+        # The processor returns float32 pixel values, and the checkpoints load in bfloat16 (#51047)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = InklingForConditionalGeneration(config).to(torch_device, dtype=torch.bfloat16).eval()
+        self.assertEqual(inputs_dict["pixel_values"].dtype, torch.float32)
+        with torch.no_grad():
+            model(**inputs_dict)
 
     @unittest.skip("The tester has no audios in input dict")
     def test_get_audio_features_hidden_states(self):
