@@ -1271,6 +1271,10 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         captures = []
         for prompt in (inputs_dict, new_inputs_dict):
             prompt = _clean_inputs_for_export(prompt, config)
+            # `generate` drops a mask of all ones, so a prompt drawn with padding and one without would trace graphs
+            # taking different inputs: neither pads
+            if isinstance(prompt.get("attention_mask"), torch.Tensor):
+                prompt["attention_mask"] = torch.ones_like(prompt["attention_mask"])
             prompt = cast_leaf_tensors(prompt, dtype=module_dtype(model), device=module_device(model))
             components = decompose_for_generation(
                 model, prompt, generation_config=generation_config, multi_token_decode=multi_token_decode
