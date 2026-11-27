@@ -95,8 +95,6 @@ name their scales differently load too: DeepSeek-V4's `scale`, Mistral Large 4's
 Checkpoints that mix FP8 with other methods per layer load as a [quantization plan](./overview#quantization-plans),
 with fine-grained FP8 for their FP8 layers:
 
-- [DeepSeek-V4](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash) is fine-grained FP8 (ue8m0 scales) except for its
-  routed experts, saved as MXFP4 (`expert_dtype: "fp4"`), which load with [MXFP4](./mxfp4).
 - ModelOpt checkpoints with `quant_algo: "MIXED_PRECISION"`, e.g. [nvidia/Qwen3.6-35B-A3B-NVFP4](https://huggingface.co/nvidia/Qwen3.6-35B-A3B-NVFP4),
   list a `quant_algo` per layer: `FP8` (per-tensor, static activations) and `FP8_PB_WO` (`(128, 128)` blocks,
   weight-only) layers load with fine-grained FP8, `NVFP4` ones with [NVFP4](./nvfp4).

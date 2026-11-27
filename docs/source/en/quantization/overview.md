@@ -51,7 +51,6 @@ Some checkpoints quantize different layers with different methods. Their `config
 | Checkpoint | Scheme in `config.json` | Loads as |
 |---|---|---|
 | [nvidia/Qwen3.6-35B-A3B-NVFP4](https://huggingface.co/nvidia/Qwen3.6-35B-A3B-NVFP4) | ModelOpt `quant_algo: "MIXED_PRECISION"`, one `quant_algo` per layer under `quantized_layers` | [FP8](./finegrained_fp8) and [NVFP4](./nvfp4) layers |
-| [deepseek-ai/DeepSeek-V4-Flash](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash) | `quant_method: "fp8"` with `expert_dtype: "fp4"` | [MXFP4](./mxfp4) routed experts, [FP8](./finegrained_fp8) elsewhere |
 
 ```py
 from transformers import AutoModelForCausalLM

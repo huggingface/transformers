@@ -128,8 +128,6 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-For FP4-packed expert weights (DeepSeek V4-style), the GPU must be SM100+ (Blackwell). The checkpoint config typically sets `expert_dtype="fp4"` and `scale_fmt="ue8m0"`.
-
 > [!NOTE]
 > On Blackwell (SM100+), the `"deepgemm"` and `"deepgemm_megamoe"` experts kernels require power-of-two UE8M0 expert scales. A checkpoint quantized with plain `float32` scales (`scale_fmt="float"`) raises a `ValueError` on the first forward instead of silently corrupting the output. Load a checkpoint quantized with `scale_fmt="ue8m0"`, or switch to `grouped_mm` or `batched_mm`, which consume `float32` block scales directly. Hopper (SM90+) consumes `float32` scales on the DeepGEMM path without conversion.
 
@@ -152,7 +150,7 @@ On Blackwell (SM100+), set `experts_implementation="deepgemm_megamoe"` to run a 
 This backend requires:
 
 - A Blackwell GPU (compute capability ≥ 10.0) with a CUDA toolkit (`nvcc`) 12.9 or later.
-- FP4-packed expert weights paired with UE8M0 weight scales (the pre-quantized checkpoint typically declares `expert_dtype="fp4"` and `scale_fmt="ue8m0"` in its config).
+- FP4-packed expert weights paired with UE8M0 weight scales.
 - A `torch.distributed` process group for the expert-parallel group, which the expert-parallel wrapping supplies automatically when `ep_size > 1`.
 
 ```py
