@@ -16,6 +16,7 @@
 """
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
 import torch
@@ -41,6 +42,42 @@ class DecisionMixin:
     The `decide` of the `XxxForDecision` models, with their `decision_config`: the decision config of their repo, or the
     one of the checkpoint they read the head of, like `generation_config` for `generate`.
     """
+
+    @staticmethod
+    def _split_decision_spans(
+        prompts: Sequence[tuple[dict, list[Question]]],
+        max_state_length: int | None,
+        max_option_length: int | None,
+        truncation: str,
+    ) -> list[tuple[torch.Tensor, tuple[torch.Tensor, ...], Question]]:
+        """Split marked decision prompts into state and candidate token sequences."""
+        if not prompts:
+            raise ValueError("Expected at least one rendered decision prompt.")
+        if truncation not in {"error", "left", "right"}:
+            raise ValueError("truncation must be 'error', 'left', or 'right'.")
+        if any(limit is not None and limit < 1 for limit in (max_state_length, max_option_length)):
+            raise ValueError("State and option length limits must be positive.")
+
+        batch = []
+        for inputs, questions in prompts:
+            marks = inputs["marks"]
+            if len(questions) != 1 or len(marks) != len(questions[0].options) + 1:
+                raise ValueError("Expected one state span followed by one span per option for each question.")
+
+            lengths = marks.diff(prepend=marks.new_zeros(1)).tolist()
+            segments = inputs["input_ids"][0, : int(marks[-1])].split(lengths)
+            trimmed = []
+            for index, segment in enumerate(segments):
+                limit = max_state_length if index == 0 else max_option_length
+                if limit is not None and len(segment) > limit:
+                    if truncation == "error":
+                        raise ValueError(f"Decision span exceeds its {limit} token limit.")
+                    segment = segment[-limit:] if truncation == "left" else segment[:limit]
+                trimmed.append(segment)
+
+            batch.append((trimmed[0], tuple(trimmed[1:]), questions[0]))
+
+        return batch
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *args, config=None, decision_config=None, **kwargs):
@@ -111,6 +148,8 @@ class DecisionMixin:
         `Question.answer` turns into answers.
         """
         decision_config = decision_config or self.decision_config
+        if any(question.allow_null for question in decision_questions):
+            raise ValueError("This decision head does not predict null scores.")
         # Override any caller preference because we read `.logits` below.
         kwargs["return_dict"] = True
         inputs = {"input_ids": input_ids, **kwargs}
@@ -127,4 +166,4 @@ class DecisionMixin:
         )
 
 
-__all__ = ["DecisionMixin"]
+__all__ = ["DecisionMixin", "process_scores"]
