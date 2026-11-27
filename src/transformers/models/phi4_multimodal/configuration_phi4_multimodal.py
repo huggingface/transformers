@@ -143,6 +143,9 @@ class Phi4MultimodalAudioConfig(PreTrainedConfig):
     feature_layer: int = -2
 
     def __post_init__(self, **kwargs):
+        legacy_dw_out = kwargs.pop("depthwise_seperable_out_channel", None)
+        if legacy_dw_out is not None and self.depthwise_separable_out_channel == 1024:
+            self.depthwise_separable_out_channel = legacy_dw_out
         nemo_final_size = self.input_size
         for _ in range(int(math.log2(self.time_reduction))):
             nemo_final_size = math.floor((nemo_final_size - 1) / 2 + 1)
@@ -288,6 +291,14 @@ class Phi4MultimodalConfig(PreTrainedConfig):
                 raise ValueError(
                     f"`rope_parameters`'s long_factor field must have length {rotary_ndims // 2}, got {len(rope_parameters_long_factor)}"
                 )
+
+    @property
+    def image_token_id(self) -> int:
+        return self.vision_config.image_token_id
+
+    @property
+    def audio_token_id(self) -> int:
+        return self.audio_config.audio_token_id
 
 
 __all__ = ["Phi4MultimodalVisionConfig", "Phi4MultimodalAudioConfig", "Phi4MultimodalConfig"]

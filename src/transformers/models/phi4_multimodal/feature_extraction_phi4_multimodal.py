@@ -266,6 +266,14 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
 
         return log_spec
 
+    def get_num_audio_tokens(self, audio_length: int) -> int:
+        """
+        Compute the number of audio placeholder tokens for a single audio clip of length `audio_length` samples.
+        """
+        feature_length = ((audio_length - self.win_length) // self.hop_length + 1) * self.audio_feat_stride
+        compressed = (feature_length + self.audio_compression_rate - 1) // self.audio_compression_rate
+        return (compressed + self.audio_downsample_rate - 1) // self.audio_downsample_rate
+
     def _compute_audio_embed_size(self, audio_frames):
         integer = audio_frames // self.audio_compression_rate
         remainder = audio_frames % self.audio_compression_rate
