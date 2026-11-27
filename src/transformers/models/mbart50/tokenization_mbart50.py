@@ -159,7 +159,7 @@ class MBart50Tokenizer(TokenizersBackend):
             )
         )
 
-        normalizers_ = [normalizers.Replace(Regex(r" {2,}"), " ")]
+        normalizers_ = [normalizers.Strip(left=False, right=True), normalizers.Replace(Regex(r" {2,}"), " ")]
         if _spm_precompiled_charsmap is not None:
             normalizers_ = [normalizers.Precompiled(_spm_precompiled_charsmap)] + normalizers_
 

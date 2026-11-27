@@ -564,3 +564,26 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(inputs["input_ids"], [expected_input_ids])
         self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids)])
+
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        "Tests that the helper used internally in vLLM works correctly"
+
+        processor = self.get_processor()
+        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
+
+        num_mm_tokens = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
+
+        # Overwritten to process one image per call, because the tiny `max_image_tokens` makes extreme aspect
+        # ratios exceed the padded patch count, so such images can't be batched with the others
+        for (h, w), num_image_tokens, num_image_patches in zip(
+            image_sizes, num_mm_tokens["num_image_tokens"], num_mm_tokens["num_image_patches"]
+        ):
+            image = np.random.randint(255, size=(h, w, 3), dtype=np.uint8)
+            inputs = processor(
+                text=f"This is an image {self.image_token}",
+                images=[image],
+                return_text_replacement_offsets=True,
+                return_tensors="pt",
+            )
+            self.assertListEqual(self._count_embed_tokens(processor, inputs, "image"), [num_image_tokens])
+            self.assertEqual(len(inputs.pixel_values), num_image_patches)

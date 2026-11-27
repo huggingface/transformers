@@ -151,8 +151,7 @@ class ChameleonProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            # add 2 for BOI and EOI tokens
-            num_image_tokens = [self.image_seq_length + 2] * len(image_sizes)
+            num_image_tokens = [self.image_seq_length] * len(image_sizes)
             num_image_patches = [1] * len(image_sizes)
 
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})

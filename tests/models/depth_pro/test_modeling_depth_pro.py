@@ -19,7 +19,7 @@ import pytest
 
 from transformers import DepthProConfig
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, skip_tpu, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -308,6 +308,7 @@ def prepare_img():
 @require_vision
 @slow
 class DepthProModelIntegrationTest(unittest.TestCase):
+    @skip_tpu("test hangs")
     def test_inference_depth_estimation(self):
         model_path = "apple/DepthPro-hf"
         image_processor = DepthProImageProcessor.from_pretrained(model_path)

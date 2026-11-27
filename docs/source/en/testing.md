@@ -89,6 +89,8 @@ use `ALL=1` when unsure whether indirect dependencies are covered.
 `model_type` defined in `models/bert`. Composite models that merely embed BERT are not run;
 use the default changed-files selection (or `ALL=1`) to include them.
 
+When your PR changes a model's outputs on purpose, see [Model integration contracts](./pr_checks#model-integration-contracts) to update its baselines.
+
 ## Pick a base test class
 
 Three base classes cover the most common model families. Pick the one that matches your model's modality.

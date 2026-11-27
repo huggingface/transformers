@@ -178,7 +178,7 @@ Load the Audio Flamingo model. We use `bfloat16` precision and `device_map="auto
 >>> import torch
 >>> model = AudioFlamingo3ForConditionalGeneration.from_pretrained(
 ...     "nvidia/audio-flamingo-3-hf",
-...     torch_dtype=torch.bfloat16,
+...     dtype=torch.bfloat16,
 ...     device_map="auto",
 ... )
 ```
@@ -285,7 +285,7 @@ Load the fine-tuned model and processor:
 >>> import torch
 >>> base_model = AudioFlamingo3ForConditionalGeneration.from_pretrained(
 ...     "nvidia/audio-flamingo-3-hf",
-...     torch_dtype=torch.bfloat16,
+...     dtype=torch.bfloat16,
 ...     device_map="auto",
 ... )
 >>> model = PeftModel.from_pretrained(base_model, "audio-flamingo-3-hf-lora-finetuned")

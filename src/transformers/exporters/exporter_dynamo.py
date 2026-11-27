@@ -417,6 +417,7 @@ def _reshaped_vision_attention_forward(
     # Combined `qkv` + `(cos, sin)` rotary + `.proj`
     "transformers.models.qwen2_vl.modeling_qwen2_vl.VisionAttention.forward",
     "transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLVisionAttention.forward",
+    "transformers.models.llava_onevision1_5.modeling_llava_onevision1_5.LlavaOnevision15VisionAttention.forward",
     "transformers.models.qwen3_vl.modeling_qwen3_vl.Qwen3VLVisionAttention.forward",
     "transformers.models.qwen3_vl_moe.modeling_qwen3_vl_moe.Qwen3VLMoeVisionAttention.forward",
     "transformers.models.qwen3_5.modeling_qwen3_5.Qwen3_5VisionAttention.forward",
@@ -440,6 +441,7 @@ def _reshaped_vision_attention_forward(
     # Separate `_proj` + `(cos, sin)` rotary + `.out_proj` (tuple return)
     "transformers.models.lfm3_vl.modeling_lfm3_vl.Lfm3VlVisionAttention.forward",
     "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
+    "transformers.models.ovis2_5.modeling_ovis2_5.Ovis2_5VisionAttention.forward",
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",
     "transformers.models.minimax_m3_vl.modeling_minimax_m3_vl.MiniMaxM3VLVisionAttention.forward",
     "transformers.models.inkling2.modeling_inkling2.Inkling2VisionAttention.forward",

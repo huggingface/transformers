@@ -41,8 +41,9 @@ FLEETS = ("prototypes", "control")
 FLEET_VARIANTS = {"prototypes": ("bfloat16",), "control": ("default", "bfloat16")}
 # Baselines are recorded (and checked in CI) with this many CPU threads; fewer or more can shift numerics.
 BASELINE_THREADS = 4
-# The oldest transformers-mic that reads the testers' static small-config overrides; keep it in step with setup.py.
-MIN_MIC_VERSION = "0.1.3"
+# The oldest transformers-mic this checkout supports (0.1.4: fleet history and record-mic overlays, fixtures
+# in the checkpoint's dtypes); keep it in step with setup.py.
+MIN_MIC_VERSION = "0.1.4"
 INSTALL_HINT = (
     f'transformers-mic>={MIN_MIC_VERSION} or hf-doc-builder is not installed: python -m pip install -e ".[testing]"'
 )

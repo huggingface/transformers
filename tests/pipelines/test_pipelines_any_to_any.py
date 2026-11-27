@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     require_audio,
     require_torch,
+    require_torchvision,
     require_vision,
     slow,
 )
@@ -347,6 +348,35 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         self.assertEqual(len(outputs), 2)
         self.assertEqual([output["input_text"] for output in outputs], ["hello", "world"])
         self.assertTrue(all("generated_text" in output for output in outputs))
+
+    @require_torchvision
+    def test_batched_generation_left_pads_decoder_only_model(self):
+        # The Qwen2.5-VL tokenizer pads on the right by default, which breaks batched decoder-only generation
+        pipe = pipeline("any-to-any", model="trl-internal-testing/tiny-Qwen2_5_VLForConditionalGeneration")
+        image = PIL.Image.new("RGB", (64, 64), color=(120, 30, 200))
+        messages = [
+            [{"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": text}]}]
+            for text in ("Describe.", "Describe the colors, the shapes and the overall layout of this picture.")
+        ]
+        kwargs = {"max_new_tokens": 6, "do_sample": False}
+
+        single = [pipe(text=chat, generate_kwargs=kwargs, return_full_text=False) for chat in messages]
+        batched = pipe(text=messages, batch_size=2, generate_kwargs=kwargs, return_full_text=False)
+        self.assertEqual(batched, single)
+
+    @require_torchvision
+    def test_batched_text_generation_with_right_padding_feature_extractor(self):
+        # Qwen2.5-Omni pads its text and audio features on the right, only the text has to move to the left
+        pipe = pipeline("any-to-any", model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration")
+        messages = [
+            [{"role": "user", "content": [{"type": "text", "text": text}]}]
+            for text in ("Hello!", "Hello, how are you doing on this fine spring morning?")
+        ]
+        kwargs = {"generation_mode": "text", "thinker_max_new_tokens": 5, "thinker_do_sample": False}
+
+        single = [pipe(text=chat, generate_kwargs=kwargs, return_full_text=False) for chat in messages]
+        batched = pipe(text=messages, batch_size=2, generate_kwargs=kwargs, return_full_text=False)
+        self.assertEqual(batched, single)
 
     @slow
     def test_small_model_pt_token_text_only(self):

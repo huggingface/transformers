@@ -19,6 +19,7 @@ from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
+    DataCollatorWithFlattening,
     Inkling2Config,
     Inkling2TextConfig,
     Inkling2VisionConfig,
@@ -26,6 +27,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
+    require_causal_conv1d,
     require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
@@ -74,6 +76,7 @@ class Inkling2TextModelTester(CausalLMModelTester):
         values["swa_num_attention_heads"] = values["num_attention_heads"]
         values["swa_num_key_value_heads"] = values["num_key_value_heads"]
         values["swa_head_dim"] = values["head_dim"]
+        values["unpadded_vocab_size"] = values["vocab_size"]
         return values
 
 
@@ -98,6 +101,28 @@ class Inkling2TextModelTest(CausalLMModelTest, unittest.TestCase):
         if dtype in ("fp16", "bf16"):
             self.skipTest("Low-precision rounding differences across expert kernels exceed the 1e-4 tolerance")
         _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
+
+    @require_causal_conv1d
+    @require_torch_accelerator
+    def test_padding_free_matches_separate_sequences(self):
+        """Tests that packed sequences do not leak through the causal_conv1 layers."""
+        config = self.model_tester.get_config()
+        model = Inkling2ForCausalLM(config).to(torch_device).eval()
+        features = [{"input_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9]}, {"input_ids": [10, 11, 12, 13, 14, 15, 16]}]
+        batch = DataCollatorWithFlattening(return_tensors="pt", return_seq_idx=True)(features)
+        batch.pop("labels")
+        batch = {key: value.to(torch_device) for key, value in batch.items()}
+
+        with torch.no_grad():
+            separate_logits = torch.cat(
+                [
+                    model(input_ids=torch.tensor([feature["input_ids"]], device=torch_device)).logits[0]
+                    for feature in features
+                ]
+            )
+            packed_logits = model(**batch, use_cache=False).logits[0]
+
+        torch.testing.assert_close(packed_logits, separate_logits, atol=1e-5, rtol=1e-5)
 
 
 class Inkling2VisionText2TextModelTester(VLMModelTester):
@@ -126,6 +151,7 @@ class Inkling2VisionText2TextModelTester(VLMModelTester):
     def get_small_config_defaults(cls, **kwargs):
         values = super().get_small_config_defaults(**kwargs)
         values["text_hidden_size"] = values["hidden_size"]
+        values["unpadded_vocab_size"] = values["vocab_size"]
         return values
 
     def create_pixel_values(self, batch_size: int | None = None):
@@ -141,7 +167,8 @@ class Inkling2VisionText2TextModelTester(VLMModelTester):
 @require_torch
 class Inkling2VisionText2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Inkling2VisionText2TextModelTester
-    # each image adds a class token and `spatial_merge_size**2` vision tokens per `pixel_values` row
+    # `last_hidden_state` holds `spatial_merge_size**2` patch states per `pixel_values` row plus a class token per image,
+    # but the common test expects one state per `pixel_values` row
     skip_test_image_features_output_shape = True
 
     def _get_conv_state_shape(self, batch_size: int, config):

@@ -1772,6 +1772,28 @@ _KV_LINES_TOOLS_TEMPLATE = {
     },
 }
 
+# xml-inline where each tag says how to read its value: `string="true"` is literal text, `string="false"` is JSON.
+_TYPED_TAGS_TEMPLATE = {
+    "defaults": {"role": "assistant"},
+    "start_anchor": "<|im_start|>assistant\n",
+    "fields": {
+        "tool_calls": {
+            "open_pattern": r'<call name="(?P<name>\w+)">',
+            "close": "</call>",
+            "repeats": True,
+            "content": "xml-inline",
+            "content_args": {
+                "tag_pattern": r'<parameter name="(?P<key>\w+)" string="(?P<string>true|false)">(?P<value>.*?)</parameter>',
+                "value_parser_by": {
+                    "group": "string",
+                    "parsers": {"true": {"name": "text", "args": {"strip": False}}, "false": {"name": "json"}},
+                },
+            },
+            "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
+        },
+    },
+}
+
 _SET_ALARM_CALL = (
     "<tool_call>\n<function=set_alarm>\n"
     "<parameter=hour>\n7\n</parameter>\n"
@@ -1978,6 +2000,64 @@ class ToolArgCoercionTest(unittest.TestCase):
             expected,
         )
 
+    def test_xml_inline_value_parser_by_follows_the_tag(self):
+        # The model marks each value as a literal string or JSON; no tools are needed to type them.
+        model_out = (
+            '<call name="set_alarm">'
+            '<parameter name="hour" string="false">7</parameter>'
+            '<parameter name="label" string="true"> 7 </parameter>'
+            '<parameter name="days" string="false">["mon", "tue"]</parameter>'
+            '<parameter name="enabled" string="true">true</parameter>'
+            "</call>"
+        )
+        expected = {"hour": 7, "label": " 7 ", "days": ["mon", "tue"], "enabled": "true"}
+        self.assertEqual(_first_tool_args(parse_response(model_out, _TYPED_TAGS_TEMPLATE, prefix="")), expected)
+
+    def test_value_parser_by_is_not_recast_from_the_tool_schema(self):
+        # `label` allows both types and `enabled` is declared boolean, but the model said both are strings.
+        tools = _set_alarm_tools(
+            hour={"type": "integer"}, label={"type": ["integer", "string"]}, enabled={"type": "boolean"}
+        )
+        model_out = (
+            '<call name="set_alarm">'
+            '<parameter name="hour" string="false">7</parameter>'
+            '<parameter name="label" string="true">2</parameter>'
+            '<parameter name="enabled" string="true">true</parameter>'
+            "</call>"
+        )
+        expected = {"hour": 7, "label": "2", "enabled": "true"}
+        self.assertEqual(
+            _first_tool_args(parse_response(model_out, _TYPED_TAGS_TEMPLATE, prefix="", tools=tools)), expected
+        )
+        # The same tags without `value_parser_by` are typed from the schema, which can't tell "2" from 2.
+        template = copy.deepcopy(_TYPED_TAGS_TEMPLATE)
+        del template["fields"]["tool_calls"]["content_args"]["value_parser_by"]
+        self.assertEqual(
+            _first_tool_args(parse_response(model_out, template, prefix="", tools=tools)),
+            {"hour": 7, "label": 2, "enabled": True},
+        )
+
+    def test_value_parser_by_falls_back_to_value_parser(self):
+        content_args = {
+            "tag_pattern": r'<p name="(?P<key>\w+)"(?: type="(?P<type>\w+)")?>(?P<value>.*?)</p>',
+            "value_parser": {"name": "text"},
+            "value_parser_by": {"group": "type", "parsers": {"json": {"name": "json"}}},
+        }
+        text = '<p name="a" type="json">[1]</p><p name="b" type="other"> x </p><p name="c"> 1 </p>'
+        self.assertEqual(parse_content(text, "xml-inline", content_args), {"a": [1], "b": "x", "c": "1"})
+        del content_args["value_parser"]
+        self.assertEqual(parse_content(text, "xml-inline", content_args), {"a": [1], "b": " x ", "c": " 1 "})
+
+    def test_value_parser_by_rejects_bad_config(self):
+        tag_pattern = r'<p name="(?P<key>\w+)">(?P<value>.*?)</p>'
+        text = '<p name="a">1</p>'
+        with self.assertRaisesRegex(ValueError, "does not define"):
+            parse_content(
+                text, "xml-inline", {"tag_pattern": tag_pattern, "value_parser_by": {"group": "type", "parsers": {}}}
+            )
+        with self.assertRaisesRegex(ValueError, "must be a dict with 'group'"):
+            parse_content(text, "xml-inline", {"tag_pattern": tag_pattern, "value_parser_by": {"group": "type"}})
+
     def test_merge_duplicates_arguments_are_cast_element_wise(self):
         # merge_duplicates collects repeated tags into a list, which is cast element-wise
         template = copy.deepcopy(_XML_STRING_ARGS_TEMPLATE)
@@ -2106,6 +2186,69 @@ class ToolArgCoercionTest(unittest.TestCase):
         with_tools = parse_response(model_out, cohere_template, prefix="", tools=_SET_ALARM_TOOLS)
         self.assertEqual(without, with_tools)
         self.assertEqual(_first_tool_args(with_tools), {"hour": 7, "enabled": True})
+
+    def test_tools_typed_parsers_preserve_string_schemas_and_coerce_non_string(self):
+        tools = _set_alarm_tools(
+            hour={"type": "integer"},
+            msg={"anyOf": [{"type": "string"}, {"type": "null"}]},
+            alt={"type": "string", "nullable": True},
+            code={"anyOf": [{"type": "string"}, {"type": "integer"}]},
+            flag={"anyOf": [{"type": "string"}, {"type": "boolean"}]},
+            items={"anyOf": [{"type": "string"}, {"type": "array"}]},
+            obj={"anyOf": [{"type": "string"}, {"type": "object"}]},
+        )
+        expected = {
+            "hour": 7,
+            "msg": "null",
+            "alt": "None",
+            "code": "0123",
+            "flag": "true",
+            "items": "[1, 2]",
+            "obj": "{}",
+        }
+        smollm_out = (
+            '<tool_call>{"name": "set_alarm", "arguments": '
+            '{"hour": "7", "msg": "null", "alt": "None", "code": "0123", '
+            '"flag": "true", "items": "[1, 2]", "obj": "{}"}}</tool_call>'
+        )
+        json_args = _first_tool_args(parse_response(smollm_out, smollm_template, prefix="", tools=tools))
+        self.assertEqual(json_args, expected)
+        self.assertIs(type(json_args["hour"]), int)
+
+        stream = ResponseParser(smollm_template, prefix="", tools=tools)
+        events = stream.feed(smollm_out[:25]) + stream.feed(smollm_out[25:])
+        _, tail_events = stream.finalize()
+        closes = [e for e in events + tail_events if e["type"] == "region_close" and e["field"] == "tool_calls"]
+        self.assertEqual(len(closes), 1)
+        self.assertEqual(closes[0]["value"]["function"]["arguments"], expected)
+
+        gemma_out = (
+            '<|tool_call>call:set_alarm{hour:<|"|>7<|"|>, msg:<|"|>null<|"|>, alt:<|"|>None<|"|>, '
+            'code:<|"|>0123<|"|>, flag:<|"|>true<|"|>, items:<|"|>[1, 2]<|"|>, obj:<|"|>{}<|"|>}<tool_call|>'
+        )
+        gemma_args = _first_tool_args(parse_response(gemma_out, gemma4_template, prefix="", tools=tools))
+        self.assertEqual(gemma_args, expected)
+        self.assertIs(type(gemma_args["hour"]), int)
+
+        lfm2_out = (
+            '<|tool_call_start|>[set_alarm(hour="7", msg="null", alt="None", code="0123", '
+            'flag="true", items="[1, 2]", obj="{}"), '
+            "set_alarm(hour=7, msg=None, alt=None, code=123, flag=True, items=[1, 2], obj={})]"
+            "<|tool_call_end|>"
+        )
+        lfm2_parsed = parse_response(lfm2_out, lfm2_template, prefix="", tools=tools)
+        str_args = lfm2_parsed["tool_calls"][0]["function"]["arguments"]
+        typed_args = lfm2_parsed["tool_calls"][1]["function"]["arguments"]
+        self.assertEqual(str_args, expected)
+        self.assertIs(type(str_args["hour"]), int)
+        for key in ("msg", "alt", "code", "flag", "items", "obj"):
+            self.assertIsInstance(str_args[key], str)
+        self.assertEqual(
+            typed_args,
+            {"hour": 7, "msg": None, "alt": None, "code": 123, "flag": True, "items": [1, 2], "obj": {}},
+        )
+        self.assertIs(type(typed_args["code"]), int)
+        self.assertIs(type(typed_args["flag"]), bool)
 
 
 if __name__ == "__main__":

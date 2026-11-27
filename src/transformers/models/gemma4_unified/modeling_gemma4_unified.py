@@ -59,7 +59,7 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto.modeling_auto import AutoModel
+from ..auto import AutoModel
 from .configuration_gemma4_unified import (
     Gemma4UnifiedAudioConfig,
     Gemma4UnifiedConfig,
@@ -154,16 +154,16 @@ class Gemma4UnifiedModelOutputWithPast(MultimodalBaseModelOutputWithPast):
 
 
 class Gemma4UnifiedRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6, with_scale: bool = True):
+    def __init__(self, hidden_size: int, eps: float = 1e-6, with_scale: bool = True):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
         self.with_scale = with_scale
 
         if self.with_scale:
-            self.weight = nn.Parameter(torch.ones(dim), requires_grad=True)
+            self.weight = nn.Parameter(torch.ones(hidden_size), requires_grad=True)
 
     def _norm(self, hidden_states: torch.Tensor):
-        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
+        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.variance_epsilon
         # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to address compiler differences between Torch and JAX
         return hidden_states * torch.pow(mean_squared, -0.5)
 
@@ -347,11 +347,11 @@ class Gemma4UnifiedTextAttention(nn.Module):
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
-        self.q_norm = Gemma4UnifiedRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = Gemma4UnifiedRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
         # Layers sharing kv states don't need any weight matrices
         if not self.is_kv_shared_layer:
-            self.k_norm = Gemma4UnifiedRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+            self.k_norm = Gemma4UnifiedRMSNorm(self.head_dim, eps=config.rms_norm_eps)
             self.v_norm = Gemma4UnifiedRMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
             self.k_proj = nn.Linear(
@@ -1133,9 +1133,9 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         # Merge text and audio
         audio_outputs = None
         if input_features is not None and input_features_mask is not None:
-            audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
-            audio_features = audio_output.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
-            audio_mask_from_encoder = audio_output.attention_mask  # True = valid
+            audio_outputs = self.get_audio_features(input_features, input_features_mask, return_dict=True)
+            audio_features = audio_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+            audio_mask_from_encoder = audio_outputs.attention_mask  # True = valid
 
             # Strip padding tokens: only keep real (non-padding) audio soft tokens.
             # audio_mask_from_encoder is True for valid positions, False for padding tokens.
@@ -1444,6 +1444,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            audio_outputs=outputs.audio_outputs,
             shared_kv_states=outputs.shared_kv_states,
         )
 

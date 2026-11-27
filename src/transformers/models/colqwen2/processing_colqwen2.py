@@ -115,6 +115,8 @@ class ColQwen2Processor(ProcessorMixin):
             if suffix is None:
                 suffix = self.query_augmentation_token * 10
 
+            if isinstance(text, str):
+                text = [text]
             text = [f"{self.query_prefix}{sample}{suffix}\n" for sample in text]
 
         model_inputs = super().__call__(images=images, text=text, **output_kwargs)
@@ -169,8 +171,10 @@ class ColQwen2Processor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
-            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
+            merge_size = images_kwargs["merge_size"]
 
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
