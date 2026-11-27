@@ -15,7 +15,7 @@
 Processor class for Llava.
 """
 
-from ...image_utils import get_image_size, to_numpy_array
+from ...image_utils import get_image_size
 from ...processing_utils import (
     MultiModalData,
     ProcessingKwargs,
@@ -62,7 +62,7 @@ class LlavaProcessor(ProcessorMixin):
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         pixel_values = image_inputs["pixel_values"][image_idx]
-        height, width = get_image_size(to_numpy_array(pixel_values))
+        height, width = get_image_size(pixel_values)
         num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + self.num_additional_image_tokens
         if self.vision_feature_select_strategy == "default":
             num_image_tokens -= 1

@@ -68,7 +68,7 @@ class Kosmos2_5Processor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        encoding = BatchFeature()
+        encoding = {}
 
         if images is not None:
             image_encoding = self.image_processor(images, **output_kwargs["images_kwargs"])
@@ -100,7 +100,12 @@ class Kosmos2_5Processor(ProcessorMixin):
                 }
             )
 
-        return encoding
+        return BatchFeature(
+            data=encoding,
+            tensor_type=output_kwargs["images_kwargs"].get("return_tensors"),
+            device=output_kwargs["images_kwargs"].get("device"),
+            dtype=output_kwargs["images_kwargs"].get("dtype"),
+        )
 
     def batch_decode(self, *args, **kwargs):
         """

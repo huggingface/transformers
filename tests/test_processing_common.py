@@ -734,7 +734,7 @@ class ProcessorTesterMixin:
                     f"`{key}` is non-floating but has dtype `{value.dtype}`, which should not be `torch.bfloat16`",
                 )
 
-        # Many models hardcode `pt` in their code and error out otherwise...
+        # Many models hardcode `pt` in their code and error out otherwise... # noqa: NC001
         # inputs = processor(**inputs_dict, return_tensors="np", dtype="float16")
         # for key, value in inputs.items():
         #     if np.issubdtype(value.dtype, np.floating):

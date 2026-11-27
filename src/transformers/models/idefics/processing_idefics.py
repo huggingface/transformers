@@ -436,7 +436,10 @@ class IdeficsProcessor(ProcessorMixin):
                 "attention_mask": output_attention_masks,
                 "pixel_values": output_images,
                 "image_attention_mask": image_attention_mask,
-            }
+            },
+            tensor_type=return_tensors,
+            device=output_kwargs["images_kwargs"].get("device"),
+            dtype=output_kwargs["images_kwargs"].get("dtype"),
         )
 
     @property

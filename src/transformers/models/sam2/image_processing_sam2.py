@@ -419,6 +419,7 @@ class Sam2ImageProcessor(TorchvisionBackend):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Union[str, "torch.device"] | None = None,
+        dtype: str | None = None,
         **kwargs: Unpack[Sam2ImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -457,7 +458,7 @@ class Sam2ImageProcessor(TorchvisionBackend):
             )
             data["labels"] = processed_segmentation_maps.squeeze(1).to(torch.int64)
 
-        return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
+        return BatchFeature(data=data, tensor_type=kwargs["return_tensors"], device=device, dtype=dtype)
 
     def _preprocess(
         self,

@@ -21,7 +21,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_python import AddedToken
-from ...tokenization_utils_base import BatchEncoding, TextInput
+from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_attr
 
@@ -197,7 +197,7 @@ class Kosmos2Processor(ProcessorMixin):
         padding = output_kwargs["text_kwargs"].get("padding", False)
         return_tensors = output_kwargs["text_kwargs"].setdefault("return_tensors", None)
 
-        encoding = BatchFeature()
+        encoding = {}
 
         if images is not None:
             image_encoding = self.image_processor(images, **output_kwargs["images_kwargs"])
@@ -301,17 +301,19 @@ class Kosmos2Processor(ProcessorMixin):
 
             # update (with the target tensor type if specified)
             encoding.update(
-                BatchEncoding(
-                    data={
-                        "input_ids": input_ids,
-                        "attention_mask": encoding["attention_mask"],
-                        "image_embeds_position_mask": image_embeds_position_mask,
-                    },
-                    tensor_type=return_tensors,
-                )
+                {
+                    "input_ids": input_ids,
+                    "attention_mask": encoding["attention_mask"],
+                    "image_embeds_position_mask": image_embeds_position_mask,
+                }
             )
 
-        return encoding
+        return BatchFeature(
+            data=encoding,
+            tensor_type=return_tensors,
+            device=output_kwargs["images_kwargs"].get("device"),
+            dtype=output_kwargs["images_kwargs"].get("dtype"),
+        )
 
     def _check_bboxes_for_single_text(self, bboxes):
         """

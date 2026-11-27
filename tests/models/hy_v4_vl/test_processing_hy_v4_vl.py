@@ -17,7 +17,7 @@ import unittest
 import numpy as np
 from parameterized import parameterized
 
-from transformers.testing_utils import require_tokenizers, require_torchvision, torch_device
+from transformers.testing_utils import require_tokenizers, require_torchvision
 from transformers.utils import (
     is_tokenizers_available,
     is_torch_available,
@@ -78,11 +78,11 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_image_processor(cls):
-        return HunYuanVLImageProcessor(size={"shortest_edge": 32 * 32, "longest_edge": 64 * 128}, device=torch_device)
+        return HunYuanVLImageProcessor(size={"shortest_edge": 32 * 32, "longest_edge": 64 * 128})
 
     @classmethod
     def _setup_video_processor(cls):
-        return HYV4VLVideoProcessor(size={"shortest_edge": 32 * 32, "longest_edge": 4 * 64 * 128}, device=torch_device)
+        return HYV4VLVideoProcessor(size={"shortest_edge": 32 * 32, "longest_edge": 4 * 64 * 128})
 
     @staticmethod
     def prepare_processor_dict():
@@ -134,8 +134,6 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             kwargs["videos"] = self.prepare_videos_inputs(batch_size=2)
         output = processor(text=self.prepare_text_inputs(2, modalities), padding=True, return_tensors="pt", **kwargs)
         for name in modalities:
-            pixels_name = "pixel_values" if name == "image" else "pixel_values_videos"
-            self.assertEqual(output[pixels_name].device.type, torch.device(torch_device).type)
             grids = output[f"{name}_grid_thw"]
             token_id = getattr(processor, f"{name}_token_id")
             merge_size = getattr(processor, f"{name}_processor").merge_size

@@ -220,6 +220,7 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
                 The log mel-scaled spectrogram of the batched waveforms.
         """
         fft_window = torch.hamming_window(self.win_length, periodic=False, device=device, dtype=torch.float64)
+        waveform = waveform.to(device=device)
 
         # batched implementation
         batch_size = waveform.shape[0]
