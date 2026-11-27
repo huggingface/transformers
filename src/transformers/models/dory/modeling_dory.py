@@ -531,6 +531,7 @@ class DoryModel(DoryPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_embeddings=position_embeddings[decoder_layer.attention_type],
+                position_ids=position_ids,
                 cache=cache,
                 **kwargs,
             )
@@ -548,6 +549,7 @@ class DoryModel(DoryPreTrainedModel):
                     hidden_states,
                     attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                     position_embeddings=position_embeddings[decoder_layer.attention_type],
+                    position_ids=position_ids,
                     cache=cache,
                     cache_offset=cache_offset,
                     **kwargs,
@@ -559,6 +561,7 @@ class DoryModel(DoryPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_embeddings=position_embeddings[decoder_layer.attention_type],
+                position_ids=position_ids,
                 cache=cache,
                 **kwargs,
             )
