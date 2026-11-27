@@ -176,6 +176,7 @@ extras["quality"] = deps_list(
     "datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty", "transformers-mlinter"
 )
 extras["docs"] = deps_list("hf-doc-builder")
+extras["kernels"] = deps_list("kernels")  # For BC, already included in torch
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["mistral-common"] = deps_list("mistral-common[image]")
