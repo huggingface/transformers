@@ -572,13 +572,11 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel, MultimodalMixin):
         if vision_feature_select_strategy == "default":
             vision_features = vision_features[:, 1:, :]
 
-        # Calculate dimensions based on vision features
-        channels = vision_features.shape[1]
-        feature_size = int(channels**0.5)
+        # The patch grid, from the images' height and width: any resolution, as the position embeddings interpolate
         batch_size = vision_features.shape[0]
-
-        # Reshape tensor to spatial dimensions
-        vision_features = vision_features.reshape(batch_size, feature_size, feature_size, -1)
+        patch_height, patch_width = self.vision_tower.embeddings.patch_embeddings.patch_size
+        grid_height, grid_width = pixel_values.shape[-2] // patch_height, pixel_values.shape[-1] // patch_width
+        vision_features = vision_features.reshape(batch_size, grid_height, grid_width, -1)
 
         # Apply downsampling using pixel shuffle
         vision_features = self.pixel_shuffle(vision_features, scale_factor=downsample_ratio)
@@ -683,21 +681,19 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel, MultimodalMixin):
                 Downsampled tensor of shape (batch_size, height*scale_factor, width*scale_factor, channels/(scale_factor^2)).
         """
         batch_size, width, height, channels = vision_features.size()
+        # Each axis shrinks by a whole number of patches: integer sizes, which trace with dynamic image sizes
+        stride = round(1 / scale_factor)
 
-        if height % scale_factor != 0 or width % scale_factor != 0:
-            raise ValueError("Height and width must be divisible by scale_factor for proper downsampling.")
+        if height % stride != 0 or width % stride != 0:
+            raise ValueError("Height and width must be divisible by 1 / scale_factor for proper downsampling.")
 
         # Reshape to allow downsampling
-        vision_features = vision_features.view(
-            batch_size, width, int(height * scale_factor), int(channels / scale_factor)
-        )
+        vision_features = vision_features.view(batch_size, width, height // stride, channels * stride)
         # Permute dimensions to align downsampled axis correctly
         vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
 
         # Reshape to achieve final downsampled dimensions
-        vision_features = vision_features.view(
-            batch_size, int(height * scale_factor), int(width * scale_factor), int(channels / (scale_factor**2))
-        )
+        vision_features = vision_features.view(batch_size, height // stride, width // stride, channels * stride**2)
 
         # Swap height and width back for proper orientation
         vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
