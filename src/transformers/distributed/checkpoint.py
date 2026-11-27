@@ -24,6 +24,8 @@ from typing import TYPE_CHECKING
 from huggingface_hub import split_torch_state_dict_into_shards
 
 from ..utils import (
+    SAFE_WEIGHTS_INDEX_NAME,
+    SAFE_WEIGHTS_NAME,
     is_torch_available,
     is_torch_greater_or_equal,
     logging,
@@ -42,6 +44,7 @@ from .utils import (
 if TYPE_CHECKING:
     from huggingface_hub import StateDictSplit
 
+    from ...modeling_utils import PreTrainedModel
     from ..quantizers import HfQuantizer
 
 
@@ -50,6 +53,7 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
     from safetensors.torch import save as safe_save
+    from safetensors.torch import save_file as safe_save_file
     from torch.utils._pytree import tree_map
 
     from ..core_model_loading import _revert_weight_conversion_per_transform, revert_weight_conversion
@@ -467,26 +471,94 @@ class _SafetensorsWriter:
 
 
 def consolidate_distributed_checkpoint(
-    checkpoint_dir: str | os.PathLike, output_dir: str | os.PathLike | None = None
+    checkpoint_dir: str | os.PathLike,
+    output_dir: str | os.PathLike | None = None,
+    max_shard_size: int | str = "50GB",
+    model: PreTrainedModel = None,
+    num_workers: int | None = None,
 ) -> None:
-    """Consolidate rank-local safetensors files. Call from a single process or rank."""
+    """
+    Merge the rank-local safetensors files of a distributed checkpoint into regular safetensors files of at most
+    `max_shard_size` each, like `save_pretrained` writes them. Call it from a single process, or
+    from every rank of an initialized process group: file `i` is then written by rank `i % world_size`.
+
+    `model` is the model the checkpoint was saved from: its weight conversions are reverted and its tied weights
+    are dropped. Without it, the tensors are written as they are stored, which might not be the expected format.
+
+    Each process writes its files in parallel with `num_workers` threads, one per file by default. Each thread holds
+    one file in CPU memory, so the memory used per process is about `num_workers * max_shard_size`.
+    """
     if not _check_distributed_checkpointing_available() or not is_torch_greater_or_equal("2.9"):
         raise OSError(
             "Consolidating a distributed checkpoint requires `torch>=2.9` with `torch.distributed` available."
         )
 
-    from torch.distributed.checkpoint._consolidate_hf_safetensors import consolidate_safetensors_files
+    # Import here because otherwise it emits a warning every time it's imported on some hardware
+    import torch.distributed.checkpoint as dcp
+
+    from ..modeling_utils import remove_tied_weights_from_state_dict
 
     if output_dir is None:
         output_dir = checkpoint_dir
 
-    metadata = HuggingFaceStorageReader(str(checkpoint_dir)).read_metadata()
-    os.makedirs(output_dir, exist_ok=True)
-    consolidate_safetensors_files(
-        input_dir=str(checkpoint_dir),
-        output_dir=str(output_dir),
-        fqn_to_index_mapping=dict.fromkeys(metadata.state_dict_metadata, 1),
+    if model is None:
+        logger.warning(
+            "No `model` was given to `consolidate_distributed_checkpoint`: the weight conversions are not reverted, so "
+            "the consolidated checkpoint might not be in the expected format. Pass the model the checkpoint was saved "
+            "from to get the original format."
+        )
+
+    reader = HuggingFaceStorageReader(str(checkpoint_dir))
+    # Plan the files on meta tensors with the global shapes, like `save_pretrained` does.
+    meta_state_dict = {
+        name: torch.empty(entry.size, dtype=entry.properties.dtype, device="meta")
+        for name, entry in reader.read_metadata().state_dict_metadata.items()
+    }
+    if model is not None:
+        # Drop the tied weights (e.g. `lm_head`), found through the parameters of the model.
+        meta_state_dict = remove_tied_weights_from_state_dict(meta_state_dict, model)
+    state_dict_split = split_torch_state_dict_into_shards(
+        meta_state_dict,
+        filename_pattern=SAFE_WEIGHTS_NAME.replace(".safetensors", "{suffix}.safetensors"),
+        max_shard_size=max_shard_size,
     )
+
+    def write_file(filename: str, names: list[str]) -> None:
+        shard = {name: torch.empty(meta_state_dict[name].shape, dtype=meta_state_dict[name].dtype) for name in names}
+        # Only the tensors in `shard` are read from the checkpoint. One reader per thread, as readers keep state.
+        dcp.load(shard, storage_reader=HuggingFaceStorageReader(str(checkpoint_dir)), no_dist=True)
+        if model is not None:
+            shard = revert_weight_conversion(model, shard)
+        shard = {name: tensor.contiguous() for name, tensor in shard.items()}
+        safe_save_file(shard, os.path.join(output_dir, filename), metadata={"format": "pt"})
+
+    rank, world_size = 0, 1
+    if _is_torch_distributed_initialized():
+        rank, world_size = _get_torch_distributed_rank(), _get_torch_distributed_world_size()
+    files = list(state_dict_split.filename_to_tensors.items())
+    owned_files = files[rank::world_size]
+
+    os.makedirs(output_dir, exist_ok=True)
+    if owned_files:
+        with ThreadPoolExecutor(max_workers=num_workers or len(owned_files)) as pool:
+            # `result()` raises the exception of a failed file.
+            for future in [pool.submit(write_file, filename, names) for filename, names in owned_files]:
+                future.result()
+
+    if rank == 0 and state_dict_split.is_sharded:
+        # The final names are known without the data: revert the conversions on the meta tensors of each file.
+        weight_map = {}
+        for filename, names in files:
+            if model is not None:
+                names = revert_weight_conversion(model, {name: meta_state_dict[name] for name in names})
+            weight_map.update(dict.fromkeys(names, filename))
+        index = {"metadata": state_dict_split.metadata, "weight_map": weight_map}
+        with open(os.path.join(output_dir, SAFE_WEIGHTS_INDEX_NAME), "w", encoding="utf-8") as f:
+            f.write(json.dumps(index, indent=2, sort_keys=True) + "\n")
+
+    # The checkpoint is only complete once every rank is done writing.
+    if world_size > 1:
+        _distributed_barrier()
 
 
 def is_sharded_checkpoint(checkpoint_dir: str | os.PathLike) -> bool:
