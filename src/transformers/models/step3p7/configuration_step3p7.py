@@ -209,18 +209,22 @@ class Step3p7TextConfig(PreTrainedConfig):
             if num_nextn_predict_layers:
                 self.mtp_layer_types = ["full_attention"] * num_nextn_predict_layers
 
+        # Legacy hub-config aliases for `mlp_layer_types`
+        moe_layers_enum = kwargs.pop("moe_layers_enum", None)
+        moe_layer_freq = kwargs.pop("moe_layer_freq", None)
         if self.mlp_layer_types is None:
-            # `moe_layers_enum` is the legacy hub-config alias for `mlp_layer_types`, read here only
-            # Derived over the padded range so the trailing MTP layers get an `mtp_mlp_layer_types` entry.
-            moe_layers_enum = kwargs.pop("moe_layers_enum", None)
             if moe_layers_enum is not None:
                 items = moe_layers_enum.split(",") if isinstance(moe_layers_enum, str) else moe_layers_enum
                 moe_set = {int(i) for i in items if str(i).strip()}
+                mlp_layer_types = ["sparse" if i in moe_set else "dense" for i in range(padded)]
+            elif moe_layer_freq is not None:
+                mlp_layer_types = ["sparse" if f else "dense" for f in moe_layer_freq]
             else:
                 moe_set = set(range(3, n))
-            mlp_layer_types = ["sparse" if i in moe_set else "dense" for i in range(padded)]
+                mlp_layer_types = ["sparse" if i in moe_set else "dense" for i in range(padded)]
+
             self.mlp_layer_types = mlp_layer_types[:n]
-            if num_nextn_predict_layers:
+            if num_nextn_predict_layers and len(mlp_layer_types) == padded:
                 self.mtp_mlp_layer_types = mlp_layer_types[n:padded]
 
         if self.num_sliding_attention_heads is None:
