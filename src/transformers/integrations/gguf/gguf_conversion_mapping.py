@@ -233,8 +233,24 @@ def _lfm2(config) -> list[WeightTransform]:
     return renamings + [conv_kernel]
 
 
+def _qwen3(config) -> list[WeightTransform]:
+    """Qwen3: the dense decoder skeleton, plus the per-head q/k norms.
+
+    llama.cpp only renames here. Qwen3's norms carry no offset (checked against the safetensors checkpoint), so every
+    quantized weight stays packed.
+    """
+    return DENSE_DECODER_RENAMINGS + [
+        WeightRenaming(r"^output_norm\.", "model.norm."),
+        WeightRenaming(r"\.attn_norm\.", ".input_layernorm."),
+        WeightRenaming(r"\.ffn_norm\.", ".post_attention_layernorm."),
+        WeightRenaming(r"\.attn_q_norm\.", ".self_attn.q_norm."),
+        WeightRenaming(r"\.attn_k_norm\.", ".self_attn.k_norm."),
+    ]
+
+
 # gguf `general.architecture` -> builder taking the model config
 GGUF_ARCHS = {
+    "qwen3": _qwen3,
     "qwen35": _qwen35,
     "qwen35moe": _qwen35moe,
     "lfm2": _lfm2,

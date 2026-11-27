@@ -27,6 +27,7 @@ from transformers import (
     Lfm2ForCausalLM,
     Qwen3_5ForCausalLM,
     Qwen3_5MoeForCausalLM,
+    Qwen3ForCausalLM,
 )
 from transformers.testing_utils import (
     require_gguf,
@@ -64,6 +65,25 @@ class GgufDequantizeTest(unittest.TestCase):
                 theirs = reference(blocks.numpy().reshape(-1).copy(), GGMLQuantizationType(ggml_type))
                 # `equal_nan`: a random scale can be a NaN, and both sides must produce the same one
                 self.assertTrue(np.array_equal(ours, theirs.reshape(-1)[: ours.size], equal_nan=True))
+
+
+class Qwen3GgufConfigTest(unittest.TestCase):
+    def test_head_dim_comes_from_the_file(self):
+        from transformers.integrations.gguf.gguf_config_mapping import _qwen3_config
+
+        metadata = {
+            "qwen3.context_length": 4096,
+            "qwen3.embedding_length": 512,
+            "qwen3.attention.head_count": 8,
+            "qwen3.attention.head_count_kv": 2,
+            "qwen3.attention.key_length": 64,  # not the 128 default
+            "qwen3.feed_forward_length": 1024,
+            "qwen3.block_count": 2,
+            "qwen3.attention.layer_norm_rms_epsilon": 1e-6,
+            "qwen3.rope.freq_base": 10000.0,
+            "tokenizer.ggml.tokens": 1024,
+        }
+        self.assertEqual(_qwen3_config(metadata, ("token_embd.weight",))["head_dim"], 64)
 
 
 class GgufTokenizerTesterMixin:
@@ -498,6 +518,19 @@ class Lfm2GgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
     quantized_gguf_file = "LFM2.5-230M-Q4_K_M.gguf"
     reference_repo = "LiquidAI/LFM2.5-230M"
     model_class = Lfm2ForCausalLM
+
+    prompt = "The capital of France is Paris. The capital of Germany is"
+    expected_completion = " Berlin"
+
+
+@require_torch_accelerator
+@slow
+class Qwen3GgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
+    gguf_repo = "unsloth/Qwen3-0.6B-GGUF"
+    gguf_file = "Qwen3-0.6B-BF16.gguf"
+    quantized_gguf_file = "Qwen3-0.6B-Q4_K_M.gguf"
+    reference_repo = "Qwen/Qwen3-0.6B"
+    model_class = Qwen3ForCausalLM
 
     prompt = "The capital of France is Paris. The capital of Germany is"
     expected_completion = " Berlin"
