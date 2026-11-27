@@ -82,6 +82,17 @@ runs:
         if not path.startswith(expected + os.sep):
             sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
         "
+        # [Temporary] PR #47773: kernels 0.19.1 (PyPI), and fail if transformers doesn't see it
+        uv pip install "kernels==0.19.1"
+        python -c "
+        import sys, kernels
+        from importlib.metadata import version
+        vllm_version = version('vllm')
+        from transformers.utils.import_utils import is_kernels_available
+        print(f'[kernels check] kernels {kernels.__version__}, is_kernels_available()={is_kernels_available()}, vllm {vllm_version}')
+        if kernels.__version__ != '0.19.1' or not is_kernels_available():
+            sys.exit('ERROR: kernels 0.19.1 is not available to transformers')
+        "
 
     - name: Enable the page cache eviction pytest plugin
       if: ${{ inputs.evict-page-cache == 'true' }}

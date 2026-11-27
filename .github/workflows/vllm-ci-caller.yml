@@ -37,12 +37,8 @@ jobs:
         run: |
           METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
           # path field is like '../../../{full_commit_hash}/{wheel_filename}' relative to nightly/cpu/vllm/
-          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
-          print(wheel['path'].split('/')[3])
-          ")
+          # [Temporary] pinned to the vLLM commit of nightly 45932608928
+          VLLM_COMMIT=5aea30579ad672c3c35be43112b7a1f7b293a09e
           if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
             echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
             exit 1
@@ -1133,7 +1129,7 @@ jobs:
           python3 transformers/utils/ci_report_notify.py \
             --reports-dir ./vllm-ci-reports \
             --hub-repo hf-internal-testing/transformers_vllm_ci \
-            --slack-channel "#transformers-ci-vllm" \
+            --slack-channel "#transformers-ci-dummy" \
             --commit "vllm=vllm-project/vllm@$VLLM_COMMIT" \
             --commit-date "transformers=$TRANSFORMERS_COMMIT_DATE" \
             --commit-date "vllm=$VLLM_COMMIT_DATE"
