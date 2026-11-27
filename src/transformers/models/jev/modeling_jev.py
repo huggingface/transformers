@@ -70,7 +70,6 @@ class JevForDecision(DecisionMixin, JevPreTrainedModel):
         num_options: torch.LongTensor,
         question_type_ids: torch.LongTensor,
         labels: torch.Tensor | None = None,
-        loss_weights: torch.Tensor | None = None,
         **kwargs,
     ) -> JevDecisionOutput:
         r"""
@@ -78,9 +77,11 @@ class JevForDecision(DecisionMixin, JevPreTrainedModel):
             Integer option indices of shape `(1, num_questions)`, with `-100` for ignored questions, or floating-point
             target distributions of shape `(1, total_num_options)`, concatenated in question order. Each distribution
             must sum to one over that question's active options.
-        loss_weights (`torch.Tensor` of shape `(1, num_questions)`, *optional*):
-            Per-question weights. The weighted loss is divided by the number of valid questions, not the sum of weights.
         """
+        loss_kwargs = {
+            name: kwargs.pop(name) for name in ("loss_weights", "num_items_in_batch", "ignore_index") if name in kwargs
+        }
+
         # A batch of one prompt
         marks, num_options, question_type_ids = marks[0], num_options[0], question_type_ids[0]
         hidden_states = self.model(input_ids=input_ids, use_cache=False, **kwargs).last_hidden_state[0]
@@ -99,8 +100,7 @@ class JevForDecision(DecisionMixin, JevPreTrainedModel):
                 labels=labels,
                 num_options=num_options,
                 is_score=question_type_ids == Question.questions_types.index("score"),
-                loss_weights=loss_weights,
-                **kwargs,
+                **loss_kwargs,
             )
         return JevDecisionOutput(loss=loss, logits=scores)
 

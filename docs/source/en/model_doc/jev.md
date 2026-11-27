@@ -105,7 +105,11 @@ outputs = model(**{name: tensor.to(model.device) for name, tensor in inputs.item
 outputs.loss.backward()
 ```
 
-For a custom accumulation loop, pass the total valid-question count as `num_items_in_batch` to weight prompts with
+Pass `loss_weights` with shape `(1, num_questions)` to weight individual questions. The loss is divided by the number
+of valid questions. If your `Trainer` dataset includes a `loss_weights` column, set `remove_unused_columns=False`
+to pass it through to the model.
+
+In a custom accumulation loop, pass the total valid-question count as `num_items_in_batch` to weight prompts with
 different numbers of questions correctly. The standard `Trainer` averages the microbatch losses.
 
 ## JevConfig
