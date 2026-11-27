@@ -2734,7 +2734,7 @@ class ModelUtilsTest(TestCasePlus):
 
         The signature check is driven directly, so this needs neither the kernel nor the hardware to be available.
         """
-        from kernels.layer.layer import _validate_layer
+        from kernels._internals.layer.layer import _validate_layer
 
         from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5GatedDeltaNet
 
