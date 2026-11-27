@@ -288,16 +288,47 @@ class LiquidCodecQuantizer(nn.Module):
 
 class LiquidCodecISTFTCache:
     """
-    Streaming cache of [`LiquidCodecISTFTHead`]: the last `n_fft - hop_length` samples of a chunk, which the next
-    chunk's frames still overlap. [`~LiquidCodecISTFTCache.flush`] ends the stream.
+    Streaming cache of [`LiquidCodecISTFTHead`].
 
-    Each chunk is normalized by its own window envelope. Over the overlap, the stream is the crossfade of both chunks,
-    weighted by their share of the full envelope: it depends only on the window and the hop.
+    With the default `n_fft = 1280`, `hop_length = 320`, `upsampling_factor = 6`, in samples:
+
+        codec frame = upsampling_factor * hop_length = 1920
+        cache       = n_fft - hop_length             = 960
+        pad         = (n_fft - hop_length) // 2      = 480
+        first emit  = codec frame - pad              = 1440
+
+        codec frames      ├──── codec frame 0 ────┼──── codec frame 1 ────┼──── codec frame 2 ────┤
+        spec frames       0   1   2   3   4   5   6   7   8   9   10  11  12  13  14  15  16  17  18  19
+        chunk 0     ├──────── windows of frames 0-5 ────┤
+        chunk 1                             ├─────── windows of frames 6-11 ────┤
+        chunk 2                                                     ├─────── windows of frames 12-17 ───┤
+
+        update 0    ├─pad─┼─── emit 1440 ───┼ cache 960 ┤
+        update 1                            ├────── emit 1920 ──────┼ cache 960 ┤
+        update 2                                                    ├────── emit 1920 ──────┼ cache 960 ┤
+                                                                                                         ...
+        flush (last cache)                                                                                ├─480─┼─pad─┤
+
+    Per-chunk ISTFT: normalized by the chunk's own envelope (sum of its squared windows). Crossfade over the overlap
+    restores the full one, as non-streaming:
+
+        fade_out = tail_envelope / (tail_envelope + head_envelope)    tail: previous chunk's last 960 samples (cache)
+        fade_in  = head_envelope / (tail_envelope + head_envelope)    head: new chunk's first 960 samples
+        emitted  = cache * fade_out + head * fade_in
     """
 
     def __init__(self, config: LiquidCodecDecoderConfig):
         self.num_overlap_samples = config.n_fft - config.hop_length
         self.num_padding_samples = self.num_overlap_samples // 2
+
+        # even: same padding at both ends. At most a chunk (one codec frame): only consecutive chunks overlap
+        num_chunk_samples = config.upsampling_factor * config.hop_length
+        if not 0 < self.num_overlap_samples <= num_chunk_samples or self.num_overlap_samples % 2:
+            raise ValueError(
+                "Streaming needs `n_fft - hop_length` to be even and in `(0, upsampling_factor * hop_length]`, got "
+                f"`n_fft={config.n_fft}`, `hop_length={config.hop_length}` and "
+                f"`upsampling_factor={config.upsampling_factor}`."
+            )
 
         # window envelope of the frames reaching into the overlap: a chunk's first ones cover its head, its last ones
         # its tail
