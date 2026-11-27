@@ -38,6 +38,7 @@ edge deployment. The export pipeline runs:
 
 from __future__ import annotations
 
+import inspect
 import math
 import operator
 import shutil
@@ -50,6 +51,7 @@ from ..utils.import_utils import is_executorch_available, is_torch_available
 from .configs import ExecutorchConfig, ExportFormat
 from .exporter_dynamo import DynamoExporter
 from .metadata import ExportMetadata
+from .runners.runner_executorch import writes_inputs_in_place
 from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
@@ -64,6 +66,7 @@ from .utils import (
 if is_torch_available():
     import torch
     from torch.export import ExportedProgram
+    from torch.export.graph_signature import OutputKind
     from torch.fx.passes.infra.pass_base import PassResult
     from torch.nn.attention import SDPBackend, sdpa_kernel
     from torch.utils._sympy.numbers import IntInfinity
@@ -150,7 +153,7 @@ class ExecutorchExporter(DynamoExporter):
                 transform_passes=_get_transform_passes(config.backend),
             )
             executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
-                config=_get_backend_config(config)
+                config=_get_backend_config(config, edge_program_manager.exported_program())
             )
 
         return executorch_programs_manager, metadata
@@ -214,21 +217,17 @@ def _get_edge_compile_config(backend: str) -> EdgeCompileConfig:
     )
 
 
-def _get_backend_config(config):
-    """Build the ``ExecutorchBackendConfig`` for ``to_executorch``, or ``None`` for defaults.
-
-    Only overrides the memory-planning pass when the caller changed an ``alloc_*`` flag. Turning off
-    ``alloc_graph_input``/``alloc_graph_output`` hands input/output memory ownership to the caller
-    (see [`ExecutorchConfig`]) — the prerequisite for zero-copy in-place ``USER_INPUT_MUTATION``.
-    """
-    if config.alloc_graph_input and config.alloc_graph_output and config.alloc_mutable_buffers:
-        return None
+def _get_backend_config(config, exported_program) -> ExecutorchBackendConfig:
+    """The `ExecutorchBackendConfig` for `to_executorch`: where ExecuTorch supports it, a program writing into its cache
+    writes into the caller's tensor, instead of into a copy it plans and returns."""
+    in_place = writes_inputs_in_place() and any(
+        spec.kind == OutputKind.USER_INPUT_MUTATION for spec in exported_program.graph_signature.output_specs
+    )
+    planning = {"alloc_graph_input": not in_place, "alloc_graph_output": True, "alloc_mutable_buffers": True}
+    planning.update({name: getattr(config, name) for name in planning if getattr(config, name) is not None})
+    run_reinplace_pass = in_place if config.run_reinplace_pass is None else config.run_reinplace_pass
     return ExecutorchBackendConfig(
-        memory_planning_pass=MemoryPlanningPass(
-            alloc_graph_input=config.alloc_graph_input,
-            alloc_graph_output=config.alloc_graph_output,
-            alloc_mutable_buffers=config.alloc_mutable_buffers,
-        )
+        run_reinplace_pass=run_reinplace_pass, memory_planning_pass=MemoryPlanningPass(**planning)
     )
 
 
@@ -298,9 +297,9 @@ def prepare_for_mlx(model: PreTrainedModel, sample_inputs: dict[str, Any]):
         caches = [value]
         if isinstance(value, EncoderDecoderCache):
             caches = [value.self_attention_cache, value.cross_attention_cache]
-        if any(isinstance(cache, StaticCache) for cache in caches):
+        if any(isinstance(cache, StaticCache) for cache in caches) and not writes_inputs_in_place():
             raise ValueError(
-                "StaticCache is not supported by the ExecuTorch MLX backend. "
+                "StaticCache needs ExecuTorch 1.7 (or a nightly from 2026-11-17) on the ExecuTorch MLX backend. "
                 "Use DynamicCache or set cache_implementation='dynamic' in GenerationConfig."
             )
 
@@ -658,10 +657,11 @@ def _patch_eval_upper_bound(original):
     per-symbol ranges — so planned buffers stay proportional to the sampled inputs.
     """
 
-    def patch(maybe_symint):
+    # Newer ExecuTorch passes a `budget`
+    def patch(maybe_symint, **kwargs):
         if isinstance(maybe_symint, int):
             return maybe_symint
-        result = original(maybe_symint)
+        result = original(maybe_symint, **kwargs)
         hint = eval_expr(maybe_symint)
         cap = max(hint * _MAX_DIM_MULTIPLIER, _MAX_DIM_FLOOR) if isinstance(hint, int) else _MAX_DIM_FLOOR
         return min(result, cap) if isinstance(result, int) else cap
@@ -709,8 +709,12 @@ def _patch_dim_order_from_stride(_original):
     deep inside ``spec_prop_pass``. Use ``guard_or_true`` / ``guard_or_false``
     so the sort still produces *a* dim order when the comparison is unbacked —
     the exact order on unbacked dims doesn't affect correctness, just memory layout.
+    Fixed upstream in ExecuTorch nightlies, which take a `sizes` argument.
     """
     from torch.fx.experimental.symbolic_shapes import guard_or_false, guard_or_true
+
+    if "sizes" in inspect.signature(_original).parameters:
+        return _original
 
     def patch(stride):
         for s in stride:

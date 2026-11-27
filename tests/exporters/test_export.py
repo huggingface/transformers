@@ -1067,19 +1067,11 @@ class ExportTesterMixin:
         config = DynamoConfig(dynamic=dynamic)
 
         for model_class in self.all_model_classes:
-            if self._should_skip(
-                model_class,
-                dynamic=dynamic,
-                backend="dynamo",
-            ):
+            if self._should_skip(model_class, dynamic=dynamic, backend="dynamo"):
                 continue
 
-            check_exactness = not self._should_skip_exactness(
-                model_class,
-                dynamic=dynamic,
-                backend="dynamo",
-            )
-            components = self._prepare_export_model_and_inputs(model_class, dynamic=dynamic, device=torch_device)
+            check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic, backend="dynamo")
+            components = self._prepare_export_model_and_inputs(model_class, dynamic=dynamic)
             for name, (model, inputs, new_inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     self._check_export(
@@ -1091,7 +1083,6 @@ class ExportTesterMixin:
                         atol=atol,
                         rtol=rtol,
                         check_exactness=check_exactness,
-                        check_device=True,
                     )
 
     # ──────────────────────── ONNX tests ─────────────────────────
@@ -1110,11 +1101,7 @@ class ExportTesterMixin:
         exporter = OnnxExporter()
 
         for model_class in self.all_model_classes:
-            if self._should_skip(
-                model_class,
-                dynamic=dynamic,
-                backend="onnx",
-            ):
+            if self._should_skip(model_class, dynamic=dynamic, backend="onnx"):
                 continue
 
             optimize = _onnx_optimize_enabled(model_class, dynamic)
@@ -1122,12 +1109,8 @@ class ExportTesterMixin:
             ort_fusions = torch_device if optimize and torch_device in ("cpu", "cuda") else None
             config = OnnxConfig(dynamic=dynamic, optimize=optimize, ort_fusions=ort_fusions)
 
-            check_exactness = not self._should_skip_exactness(
-                model_class,
-                dynamic=dynamic,
-                backend="onnx",
-            )
-            components = self._prepare_export_model_and_inputs(model_class, dynamic=dynamic, device=torch_device)
+            check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic, backend="onnx")
+            components = self._prepare_export_model_and_inputs(model_class, dynamic=dynamic)
             for name, (model, inputs, new_inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     self._check_export(
@@ -1157,19 +1140,11 @@ class ExportTesterMixin:
         config = OpenVINOConfig(dynamic=dynamic)
 
         for model_class in self.all_model_classes:
-            if self._should_skip(
-                model_class,
-                dynamic=dynamic,
-                backend="openvino",
-            ):
+            if self._should_skip(model_class, dynamic=dynamic, backend="openvino"):
                 continue
 
-            check_exactness = not self._should_skip_exactness(
-                model_class,
-                dynamic=dynamic,
-                backend="openvino",
-            )
-            components = self._prepare_export_model_and_inputs(model_class, dynamic=dynamic, device=torch_device)
+            check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic, backend="openvino")
+            components = self._prepare_export_model_and_inputs(model_class, dynamic=dynamic)
             for name, (model, inputs, new_inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     self._check_export(
@@ -1202,11 +1177,7 @@ class ExportTesterMixin:
         config = ExecutorchConfig(backend=backend, dynamic=dynamic)
 
         for model_class in self.all_model_classes:
-            if self._should_skip(
-                model_class,
-                dynamic=dynamic,
-                backend=("executorch", backend),
-            ):
+            if self._should_skip(model_class, dynamic=dynamic, backend=("executorch", backend)):
                 continue
             # Trace on CPU: XNNPACK targets CPU, and CPU tracing yields device-consistent graphs.
             # Tracing on CUDA surfaces per-model device bugs — models create in-`forward` tensors
@@ -1214,9 +1185,7 @@ class ExportTesterMixin:
             # CUDA model (`FakeTensor Device Propagation ... cuda:0, cpu`). The exporter *can* take a
             # CUDA model, but the suite exercises the canonical CPU-traced path.
             check_exactness = not self._should_skip_exactness(
-                model_class,
-                dynamic=dynamic,
-                backend=("executorch", backend),
+                model_class, dynamic=dynamic, backend=("executorch", backend)
             )
             components = self._prepare_export_model_and_inputs(model_class, dynamic=dynamic, device="cpu")
             for name, (model, inputs, new_inputs) in components.items():
@@ -1333,19 +1302,11 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
         for model_class in self.all_generative_model_classes:
             if self._should_skip(
-                model_class,
-                generate=True,
-                dynamic=dynamic,
-                backend="dynamo",
-                generation_config=generation_config,
+                model_class, generate=True, dynamic=dynamic, backend="dynamo", generation_config=generation_config
             ):
                 continue
             check_exactness = not self._should_skip_exactness(
-                model_class,
-                generate=True,
-                dynamic=dynamic,
-                backend="dynamo",
-                generation_config=generation_config,
+                model_class, generate=True, dynamic=dynamic, backend="dynamo", generation_config=generation_config
             )
             components = self._prepare_export_generate_model_and_inputs(
                 model_class,
@@ -1365,7 +1326,6 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                         atol=atol,
                         rtol=rtol,
                         check_exactness=check_exactness,
-                        check_device=True,
                     )
 
     # ──────────────────────── ONNX tests ─────────────────────────
@@ -1386,11 +1346,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
         for model_class in self.all_generative_model_classes:
             if self._should_skip(
-                model_class,
-                generate=True,
-                dynamic=dynamic,
-                backend="onnx",
-                generation_config=generation_config,
+                model_class, generate=True, dynamic=dynamic, backend="onnx", generation_config=generation_config
             ):
                 continue
 
@@ -1400,11 +1356,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             config = OnnxConfig(dynamic=dynamic, optimize=optimize, ort_fusions=ort_fusions)
 
             check_exactness = not self._should_skip_exactness(
-                model_class,
-                generate=True,
-                dynamic=dynamic,
-                backend="onnx",
-                generation_config=generation_config,
+                model_class, generate=True, dynamic=dynamic, backend="onnx", generation_config=generation_config
             )
             components = self._prepare_export_generate_model_and_inputs(
                 model_class,
@@ -1444,20 +1396,12 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
         for model_class in self.all_generative_model_classes:
             if self._should_skip(
-                model_class,
-                generate=True,
-                dynamic=dynamic,
-                backend="openvino",
-                generation_config=generation_config,
+                model_class, generate=True, dynamic=dynamic, backend="openvino", generation_config=generation_config
             ):
                 continue
 
             check_exactness = not self._should_skip_exactness(
-                model_class,
-                generate=True,
-                dynamic=dynamic,
-                backend="openvino",
-                generation_config=generation_config,
+                model_class, generate=True, dynamic=dynamic, backend="openvino", generation_config=generation_config
             )
             components = self._prepare_export_generate_model_and_inputs(
                 model_class,

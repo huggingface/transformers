@@ -76,6 +76,8 @@ class OnnxModelRunner(ModelRunner):
         # ORT hands a bool output over DLPack as uint8.
         self.bool_outputs = [spec.type == "tensor(bool)" for spec in session.get_outputs()]
 
+        self.output_names = [spec.name for spec in session.get_outputs()]
+
         # The CUDA graph's binding and input buffers, made on the first call.
         self.cuda_graph: tuple[ort.IOBinding, dict[str, torch.Tensor]] | None = None
 
@@ -141,7 +143,9 @@ class OnnxModelRunner(ModelRunner):
             raise ValueError(f"The graph takes {missing}, which {list(kwargs)} don't hold.")
         if self.replays_cuda_graph:
             return self._replay_cuda_graph(inputs, share_outputs)
-        binding, bound_buffers = self.session.io_binding(), []
+        binding, bound_buffers, written_in_place = self.session.io_binding(), [], {}
+        # A cache whose tensors keep their shape (a static one) is written in place
+        fixed_cache = getattr(kwargs.get("cache"), "is_compileable", False)
         for name, leaf in inputs.items():
             # Integers bind on host: ORT reads them on its CPU, where a GPU pointer is an illegal access.
             on_host = not (on_gpu and leaf.is_floating_point())
@@ -150,15 +154,26 @@ class OnnxModelRunner(ModelRunner):
             buffer = tensor if tensor.numel() else torch.empty(1, dtype=tensor.dtype, device=tensor.device)
             bound_buffers.append(buffer)
             _bind_input(binding, name, tensor, buffer.data_ptr())
-        for spec in self.session.get_outputs():
-            binding.bind_output(spec.name, device.type, device.index or 0)
+            # Written into the caller's tensor as `output.<path>`, when that is the one bound
+            if fixed_cache and name.startswith("input.") and tensor.numel() and tensor.data_ptr() == leaf.data_ptr():
+                written_in_place["output." + name.removeprefix("input.")] = leaf
+        for name in self.output_names:
+            leaf = written_in_place.get(name)
+            if leaf is None:
+                binding.bind_output(name, device.type, device.index or 0)
+            else:
+                dtype = int(onnx_ir.tensor_adapters.from_torch_dtype(leaf.dtype))
+                binding.bind_output(
+                    name, leaf.device.type, leaf.device.index or 0, dtype, list(leaf.shape), leaf.data_ptr()
+                )
         # ORT runs on its own stream: sync both ways, or it reads half-written inputs.
         if on_gpu:
             torch.cuda.current_stream(device).synchronize()
         self.session.run_with_iobinding(binding)
         if on_gpu:
             binding.synchronize_outputs()
-        return self.unflatten(self._read_outputs(binding))
+        outputs = self._read_outputs(binding)
+        return self.unflatten([written_in_place.get(name, output) for name, output in zip(self.output_names, outputs)])
 
     def _replay_cuda_graph(self, inputs: dict[str, torch.Tensor], share_outputs: bool) -> Any:
         """Run a session that replays a CUDA graph (`enable_cuda_graph`, `trt_cuda_graph_enable`). The graph reads and
