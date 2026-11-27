@@ -237,7 +237,7 @@ class GraniteSpeech5EncoderConvolutionModule(nn.Module):
             groups=inner_dim,
             bias=False,
         )
-        self.norm = nn.BatchNorm1d(inner_dim)
+        self.norm = nn.BatchNorm1d(inner_dim, dtype=torch.float32)
         self.pointwise_lin2 = nn.Linear(inner_dim, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:

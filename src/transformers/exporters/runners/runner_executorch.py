@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+import functools
+import importlib.metadata
 from typing import Any
 
 from ...utils.import_utils import is_executorch_available, is_torch_available
@@ -29,6 +31,16 @@ if is_torch_available():
 if is_executorch_available():
     from executorch.exir import ExecutorchProgramManager
     from executorch.runtime import Program, Runtime
+
+
+@functools.cache
+def writes_inputs_in_place() -> bool:
+    """Whether ExecuTorch writes an unplanned input a method mutates into the caller's tensor (pytorch/executorch#23183,
+    #23508 for MLX): 1.7, or a nightly from 2026-11-17."""
+    from packaging import version
+
+    executorch_version = version.parse(importlib.metadata.version("executorch"))
+    return executorch_version.release >= (1, 7) or (executorch_version.dev or 0) >= 20261117
 
 
 class ExecutorchModelRunner(ModelRunner):
@@ -57,4 +69,18 @@ class ExecutorchModelRunner(ModelRunner):
             leaf.contiguous() if isinstance(leaf, torch.Tensor) else None if isinstance(leaf, str) else leaf
             for leaf in leaves
         ]
-        return self.unflatten(list(self.method.execute(feed)))
+        if not writes_inputs_in_place():
+            return self.unflatten(list(self.method.execute(feed)))
+        outputs = list(self.method.execute(feed, clone_outputs=False))
+        if share_outputs:
+            return self.unflatten(outputs)
+        # Outputs sharing an input's storage are the caller's (a static cache written in place)
+        given = {leaf.untyped_storage().data_ptr() for leaf in feed if isinstance(leaf, torch.Tensor)}
+        return self.unflatten(
+            [
+                output.clone()
+                if isinstance(output, torch.Tensor) and output.untyped_storage().data_ptr() not in given
+                else output
+                for output in outputs
+            ]
+        )

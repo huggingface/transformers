@@ -33,6 +33,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -604,28 +605,6 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel, MultimodalMixin):
 
         self.post_init()
 
-    @accepts_precomputed_kwargs(modality="video")
-    @can_return_tuple
-    @auto_docstring
-    def get_video_embeddings(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor,
-        video_merge_sizes: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
-            The spatial downsampling ratio of each video feature.
-        """
-        return self.get_image_embeddings(
-            pixel_values=pixel_values_videos,
-            image_grid_thw=video_grid_thw,
-            image_merge_sizes=video_merge_sizes,
-            return_dict=True,
-            **kwargs,
-        )
-
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
@@ -635,7 +614,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel, MultimodalMixin):
         image_grid_thw: torch.LongTensor,
         image_merge_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
@@ -650,8 +629,30 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel, MultimodalMixin):
         last_hidden_state = vision_outputs.last_hidden_state
         image_embeds = self.projector(last_hidden_state)
         vision_outputs.pooler_output = image_embeds
-        vision_outputs.split_sizes = image_grid_thw.prod(-1) // image_merge_sizes**2
-        return vision_outputs
+        split_sizes = image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
+
+    @accepts_precomputed_kwargs(modality="video")
+    @can_return_tuple
+    @auto_docstring
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.LongTensor,
+        video_merge_sizes: torch.LongTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
+        r"""
+        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
+            The spatial downsampling ratio of each video feature.
+        """
+        return self.get_image_embeddings(
+            pixel_values=pixel_values_videos,
+            image_grid_thw=video_grid_thw,
+            image_merge_sizes=video_merge_sizes,
+            return_dict=True,
+            **kwargs,
+        )
 
     def get_placeholder_mask(
         self,
@@ -763,16 +764,14 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = mm_encoder_outputs["image"].pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = mm_encoder_outputs["video"].pooler_output
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             if video_compression_mask is not None:
                 video_embeds = video_embeds[video_compression_mask.to(video_embeds.device)]
             _, video_mask = self.get_placeholder_mask(

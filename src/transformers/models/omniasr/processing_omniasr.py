@@ -213,7 +213,9 @@ class OmniASRProcessor(ProcessorMixin):
         The chat template writes the language token as is, so this override is needed to accept ISO 639-1 codes (e.g.
         `"en"` for `"eng_Latn"`), and to raise on unsupported codes instead of silently writing an unknown token.
         """
-        is_batched = isinstance(conversation[0], (list, tuple))
+        # We normalize first, because messages can also be dataclasses or pydantic models, and we need dicts
+        # to rewrite the language blocks
+        conversations, is_batched = self._normalize_conversations(conversation)
         conversations = [
             [
                 {
@@ -229,7 +231,7 @@ class OmniASRProcessor(ProcessorMixin):
                 else message
                 for message in conv
             ]
-            for conv in (conversation if is_batched else [conversation])
+            for conv in conversations
         ]
         return super().apply_chat_template(conversations if is_batched else conversations[0], *args, **kwargs)
 

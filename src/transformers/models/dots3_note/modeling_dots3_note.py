@@ -37,6 +37,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
@@ -306,7 +307,7 @@ class Dots3NoteTextTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
@@ -678,7 +679,7 @@ class Dots3NotePreTrainedModel(PreTrainedModel):
         "attentions": Dots3NoteTextAttention,
         "router_logits": OutputRecorder(Dots3NoteTextTopkRouter, index=0),
     }
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
     _keys_to_ignore_on_load_unexpected = [
         r"^model\.(language_model\.)?layers\.46\.",
         r"^model\.(language_model\.)?mtp\.",
@@ -1178,9 +1179,13 @@ class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
                 **kwargs,
             )
         hidden_states = self.layer_norm(hidden_states)
-        pooled_output = self.adapter(hidden_states[padding_mask.to(hidden_states.device)])
+        padding_mask = padding_mask.to(hidden_states.device)
+        pooled_output = self.adapter(hidden_states[padding_mask])
 
-        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=pooled_output)
+        split_sizes = padding_mask.sum(-1)
+        return BaseModelOutputWithPoolingAndSplitSizes(
+            last_hidden_state=hidden_states, pooler_output=pooled_output, split_sizes=split_sizes
+        )
 
 
 class Dots3NoteAudioAdapter(nn.Module):
@@ -1298,7 +1303,7 @@ class Dots3NoteVisionTopKRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.router_scaling_factor = config.router_scaling_factor
 
     def forward(
@@ -1329,7 +1334,7 @@ class Dots3NoteVisionMoE(nn.Module):
         layer_config = config.per_layer_config[layer_idx]
         self.experts = Dots3NoteExperts(layer_config)
         self.gate = Dots3NoteVisionTopKRouter(layer_config)
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(layer_config.num_local_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(layer_config.num_local_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         orig_shape = hidden_states.shape
@@ -1499,7 +1504,7 @@ class Dots3NoteVisionPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     main_input_name = "pixel_values"
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
 
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
@@ -1595,7 +1600,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.Tensor,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         outputs = self.vision_tower(
             pixel_values,
             grid_thw=image_grid_thw,
@@ -1603,17 +1608,17 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, MultimodalMixin):
             **kwargs,
         )
 
-        outputs.split_sizes = image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
-        return outputs
+        split_sizes = image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         chunk_sample_lengths: torch.Tensor,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         chunk_sample_lengths (`torch.Tensor`):
             Number of waveform samples represented by each feature chunk.
@@ -1708,7 +1713,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, MultimodalMixin):
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeddings.to(inputs_embeds))
 
         if input_features is not None:
-            audio_embeddings = self.get_audio_features(
+            audio_embeddings = self.get_audio_embeddings(
                 input_features, chunk_sample_lengths, return_dict=True
             ).pooler_output
             audio_mask = self.get_placeholder_mask(
@@ -1735,16 +1740,12 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, MultimodalMixin):
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.Tensor,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
 
 @auto_docstring
-class Dots3NoteForConditionalGeneration(
-    Dots3NotePreTrainedModel,
-    GenerationMixin,
-    MultimodalMixin,
-):
+class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, MultimodalMixin, GenerationMixin):
     input_modalities = ("image", "video", "audio", "text")
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
@@ -1754,9 +1755,6 @@ class Dots3NoteForConditionalGeneration(
         self.model = Dots3NoteModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_audio_features(self, *args, **kwargs):
-        return self.model.get_audio_features(*args, **kwargs)
 
     @can_return_tuple
     @auto_docstring

@@ -31,9 +31,10 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -259,10 +260,15 @@ def unpad_image(tensor, original_size):
 
 
 def get_pack_index_per_image(
-    image_sizes: torch.Tensor, config: LlavaNextVideoConfig, vision_feature_select_strategy: str
+    image_sizes: torch.Tensor,
+    config: LlavaNextVideoConfig,
+    vision_feature_select_strategy: str,
+    grid_size: int | None = None,
 ) -> list[torch.Tensor]:
-    """For each image, the indices of its packed features in all images' patch tokens, `image_newline` past them."""
-    grid_size = config.vision_config.image_size // config.vision_config.patch_size
+    """For each image, the indices of its packed features in all images' patch tokens, `image_newline` past them. A
+    patch's features are a `grid_size` x `grid_size` grid, the vision tower's patch grid by default."""
+    if grid_size is None:
+        grid_size = config.vision_config.image_size // config.vision_config.patch_size
     tokens_per_patch = grid_size**2 + (vision_feature_select_strategy == "full")
     image_num_patches = [
         image_size_to_num_patches(image_size, config.image_grid_pinpoints, config.vision_config.image_size)
@@ -294,11 +300,12 @@ def get_pack_index(
     config: LlavaNextVideoConfig,
     vision_feature_select_strategy: str,
     kwargs: dict | None = None,
+    grid_size: int | None = None,
 ) -> torch.Tensor:
     """All images' packed feature indices, or pops `"pack_index"`."""
     if kwargs is not None and (pack_index := kwargs.pop("pack_index", None)) is not None:
         return pack_index
-    return torch.cat(get_pack_index_per_image(image_sizes, config, vision_feature_select_strategy))
+    return torch.cat(get_pack_index_per_image(image_sizes, config, vision_feature_select_strategy, grid_size))
 
 
 def get_pack_sizes(
@@ -306,11 +313,12 @@ def get_pack_sizes(
     config: LlavaNextVideoConfig,
     vision_feature_select_strategy: str,
     kwargs: dict | None = None,
+    grid_size: int | None = None,
 ) -> torch.Tensor:
     """Each image's number of packed features, or pops `"pack_sizes"`."""
     if kwargs is not None and (pack_sizes := kwargs.pop("pack_sizes", None)) is not None:
         return pack_sizes
-    pack_index = get_pack_index_per_image(image_sizes, config, vision_feature_select_strategy)
+    pack_index = get_pack_index_per_image(image_sizes, config, vision_feature_select_strategy, grid_size)
     return torch.tensor([len(index) for index in pack_index], device=image_sizes.device)
 
 
@@ -461,7 +469,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel, MultimodalMixin):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, num_patches, channels, height, width)`)
             The tensors corresponding to the input images.
@@ -508,8 +516,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel, MultimodalMixin):
         image_outputs.pooler_output = torch.cat([image_features, image_newline[None]])[
             pack_index.to(image_features.device)
         ]
-        image_outputs.split_sizes = split_sizes
-        return image_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -602,8 +609,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -651,7 +657,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel, MultimodalMixin):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor]` of shape `(batch_size, num_frames, channels, height, width)`)
             The tensors corresponding to the input video.
@@ -686,9 +692,10 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel, MultimodalMixin):
         # Same as image features except that video has pooling layer
         video_features = self.vision_resampler(selected_video_features)
         video_features = self.multi_modal_projector(video_features)
-        video_outputs.pooler_output = video_features.unflatten(0, (batch_size, frames)).flatten(1, 2)
-        video_outputs.pooler_output, video_outputs.split_sizes = flatten_items(video_outputs.pooler_output)
-        return video_outputs
+        features = video_features.unflatten(0, (batch_size, frames)).flatten(1, 2)
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        video_outputs.pooler_output = features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**video_outputs, split_sizes=split_sizes)
 
 
 @auto_docstring(

@@ -210,6 +210,7 @@ timestamps = processor.align_word_timestamps(
 
 [[autodoc]] Nemotron3_5TranscribeModel
     - forward
+    - get_audio_embeddings
     - get_audio_features
     - get_word_timestamp_hidden_states
 

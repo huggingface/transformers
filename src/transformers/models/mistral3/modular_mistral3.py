@@ -21,7 +21,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
@@ -29,20 +29,20 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import accepts_precomputed_kwargs, can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import select_hidden_states
 from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..llava.modeling_llava import (
     LlavaForConditionalGeneration,
     LlavaModel,
     LlavaPreTrainedModel,
     TransformersKwargs,
 )
-from ..mistral.modeling_mistral import MistralRMSNorm
 from .configuration_mistral3 import Mistral3Config
 
 
 logger = logging.get_logger(__name__)
 
 
-class Mistral3RMSNorm(MistralRMSNorm):
+class Mistral3RMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -157,7 +157,7 @@ class Mistral3Model(LlavaModel):
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_tower(
             pixel_values,
             image_sizes=image_sizes,
@@ -176,10 +176,10 @@ class Mistral3Model(LlavaModel):
             selected_image_feature.squeeze(0), image_sizes, **kwargs
         )
         downsample_ratio = self.vision_tower.patch_size * self.config.spatial_merge_size
-        image_outputs.split_sizes = (
+        split_sizes = (
             torch.as_tensor(image_sizes, device=image_outputs.pooler_output.device) // downsample_ratio
         ).prod(dim=-1)
-        return image_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -220,8 +220,7 @@ class Mistral3Model(LlavaModel):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )

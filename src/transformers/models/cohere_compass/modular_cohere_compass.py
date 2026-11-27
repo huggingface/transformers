@@ -38,12 +38,12 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
+from ..cohere.modeling_cohere import CohereLayerNorm
 from ..cohere2.configuration_cohere2 import Cohere2Config
 from ..cohere2.modeling_cohere2 import (
     Cohere2Attention,
     Cohere2DecoderLayer,
     Cohere2ForCausalLM,
-    Cohere2LayerNorm,
     Cohere2MLP,
     eager_attention_forward,
 )
@@ -163,6 +163,9 @@ class CohereCompassProcessor(Qwen3VLProcessor):
         self.vision_start_token = "<|VISION_START|>"
         self.vision_end_token = "<|VISION_END|>"
 
+    def get_text_with_replacements(self):
+        raise AttributeError("CohereCompass expects the chat template's outer vision wrapper, so it uses the default")
+
 
 # Same mrope interleaving pattern as Qwen3VL but this model has layer-types
 class CohereCompassRotaryEmbedding(Gemma3RotaryEmbedding):
@@ -246,7 +249,7 @@ class CohereCompassMLP(Cohere2MLP):
     pass
 
 
-class CohereCompassLayerNorm(Cohere2LayerNorm):
+class CohereCompassLayerNorm(CohereLayerNorm):
     pass
 
 

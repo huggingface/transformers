@@ -337,6 +337,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "onnx_export_test: mark test which tests ONNX export functionality")
     config.addinivalue_line("markers", "executorch_export_test: mark test which tests ExecuTorch export functionality")
     config.addinivalue_line("markers", "openvino_export_test: mark test which tests OpenVINO export functionality")
+    config.addinivalue_line("markers", "mlx_export_test: mark test which tests MLX export functionality")
     config.addinivalue_line("markers", "flash_attn_test: mark test which tests flash attention functionality")
     config.addinivalue_line("markers", "flash_attn_3_test: mark test which tests flash attention 3 functionality")
     config.addinivalue_line("markers", "flash_attn_4_test: mark test which tests flash attention 4 functionality")

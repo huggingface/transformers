@@ -31,9 +31,10 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
@@ -826,7 +827,7 @@ class AriaModel(AriaPreTrainedModel, MultimodalMixin):
         pixel_mask: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] = -1,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
         image_outputs = self.vision_tower(
             pixel_values,
@@ -840,10 +841,10 @@ class AriaModel(AriaPreTrainedModel, MultimodalMixin):
             image_attn_mask = torch.logical_not(flattened_mask)
 
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-        image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
-
-        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
-        return image_outputs
+        features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs.pooler_output = features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor

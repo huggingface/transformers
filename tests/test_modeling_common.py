@@ -712,6 +712,26 @@ def _deepspeed_zero3(ds_config):
         unset_hf_deepspeed_config()
 
 
+def get_packed_inputs_encoders(model: PreTrainedModel) -> set[str]:
+    """The sub-configs of `model` (`""` for the model itself) whose encoders take all their images (or audios) as one
+    packed sequence, delimited by `cu_seqlens`, rather than as a padded batch.
+
+    TODO: users have no official way to find this out yet, so we guess it from which (sub-)model owns a module taking
+    `cu_seqlens`.
+    """
+    config_names = {id(model.config): ""} | {
+        id(getattr(model.config, name)): name for name in model.config.sub_configs if getattr(model.config, name)
+    }
+    sub_models = {path: module for path, module in model.named_modules() if isinstance(module, PreTrainedModel)}
+    packed = set()
+    for path, module in model.named_modules():
+        if "cu_seqlens" in inspect.signature(module.forward).parameters:
+            # The innermost (sub-)model holding this module
+            owner = max((p for p in sub_models if p == "" or path == p or path.startswith(f"{p}.")), key=len)
+            packed.add(config_names.get(id(sub_models[owner].config)))
+    return packed - {None}
+
+
 def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
     backends = []
     if enable_flash:
@@ -872,10 +892,12 @@ class ModelTesterMixin(ExportTesterMixin):
             "Gemma3nTextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
             "Gemma3nVision2TextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
             "MistralLarge4ModelTest": 4,  # need to test KV shared layer for both types: RoPE and NoPE
+            "Kolibri1_1ModelTest": 5,  # a sliding layer, plus sparse indexers and reindexers that produce or reuse K/V
             "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
             "Wav2Vec2BertModelTest": 4,
             "Lfm3ModelTest": 3,  # One layer per operator type: ["full_attention", "sliding_attention", "conv"]
+            "Inkling2LoopTextModelTest": 4,  # need to test all layer types (before loop, loop, after loop). 2 layers for loop because of sliding and full attention layers.
             "LaraMiniModelTest": 3,  # One layer per token mixer: ["linear_attention", "sliding_attention", "full_attention"]
         }
         target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
@@ -1029,6 +1051,40 @@ class ModelTesterMixin(ExportTesterMixin):
                             self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
                         else:
                             self.assertTrue(param.dtype == torch.bfloat16, f"{name} was upcasted but it should NOT be")
+
+    def test_keep_in_fp32_modules_strict_also_hardcode_fp32(self):
+        """
+        Test that models using `_keep_in_fp32_modules_strict` actually hardcode the `dtype=torch.float32` in the parameter/buffer
+        creation, as otherwise the dtype is lost when instantiating a model from `__init__` or `from_config`.
+        """
+        from transformers.core_model_loading import build_glob_alternation
+        from transformers.modeling_utils import local_torch_dtype
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                # Init an empty model in fp16 to check if the params inside _keep_in_fp32_modules_strict are correctly
+                # kept in fp32
+                with local_torch_dtype(torch.float16, model_class.__name__):
+                    model = model_class(config).to(torch_device)
+                    model.eval()
+
+                if len(model._keep_in_fp32_modules_strict) == 0:
+                    self.skipTest("No `_keep_in_fp32_modules_strict` defined")
+
+                dtype_policy_alt, _, _ = build_glob_alternation(list(model._keep_in_fp32_modules_strict))
+
+                missing = []
+                for k, v in model.state_dict().items():
+                    # Check is_floating_point as well, as some params (e.g. norm's `num_batches_tracked` buffers) can be int
+                    if dtype_policy_alt.search(k) is not None and v.dtype != torch.float32 and v.is_floating_point():
+                        missing.append(k)
+
+                self.assertTrue(
+                    len(missing) == 0,
+                    f"The following parameters/buffers are part of `_keep_in_fp32_modules_strict` but do not hardcode their dtype in the __init__: {(*missing,)}",
+                )
 
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1746,8 +1802,12 @@ class ModelTesterMixin(ExportTesterMixin):
                 model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
 
                 checkpointing_layer = next(m for m in model.modules() if isinstance(m, GradientCheckpointingLayer))
-                pre_hook_mock = unittest.mock.Mock(return_value=None)
-                checkpointing_layer.register_forward_pre_hook(pre_hook_mock)
+                # record whether gradients are on at each call of the layer: only those calls are checkpointed (HrmText
+                # runs some of its layers under `torch.no_grad()`)
+                grad_enabled_calls = []
+                checkpointing_layer.register_forward_pre_hook(
+                    lambda *_: grad_enabled_calls.append(torch.is_grad_enabled())
+                )
                 # count the runs of the forward that the layer hands to the checkpoint function
                 checkpoint_func = checkpointing_layer._gradient_checkpointing_func
                 forward_mock = unittest.mock.Mock()
@@ -1768,7 +1828,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     # test that gradient checkpointing is active as it would call the gradient checkpointing layer's
                     # forward more than once.
                     self.assertGreater(forward_mock.call_count, 1)
-                    self.assertEqual(pre_hook_mock.call_count, checkpoint_mock.call_count)
+                    self.assertEqual(sum(grad_enabled_calls), checkpoint_mock.call_count)
 
                 # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
                 # checkpointing. divergence indicates a different forward-pass environment that needs special handling.
@@ -2301,7 +2361,9 @@ class ModelTesterMixin(ExportTesterMixin):
                 split_sizes = getattr(outputs.image_outputs, "split_sizes", None)
                 pooler_output = outputs.image_outputs.pooler_output
                 num_images = len(split_sizes) if split_sizes is not None else len(pooler_output)
-                self.assertEqual(num_images, self.model_tester.batch_size)
+                self.assertEqual(
+                    num_images, self.model_tester.batch_size * getattr(self.model_tester, "num_images", 1)
+                )
 
         if not self.has_attentions:
             self.skipTest(reason="Model does not output attentions")
@@ -3142,16 +3204,12 @@ class ModelTesterMixin(ExportTesterMixin):
                         return
                     # model might return non-tensors objects (e.g. Cache class)
                     elif isinstance(tuple_object, torch.Tensor):
-                        self.assertTrue(
-                            torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
-                            ),
-                            msg=(
-                                "Tuple and dict output are not equal. Difference:"
-                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
-                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
-                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
-                            ),
+                        torch.testing.assert_close(
+                            set_nan_tensor_to_zero(tuple_object),
+                            set_nan_tensor_to_zero(dict_object),
+                            rtol=1e-5,
+                            atol=1e-5,
+                            msg=lambda m: f"Tuple and dict output are not equal.\n{m}",
                         )
 
                 recursive_check(tuple_output, dict_output)
@@ -4118,6 +4176,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 "parakeet_encoder",
                 "parakeet_ctc",
                 "pi0",
+                "pi05",
                 "pixtral",
                 "sam",
                 "sam_hq",
@@ -4257,13 +4316,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(tmpdirname, dtype=dtype)
 
-                sub_models_supporting_fa = [
-                    module._supports_flash_attn
-                    for name, module in model.named_modules()
-                    if isinstance(module, PreTrainedModel) and name != ""
-                ]
-                supports_fa_all_modules = (
-                    all(sub_models_supporting_fa) if len(sub_models_supporting_fa) > 0 else model._supports_flash_attn
+                supports_fa_all_modules = all(
+                    module._supports_flash_attn for module in model.modules() if isinstance(module, PreTrainedModel)
                 )
                 if not supports_fa_all_modules:
                     with self.assertRaises(ValueError):
@@ -4553,53 +4607,42 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_accelerator
     @mark.flash_attn_test
     @pytest.mark.torch_compile_test
-    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
-        """Given `get_data_dependent_inputs`, each modality's encoder compiles with `fullgraph=True` and matches eager."""
-        tested = False
+    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
+        """Given `get_data_dependent_inputs`, the whole forward compiles with `fullgraph=True` and matches eager."""
         for model_class in self.all_model_classes:
-            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-            try:
-                model = model_class._from_config(config, attn_implementation="flash_attention_2", dtype=torch.bfloat16)
-            except (ValueError, ImportError):
+            if not hasattr(model_class, "get_data_dependent_inputs"):
                 continue
-            model = model.to(torch_device).eval().base_model
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config).to(torch_device).eval()
+
+            # Packed encoders only trace with flash attention (SDPA loops over their items on the host), which needs bf16.
+            # Models without any run in fp32 with their default attention, where compiling changes the least.
+            # TODO: with SDPA and packed inputs, models could call torch's own varlen attention instead of looping, which
+            # would make SDPA trace too.
+            dtype = torch.float32
+            if packed := get_packed_inputs_encoders(model):
+                dtype = torch.bfloat16
+                # Built in bf16 rather than cast, so the modules kept in fp32 (e.g. MoE routers) stay so
+                model = model_class._from_config(config, dtype=dtype).to(torch_device).eval()
+                # `""` is the model itself, when it is the packed encoder (e.g. a vision model test). This is only set when
+                # needed: setting it also re-applies the top-level implementation to the sub-models whose config isn't
+                # a sub-config, e.g. `sdpa` to VibeVoice's acoustic tokenizer, which doesn't support it
+                flash = dict.fromkeys(packed, "flash_attention_2")
+                model.set_attn_implementation({"": model.config._attn_implementation} | flash)
             inputs = {
-                name: value.to(torch.bfloat16)
-                if isinstance(value, torch.Tensor) and value.is_floating_point()
+                name: value.to(torch_device, dtype if value.is_floating_point() else value.dtype)
+                if isinstance(value, torch.Tensor)
                 else value
                 for name, value in self._prepare_for_class(inputs, model_class).items()
             }
-            if (get_data_dependent_inputs := getattr(model, "get_data_dependent_inputs", None)) is not None:
-                inputs.update(get_data_dependent_inputs(**inputs))
-            for modality in ("image", "video", "audio"):
-                encoder = getattr(model, f"get_{modality}_embeddings", None) or getattr(
-                    model, f"get_{modality}_features", None
-                )
-                if encoder is None:
-                    continue
-                parameters = inspect.signature(encoder).parameters
-                takes_kwargs = any(parameter.kind is parameter.VAR_KEYWORD for parameter in parameters.values())
-                encoder_inputs = {
-                    name: value
-                    for name, value in inputs.items()
-                    if name in parameters or (takes_kwargs and name.startswith(f"{modality}_"))
-                }
-                missing_required = any(
-                    parameter.default is parameter.empty
-                    and parameter.kind is parameter.POSITIONAL_OR_KEYWORD
-                    and name not in encoder_inputs
-                    for name, parameter in parameters.items()
-                )
-                if not encoder_inputs or missing_required:
-                    continue
-                torch._dynamo.reset()
-                with torch.no_grad():
-                    expected = encoder(**copy.deepcopy(encoder_inputs))
-                    actual = torch.compile(encoder, fullgraph=True, backend="eager")(**copy.deepcopy(encoder_inputs))
-                torch.testing.assert_close(actual, expected)
-                tested = True
-        if not tested:
-            self.skipTest(reason="The model has no modality encoder taking these inputs")
+            inputs |= model.get_data_dependent_inputs(**inputs)
+            torch.compiler.reset()
+            with torch.no_grad():
+                expected = model(**copy.deepcopy(inputs))
+                actual = torch.compile(model, fullgraph=True, backend="eager")(**copy.deepcopy(inputs))
+            # bf16 allows one rounding step at the outputs' magnitude, as compiling can reorder a few operations
+            tolerance = 2e-2 if dtype == torch.bfloat16 else 1e-4
+            torch.testing.assert_close(actual.to_tuple()[0], expected.to_tuple()[0], atol=tolerance, rtol=tolerance)
 
     @slow
     @require_torch_accelerator
@@ -4609,6 +4652,15 @@ class ModelTesterMixin(ExportTesterMixin):
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_train_cls`.")
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Disable dropout to avoid randomized outcomes
+        if hasattr(config, "attention_dropout"):
+            config.attention_dropout = 0.0
+        if hasattr(config, "attention_probs_dropout_prob"):
+            config.attention_probs_dropout_prob = 0.0
+        if hasattr(config, "dropout_rate"):
+            config.dropout_rate = 0.0
+
         cls = self._torch_compile_train_cls
         attn_implementation = getattr(self, "_torch_compile_train_attn_implementation", None)
         if attn_implementation is not None:
@@ -5612,6 +5664,32 @@ class ModelTesterMixin(ExportTesterMixin):
 
             check_attentions_output(inputs_dict, config, model_class)
 
+    def test_placeholder_modalities_have_flat_getters(self):
+        """A model scattering a modality's features into its placeholder tokens has the flat getter
+        (`get_<modality>_embeddings`): one tensor for any number of items, where the per-item split of
+        `get_<modality>_features` would fix the count in an exported or a compiled graph."""
+        from transformers.modeling_multimodal_utils import MultimodalMixin
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            # Dual encoders (CLIP) and RNN-T speech models take the modality but have no placeholders to scatter into
+            if not hasattr(model_class, "get_placeholder_mask"):
+                continue
+            model = model_class(copy.deepcopy(config))
+            for modality in set(model_class.input_modalities) & {"image", "video", "audio"}:
+                # A modality no encoder computes features for (a TTS model's own audio latents) has nothing to flatten
+                if not hasattr(model_class, f"get_{modality}_features"):
+                    continue
+                getter = f"get_{modality}_embeddings"
+                own = getattr(model_class, getter, None)
+                # `MultimodalMixin`'s, or none, hands a head's call to its base model, `model.model`
+                if own is None or own is getattr(MultimodalMixin, getter):
+                    own = getattr(type(getattr(model, "model", None)), getter, None)
+                self.assertTrue(
+                    own is not None and own is not getattr(MultimodalMixin, getter),
+                    f"{model_class.__name__} takes {modality} inputs into placeholders but has no `{getter}`",
+                )
+
     @parameterized.expand([True, False, None])
     def test_get_image_features_output(self, return_dict: bool | None):
         for model_class in self.all_model_classes:
@@ -5712,10 +5790,11 @@ class ModelTesterMixin(ExportTesterMixin):
             if pooler_output is None:
                 continue
 
+            num_images = self.model_tester.batch_size * getattr(self.model_tester, "num_images", 1)
             self.assertEqual(
                 len(pooler_output),
-                self.model_tester.batch_size,
-                f"`pooler_output` should have one entry per image: {len(pooler_output)} != {self.model_tester.batch_size}",
+                num_images,
+                f"`pooler_output` should have one entry per image: {len(pooler_output)} != {num_images}",
             )
             self.assertEqual(
                 pooler_output[0].ndim,
@@ -5851,10 +5930,35 @@ class ModelTesterMixin(ExportTesterMixin):
             set_value_subconfigs(config, "output_attentions", True)
             check_attentions_output(inputs_dict, config, model_class)
 
+    def test_get_audio_embeddings_one_row_per_audio_token(self):
+        # The flat audio embeddings fill the audio placeholder tokens of the text: one row per token, without padding
+        for model_class in self.all_model_classes:
+            if "audio" not in model_class.input_modalities or not hasattr(model_class, "get_audio_embeddings"):
+                continue
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            audio_token_id = getattr(config, "audio_token_id", None)
+            if audio_token_id is None or inputs_dict.get("input_ids") is None:
+                continue
+            model = model_class(config).to(torch_device).eval()
+            getter_parameters = inspect.signature(model.get_audio_embeddings).parameters
+            audio_inputs = {key: value for key, value in inputs_dict.items() if key in getter_parameters}
+            if not audio_inputs:
+                continue
+            with torch.no_grad():
+                outputs = model.get_audio_embeddings(**audio_inputs, return_dict=True)
+            num_audio_tokens = (inputs_dict["input_ids"] == audio_token_id).sum().item()
+            self.assertEqual(
+                outputs.pooler_output.shape[0],
+                num_audio_tokens,
+                f"`get_audio_embeddings` should return one row per audio token: {outputs.pooler_output.shape[0]} != "
+                f"{num_audio_tokens}",
+            )
+            self.assertEqual(outputs.split_sizes.sum().item(), num_audio_tokens)
+
     @parameterized.expand([True, False, None])
     def test_get_audio_features_output(self, return_dict: bool | None):
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_audio_features"):
+            if "audio" not in model_class.input_modalities or not hasattr(model_class, "get_audio_features"):
                 continue
 
             config, inputs_dict = self._audio_features_prepare_config_and_inputs()
@@ -5937,7 +6041,7 @@ class ModelTesterMixin(ExportTesterMixin):
             self.assertEqual(len(hidden_states), expected_num_hidden_states, "Number of hidden states layers mismatch")
 
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_audio_features"):
+            if "audio" not in model_class.input_modalities or not hasattr(model_class, "get_audio_features"):
                 continue
 
             config, inputs_dict = self._audio_features_prepare_config_and_inputs()
@@ -5979,7 +6083,7 @@ class ModelTesterMixin(ExportTesterMixin):
             return
 
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_audio_features"):
+            if "audio" not in model_class.input_modalities or not hasattr(model_class, "get_audio_features"):
                 continue
 
             config, inputs_dict = self._audio_features_prepare_config_and_inputs()
@@ -5999,6 +6103,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @parameterized.expand([True, False, None])
     def test_get_video_features_output(self, return_dict: bool | None):
         for model_class in self.all_model_classes:
+            # Models taking no video still get a `get_video_features` from `MultimodalMixin`
             if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
@@ -6077,6 +6182,7 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_model_classes:
             if model_class.__name__ not in get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES):
                 continue
+            # Models taking no video still get a `get_video_features` from `MultimodalMixin`
             if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
@@ -6118,6 +6224,7 @@ class ModelTesterMixin(ExportTesterMixin):
             self.assertEqual(len(hidden_states), expected_num_hidden_states, "Number of hidden states layers mismatch")
 
         for model_class in self.all_model_classes:
+            # Models taking no video still get a `get_video_features` from `MultimodalMixin`
             if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
@@ -6160,6 +6267,7 @@ class ModelTesterMixin(ExportTesterMixin):
             return
 
         for model_class in self.all_model_classes:
+            # Models taking no video still get a `get_video_features` from `MultimodalMixin`
             if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 

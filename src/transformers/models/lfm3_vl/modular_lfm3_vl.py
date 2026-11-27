@@ -23,6 +23,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -407,20 +408,12 @@ class Lfm3VlModel(Qwen2VLModel):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         image_features = self.multi_modal_projector(image_outputs.last_hidden_state)
         image_outputs.pooler_output = image_features
-        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
-        return image_outputs
-
-    def get_video_embeddings(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
+        split_sizes = image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -460,16 +453,14 @@ class Lfm3VlModel(Qwen2VLModel):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_features = mm_encoder_outputs["video"].pooler_output
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_features = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
             )
@@ -586,6 +577,9 @@ class Lfm3VlProcessor(Qwen3VLProcessor):
 
     def model_input_names(self):
         raise AttributeError("Lfm3Vl doesn't need to override it")
+
+    def get_text_with_replacements(self):
+        raise AttributeError("Lfm3Vl expects the chat template's outer vision wrapper, so it uses the default")
 
 
 __all__ = [

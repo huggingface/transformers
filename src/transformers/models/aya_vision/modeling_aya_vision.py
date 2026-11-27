@@ -26,9 +26,10 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -159,7 +160,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel, MultimodalMixin):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_tower(
             pixel_values,
             return_dict=True,
@@ -180,12 +181,10 @@ class AyaVisionModel(AyaVisionPreTrainedModel, MultimodalMixin):
             selected_image_feature = torch.cat(hs_pool, dim=-1)
 
         pooler_output = self.multi_modal_projector(selected_image_feature)
-        image_outputs.pooler_output = pooler_output.reshape(
-            selected_image_feature.shape[0], -1, self.config.text_config.hidden_size
-        )
-
-        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
-        return image_outputs
+        features = pooler_output.reshape(selected_image_feature.shape[0], -1, self.config.text_config.hidden_size)
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs.pooler_output = features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -352,6 +351,7 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, MultimodalMixi
         hidden_states = outputs[0]
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
+        logits = logits * self.config.text_config.logit_scale
 
         loss = None
         if labels is not None:

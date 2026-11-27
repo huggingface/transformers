@@ -30,6 +30,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -222,10 +223,15 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
 
 
 def get_pack_index_per_image(
-    image_sizes: torch.Tensor, config: LlavaNextConfig, vision_feature_select_strategy: str
+    image_sizes: torch.Tensor,
+    config: LlavaNextConfig,
+    vision_feature_select_strategy: str,
+    grid_size: int | None = None,
 ) -> list[torch.Tensor]:
-    """For each image, the indices of its packed features in all images' patch tokens, `image_newline` past them."""
-    grid_size = config.vision_config.image_size // config.vision_config.patch_size
+    """For each image, the indices of its packed features in all images' patch tokens, `image_newline` past them. A
+    patch's features are a `grid_size` x `grid_size` grid, the vision tower's patch grid by default."""
+    if grid_size is None:
+        grid_size = config.vision_config.image_size // config.vision_config.patch_size
     tokens_per_patch = grid_size**2 + (vision_feature_select_strategy == "full")
     image_num_patches = [
         image_size_to_num_patches(image_size, config.image_grid_pinpoints, config.vision_config.image_size)
@@ -253,21 +259,29 @@ def get_pack_index_per_image(
 
 
 def get_pack_index(
-    image_sizes: torch.Tensor, config: LlavaNextConfig, vision_feature_select_strategy: str, kwargs: dict | None = None
+    image_sizes: torch.Tensor,
+    config: LlavaNextConfig,
+    vision_feature_select_strategy: str,
+    kwargs: dict | None = None,
+    grid_size: int | None = None,
 ) -> torch.Tensor:
     """All images' packed feature indices, or pops `"pack_index"`."""
     if kwargs is not None and (pack_index := kwargs.pop("pack_index", None)) is not None:
         return pack_index
-    return torch.cat(get_pack_index_per_image(image_sizes, config, vision_feature_select_strategy))
+    return torch.cat(get_pack_index_per_image(image_sizes, config, vision_feature_select_strategy, grid_size))
 
 
 def get_pack_sizes(
-    image_sizes: torch.Tensor, config: LlavaNextConfig, vision_feature_select_strategy: str, kwargs: dict | None = None
+    image_sizes: torch.Tensor,
+    config: LlavaNextConfig,
+    vision_feature_select_strategy: str,
+    kwargs: dict | None = None,
+    grid_size: int | None = None,
 ) -> torch.Tensor:
     """Each image's number of packed features, or pops `"pack_sizes"`."""
     if kwargs is not None and (pack_sizes := kwargs.pop("pack_sizes", None)) is not None:
         return pack_sizes
-    pack_index = get_pack_index_per_image(image_sizes, config, vision_feature_select_strategy)
+    pack_index = get_pack_index_per_image(image_sizes, config, vision_feature_select_strategy, grid_size)
     return torch.tensor([len(index) for index in pack_index], device=image_sizes.device)
 
 
@@ -414,7 +428,7 @@ class LlavaNextModel(LlavaNextPreTrainedModel, MultimodalMixin):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, num_patches, channels, height, width)`)
             The tensors corresponding to the input images.
@@ -461,8 +475,7 @@ class LlavaNextModel(LlavaNextPreTrainedModel, MultimodalMixin):
         image_outputs.pooler_output = torch.cat([image_features, image_newline[None]])[
             pack_index.to(image_features.device)
         ]
-        image_outputs.split_sizes = split_sizes
-        return image_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -534,8 +547,7 @@ class LlavaNextModel(LlavaNextPreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )

@@ -177,10 +177,6 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
     skip_test_image_features_output_shape = True  # SmolVLM merges batch_size with num_images in index 0
     test_resize_embeddings = True
 
-    @unittest.skip(reason="The encoder's padding mask goes through flash attention's data-dependent unpadding")
-    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
-        pass
-
     def setUp(self):
         self.model_tester = SmolVLMVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(
@@ -230,10 +226,6 @@ class SmolVLMForConditionalGenerationModelTest(
     )
     skip_test_image_features_output_shape = True  # SmolVLM merges batch_size with num_images in index 0
     test_resize_embeddings = True
-
-    @unittest.skip(reason="The encoder's padding mask goes through flash attention's data-dependent unpadding")
-    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
-        pass
 
     def setUp(self):
         self.model_tester = SmolVLMVisionText2TextModelTester(self)

@@ -222,7 +222,9 @@ print(output_text)
 
 [[autodoc]] Ernie4_5_VLMoeModel
     - forward
+    - get_video_embeddings
     - get_video_features
+    - get_image_embeddings
     - get_image_features
 
 ## Ernie4_5_VLMoeForConditionalGeneration

@@ -110,6 +110,37 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return [[video_input]]
         return [[video_input]] * batch_size
 
+    # Override as SmolVLM needs images to be an explicitly nested batch
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        "Tests that the helper used internally in vLLM works correctly"
+        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
+        image_inputs = [np.random.randint(255, size=(h, w, 3), dtype=np.uint8) for h, w in image_sizes]
+
+        processor = self.get_processor()
+        for do_image_splitting in [False, True]:
+            with self.subTest(do_image_splitting=do_image_splitting):
+                processor.image_processor.do_image_splitting = do_image_splitting
+
+                text = [f"This is an image {self.image_token}"] * len(image_inputs)
+                images = [[image] for image in image_inputs]
+                inputs = processor(
+                    text=text, images=images, padding=True, return_text_replacement_offsets=True, return_tensors="pt"
+                )
+                num_image_tokens_from_call = self._count_embed_tokens(processor, inputs, "image")
+                num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
+                self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
+
+                text = [f"These are two images {self.image_token}{self.image_token}"] * len(image_inputs)
+                images = [[image, image] for image in image_inputs]
+                inputs = processor(
+                    text=text, images=images, padding=True, return_text_replacement_offsets=True, return_tensors="pt"
+                )
+                num_image_tokens_from_call = self._count_embed_tokens(processor, inputs, "image")
+                num_image_tokens_from_helper = processor._get_num_multimodal_tokens(
+                    image_sizes=[s for s in image_sizes for _ in range(2)]
+                )
+                self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
+
     def get_split_image_expected_tokens(self, processor, image_rows, image_cols):
         text_split_images = []
         for n_h in range(image_rows):
@@ -130,6 +161,24 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             + [self.fake_image_token_id]
         )
         return text_split_images
+
+    def test_video_prompt_frame_counts(self):
+        """Check that each prompt uses its video's frame count in a mixed-length batch."""
+        processor = self.get_processor()
+        videos = [np.zeros((num_frames, 16, 16, 3), dtype=np.uint8) for num_frames in (2, 4)]
+
+        inputs = processor(
+            text=[f"{self.video_token}Describe this clip."] * 2,
+            videos=videos,
+            do_sample_frames=False,
+            padding=True,
+            return_tensors="pt",
+        )
+        prompts = processor.batch_decode(inputs["input_ids"])
+        for prompt, frame_count in zip(prompts, ("two", "four")):
+            self.assertIn(f"series of {frame_count} frames", prompt)
+        for prompt, num_frames in zip(prompts, (2, 4)):
+            self.assertEqual(prompt.count("Frame from "), num_frames)
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor_components = self.prepare_components()

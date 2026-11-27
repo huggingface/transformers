@@ -29,7 +29,8 @@ from ...utils import auto_docstring
 class Inkling2TextConfig(PreTrainedConfig):
     r"""
     unpadded_vocab_size (`int`, *optional*, defaults to 200058):
-        Number of rows of the unembedding matrix that hold real tokens. Logits beyond it are dropped.
+        Output size of the language modeling head. The checkpoint unembedding is padded to `vocab_size`, the padded
+        rows are dropped on load and restored as zeros on save.
     swa_num_attention_heads (`int`, *optional*, defaults to 48):
         Number of attention heads in the sliding-window layers.
     swa_num_key_value_heads (`int`, *optional*, defaults to 8):
@@ -64,12 +65,7 @@ class Inkling2TextConfig(PreTrainedConfig):
 
     model_type = "inkling2_text"
     base_config_key = "text_config"
-    base_model_tp_plan = {
-        "embed_tokens": "replicate",
-        "layers.*.mlp.experts.gate_up_proj": "colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
-    }
+    base_model_tp_plan = {"embed_tokens": "replicate"}
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",

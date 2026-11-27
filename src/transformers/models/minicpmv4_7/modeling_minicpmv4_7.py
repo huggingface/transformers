@@ -36,6 +36,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -611,7 +612,6 @@ class MiniCPMV4_7PreTrainedModel(PreTrainedModel):
         "MiniCPMV4_7VisionEncoderLayer",
         "MiniCPMV4_7ViTWindowAttentionMerger",
     ]
-    _is_stateful = True
 
 
 @auto_docstring(
@@ -638,7 +638,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel, MultimodalMixin):
         target_sizes: torch.IntTensor,
         downsample_mode: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         target_sizes (`torch.IntTensor` of shape `(num_images, 2)`):
             Height and width (in patches) of each image.
@@ -659,13 +659,10 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel, MultimodalMixin):
 
         if use_vit_merger:
             target_sizes = target_sizes // 2
-        vision_output.pooler_output = torch.cat(self.merger(vision_output.last_hidden_state, target_sizes), dim=0)
-        merge_height, merge_width = self.merger.merge_kernel_size
-        rounds = self.merger.merger_times
-        vision_output.split_sizes = (target_sizes[:, 0] // merge_height**rounds) * (
-            target_sizes[:, 1] // merge_width**rounds
-        )
-        return vision_output
+        merged = self.merger(vision_output.last_hidden_state, target_sizes)
+        vision_output.pooler_output = torch.cat(merged, dim=0)
+        split_sizes = torch.tensor([len(features) for features in merged], device=target_sizes.device)
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_output, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -791,14 +788,35 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel, MultimodalMixin):
             **output, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
         )
 
-    def get_data_dependent_inputs(self, target_sizes: torch.IntTensor | None = None, **kwargs) -> dict[str, Any]:
-        """What the forward derives from the processor's outputs with data-dependent ops: the vision
-        tower's (see [`MiniCPMV4_7VisionModel.get_data_dependent_inputs`]) prefixed `image_`, as
-        `get_image_features` takes them."""
-        if target_sizes is None:
-            return {}
-        tower_inputs = self.vision_tower.get_data_dependent_inputs(target_sizes)
-        return {f"image_{name}": value for name, value in tower_inputs.items()}
+    def get_data_dependent_inputs(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        target_sizes: torch.IntTensor | None = None,
+        target_sizes_videos: torch.IntTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        downsample_mode: str | None = None,
+        position_ids: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """What the forward derives from the processor's outputs with data-dependent ops: the canvas M-RoPE
+        `position_ids`, and the vision tower's inputs (see [`MiniCPMV4_7VisionModel.get_data_dependent_inputs`])
+        prefixed `image_`, as `get_image_features` takes them."""
+        inputs = {}
+        if target_sizes is not None:
+            tower_inputs = self.vision_tower.get_data_dependent_inputs(target_sizes)
+            inputs.update({f"image_{name}": value for name, value in tower_inputs.items()})
+        has_multimodal = target_sizes is not None or target_sizes_videos is not None
+        if position_ids is None and input_ids is not None and mm_token_type_ids is not None and has_multimodal:
+            inputs["position_ids"], _ = self.get_rope_index(
+                input_ids,
+                attention_mask=attention_mask,
+                target_sizes=target_sizes,
+                target_sizes_videos=target_sizes_videos,
+                mm_token_type_ids=mm_token_type_ids,
+                downsample_mode=downsample_mode,
+            )
+        return inputs
 
     @can_return_tuple
     @auto_docstring(
@@ -810,7 +828,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel, MultimodalMixin):
         target_sizes_videos: torch.IntTensor,
         downsample_mode: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor` of shape `(1, channels, patch_size, seq_len)`):
             NaViT-packed pixel patches for all video frames. The video processor concatenates

@@ -21,9 +21,10 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -128,7 +129,7 @@ class LlavaModel(LlavaPreTrainedModel, MultimodalMixin):
         vision_feature_select_strategy: str | None = None,
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         if image_sizes is not None:  # pass only when not-None, not all vision backbones accept it
             kwargs["image_sizes"] = image_sizes
         image_outputs = self.vision_tower(
@@ -155,12 +156,14 @@ class LlavaModel(LlavaPreTrainedModel, MultimodalMixin):
         # If image_sizes is provided, we need to split the image features accordingly,
         # but only if the image_sizes is not None (the default in this and related architectures)
         if image_sizes is not None:
-            image_outputs.split_sizes = (
+            split_sizes = (
                 torch.as_tensor(image_sizes, device=image_features.device) // self.vision_tower.patch_size
             ).prod(dim=-1)
             image_features = image_features.squeeze(0)
         else:
-            image_features, image_outputs.split_sizes = flatten_items(image_features)
+            split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
+            image_features = image_features.flatten(0, 1)
+        image_outputs = BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
         image_outputs.pooler_output = image_features
 
         return image_outputs
@@ -228,8 +231,7 @@ class LlavaModel(LlavaPreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )

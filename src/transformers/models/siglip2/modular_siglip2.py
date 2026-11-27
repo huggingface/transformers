@@ -229,7 +229,6 @@ class Siglip2VisionEmbeddings(nn.Module):
 class Siglip2PreTrainedModel(SiglipPreTrainedModel):
     # nn.MultiHeadAttention mask doesn't allow for non 4d mask
     _supports_flex_attn = False
-    _supports_flash_attn = False
 
 
 class Siglip2VisionModel(SiglipVisionModel):
@@ -314,27 +313,10 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
         batch_size = hidden_state.shape[0]
         probe = self.probe.repeat(batch_size, 1, 1)
 
-        if attention_mask is not None:
-            target_len, source_len = probe.shape[1], hidden_state.shape[1]
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=probe,
-                attention_mask=attention_mask,
-                encoder_hidden_states=hidden_state,
-            )
-            if attention_mask is not None:
-                attention_mask = attention_mask.repeat(1, self.num_heads, target_len, 1)
-                attention_mask = attention_mask.reshape(-1, target_len, source_len)
-
-                # `nn.MultiheadAttention` cannot handle boolean masks (which SDPA can)
-                if attention_mask.dtype == torch.bool:
-                    attention_mask = torch.where(
-                        attention_mask,
-                        torch.full((), 0.0, device=attention_mask.device, dtype=probe.dtype),
-                        torch.finfo(probe.dtype).min,
-                    )
-
-        hidden_state = self.attention(probe, hidden_state, hidden_state, attn_mask=attention_mask)[0]
+        # `nn.MultiheadAttention` takes the padding as `key_padding_mask` (True = ignored), whatever the attention
+        # implementation of the encoder
+        key_padding_mask = ~attention_mask.bool() if attention_mask is not None else None
+        hidden_state = self.attention(probe, hidden_state, hidden_state, key_padding_mask=key_padding_mask)[0]
 
         residual = hidden_state
         hidden_state = self.layernorm(hidden_state)

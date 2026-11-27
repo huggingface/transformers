@@ -25,12 +25,14 @@ _import_structure = {
         "ExecutorchConfig",
         "ExportConfigMixin",
         "ExportFormat",
+        "MLXConfig",
         "OnnxConfig",
         "OpenVINOConfig",
         "OrtFusionConfig",
     ],
     "exporter_dynamo": ["DynamoExporter"],
     "exporter_executorch": ["ExecutorchExporter"],
+    "exporter_mlx": ["MLXExporter"],
     "exporter_onnx": ["OnnxExporter"],
     "exporter_openvino": ["OpenVINOExporter"],
     "generation": ["ExportedModelForCausalLM", "ExportedModelForSeq2SeqLM", "ExportedMultimodalModelForCausalLM"],
@@ -59,12 +61,14 @@ if TYPE_CHECKING:
         ExecutorchConfig,
         ExportConfigMixin,
         ExportFormat,
+        MLXConfig,
         OnnxConfig,
         OpenVINOConfig,
         OrtFusionConfig,
     )
     from .exporter_dynamo import DynamoExporter
     from .exporter_executorch import ExecutorchExporter
+    from .exporter_mlx import MLXExporter
     from .exporter_onnx import OnnxExporter
     from .exporter_openvino import OpenVINOExporter
     from .generation import ExportedModelForCausalLM, ExportedModelForSeq2SeqLM, ExportedMultimodalModelForCausalLM

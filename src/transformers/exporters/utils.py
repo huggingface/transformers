@@ -47,7 +47,6 @@ from packaging import version
 
 from ..utils import logging
 from ..utils.import_utils import _is_package_available, is_torch_available
-from .precompute import precompute_export_inputs
 
 
 logger = logging.get_logger(__name__)
@@ -55,18 +54,7 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
-
-    try:
-        from torch._prims_common import is_contiguous_or_false
-    except ImportError:  # `is_contiguous_or_false` was added in torch 2.9
-        from torch.fx.experimental.symbolic_shapes import GuardOnDataDependentSymNode
-
-        def is_contiguous_or_false(a: torch.Tensor) -> bool:
-            # Like torch>=2.9's version, answer False instead of raising on data-dependent shapes.
-            try:
-                return bool(a.is_contiguous())
-            except GuardOnDataDependentSymNode:
-                return False
+    from torch._prims_common import is_contiguous_or_false
 
     from .. import masking_utils
     from ..modeling_utils import PreTrainedModel
@@ -567,6 +555,15 @@ def quantize_converted_model(program: Any, sample_inputs: MutableMapping[str, An
 _OUTPUT_FLAGS = ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss")
 
 
+def with_data_dependent_inputs(model, inputs: dict[str, Any]) -> dict[str, Any]:
+    """`inputs` with what `model` computes from them with data-dependent ops (`get_data_dependent_inputs`: host syncs,
+    loops over images), precomputed so it traces; the ones `inputs` already has are kept."""
+    if (get_data_dependent_inputs := getattr(model, "get_data_dependent_inputs", None)) is None:
+        return inputs
+    with torch.no_grad():
+        return {**get_data_dependent_inputs(**inputs), **inputs}
+
+
 def prepare_for_export(
     model: PreTrainedModel | torch.nn.Module, inputs: MutableMapping[str, Any]
 ) -> tuple[PreTrainedModel | torch.nn.Module, MutableMapping[str, Any], dict[str, Any]]:
@@ -579,8 +576,8 @@ def prepare_for_export(
     - Pops output flags (`use_cache`, `return_dict`, …) from `inputs` so they don't appear
       as traced kwargs; the values are returned for the trace block to apply onto
       `model.config`.
-    - Pre-computes data-dependent vision/audio kwargs registered via
-      `@register_export_input_preparer` and writes them into `inputs`.
+    - Adds the model's `get_data_dependent_inputs` (`cu_seqlens`, `position_ids`, …), which the forward
+      would otherwise compute with data-dependent ops, keeping the ones `inputs` already has.
     - Casts input tensors to match the model's `dtype` / `device`.
     """
     # Strip label inputs — loss computation is not supported during export.
@@ -609,12 +606,7 @@ def prepare_for_export(
     if isinstance(inputs.get("logits_to_keep"), int):
         output_flags["logits_to_keep"] = inputs.pop("logits_to_keep")
 
-    # Pre-compute data-dependent vision/audio tensors that use loops, .tolist(),
-    # repeat_interleave, or itertools.groupby — untraceable by dynamo.
-    # TODO: use the collator API once it covers these cases.
-    # A decomposed component (e.g. `FSMTEncoder`) may carry no config.
-    if (config := getattr(model, "config", None)) is not None:
-        inputs.update(precompute_export_inputs(config, inputs))
+    inputs.update(with_data_dependent_inputs(model, inputs))
 
     # Cast all input tensors to match the model's dtype and device (e.g. cache objects
     # created before the model was moved to bfloat16/CUDA by a backend preparation step).

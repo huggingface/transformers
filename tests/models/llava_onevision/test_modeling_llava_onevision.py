@@ -215,10 +215,6 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     test_disk_offload_bin = False
     _is_composite = True
 
-    @unittest.skip(reason="Each image's features are interpolated to an anyres-max size from `image_sizes`")
-    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
-        pass
-
     def setUp(self):
         self.model_tester = LlavaOnevisionVisionText2TextModelTester(self)
         common_properties = ["image_token_index", "video_token_index", "vision_feature_layer"]
@@ -360,6 +356,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXTS = Expectations(
             {
                 ("xpu", 3): 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VIZ," "TextVQA," "SQA-IMG," and "MQE." The radar chart shows',
+                ("xpu", 5): 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VQAv2," "MM-Vet," "LLaVA-Bench," "LLaVA-1',
                 ("cuda", 7): 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VQAv2," "MM-Vet," "LLaVA-Bench," "LLaVA-1',
                 ("cuda", 8): 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VIZ," "TextVQA," "SQA-IMG," and "MQE." The radar chart shows',
             }

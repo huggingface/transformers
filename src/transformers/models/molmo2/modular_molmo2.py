@@ -17,6 +17,7 @@
 import itertools
 import math
 from collections.abc import Callable
+from typing import Any
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -41,7 +42,12 @@ from ...image_utils import (
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import (
@@ -61,7 +67,7 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoInput, VideoMetadata
@@ -708,16 +714,15 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
     def get_image_grid_and_crops(self, height: int, width: int, images_kwargs=None) -> tuple[list[int], int]:
         """Return the `[low_res_h, low_res_w, high_res_h, high_res_w]` pooled grid and the crop count for one image."""
-        if images_kwargs is None:
-            images_kwargs = {}
-        max_crops = images_kwargs.get("max_crops", self.max_crops)
-        overlap_margins = images_kwargs.get("overlap_margins", self.overlap_margins)
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        pooling_size = images_kwargs.get("pooling_size", self.pooling_size)
-        size = images_kwargs.get("size", self.size)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        max_crops = images_kwargs["max_crops"]
+        overlap_margins = images_kwargs["overlap_margins"]
+        patch_size = images_kwargs["patch_size"]
+        pooling_size = images_kwargs["pooling_size"]
+        size = images_kwargs["size"]
 
-        base_h = size["height"] if isinstance(size, dict) else size.height
-        base_w = size["width"] if isinstance(size, dict) else size.width
+        base_h = size.height
+        base_w = size.width
         pooling_h, pooling_w = pooling_size
 
         tiling_h, tiling_w, canvas_height, canvas_width = compute_crop_geometry(
@@ -1047,8 +1052,9 @@ class Molmo2Processor(ProcessorMixin):
             num_image_tokens, num_image_patches = [], []
             for image_size in image_sizes:
                 image_grid, num_crops = self.image_processor.get_image_grid_and_crops(*image_size, images_kwargs)
-                image_string = self.replace_image_token({"image_grids": [image_grid]}, image_idx=0)
-                num_image_tokens.append(len(self.tokenizer.tokenize(image_string)))
+                # `<im_patch>` tokens of the low-res view followed by those of the high-res view
+                resized_h, resized_w, height, width = image_grid
+                num_image_tokens.append(resized_h * resized_w + height * width)
                 num_image_patches.append(num_crops)
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
@@ -1375,6 +1381,7 @@ class Molmo2Adapter(Molmo2PreTrainedModel):
         self,
         image_features: torch.Tensor,
         pooled_patches_idx: torch.Tensor,
+        valid_token_index: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -1382,11 +1389,14 @@ class Molmo2Adapter(Molmo2PreTrainedModel):
             Concatenated intermediate ViT features of every crop.
         pooled_patches_idx (`torch.Tensor` of shape `(num_tokens, pool_h * pool_w)`):
             Indices into the flattened patch sequence pooled by each output token; `-1` marks padding slots.
+        valid_token_index (`torch.LongTensor`, *optional*):
+            The tokens with at least one patch to pool, the ones returned. Computed if not given.
         """
         flat_features = image_features.reshape(-1, image_features.shape[-1])
 
         valid_mask = pooled_patches_idx >= 0
-        valid_token_mask = torch.any(valid_mask, -1)
+        if valid_token_index is None:
+            valid_token_index = valid_mask.any(-1).nonzero().squeeze(-1)
 
         patches_to_pool = flat_features[torch.clip(pooled_patches_idx, 0)]
         patches_to_pool = patches_to_pool * valid_mask.to(patches_to_pool.dtype)[..., None]
@@ -1401,7 +1411,7 @@ class Molmo2Adapter(Molmo2PreTrainedModel):
         pooled_features, _ = self.image_pooling_2d(query, patches_to_pool, attention_mask=attention_mask, **kwargs)
         pooled_features = pooled_features.squeeze(1)
         pooled_features = self.image_projector(pooled_features)
-        return BaseModelOutput(last_hidden_state=pooled_features[valid_token_mask])
+        return BaseModelOutput(last_hidden_state=pooled_features[valid_token_index])
 
 
 class Molmo2TextModel(LlamaModel):
@@ -1507,7 +1517,22 @@ class Molmo2Model(LlavaModel):
         self.language_model = Molmo2TextModel(config.text_config)
         self.post_init()
 
+    def get_data_dependent_inputs(
+        self,
+        image_token_pooling: torch.Tensor | None = None,
+        video_token_pooling: torch.Tensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """The tokens the adapter returns, those with at least one patch to pool (`valid_token_index`), prefixed
+        `image_` and `video_`."""
+        inputs = {}
+        for modality, token_pooling in (("image", image_token_pooling), ("video", video_token_pooling)):
+            if token_pooling is not None:
+                inputs[f"{modality}_valid_token_index"] = (token_pooling >= 0).any(-1).nonzero().squeeze(-1)
+        return inputs
+
     @can_return_tuple
+    @accepts_precomputed_kwargs(modality="image")
     @filter_output_hidden_states
     @auto_docstring(
         custom_intro="Obtains pooled image features from the vision tower and the adapter: the `pooler_output` is "
@@ -1519,12 +1544,13 @@ class Molmo2Model(LlavaModel):
         image_token_pooling: torch.Tensor,
         image_grids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_shape = None
         if pixel_values.dim() == 4:
             image_shape = pixel_values.shape[:3]
             pixel_values = pixel_values.reshape(-1, pixel_values.shape[-2], pixel_values.shape[-1])
 
+        valid_token_index = kwargs.pop("valid_token_index", None)
         image_outputs: BaseModelOutputWithPooling = self.vision_tower(pixel_values, **kwargs)
         image_features = torch.cat(
             [
@@ -1536,12 +1562,15 @@ class Molmo2Model(LlavaModel):
 
         if image_shape is not None:
             image_features = image_features.reshape(*image_shape, -1)
-        pooled_features = self.multi_modal_projector(image_features, image_token_pooling).last_hidden_state
+        pooled_features = self.multi_modal_projector(
+            image_features, image_token_pooling, valid_token_index=valid_token_index
+        ).last_hidden_state
         image_outputs.pooler_output = pooled_features
-        image_outputs.split_sizes = image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]
-        return image_outputs
+        split_sizes = image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
+    @accepts_precomputed_kwargs(modality="video")
     @auto_docstring(
         custom_intro="Obtains pooled video features from the vision tower and the adapter: the `pooler_output` is "
         "one `(num_video_tokens, hidden_size)` tensor for all videos."
@@ -1552,7 +1581,7 @@ class Molmo2Model(LlavaModel):
         video_token_pooling: torch.Tensor,
         video_grids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         # Video frames only go through the low-res path: `num_frames` frames of `rows x cols` tokens, no high-res crops.
         num_frames, rows, cols = video_grids.unbind(-1)
         image_grids = torch.stack([num_frames * rows, cols, torch.zeros_like(cols), torch.zeros_like(cols)], dim=-1)
@@ -1599,10 +1628,12 @@ class Molmo2Model(LlavaModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_token_pooling, image_grids)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
+                pixel_values, image_token_pooling, image_grids, **kwargs
+            )
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
             mm_encoder_outputs["video"] = self.get_video_embeddings(
-                pixel_values_videos, video_token_pooling, video_grids
+                pixel_values_videos, video_token_pooling, video_grids, **kwargs
             )
 
         image_features: torch.Tensor | None = None

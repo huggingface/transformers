@@ -121,13 +121,6 @@ class Ernie4_5_VLMoeModelTest(VLMModelTest, unittest.TestCase):
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
     test_all_params_have_gradient = False  # e score correction bias + moe
 
-    @unittest.skip(
-        reason="Its TP and EP plans don't reach the text and vision experts yet; they come with their own PR, "
-        "together with the loading fix that splits the checkpoint's expert stack."
-    )
-    def test_moe_parallel_plans_shard_experts(self):
-        pass
-
     def _video_features_prepare_config_and_inputs(self):
         """
         Helper method to extract only video-related inputs from the full set of inputs, for testing `get_video_features`.
@@ -516,6 +509,10 @@ class Ernie4_5_VLMoeSmallIntegrationTest(unittest.TestCase):
                 ("xpu", None): [
                     '知道了知道了attaatta不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如',
                     '填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空',
+                ],
+                ("xpu", 5): [
+                    '知道了知道了attaatta不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如',
+                    '知道了知道了attaattaattaatta蚕蚕尖尖尖尖尖尖尖尖尖尖尖尖尖尖尖尖尖尖尖尖尖尖',
                 ],
                 (None, None): [
                     '知道了知道了attaatta不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如',

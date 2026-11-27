@@ -25,6 +25,7 @@ from .configs import (
     ExecutorchConfig,
     ExportConfigMixin,
     ExportFormat,
+    MLXConfig,
     OnnxConfig,
     OpenVINOConfig,
 )
@@ -55,6 +56,7 @@ EXPORT_BACKENDS: dict[str, ExportBackend] = {
     ),
     "dynamo": ExportBackend(DynamoConfig, "exporter_dynamo.DynamoExporter", "runners.runner_dynamo.DynamoModelRunner"),
     "onnx": ExportBackend(OnnxConfig, "exporter_onnx.OnnxExporter", "runners.runner_onnx.OnnxModelRunner"),
+    "mlx": ExportBackend(MLXConfig, "exporter_mlx.MLXExporter", "runners.runner_mlx.MLXModelRunner"),
 }
 
 
