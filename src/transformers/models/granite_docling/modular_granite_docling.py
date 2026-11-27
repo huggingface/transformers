@@ -71,7 +71,7 @@ logger = logging.get_logger(__name__)
     Configuration of the SigLIP-style vision encoder that embeds every 512x512 tile of a page, and of the connector
     that turns its outputs into image tokens.
     """,
-    checkpoint="ibm-granite/granite-for-docling-500m",
+    checkpoint="ibm-granite/granite-docling-v2-500m",
 )
 @strict
 class GraniteDoclingVisionConfig(Idefics3VisionConfig):
@@ -93,10 +93,10 @@ class GraniteDoclingVisionConfig(Idefics3VisionConfig):
     ```python
     >>> from transformers import GraniteDoclingVisionConfig, GraniteDoclingVisionModel
 
-    >>> # Initializing a GraniteDoclingVisionConfig with ibm-granite/granite-for-docling-500m style configuration
+    >>> # Initializing a GraniteDoclingVisionConfig with ibm-granite/granite-docling-v2-500m style configuration
     >>> configuration = GraniteDoclingVisionConfig()
 
-    >>> # Initializing a GraniteDoclingVisionModel (with random weights) from the ibm-granite/granite-for-docling-500m style configuration
+    >>> # Initializing a GraniteDoclingVisionModel (with random weights) from the ibm-granite/granite-docling-v2-500m style configuration
     >>> model = GraniteDoclingVisionModel(configuration)
 
     >>> # Accessing the model configuration
@@ -120,7 +120,7 @@ class GraniteDoclingVisionConfig(Idefics3VisionConfig):
         PreTrainedConfig.__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="ibm-granite/granite-for-docling-500m")
+@auto_docstring(checkpoint="ibm-granite/granite-docling-v2-500m")
 @strict
 class GraniteDoclingTextConfig(GraniteConfig):
     model_type = "granite_docling_text"
@@ -144,7 +144,7 @@ class GraniteDoclingTextConfig(GraniteConfig):
     attention_multiplier: float | int = 0.015625
 
 
-@auto_docstring(checkpoint="ibm-granite/granite-for-docling-500m")
+@auto_docstring(checkpoint="ibm-granite/granite-docling-v2-500m")
 @strict
 class GraniteDoclingConfig(PreTrainedConfig):
     r"""
@@ -1330,10 +1330,10 @@ class GraniteDoclingForConditionalGeneration(Idefics3ForConditionalGeneration):
         >>> from transformers import AutoProcessor, AutoModelForImageTextToText
         >>> from transformers.image_utils import load_image
 
-        >>> image = load_image("https://huggingface.co/ibm-granite/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png")
+        >>> image = load_image("https://huggingface.co/ibm-granite/granite-docling-v2-500m/resolve/main/docling_technical_report_p1.png")
 
-        >>> processor = AutoProcessor.from_pretrained("ibm-granite/granite-for-docling-500m")
-        >>> model = AutoModelForImageTextToText.from_pretrained("ibm-granite/granite-for-docling-500m", device_map="auto")
+        >>> processor = AutoProcessor.from_pretrained("ibm-granite/granite-docling-v2-500m")
+        >>> model = AutoModelForImageTextToText.from_pretrained("ibm-granite/granite-docling-v2-500m", device_map="auto")
 
         >>> messages = [
         ...     {

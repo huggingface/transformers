@@ -364,7 +364,7 @@ class GraniteDoclingModelTest(VLMModelTest, unittest.TestCase):
 @require_torch
 @slow
 class GraniteDoclingIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    model_id = "ibm-granite/granite-for-docling-500m"
+    model_id = "ibm-granite/granite-docling-v2-500m"
 
     def setUp(self):
         super().setUp()

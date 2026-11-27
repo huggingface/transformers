@@ -32,7 +32,7 @@ if is_torch_available():
 class GraniteDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GraniteDoclingProcessor
     tiny_model_id = "hf-internal-testing/tiny-processor-granite-docling"
-    model_id = "ibm-granite/granite-for-docling-500m"
+    model_id = "ibm-granite/granite-docling-v2-500m"
 
     @classmethod
     def _setup_test_attributes(cls, processor):

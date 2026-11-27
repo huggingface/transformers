@@ -30,7 +30,7 @@ from ...utils import auto_docstring
     Configuration of the SigLIP-style vision encoder that embeds every 512x512 tile of a page, and of the connector
     that turns its outputs into image tokens.
     """,
-    checkpoint="ibm-granite/granite-for-docling-500m",
+    checkpoint="ibm-granite/granite-docling-v2-500m",
 )
 @strict
 class GraniteDoclingVisionConfig(PreTrainedConfig):
@@ -52,10 +52,10 @@ class GraniteDoclingVisionConfig(PreTrainedConfig):
     ```python
     >>> from transformers import GraniteDoclingVisionConfig, GraniteDoclingVisionModel
 
-    >>> # Initializing a GraniteDoclingVisionConfig with ibm-granite/granite-for-docling-500m style configuration
+    >>> # Initializing a GraniteDoclingVisionConfig with ibm-granite/granite-docling-v2-500m style configuration
     >>> configuration = GraniteDoclingVisionConfig()
 
-    >>> # Initializing a GraniteDoclingVisionModel (with random weights) from the ibm-granite/granite-for-docling-500m style configuration
+    >>> # Initializing a GraniteDoclingVisionModel (with random weights) from the ibm-granite/granite-docling-v2-500m style configuration
     >>> model = GraniteDoclingVisionModel(configuration)
 
     >>> # Accessing the model configuration
@@ -87,7 +87,7 @@ class GraniteDoclingVisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="ibm-granite/granite-for-docling-500m")
+@auto_docstring(checkpoint="ibm-granite/granite-docling-v2-500m")
 @strict
 class GraniteDoclingTextConfig(PreTrainedConfig):
     r"""
@@ -154,7 +154,7 @@ class GraniteDoclingTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="ibm-granite/granite-for-docling-500m")
+@auto_docstring(checkpoint="ibm-granite/granite-docling-v2-500m")
 @strict
 class GraniteDoclingConfig(PreTrainedConfig):
     r"""

@@ -1356,10 +1356,10 @@ class GraniteDoclingForConditionalGeneration(GraniteDoclingPreTrainedModel, Gene
         >>> from transformers import AutoProcessor, AutoModelForImageTextToText
         >>> from transformers.image_utils import load_image
 
-        >>> image = load_image("https://huggingface.co/ibm-granite/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png")
+        >>> image = load_image("https://huggingface.co/ibm-granite/granite-docling-v2-500m/resolve/main/docling_technical_report_p1.png")
 
-        >>> processor = AutoProcessor.from_pretrained("ibm-granite/granite-for-docling-500m")
-        >>> model = AutoModelForImageTextToText.from_pretrained("ibm-granite/granite-for-docling-500m", device_map="auto")
+        >>> processor = AutoProcessor.from_pretrained("ibm-granite/granite-docling-v2-500m")
+        >>> model = AutoModelForImageTextToText.from_pretrained("ibm-granite/granite-docling-v2-500m", device_map="auto")
 
         >>> messages = [
         ...     {
