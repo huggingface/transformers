@@ -273,6 +273,7 @@ from .import_utils import (
     is_vptq_available,
     is_xlstm_available,
     is_yt_dlp_available,
+    is_zyphra_textnorm_available,
     requires_backends,
     torch_compilable_check,
     torch_only_method,

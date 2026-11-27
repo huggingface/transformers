@@ -828,6 +828,12 @@ def is_yt_dlp_available() -> bool:
 
 @lru_cache
 @_make_compile_constant
+def is_zyphra_textnorm_available() -> bool:
+    return _is_package_available("zyphra_textnorm")[0]
+
+
+@lru_cache
+@_make_compile_constant
 def is_libcst_available() -> bool:
     return _is_package_available("libcst")[0]
 
