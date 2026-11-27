@@ -244,9 +244,10 @@ class GgufEmbedding(nn.Module):
 
 def replace_with_gguf_modules(model, plan: dict[str, int], kernel, dtype=None) -> dict[str, nn.Module]:
     """Replace every module named in `plan` with one that holds GGUF blocks; return `{param_name: module}`."""
-    # update plan for tied weights
+    # update plan for tied weights, unless the source stays dense (a subclassed module, like Gemma's scaled embedding)
     for target, source in (model._tied_weights_keys or {}).items():
-        if source in plan and target not in plan:
+        source_module = model.get_submodule(source.removesuffix(".weight"))
+        if source in plan and target not in plan and type(source_module) in (nn.Linear, nn.Embedding):
             plan[target] = plan[source]
 
     replaced, unsupported = {}, set()
