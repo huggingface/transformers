@@ -26,7 +26,7 @@ load a new format through an existing quantizer such as fine-grained FP8.
 | Config | `utils/quantization_config.py` | [`NVFP4Config`] |
 | Quantizer | `quantizers/quantizer_<format>.py` | `NVFP4HfQuantizer`, `Mxfp4HfQuantizer` |
 | Modules, kernels, load ops | `integrations/<format>.py` | `NVFP4Linear`, `NVFP4Deserialize` |
-| Checkpoint scheme reader (optional) | `quantizers/schema_readers.py` | `modelopt_plan`, `fp4_experts_plan` |
+| Checkpoint scheme reader (optional) | `quantizers/schema_readers.py` | `modelopt_plan` |
 
 See [Contribute](./contribute) for the config, registration and tests. This page covers the format itself.
 
@@ -127,27 +127,16 @@ Transformers' format for a model quantized with several methods is a [quantizati
 | Checkpoint scheme | Reader | Plan |
 |---|---|---|
 | ModelOpt `quant_algo`, or `MIXED_PRECISION` with one per layer under `quantized_layers` | `modelopt_plan` | each layer's `quant_algo` → its config, e.g. `NVFP4` → [`NVFP4Config`] |
-| DeepSeek-V4's FP8 config with `expert_dtype: "fp4"` | `fp4_experts_plan` | `{"*.mlp.experts": Mxfp4Config(), "*": <the FP8 config>}` |
 
 Such a scheme gets a small reader in `quantizers/schema_readers.py`, converting it into a plan, instead of a special
 case in the loading code. A reader takes the checkpoint's `quantization_config` dict and returns a plan, or `None` for
 configs it doesn't handle:
 
 ```py
-def fp4_experts_plan(config: dict) -> dict | None:
-    "DeepSeek-V4's FP8 checkpoints, whose routed experts are MXFP4 (`expert_dtype: fp4`)"
-    if config.get("quant_method") != "fp8" or config.get("expert_dtype") != "fp4":
-        return None
-    return {
-        "*.mlp.experts": Mxfp4Config(),
-        "*": {key: value for key, value in config.items() if key != "expert_dtype"},
-    }
-
-
-SCHEMA_READERS = [modelopt_plan, fp4_experts_plan]  # tried in order, the first plan wins
+SCHEMA_READERS = [modelopt_plan]
 ```
 
-Add the reader to `SCHEMA_READERS`. `get_hf_quantizer` calls `read_quantization_schema(config)`, which returns the plan
+`get_hf_quantizer` calls `read_quantization_schema(config)`, which returns the plan
 of the first reader that handles the config. The plan's names are checkpoint module names: the
 `QuantizationPlanHfQuantizer` renames them to the model's, like the keys of their params. A new method in an existing
 scheme, e.g. a new ModelOpt `quant_algo`, maps to the config of its own quantizer.

@@ -41,12 +41,10 @@ if is_torch_available():
     import torch
 
 
-# A tiny Mistral4 saved pre-quantized like Mistral-Large-4's NVFP4 release: fp8 attention and experts, nvfp4 shared
-# experts. `dense_reference.pt` holds the bf16 weights it was quantized from.
+# A tiny Mistral4 saved pre-quantized like Mistral-Large-4's NVFP4 release: fp8 attention, nvfp4 shared linears.
+# `dense_reference.pt` holds the bf16 weights it was quantized from.
 REPO = "hf-internal-testing/tiny-random-Mistral4-fp8-nvfp4"
 
-# deepseek-ai/DeepSeek-V4-Flash: MXFP4 experts from `expert_dtype: fp4` in the model config, V4.1's quantization config
-DEEPSEEK_V4 = {"quant_method": "fp8", "scale_fmt": "ue8m0", "weight_block_size": [128, 128]}
 TINY_DEEPSEEK = {
     "num_hidden_layers": 2,
     "hidden_size": 64,
@@ -59,7 +57,7 @@ TINY_DEEPSEEK = {
 @require_torch
 class QuantizationPlanTest(unittest.TestCase):
     def dense_reference(self):
-        return torch.load(hf_hub_download(REPO, "dense_reference.pt")) # TODO: should be a safetensor?
+        return torch.load(hf_hub_download(REPO, "dense_reference.pt"))  # TODO: should be a safetensor?
 
     def check_logits(self, model):
         config = AutoConfig.from_pretrained(REPO)
@@ -163,7 +161,7 @@ class QuantizationPlanTest(unittest.TestCase):
         with patch.object(QuantizationPlanHfQuantizer, "validate_environment"):  # NVFP4 checks for a Blackwell GPU
             return get_hf_quantizer(config, None, None, True, {})[:2]
 
-    # nvidia/DeepSeek-V4-Flash-NVFP4's `quantization_config`, trimmed: block fp8, but ModelOpt's NVFP4 experts
+    # nvidia/DeepSeek-V4-Flash-NVFP4's `quantization_config`, trimmed: block fp8, but ModelOpt's NVFP4 layers
     DEEPSEEK = {
         "quant_method": "fp8",
         "scale_fmt": "ue8m0",
@@ -201,8 +199,7 @@ class QuantizationPlanTest(unittest.TestCase):
         deepseek_plan = dict.fromkeys(self.DEEPSEEK["quantized_layers"], NVFP4Config())
         for saved, plan, kwargs in [
             (qwen, qwen_plan, {}),
-            # ModelOpt's NVFP4 experts win over DeepSeek's `expert_dtype`, which the config copies into theirs too
-            (self.DEEPSEEK, deepseek_plan, {"expert_dtype": "fp4"}),
+            (self.DEEPSEEK, deepseek_plan, {}),
             (mistral, {"layers.0.attention.wq": FineGrainedFP8Config(activation_scheme="none")}, {}),
         ]:
             hf_quantizer, config = self.plan_from_config(saved, **kwargs)

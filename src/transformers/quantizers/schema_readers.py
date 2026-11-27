@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Readers of a checkpoint's own quantization scheme (ModelOpt's per-layer `quantized_layers`, DeepSeek-V4's
-`expert_dtype`), converting it into our format: a quantization plan `{module pattern: config}`.
+Readers of a checkpoint's own quantization scheme (ModelOpt's per-layer `quantized_layers`), converting it into our
+format: a quantization plan `{module pattern: config}`.
 
 A new scheme gets its own function here, added to `SCHEMA_READERS`.
 """
 
 from ..utils import logging
-from ..utils.quantization_config import FineGrainedFP8Config, Mxfp4Config, NVFP4Config
+from ..utils.quantization_config import FineGrainedFP8Config, NVFP4Config
 
 
 logger = logging.get_logger(__name__)
@@ -61,19 +61,8 @@ def modelopt_plan(config: dict) -> dict | None:
     return plan | {"*": base} if base else plan
 
 
-def fp4_experts_plan(config: dict) -> dict | None:
-    """DeepSeek-V4's FP8 checkpoints, whose routed experts are MXFP4 (`expert_dtype: fp4`)"""
-    if config.get("quant_method") != "fp8" or config.get("expert_dtype") != "fp4":
-        return None
-    return {
-        "*.mlp.experts": Mxfp4Config(),
-        "*": {key: value for key, value in config.items() if key != "expert_dtype"},
-    }
-
-
-# Tried in order, the first plan wins. ModelOpt first: its per-layer configs (e.g. NVFP4 experts) override DeepSeek's
-# `expert_dtype`
-SCHEMA_READERS = [modelopt_plan, fp4_experts_plan]
+# Tried in order, the first plan wins.
+SCHEMA_READERS = [modelopt_plan]
 
 
 def read_quantization_schema(config: dict) -> dict | None:
