@@ -1016,11 +1016,13 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
         valid_ids = word_ids != -1
 
-        # Create 3D mask where [batch, token_i, token_j] is True if token_i and token_j are the same word
-        same_word = (word_ids[:, :, None] == word_ids[:, None, :]) & valid_ids[:, :, None] & valid_ids[:, None, :]
+        # Offset each row's word ids so they're unique across the batch
+        global_ids = word_ids + np.arange(word_ids.shape[0])[:, None] * (word_ids.max() + 1)
 
-        # For each token, set True if any token in the same word is masked
-        return np.any(same_word & mask[:, None, :], axis=2)
+        # Collect the words that have at least one masked token
+        masked_word_ids = np.unique(global_ids[mask & valid_ids])
+
+        return np.isin(global_ids, masked_word_ids) & valid_ids
 
 
 def to_numpy(x) -> np.ndarray[Any]:
