@@ -1174,19 +1174,28 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
 
     def get_data_dependent_inputs(
         self,
+        input_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
         **kwargs,
     ) -> dict[str, Any]:
-        """What the forward derives from the processor's outputs with data-dependent ops: the vision
-        tower's (see [`GlmImageVisionModel.get_data_dependent_inputs`]) for the source images in `pixel_values`,
-        prefixed `image_`, as `get_image_embeddings` takes them."""
-        if pixel_values is None or image_grid_thw is None:
-            return {}
-        source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
-        tower_inputs = self.visual.get_data_dependent_inputs(source_grids)
-        return {f"image_{name}": value for name, value in tower_inputs.items()}
+        """What the forward derives from the processor's outputs with data-dependent ops: the M-RoPE `position_ids`,
+        and the vision tower's (see [`GlmImageVisionModel.get_data_dependent_inputs`]) for the source images in
+        `pixel_values`, prefixed `image_`, as `get_image_embeddings` takes them."""
+        inputs = {}
+        if pixel_values is not None and image_grid_thw is not None:
+            source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
+            inputs = {
+                f"image_{name}": value for name, value in self.visual.get_data_dependent_inputs(source_grids).items()
+            }
+        if position_ids is None and input_ids is not None and image_grid_thw is not None:
+            inputs["position_ids"], _ = self.get_rope_index(
+                input_ids, image_grid_thw, images_per_sample, attention_mask
+            )
+        return inputs
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def compute_3d_position_ids(
