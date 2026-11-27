@@ -37,12 +37,8 @@ jobs:
         run: |
           METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
           # path field is like '../../../{full_commit_hash}/{wheel_filename}' relative to nightly/cpu/vllm/
-          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
-          print(wheel['path'].split('/')[3])
-          ")
+          # [Temporary] pinned to the vLLM commit of nightly 45932608928
+          VLLM_COMMIT=5aea30579ad672c3c35be43112b7a1f7b293a09e
           if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
             echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
             exit 1
@@ -103,6 +99,11 @@ jobs:
         working-directory: vllm
         run: pytest -v -s tests/models/multimodal/test_mapping.py
 
+      - name: "[Temporary] Test: Transformers backend audio"
+        if: always()
+        working-directory: vllm
+        run: pytest -v -s tests/models/multimodal/processing/test_transformers_audio.py
+
       - name: "Example: chat"
         if: always()
         working-directory: vllm
@@ -121,6 +122,7 @@ jobs:
   # Mirrors vLLM's Buildkite CI: test_can_initialize_small_subset only.
   # See .buildkite/test_areas/models_basic.yaml in vllm-project/vllm.
   vllm-test-init:
+    if: false  # [Temporary] light trial
     permissions:
       contents: read
     # The 2xl runner might have sufficient RAM for this small subset (excluding Gemma3n),
@@ -165,6 +167,7 @@ jobs:
             --deselect 'tests/models/test_initialization.py::test_can_initialize_small_subset[Gemma3nForCausalLM]'
 
   vllm-test-transformers:
+    if: false  # [Temporary] light trial
     permissions:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
@@ -314,6 +317,7 @@ jobs:
   # Multimodal processing tests split across 4 parallel shards (this test takes a long time).
   # Mirrors vLLM's Buildkite CI: parallelism: 4 + pytest-shard (see .buildkite/test_areas/models_multimodal.yaml).
   vllm-test-multimodal-processing:
+    if: false  # [Temporary] light trial
     permissions:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
@@ -361,6 +365,7 @@ jobs:
   # release and doesn't run `tests/tokenizers_` / `tests/transformers_utils` at all (commented out in its
   # `.buildkite/test_areas/misc.yaml`).
   vllm-test-tokenizers-configs:
+    if: false  # [Temporary] light trial
     permissions:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
@@ -451,6 +456,7 @@ jobs:
   # logprobs / embeddings / scores. Same selection as vLLM's own CPU CI (`.buildkite/hardware_tests/cpu.yaml`,
   # "CPU-Language Generation and Pooling Model Tests": the `cpu_model` tests), plus the CLIP / SigLIP pooling tests.
   vllm-test-hf-comparison:
+    if: false  # [Temporary] light trial
     permissions:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
@@ -644,6 +650,7 @@ jobs:
   # generation counterpart of `tests/models/transformers/` (run in `vllm-test-transformers`). One matrix entry per test
   # file (only ~12 tests in total, so `--num-shards` could leave a shard without tests).
   vllm-test-multimodal-generation:
+    if: false  # [Temporary] light trial
     permissions:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
@@ -698,6 +705,7 @@ jobs:
   # parsers (special tokens of the model's tokenizer) and video frame sampling (vs the HF video processors). Only the test
   # files that use transformers objects; all pure Python (tokenizer / processor downloads, no model forward).
   vllm-test-tokenizer-features:
+    if: false  # [Temporary] light trial
     permissions:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
@@ -801,6 +809,7 @@ jobs:
   # `tests/models/multimodal/generation` (vLLM's CPU CI: "CPU-Multi-Modal Model Tests"), the multimodal counterpart of
   # `vllm-test-hf-comparison`. Not included: test_ultravox.py (its `cpu_model` tests have no transformers reference).
   vllm-test-multimodal-hf-comparison:
+    if: false  # [Temporary] light trial
     permissions:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
@@ -921,6 +930,7 @@ jobs:
   # - the entries vLLM marks `skip` (cosmos3, dots_ocr, glm4v, glm_ocr, intern_vl, intern_vl-video, isaac, pixtral_hf,
   #   intern_vl-diff-patches).
   vllm-test-multimodal-hf-comparison-more:
+    if: false  # [Temporary] light trial
     permissions:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
@@ -976,6 +986,7 @@ jobs:
   # - tests/v1/e2e/general/test_async_scheduling_accuracy.py: "preemption test had no preemptions" on CPU (the test
   #   relies on a small GPU KV cache to force preemptions); vLLM runs it on GPU only.
   vllm-test-hf-comparison-misc:
+    if: false  # [Temporary] light trial
     permissions:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
@@ -1052,7 +1063,7 @@ jobs:
     container:
       image: huggingface/transformers-torch-light
     # Run when test jobs fail, but not when the run is cancelled (unlike `always()`).
-    if: ${{ !cancelled() }}
+    if: false  # [Temporary] light trial
     needs: [find-vllm-commit, vllm-test-examples, vllm-test-init, vllm-test-transformers, vllm-test-multimodal-processing, vllm-test-tokenizers-configs, vllm-test-hf-comparison, vllm-test-multimodal-generation, vllm-test-tokenizer-features, vllm-test-multimodal-hf-comparison, vllm-test-multimodal-hf-comparison-more, vllm-test-hf-comparison-misc]
     # Override workflow-level permissions to add actions:read (needed to fetch job logs).
     permissions:
@@ -1133,7 +1144,7 @@ jobs:
           python3 transformers/utils/ci_report_notify.py \
             --reports-dir ./vllm-ci-reports \
             --hub-repo hf-internal-testing/transformers_vllm_ci \
-            --slack-channel "#transformers-ci-vllm" \
+            --slack-channel "#transformers-ci-dummy" \
             --commit "vllm=vllm-project/vllm@$VLLM_COMMIT" \
             --commit-date "transformers=$TRANSFORMERS_COMMIT_DATE" \
             --commit-date "vllm=$VLLM_COMMIT_DATE"
