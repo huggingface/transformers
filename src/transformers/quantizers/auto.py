@@ -409,13 +409,18 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
             self.patterns = [("*layers.0.mlp.experts.*", nvfp4), ("**.*", fp8)]  # exact names first, `"*"` last
             self.matcher  = (?P<p0>.*layers\.0\.mlp\.experts\..*)|(?P<p1>.*\..*)  # one group per pattern
+
+        Then, when the weight loader has the following keys:
             get_quantizer("model.layers.0.mlp.experts.gate_up_proj")  # matches `p0` -> nvfp4
             get_quantizer("model.layers.0.self_attn.q_proj")          # matches `p1` -> fp8
 
+        We also create renamers here (maybe we should not hein) per layer (vs the ones that are global).
         and, for FP8 since we do renames with: `checkpoint_renames = {"scale": "weight_scale_inv", "input_scale": "activation_scale"}`:
 
             self.renamers[fp8] = ((?P<p0>.*\.scale)|(?P<p1>.*\.input_scale), ["weight_scale_inv", "activation_scale"])
             rename_layer("layers.0.self_attn.q_proj.scale")  # `p0` -> "layers.0.self_attn.q_proj.weight_scale_inv"
+
+        We need them to scope to the layer's quantizer renaming! 
         """
         from ..conversion_mapping import get_model_conversion_mapping
         from ..core_model_loading import WeightConverter, WeightRenaming, rename_source_key
@@ -468,38 +473,42 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def update_weight_conversions(self, weight_conversions, model):
         """
-        The model's conversions, then the formats' own converters. A model converter's `.weight` also takes the scales
-        named after it (`weight_scale_inv`, see `rename_layer`), each into the target named like it. E.g. the experts'
-        converter merging `gate_proj` and `up_proj` into `gate_up_proj` (FP8):
+        We need to add conversion operations like MergeModulelist, etc for scales. We do this by creating a copy of the operation.
+        This is required because of the way the weight converter groups together checkpoint weights. Scales must be separated 
+        from the weights.
+
+        E.g. the experts' converter merging `gate_proj` and `up_proj` into `gate_up_proj` (FP8):
 
             mlp.experts.3.gate_proj.weight            -> mlp.experts.gate_up_proj            MergeModulelist, Concatenate,
             mlp.experts.3.up_proj.weight              ->                                      then Fp8Deserialize
             mlp.experts.3.gate_proj.weight_scale_inv  -> mlp.experts.gate_up_proj_scale_inv  same ops, its own target
             mlp.experts.3.up_proj.weight_scale_inv    ->
 
-        Dequantized, the converter is widened to read the scales along (`*.gate_proj.weight_scale_inv`, ...), into the
-        one target `gate_up_proj`: `Fp8Dequantize` folds each scale into its weight before the merge.
+        Conversely, when we need to dequantize, we need to make sure these ops (like MergeModulelist) also match the scales.
+        That's because dequantization runs first. It's not the most optimized but its simple for now, and we cannot go from
+        two separate groups to 1 group in the weight converter.
         """
         from ..core_model_loading import WeightConverter
 
         if self.patterns is None:
             self.map_module_to_quantizer(model)
 
-        # Dequantized, a weight's scales fold into it before the model's ops: the model's `.weight` converters read
-        # them along. Every format's names (as `rename_layer` leaves them): a layer's checkpoint only has its own
         names = []
         for quantizer in self.all_quantizers:
+            # 1. we update the converter to map scales
             weight_conversions = quantizer.update_weight_conversions(weight_conversions, model)
+            # 2. OR, If we are not dequantizing, we need to create COPY converters that apply on the scales
             if getattr(quantizer.quantization_config, "dequantize", False):
                 names += [*quantizer.serialized_names["weight"], *quantizer.checkpoint_renames.values()]
 
-        for i, converter in enumerate(weight_conversions):
-            sources = converter._original_source_patterns
-            if names and isinstance(converter, WeightConverter) and all(s.endswith(".weight") for s in sources):
-                sources = [source.removesuffix("weight") + name for source in sources for name in names]
-                weight_conversions[i] = converter.copy(
-                    sources, converter._original_target_patterns, operations=converter.operations
-                )
+        if names:
+            for i, converter in enumerate(weight_conversions):
+                sources = converter._original_source_patterns
+                if isinstance(converter, WeightConverter) and all(s.endswith(".weight") for s in sources):
+                    sources = [source.removesuffix("weight") + name for source in sources for name in names]
+                    weight_conversions[i] = converter.copy(
+                        sources, converter._original_target_patterns, operations=converter.operations
+                    )
 
         general = [converter for quantizer in self.all_quantizers for converter in quantizer.get_weight_conversions()]
         return [*weight_conversions, *general]
@@ -516,9 +525,8 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def update_weight_transform(self, transform, model, name):
         """
-        The ops of the param `name`, once its first key matched a converter, from its layer's quantizer: a
-        deserialization (after the converter's ops), a dequantization (before them), or a quantization of a full
-        precision checkpoint.
+        This is where we modify what happens to the tensor before / after the `MergeModulelist`, `Concatenate` etc.
+        All weights will go through quantization operation if they are mapped in the quantization_plan!
         """
         from ..core_model_loading import WeightConverter
 
@@ -526,7 +534,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         if quantizer is None:
             return transform
 
-        # The on-the-fly quantization moves to the load operations in #50386
+        # TODO: The on-the-fly quantization will move to the load operations in #50386
         if not quantizer.pre_quantized:
             if quantizer.param_needs_quantization(model, name):
                 transform.quantization_operation = quantizer.get_quantize_ops()
@@ -536,6 +544,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         tensors = {tensor for names in quantizer.serialized_names.values() for tensor in names}
         if operation is None or not isinstance(transform, WeightConverter) or name.rpartition(".")[2] not in tensors:
             return transform  # e.g. a merged expert bias: not one of the format's tensors
+
         # Dequantized, the scales fold into the weight before the model's ops
         load, ops = operation(quantizer), transform.operations
         dequantize = getattr(quantizer.quantization_config, "dequantize", False)
@@ -621,7 +630,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
     def postprocess_model(self, model, **kwargs):
         """
         The patterns loaded with `dequantize=True` become unquantized (`None`, so a broader pattern like `"*"` can't
-        claim their modules): with none quantized left, the model is plain unquantized.
+        claim their modules): with none quantized left, the model is plain unquantized. TODO: this should in general not be needed anymore!
         """
         for quantizer in self.all_quantizers:
             quantizer._process_model_after_weight_loading(model, **kwargs)
