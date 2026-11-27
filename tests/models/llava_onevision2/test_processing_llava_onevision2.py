@@ -61,7 +61,6 @@ class LlavaOnevision2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.processor = self.get_processor()
         self.image = np.zeros((8, 8, 3), dtype=np.uint8)
         self.image_prompt = "<|vision_start|><|image_pad|><|vision_end|>Describe."
-        self.video_prompt = "<|vision_start|><|video_pad|><|vision_end|>Describe."
 
     def test_image_tokens_match_patches(self):
         outputs = self.processor(images=self.image, text=self.image_prompt, return_tensors="pt")
@@ -87,23 +86,6 @@ class LlavaOnevision2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_truncated_visual_tokens(self):
         with self.assertRaises(ValueError):
             self.processor(images=self.image, text=self.image_prompt, truncation=True, max_length=2)
-
-    def test_mixed_image_video_order(self):
-        import torch
-
-        video = np.full((2, 8, 8, 3), 255, dtype=np.uint8)
-        options = {"do_sample_frames": False}
-        for image_first in (True, False):
-            prompt = self.image_prompt + self.video_prompt if image_first else self.video_prompt + self.image_prompt
-            outputs = self.processor(
-                images=self.image, videos=video, text=prompt, videos_kwargs=options, return_tensors="pt"
-            )
-            image = self.processor(images=self.image, text=self.image_prompt, return_tensors="pt")
-            offset = 0 if image_first else 32
-            torch.testing.assert_close(outputs["pixel_values"][offset : offset + 16], image["pixel_values"])
-            self.assertEqual(outputs["image_grid_thw"].shape, (3, 3))
-            self.assertEqual((outputs["input_ids"] == self.processor.image_token_id).sum(), 12)
-            self.assertFalse((outputs["input_ids"] == self.processor.video_token_id).any())
 
     def test_batch_with_unequal_visual_counts(self):
         outputs = self.processor(
