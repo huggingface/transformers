@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import copy
-import math
 import tempfile
 import unittest
 from pathlib import Path
@@ -30,13 +29,9 @@ if is_torch_available():
     import torch
 
     from transformers import AutoModelForDecision, JevaForDecision
-    from transformers.loss.loss_jeva import JevaForDecisionLoss
-    from transformers.models.jeva.modeling_jeva import _log_softmax
 
 
 class JevaModelTester:
-    is_training = True
-
     def __init__(self, config):
         self.config = config
 
@@ -57,42 +52,8 @@ class JevaModelTester:
 
 
 @require_torch
-class JevaLossTest(unittest.TestCase):
-    def test_candidate_and_coverage_loss(self):
-        logits = torch.tensor([[0.0, 0.0, -torch.inf], [0.0, 0.0, 0.0]])
-        coverage_logits = torch.zeros(2, requires_grad=True)
-        loss = JevaForDecisionLoss(
-            logits=_log_softmax(logits),
-            labels=torch.tensor([[0.25, 0.5, 0.25, 0.0], [0.0, 0.0, 0.0, 1.0]]),
-            coverage_logits=coverage_logits,
-            option_mask=torch.isfinite(logits),
-            allow_null=torch.tensor([True, False]),
-            num_items_in_batch=3,
-        )
-
-        expected = (0.75 * math.log(2) + math.log(2) + math.log(3)) / 3
-        self.assertAlmostEqual(loss.item(), expected, places=6)
-        loss.backward()
-        torch.testing.assert_close(coverage_logits.grad, torch.tensor([-0.25 / 3, 0.0]))
-
-    def test_confident_prediction_gradients(self):
-        logits = torch.tensor([[9.0, -9.0, -9.0]], requires_grad=True)
-        coverage = torch.tensor([18.0], requires_grad=True)
-        mask = torch.ones_like(logits, dtype=torch.bool)
-        loss = JevaForDecisionLoss(
-            _log_softmax(logits), torch.tensor([[0.0, 1.0, 0.0, 0.0]]), coverage, mask, allow_null=torch.tensor([True])
-        )
-        mass = torch.exp(torch.tensor(-18.0, dtype=torch.float64))
-        option_gradient = mass / (1 + 2 * mass)
-        expected_gradient = torch.stack([-2 * option_gradient, option_gradient, option_gradient])[None]
-        loss.backward()
-        torch.testing.assert_close(loss.double(), torch.log1p(2 * mass) + torch.log1p(mass), rtol=1e-6, atol=0)
-        torch.testing.assert_close(logits.grad.double(), expected_gradient, rtol=1e-6, atol=0)
-        torch.testing.assert_close(coverage.grad.double(), (-mass / (1 + mass))[None], rtol=1e-6, atol=0)
-
-
-@require_torch
 class JevaForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
+    is_training = True
     all_model_classes = (JevaForDecision,) if is_torch_available() else ()
 
     @classmethod
@@ -120,6 +81,19 @@ class JevaForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         self.model_tester = JevaModelTester(type(self).config)
         self.config = copy.deepcopy(type(self).config)
         self.inputs = self.model_tester.prepare_inputs()
+
+    def test_training_loss_with_nullable_decisions(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_training()
+        model = JevaForDecision(config).train()
+        outputs = model(**inputs, num_items_in_batch=3)
+
+        targets = inputs["labels"][:, 1:]
+        first_candidates = torch.nn.functional.cross_entropy(outputs.logits[0, :2], targets[0, :2])
+        second_candidates = torch.nn.functional.cross_entropy(outputs.logits[1], targets[1])
+        coverage = torch.nn.functional.binary_cross_entropy_with_logits(
+            outputs.coverage_logits[0], 1 - inputs["labels"][0, 0]
+        )
+        torch.testing.assert_close(outputs.loss, (first_candidates + second_candidates + coverage) / 3)
 
     def test_option_chunking(self):
         model = JevaForDecision(self.config).eval()

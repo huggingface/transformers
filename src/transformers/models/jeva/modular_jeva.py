@@ -345,8 +345,6 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
         labels (`torch.FloatTensor` of shape `(batch_size, max_num_options + 1)`, *optional*):
             Target probability distributions, with null mass first and zero mass on padded options.
         """
-        loss_kwargs = {name: kwargs.pop(name) for name in ("allow_null", "num_items_in_batch") if name in kwargs}
-
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
         if option_attention_mask is None:
@@ -383,7 +381,7 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
                 labels=labels,
                 coverage_logits=coverage_logit,
                 option_mask=option_mask,
-                **loss_kwargs,
+                **kwargs,
             )
         return JevaDecisionOutput(loss=loss, logits=log_q, coverage_logits=coverage_logit)
 
