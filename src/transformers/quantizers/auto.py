@@ -366,19 +366,20 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
     A quantization plan: like the dtype plan's, the glob pattern a module or param matches picks its quantizer, the
     others stay unquantized.
 
-    Every quantized model loads through one: a single quantizer is the plan `{"*": q}`. It knows every module's
-    quantizer, so it builds the conversions and gives each param its ops; a quantizer only describes its format
-    (`serialized_names`, `checkpoint_renames`, `get_load_operations`, `quantized_module`).
+    Every quantized model loads through one quantizer: a single quantizer is the plan `{"*": q}`.
+    A quantizer describes its format (`serialized_names`, `checkpoint_renames`, `get_load_operations`, `quantized_module`) and
+    the weight converter uses its operations, renames etc.
     """
 
     def __init__(self, quantizers: dict[str, HfQuantizer | None], checkpoint_names: bool = False):
-        # The patterns are checkpoint module names, renamed in `map_module_to_quantizer`
+        # The pattern matching (glob) that defines the plan is based on 
+        # checkpoint module names (the ones that are serialized) and are renamed in `map_module_to_quantizer`
         self.checkpoint_names = checkpoint_names
         self.patterns = None
         self.set_quantizers(quantizers)
         self.pre_quantized = all(quantizer.pre_quantized for quantizer in self.all_quantizers)
-        # Mixed, each format swaps the modules the plan gives it (`quantized_module`): one swapping all of a model's
-        # linears itself would take the others' too
+
+        # TODO: once all quantizer follow recent standards we can remove this.
         own_swaps = [type(q).__name__ for q in self.all_quantizers if not q.replaces_modules]
         if len(self.all_quantizers) > 1 and own_swaps:
             raise ValueError(f"{', '.join(own_swaps)} can't be mixed with other formats in a quantization plan yet")
@@ -404,17 +405,14 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def map_module_to_quantizer(self, model):
         r"""
-        The plan's patterns, in order, for `get_quantizer`. A checkpoint's plan names checkpoint modules: renamed
-        to the model's like their params' keys (per-expert names onto the fused module), its own names kept too.
-
-        E.g. the plan `{"layers.0.mlp.experts": nvfp4, "*": fp8}` gives:
+        E.g. for a plan `{"layers.0.mlp.experts": nvfp4, "*": fp8}` we create the following:
 
             self.patterns = [("*layers.0.mlp.experts.*", nvfp4), ("**.*", fp8)]  # exact names first, `"*"` last
             self.matcher  = (?P<p0>.*layers\.0\.mlp\.experts\..*)|(?P<p1>.*\..*)  # one group per pattern
             get_quantizer("model.layers.0.mlp.experts.gate_up_proj")  # matches `p0` -> nvfp4
             get_quantizer("model.layers.0.self_attn.q_proj")          # matches `p1` -> fp8
 
-        and, for FP8's `checkpoint_renames = {"scale": "weight_scale_inv", "input_scale": "activation_scale"}`:
+        and, for FP8 since we do renames with: `checkpoint_renames = {"scale": "weight_scale_inv", "input_scale": "activation_scale"}`:
 
             self.renamers[fp8] = ((?P<p0>.*\.scale)|(?P<p1>.*\.input_scale), ["weight_scale_inv", "activation_scale"])
             rename_layer("layers.0.self_attn.q_proj.scale")  # `p0` -> "layers.0.self_attn.q_proj.weight_scale_inv"
