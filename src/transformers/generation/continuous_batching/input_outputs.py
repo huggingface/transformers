@@ -686,6 +686,7 @@ class ContinuousBatchingAsyncIOs:
             )
         if not torch.get_device_module(device).is_available():
             raise RuntimeError("Async batching requires an available device.")
+        self.device = device
         # IO pairs used to avoid race conditions
         self.current_pair = 0
         self.io_pairs = [
@@ -755,6 +756,8 @@ class ContinuousBatchingAsyncIOs:
     # The get_model_kwargs method is where the H2D transfer happens
     def get_model_kwargs(self, use_padding: bool = False) -> PagedAttentionArgs:
         io_pair = self.io_pairs[self.current_pair]
+        # The device tensors are initialized and reset on the current stream, so the transfer must wait for it
+        self.h2d_stream.wait_stream(torch.get_device_module(self.device).current_stream(self.device))
         io_pair.transfer_inputs_h2d(self.h2d_stream)
         self.h2d_stream.record_event(io_pair.h2d_over)
         self.compute_stream.wait_event(io_pair.h2d_over)
