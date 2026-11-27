@@ -41,7 +41,7 @@ class NougatConfig(PreTrainedConfig):
 
     model_type = "nougat"
     sub_configs_defaults = {
-        "encoder": SubConfigSpec(config_class=AutoConfig, model_type="donut_swin"),
+        "encoder": SubConfigSpec(config_class=AutoConfig, model_type="donut-swin"),
         "decoder": SubConfigSpec(config_class=AutoConfig, model_type="mbart"),
     }
 
