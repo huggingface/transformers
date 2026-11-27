@@ -125,7 +125,12 @@ class InternVLProcessor(ProcessorMixin):
 
         if image_video_patches:
             model_inputs["pixel_values"] = concatenate_list(image_video_patches)
-        return BatchFeature(data=model_inputs, tensor_type=return_tensors)
+        return BatchFeature(
+            data=model_inputs,
+            tensor_type=return_tensors,
+            device=output_kwargs["text_kwargs"].get("device"),
+            dtype=output_kwargs["images_kwargs"].get("dtype"),
+        )
 
     def validate_inputs(
         self,

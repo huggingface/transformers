@@ -143,7 +143,9 @@ class Sam3Processor(ProcessorMixin):
         elif original_sizes is not None:
             if isinstance(original_sizes, torch.Tensor):
                 original_sizes = original_sizes.cpu().tolist()
-            encoding = BatchEncoding({"original_sizes": original_sizes}, tensor_type=return_tensors)
+            encoding = BatchEncoding(
+                {"original_sizes": original_sizes}, tensor_type=return_tensors, device=kwargs.get("device")
+            )
         elif input_boxes is not None:
             raise ValueError("Either images or original_sizes must be provided if input_boxes is not None")
 

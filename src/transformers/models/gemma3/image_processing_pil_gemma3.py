@@ -220,7 +220,10 @@ class Gemma3ImageProcessorPil(PilBackend):
             processed_images.extend(processed_image_list)
 
         return BatchFeature(
-            data={"pixel_values": processed_images, "num_crops": num_crops}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "num_crops": num_crops},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

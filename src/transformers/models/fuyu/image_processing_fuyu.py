@@ -215,6 +215,8 @@ class FuyuImageProcessor(TorchvisionBackend):
                 "image_sizes": original_image_sizes,
             },
             tensor_type=return_tensors,
+            dtype=dtype,
+            device=device,
             skip_tensor_conversion=["overflowing_values"],
         )
 

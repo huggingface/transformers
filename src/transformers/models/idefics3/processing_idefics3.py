@@ -141,7 +141,12 @@ class Idefics3Processor(ProcessorMixin):
         elif text is not None:
             text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
 
-        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={**text_inputs, **image_inputs},
+            tensor_type=return_tensors,
+            device=output_kwargs["text_kwargs"].get("device"),
+            dtype=output_kwargs["images_kwargs"].get("dtype"),
+        )
 
     def prepare_inputs_layout(
         self,

@@ -270,8 +270,7 @@ class MossTranscribeDiarizeFeatureExtractor(SequenceFeatureExtractor):
             padding_mask[idx, :length] = 1
         padded_inputs["padding_mask"] = padding_mask
 
-        if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+        padded_inputs = padded_inputs.convert_to_tensors(return_tensors, device=device, dtype=dtype)
         return padded_inputs
 
 

@@ -149,7 +149,10 @@ class GlmgaImageProcessor(Glm46VImageProcessor):
         image_grid_thw = torch.tensor(processed_grids)
 
         return BatchFeature(
-            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 
@@ -214,7 +217,10 @@ class GlmgaImageProcessorPil(Glm46VImageProcessorPil):
         image_grid_thw = np.array(processed_grids)
 
         return BatchFeature(
-            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

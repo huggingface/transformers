@@ -571,7 +571,10 @@ class Mask2FormerImageProcessorPil(PilBackend):
         )
 
         encoded_inputs = BatchFeature(
-            data={"pixel_values": padded_images, "pixel_mask": pixel_masks}, tensor_type=return_tensors
+            data={"pixel_values": padded_images, "pixel_mask": pixel_masks},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
         # we cannot batch them since they don't share a common class size
         if segmentation_maps is not None:

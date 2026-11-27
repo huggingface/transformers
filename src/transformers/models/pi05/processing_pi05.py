@@ -195,7 +195,12 @@ class PI05Processor(ProcessorMixin):
                 state = F.pad(state, (0, self.max_state_dim - state.shape[-1]))
             model_inputs["state"] = state.view(-1, self.max_state_dim)
 
-        return BatchFeature(data=model_inputs, tensor_type=return_tensors)
+        return BatchFeature(
+            data=model_inputs,
+            tensor_type=return_tensors,
+            device=output_kwargs["text_kwargs"].get("device"),
+            dtype=output_kwargs["images_kwargs"].get("dtype"),
+        )
 
     def build_prompts(
         self, text: list[str], batched_images: list[list[ImageInput]], state: torch.Tensor | None

@@ -227,7 +227,12 @@ class MllamaProcessor(ProcessorMixin):
             )
             text_inputs["cross_attention_mask"] = cross_attention_mask
 
-        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={**text_inputs, **image_inputs},
+            tensor_type=return_tensors,
+            device=output_kwargs["text_kwargs"].get("device"),
+            dtype=output_kwargs["images_kwargs"].get("dtype"),
+        )
 
     def prepare_inputs_layout(
         self,

@@ -156,7 +156,12 @@ class OwlViTProcessor(ProcessorMixin):
             image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
             data["pixel_values"] = image_features.pixel_values
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(
+            data=data,
+            tensor_type=return_tensors,
+            device=output_kwargs["text_kwargs"].get("device"),
+            dtype=output_kwargs["images_kwargs"].get("dtype"),
+        )
 
     def post_process(self, *args, **kwargs):
         """

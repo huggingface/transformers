@@ -780,9 +780,10 @@ class BatchEncoding(UserDict, Generic[_V]):
                         "Please see if a fast version of this tokenizer is available to have this feature available."
                     ) from e
                 raise ValueError(
-                    "Unable to create tensor, you should probably activate truncation and/or padding with"
+                    f"Unable to create tensor for {key}: {str(e)}\n."
+                    "You should probably activate truncation and/or padding with"
                     " 'padding=True' 'truncation=True' to have batched tensors with the same length. Perhaps your"
-                    f" features (`{key}` in this case) have excessive nesting (inputs type `list` where type `int` is"
+                    f" features have excessive nesting (inputs type `list` where type `int` is"
                     " expected)."
                 ) from e
 

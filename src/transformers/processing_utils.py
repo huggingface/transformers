@@ -709,7 +709,7 @@ class ProcessorMixin(PushToHubMixin):
 
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
-        device = merged_kwargs["text_kwargs"].get("device", None)
+        device = merged_kwargs["text_kwargs"].pop("device", None)
         if getattr(self, "tokenizer", None) is not None and text is not None:
             # text_kwargs has priority for backwards compatibility. Remove in v5.29.0.
             return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
@@ -2660,6 +2660,7 @@ class OmniModalProcessorMixin(ProcessorMixin):
 
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
+        device = merged_kwargs["text_kwargs"].pop("device", None)
         if getattr(self, "tokenizer", None) is not None and text is not None:
             # text_kwargs has priority for backwards compatibility. Remove in v5.29.0.
             return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
@@ -2691,7 +2692,13 @@ class OmniModalProcessorMixin(ProcessorMixin):
         if not kwargs.get("return_metadata"):
             data.pop("video_metadata", None)
 
-        return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
+        return BatchFeature(
+            data,
+            tensor_type=return_tensors,
+            device=device,
+            dtype=merged_kwargs["images_kwargs"].get("dtype"),
+            skip_tensor_conversion=self.skip_tensor_conversion,
+        )
 
     def _resolve_audio_from_video(
         self,

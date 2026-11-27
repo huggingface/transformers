@@ -62,6 +62,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         return_attention_mask: bool | None = None,
         return_tensors: str | TensorType | None = None,
         device: str | None = None,
+        dtype: str | None = None,
     ) -> BatchFeature:
         """
         Pad input values / input vectors or a batch of input values / input vectors up to predefined length or to the
@@ -220,7 +221,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                     value = value.astype(np.float32)
                 batch_outputs[key].append(value)
 
-        return BatchFeature(batch_outputs, tensor_type=return_tensors, device=device)
+        return BatchFeature(batch_outputs, tensor_type=return_tensors, device=device, dtype=dtype)
 
     def _pad(
         self,

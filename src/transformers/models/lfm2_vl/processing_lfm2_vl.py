@@ -141,7 +141,13 @@ class Lfm2VlProcessor(ProcessorMixin):
         # Pop unused keys from the inputs, e.g. inputs used only to compute number of image tokens
         data = {**text_inputs, **processed_images}
         data = {k: v for k, v in data.items() if k not in self.unused_input_names}
-        return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
+        return BatchFeature(
+            data,
+            tensor_type=return_tensors,
+            skip_tensor_conversion=self.skip_tensor_conversion,
+            device=merged_kwargs["images_kwargs"].get("device"),
+            dtype=merged_kwargs["images_kwargs"].get("dtype"),
+        )
 
     def prepare_inputs_layout(
         self,

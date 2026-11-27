@@ -238,7 +238,10 @@ class LlavaNextImageProcessor(TorchvisionBackend):
             processed_images = self._pad_for_batching(processed_images)
 
         return BatchFeature(
-            data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "image_sizes": image_sizes},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

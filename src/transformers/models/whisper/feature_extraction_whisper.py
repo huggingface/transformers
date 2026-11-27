@@ -341,8 +341,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 rescaled_attention_mask = rescaled_attention_mask[:, :-1]
             padded_inputs["attention_mask"] = rescaled_attention_mask
 
-        if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+        padded_inputs = padded_inputs.convert_to_tensors(return_tensors, device=device, dtype=dtype)
 
         return padded_inputs
 

@@ -253,7 +253,10 @@ class Cohere2VisionImageProcessor(TorchvisionBackend):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         return BatchFeature(
-            data={"pixel_values": processed_images, "num_patches": num_patches}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "num_patches": num_patches},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:

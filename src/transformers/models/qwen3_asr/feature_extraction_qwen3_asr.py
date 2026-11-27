@@ -232,8 +232,7 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
         if not return_attention_mask:
             padded_inputs.pop("attention_mask", None)
 
-        if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+        padded_inputs = padded_inputs.convert_to_tensors(return_tensors, device=device, dtype=dtype)
 
         return padded_inputs
 

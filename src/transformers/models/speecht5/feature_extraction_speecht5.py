@@ -358,8 +358,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
                 padded_inputs["input_values"], attention_mask=attention_mask, padding_value=self.padding_value
             )
 
-        if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+        padded_inputs = padded_inputs.convert_to_tensors(return_tensors, device=device, dtype=dtype)
 
         return padded_inputs
 

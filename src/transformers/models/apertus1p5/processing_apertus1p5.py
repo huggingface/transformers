@@ -13,8 +13,6 @@
 # limitations under the License.
 """Processor class for Apertus 1.5."""
 
-import numpy as np
-
 from ...audio_utils import AudioInput
 from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessorMixin
@@ -61,7 +59,7 @@ class Apertus1p5Processor(ProcessorMixin):
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         # count from the feature extractor's output, so truncation cannot desync placeholders from features
-        num_samples = int(np.asarray(audio_inputs["padding_mask"][audio_idx]).sum())
+        num_samples = int(sum(audio_inputs["padding_mask"][audio_idx]))
         num_codes = self.feature_extractor.get_num_audio_codes(num_samples)
         return f"{self.boa_token}{self.audio_token * num_codes}{self.eoa_token}"
 

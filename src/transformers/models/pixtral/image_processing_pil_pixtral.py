@@ -225,7 +225,10 @@ class PixtralImageProcessorPil(PilBackend):
             )
 
         return BatchFeature(
-            data={"pixel_values": processed_images, "image_sizes": batch_image_sizes}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "image_sizes": batch_image_sizes},
+            tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

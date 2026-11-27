@@ -297,8 +297,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         if return_attention_mask:
             padded_inputs["attention_mask"] = attention_mask
 
-        if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+        padded_inputs = padded_inputs.convert_to_tensors(return_tensors, device=device, dtype=dtype)
 
         return padded_inputs
 

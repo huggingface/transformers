@@ -230,8 +230,7 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         if self.do_normalize:
             padded_inputs["input_values"] = [self.normalize(feature) for feature in input_values]
 
-        if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+        padded_inputs = padded_inputs.convert_to_tensors(return_tensors, device=device, dtype=dtype)
 
         return padded_inputs
 

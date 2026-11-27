@@ -146,7 +146,12 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
 
         videos_inputs = {k: v for k, v in videos_inputs.items() if k in self.video_processor.model_input_names}
         output_data = {**text_inputs, **image_inputs, **videos_inputs}
-        result = BatchFeature(data=output_data, tensor_type=return_tensors)
+        result = BatchFeature(
+            data=output_data,
+            tensor_type=return_tensors,
+            device=output_kwargs["text_kwargs"].get("device"),
+            dtype=output_kwargs["images_kwargs"].get("dtype"),
+        )
 
         for key, value in audio_inputs.items():
             result[key] = value

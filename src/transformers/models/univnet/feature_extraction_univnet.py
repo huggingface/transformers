@@ -298,6 +298,8 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         do_normalize: str | None = None,
         return_attention_mask: bool | None = None,
         return_tensors: str | TensorType | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).
@@ -439,7 +441,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             ]
 
         if return_tensors is not None:
-            batched_speech = batched_speech.convert_to_tensors(return_tensors)
+            batched_speech = batched_speech.convert_to_tensors(return_tensors, device=device, dtype=dtype)
 
         return batched_speech
 

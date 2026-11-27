@@ -131,7 +131,12 @@ class PaliGemmaProcessor(ProcessorMixin):
             labels[np.array(result["token_type_ids"]) == 0] = -100
             result["labels"] = labels
 
-        return BatchFeature(data=result, tensor_type=return_tensors)
+        return BatchFeature(
+            data=result,
+            tensor_type=return_tensors,
+            device=kwargs["text_kwargs"].get("device"),
+            dtype=kwargs["images_kwargs"].get("dtype"),
+        )
 
     def prepare_inputs_layout(self, images=None, text=None, **kwargs):
         text = "" or text

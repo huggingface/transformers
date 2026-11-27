@@ -146,7 +146,9 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             image_encoding = self.video_processor(images, return_tensors=return_tensors)
             encoding.update(image_encoding)
 
-        encoding = BatchFeature(encoding, tensor_type=return_tensors)
+        encoding = BatchFeature(
+            encoding, tensor_type=return_tensors, device=kwargs.get("device"), dtype=kwargs.get("dtype")
+        )
         return encoding
 
     @property

@@ -185,7 +185,7 @@ class BatchFeature(UserDict):
                         # we have a ragged list so handle explicitly
                         value = as_tensor([np.asarray(val) for val in value], dtype=object)
 
-                dtype = np.dtype(dtype)  # resolve if string
+                dtype = np.dtype(dtype or "float32")  # resolve if string
                 arr = np.asarray(value)
                 return arr.astype(dtype, copy=False) if np.issubdtype(arr.dtype, np.floating) else arr
 
@@ -193,7 +193,7 @@ class BatchFeature(UserDict):
                 if device is not None and getattr(device, "type", device) != "cpu":
                     raise ValueError(f"Returning numpy arrays doesn't support non-null `device` but got {device}.")
 
-                dtype = np.dtype(dtype)  # resolve if string
+                dtype = np.dtype(dtype or "float32")  # resolve if string
                 return is_numpy_array(value) and (not np.issubdtype(value.dtype, np.floating) or value.dtype == dtype)
 
         return is_tensor, as_tensor
@@ -246,9 +246,6 @@ class BatchFeature(UserDict):
             if not _is_tensor_or_array_like(value):
                 continue
 
-            if not is_tensor(value, dtype=dtype, device=device):
-                tensor = as_tensor(value, dtype=dtype, device=device)
-                self[key] = tensor
             try:
                 if not is_tensor(value, dtype=dtype, device=device):
                     tensor = as_tensor(value, dtype=dtype, device=device)

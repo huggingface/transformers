@@ -174,7 +174,12 @@ class Idefics2Processor(ProcessorMixin):
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
             inputs.update(image_inputs)
 
-        return BatchFeature(inputs, tensor_type=return_tensors)
+        return BatchFeature(
+            inputs,
+            tensor_type=return_tensors,
+            device=output_kwargs["text_kwargs"].get("device"),
+            dtype=output_kwargs["images_kwargs"].get("dtype"),
+        )
 
 
 __getattr__ = deprecate_attr(__name__, rename={"Idefics2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})

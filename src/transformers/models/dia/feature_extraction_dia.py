@@ -62,6 +62,8 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
         max_length: int | None = None,
         return_tensors: str | TensorType | None = None,
         sampling_rate: int | None = None,
+        device: str | None = None,
+        dtype: str | None = None,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).
@@ -167,8 +169,7 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
             input_values.append(example.T)
 
         padded_inputs["input_values"] = input_values
-        if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+        padded_inputs = padded_inputs.convert_to_tensors(return_tensors, device=device, dtype=dtype)
 
         # rewrite back to original feature size
         self.feature_size = original_feature_size
