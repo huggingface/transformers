@@ -578,6 +578,48 @@ class TestResolveModel(unittest.TestCase):
         self.assertIn("org/pinned", ctx.exception.detail)
         self.assertIn("other/model", ctx.exception.detail)
 
+    def _load_error(self, hub_error_class):
+        # `from_pretrained` raises a readable OSError whose cause is the Hub error
+        hub_error = hub_error_class("401 Client Error", response=MagicMock(status_code=401))
+        try:
+            raise OSError("org/typo is not a local folder and is not a valid model identifier") from hub_error
+        except OSError as e:
+            return e
+
+    def test_unknown_model_is_404(self):
+        from huggingface_hub.errors import RepositoryNotFoundError
+
+        handler = self._make_handler()
+        handler.model_manager.load_model_and_processor.side_effect = self._load_error(RepositoryNotFoundError)
+        with self.assertRaises(HTTPException) as ctx:
+            handler._resolve_model({"model": "org/typo"})
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertIn("org/typo is not a local folder", ctx.exception.detail)
+
+    def test_unknown_revision_is_404(self):
+        from huggingface_hub.errors import RevisionNotFoundError
+
+        handler = self._make_handler()
+        handler.model_manager.load_model_and_processor.side_effect = self._load_error(RevisionNotFoundError)
+        with self.assertRaises(HTTPException) as ctx:
+            handler._resolve_model({"model": "org/model@typo"})
+        self.assertEqual(ctx.exception.status_code, 404)
+
+    def test_gated_model_is_403(self):
+        from huggingface_hub.errors import GatedRepoError
+
+        handler = self._make_handler()
+        handler.model_manager.load_model_and_processor.side_effect = self._load_error(GatedRepoError)
+        with self.assertRaises(HTTPException) as ctx:
+            handler._resolve_model({"model": "org/gated"})
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    def test_other_load_errors_are_not_mapped(self):
+        handler = self._make_handler()
+        handler.model_manager.load_model_and_processor.side_effect = OSError("disk full")
+        with self.assertRaises(OSError):
+            handler._resolve_model({"model": "org/model"})
+
 
 class TestModelManager(unittest.TestCase):
     def test_process_model_name_adds_main(self):
