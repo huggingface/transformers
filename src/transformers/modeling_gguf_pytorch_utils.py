@@ -571,12 +571,12 @@ def get_gguf_hf_weights_map(
 
 def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_load=None, torch_dtype=None):
     """
-    Load a GGUF file and return a dictionary of parsed parameters containing tensors, the parsed
+    Load a GGUF checkpoint and return a dictionary of parsed parameters containing tensors, the parsed
     tokenizer and config attributes.
 
     Args:
-        gguf_checkpoint_path (`str`):
-            The path the to GGUF file to load
+        gguf_checkpoint_path (`str` or `list[str]`):
+            One GGUF file, or the ordered paths of a complete sharded checkpoint.
         return_tensors (`bool`, defaults to `False`):
             Whether to read the tensors from the file and return them. Not doing so is faster
             and only loads the metadata in memory.
@@ -596,7 +596,15 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         )
         raise ImportError("Please install torch and gguf>=0.10.0 to load a GGUF checkpoint in PyTorch.")
 
-    reader = GGUFReader(gguf_checkpoint_path)
+    if isinstance(gguf_checkpoint_path, list):
+        from .integrations.gguf.reader import read_gguf_metadata
+
+        read_gguf_metadata(gguf_checkpoint_path)
+    else:
+        gguf_checkpoint_path = [gguf_checkpoint_path]
+    readers = [GGUFReader(path) for path in gguf_checkpoint_path]
+    reader = readers[0]
+    tensors = tuple(tensor for shard in readers for tensor in shard.tensors)
     fields = reader.fields
     reader_keys = list(fields.keys())
 
@@ -641,8 +649,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     if "stablelm" in architecture:
         attn_bias_name = {"attn_q.bias", "attn_k.bias", "attn_v.bias"}
         ffn_norm_name = "ffn_norm"
-        qkv_bias = any(bias_name in tensor.name for tensor in reader.tensors for bias_name in attn_bias_name)
-        use_parallel_residual = any(ffn_norm_name in tensor.name for tensor in reader.tensors)
+        qkv_bias = any(bias_name in tensor.name for tensor in tensors for bias_name in attn_bias_name)
+        use_parallel_residual = any(ffn_norm_name in tensor.name for tensor in tensors)
         parsed_parameters["config"]["use_qkv_bias"] = qkv_bias
         parsed_parameters["config"]["use_parallel_residual"] = not use_parallel_residual
 
@@ -653,7 +661,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # tie_word_embeddings is true otherwise false
     exceptions = ["falcon", "bloom"]
     parsed_parameters["config"]["tie_word_embeddings"] = (
-        all(tensor.name != "output.weight" for tensor in reader.tensors) or architecture in exceptions
+        all(tensor.name != "output.weight" for tensor in tensors) or architecture in exceptions
     )
 
     # Set GGUF-specific default values
@@ -786,7 +794,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
 
         tensor_key_mapping = get_gguf_hf_weights_map(model_to_load, processor)
 
-        for tensor in tqdm(reader.tensors, desc="Converting and de-quantizing GGUF tensors..."):
+        for tensor in tqdm(tensors, desc="Converting and de-quantizing GGUF tensors..."):
             name = tensor.name
             weights = dequantize(tensor.data, tensor.tensor_type)
 

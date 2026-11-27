@@ -372,6 +372,49 @@ def cached_file(
     return file
 
 
+def _get_gguf_checkpoint_files(
+    pretrained_model_name_or_path: str | os.PathLike | None,
+    gguf_file: str,
+    **cached_file_kwargs,
+) -> list[str]:
+    """Resolve a GGUF checkpoint, whose entry point is its first shard when split."""
+    gguf_file = os.fspath(gguf_file)
+    match = re.fullmatch(r"(.+)-([0-9]{5})-of-([0-9]{5})\.gguf", gguf_file)
+    filenames = [gguf_file]
+    if match is not None:
+        prefix, shard_index, shard_count = match.groups()
+        shard_index, shard_count = int(shard_index), int(shard_count)
+        if not 1 <= shard_index <= shard_count:
+            raise ValueError(f"Invalid GGUF shard filename {gguf_file!r}: expected 1 <= shard index <= shard count.")
+        first_shard = f"{prefix}-00001-of-{shard_count:05d}.gguf"
+        if shard_index != 1:
+            raise ValueError(f"Please pass the first GGUF shard {first_shard!r}, instead of {gguf_file!r}.")
+        filenames = [f"{prefix}-{index:05d}-of-{shard_count:05d}.gguf" for index in range(1, shard_count + 1)]
+
+    # Explicit local paths take priority over a model directory or Hub repository.
+    if os.path.isfile(gguf_file):
+        for filename in filenames:
+            if not os.path.isfile(filename):
+                raise OSError(f"Missing GGUF checkpoint shard: {filename}.")
+        return filenames
+    if os.path.isabs(gguf_file) or pretrained_model_name_or_path is None:
+        raise OSError(f"Missing GGUF checkpoint file: {gguf_file}.")
+
+    filename_groups = [filenames]
+    subfolder = cached_file_kwargs.get("subfolder") or ""
+    if any(character in os.path.join(subfolder, gguf_file) for character in "*?["):
+        # A single-file request avoids interpreting literal filenames as snapshot glob patterns.
+        filename_groups = [[filename] for filename in filenames]
+
+    resolved_files = []
+    for group in filename_groups:
+        files = cached_files(pretrained_model_name_or_path, group, **cached_file_kwargs)
+        if files is None or len(files) != len(group):
+            raise OSError(f"Could not resolve all GGUF checkpoint files for {gguf_file!r}.")
+        resolved_files.extend(files)
+    return resolved_files
+
+
 def cached_files(
     path_or_repo_id: str | os.PathLike,
     filenames: list[str],
