@@ -1026,13 +1026,15 @@ class Molmo2Processor(ProcessorMixin):
 
         return "".join(low_res_tokens + high_res_tokens)
 
-    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
             image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
 
         Returns:
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
@@ -1050,6 +1052,18 @@ class Molmo2Processor(ProcessorMixin):
                 num_image_tokens.append(resized_h * resized_w + height * width)
                 num_image_patches.append(num_crops)
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = self.video_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["videos_kwargs"]
+            )
+            size = videos_kwargs["size"]
+            patch_size = videos_kwargs["patch_size"]
+            pooling_h, pooling_w = videos_kwargs["pooling_size"]
+            # Every frame is resized to `size`, so the count doesn't depend on the video's own size
+            num_rows = math.ceil(size["height"] // patch_size / pooling_h)
+            num_cols = math.ceil(size["width"] // patch_size / pooling_w)
+            vision_data["num_video_tokens"] = [num_frames * num_rows * num_cols for num_frames, _, _ in video_sizes]
 
         return MultiModalData(**vision_data)
 

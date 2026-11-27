@@ -20,6 +20,7 @@ from PIL import Image
 
 from transformers import Molmo2ImageProcessor, Molmo2Processor, Molmo2VideoProcessor
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
+from transformers.video_utils import get_video_size
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -270,6 +271,24 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             predicted = processor._get_num_multimodal_tokens(image_sizes=[(height, width)])
 
             self.assertEqual(predicted["num_image_patches"][0], inputs["pixel_values"].shape[0])
+
+    # Molmo2 takes at most one video per sample, so only the one-video-per-text half of the common test applies
+    def test_get_num_multimodal_tokens_matches_processor_call_video(self):
+        processor = self.get_processor()
+        video_inputs = self.prepare_videos_inputs(batch_size=2)
+        video_inputs = [video_inputs[0][:7], video_inputs[1][:7, :, :, :200]]
+        video_sizes = [(len(video), *get_video_size(video)) for video in video_inputs]
+
+        inputs = processor(
+            text=[f"This is a video {processor.video_token}"] * len(video_inputs),
+            videos=video_inputs,
+            padding=True,
+            do_sample_frames=False,
+            return_text_replacement_offsets=True,
+            return_tensors="pt",
+        )
+        num_video_tokens = processor._get_num_multimodal_tokens(video_sizes=video_sizes)["num_video_tokens"]
+        self.assertListEqual(self._count_embed_tokens(processor, inputs, "video"), num_video_tokens)
 
     @unittest.skip(
         reason="Hub processor_config.json has use_single_crop_col_tokens=False, which differs from the __init__ "
