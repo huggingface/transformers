@@ -1801,6 +1801,23 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     def test_streaming_and_non_streaming_requests_can_alternate(self) -> None:
         self._test_streaming_or_not_request(with_streaming=True, with_non_streaming=True)
 
+    def test_split_prefill_registers_all_blocks_with_async_batching(self) -> None:
+        """Test that all the blocks of a prompt prefilled over several batches are registered for prefix sharing."""
+        tokenizer, model = get_tokenizer_and_model("Qwen/Qwen2.5-0.5B-Instruct", "sdpa", torch_device)
+        cb_config = ContinuousBatchingConfig(use_async_batching=True, max_batch_tokens=256)
+        manager = model.init_continuous_batching(continuous_batching_config=cb_config)
+        manager.start()
+
+        # 4 blocks of 256 tokens, prefilled in 4 batches
+        input_ids = tokenizer("The sailor walked along the harbour and counted the boats. " * 100)["input_ids"][:1024]
+        manager.add_request(input_ids, max_new_tokens=2)
+        manager.get_result(timeout=60)
+        allocators = manager.batch_processor.cache.cache_allocators.values()
+        num_registered_blocks = sum(len(allocator.ledger.hash_to_block) for allocator in allocators)
+        manager.stop(block=True)
+
+        self.assertEqual(num_registered_blocks, 4)
+
     def test_register_result_handler(self) -> None:
         """Test that register_result_handler receives streaming outputs through the OutputRouter."""
         import asyncio
