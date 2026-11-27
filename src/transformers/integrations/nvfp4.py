@@ -85,6 +85,17 @@ def load_nvfp4_kernel() -> NVFP4Kernel:
 
     return NVFP4Kernel(**entry_points)
 
+def dequantize_nvfp4(packed: torch.Tensor, scales: torch.Tensor, scale_2) -> torch.Tensor:
+    """
+    Dense float32 `(out_features, in_features)`: `fp4 * scales * scale_2`, two e2m1 values per byte, low nibble
+    first
+    """
+    values = torch.tensor(FP4_VALUES, device=packed.device)
+    weight = torch.stack([values[(packed & 0xF).int()], values[(packed >> 4).int()]], dim=-1)
+    weight = weight.view(packed.shape[0], -1, SF_VEC_SIZE)
+    scales = scales.view(_FP8_DTYPE).float().unsqueeze(-1)
+    return (weight * scales * scale_2).flatten(1)
+
 
 def nvfp4_linear(
     input: torch.Tensor,
@@ -133,7 +144,7 @@ class NVFP4Linear(nn.Module):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
-        # Weight-only (W4A16): the weight is dequantized in each forward, the activations stay in full precision
+        # Weight-only (W4A16): the weight is dequantized in each forward, the activations stay in full precision. This is used to keep accuracy!
         self.weight_only = weight_only
 
         # The BF16 placeholder matches the source checkpoint before the load-time conversion replaces it with
@@ -148,7 +159,7 @@ class NVFP4Linear(nn.Module):
         self.input_scale = nn.Buffer(torch.empty(1 if static_input_scale else 0, dtype=torch.float32))
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        if self.weight_only:
+        if self.weight_only: # TODO: maybe we'll create a mapping W4A16 -> func?
             weight = dequantize_nvfp4(self.weight, self.weight_scale, self.weight_scale_2)
             return nn.functional.linear(input, weight.to(input.dtype))
         return nvfp4_linear(
@@ -171,7 +182,7 @@ def _frozen(*shape, dtype: torch.dtype) -> nn.Parameter:
     return nn.Parameter(torch.empty(*shape, dtype=dtype), requires_grad=False)
 
 
-def _scale_halves(output: torch.Tensor, scales: torch.Tensor) -> torch.Tensor:
+def _scale_gate_up(output: torch.Tensor, scales: torch.Tensor) -> torch.Tensor:
     """Scale each half of `output` (e.g. gate, up) by its own column of `scales` `(rows, num_halves)`"""
     return (output.unflatten(-1, (scales.shape[-1], -1)) * scales.unsqueeze(-1)).flatten(-2)
 
@@ -235,7 +246,7 @@ class NVFP4Experts(nn.Module):
         if self.weight_only:
             weight = dequantize_nvfp4(getattr(self, name)[expert_idx], getattr(self, f"{name}_scale")[expert_idx], 1.0)
             scale_2 = getattr(self, f"{name}_scale_2").view(self.num_experts, -1)[expert_idx.reshape(1)]
-            return _scale_halves(nn.functional.linear(input, weight.to(input.dtype)), scale_2).to(input.dtype)
+            return _scale_gate_up(nn.functional.linear(input, weight.to(input.dtype)), scale_2).to(input.dtype)
 
         _, out_features, in_features = self.projections[name]
         input_scale, scale_2 = self.scales(name, expert_idx.reshape(1))
@@ -249,7 +260,7 @@ class NVFP4Experts(nn.Module):
             in_features,
             input_scale,
         )
-        return _scale_halves(output, scale_2).to(input.dtype)
+        return _scale_gate_up(output, scale_2).to(input.dtype)
 
     def grouped_linear(self, name, input, expert_ids, tokens_per_expert, offsets) -> torch.Tensor:
         """W4A4 `scaled_grouped_mm` over rows sorted by expert, each divided by its expert's static activation scale"""
@@ -285,7 +296,7 @@ class NVFP4Experts(nn.Module):
             output_dtype=torch.bfloat16,
         )
 
-        return _scale_halves(output, input_scale[:, None] * scale_2).to(input.dtype)
+        return _scale_gate_up(output, input_scale[:, None] * scale_2).to(input.dtype)
 
     def eager_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
         """One NVFP4 GEMM per hit expert"""
@@ -440,20 +451,9 @@ class NVFP4Dequantize(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        # A dequantized model has no quantization config anymore: it saves unquantized
+        # TODO: A dequantized model has no quantization config anymore: it saves unquantized
         return _IdentityOp()
 
-
-def dequantize_nvfp4(packed: torch.Tensor, scales: torch.Tensor, scale_2) -> torch.Tensor:
-    """
-    Dense float32 `(out_features, in_features)`: `fp4 * scales * scale_2`, two e2m1 values per byte, low nibble
-    first
-    """
-    values = torch.tensor(FP4_VALUES, device=packed.device)
-    weight = torch.stack([values[(packed & 0xF).int()], values[(packed >> 4).int()]], dim=-1)
-    weight = weight.view(packed.shape[0], -1, SF_VEC_SIZE)
-    scales = scales.view(_FP8_DTYPE).float().unsqueeze(-1)
-    return (weight * scales * scale_2).flatten(1)
 
 
 def is_nvfp4_compatible(module: nn.Module) -> bool:

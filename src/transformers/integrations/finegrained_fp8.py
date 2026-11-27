@@ -413,7 +413,7 @@ class FP8Linear(nn.Linear):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         if self.weight.element_size() > 1:
             return F.linear(input, self.weight, self.bias)
-        if self.activation_scheme == "none":  # weight-only: the activations stay in their dtype
+        if self.activation_scheme == "none":  # weight-only: the activations stay in their dtype. This just optimizes peak memory.
             weight = _dequantize_fp8_weight(self.weight, self.weight_scale_inv, self.block_size, input.dtype)
             return F.linear(input, weight, self.bias)
 
@@ -925,7 +925,10 @@ class Fp8Quantize(ConversionOps):
 
 
 class Fp8Deserialize(ConversionOps):
-    """Loads an FP8 linear's tensors as its params: 4-D ModelOpt scales flattened, each cast to its param's dtype"""
+    """
+    This converts safetensors weights into torch data. It's not always required, but some 
+    formats like https://github.com/NVIDIA/Model-Optimizer save fp8 differently from how they are used in kernels or in normal linear layers. This step is simply translating to our format.
+    """
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
@@ -1062,5 +1065,5 @@ class Fp8Dequantize(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        # A dequantized model has no quantization config anymore: it saves unquantized (TODO in `get_weight_conversions`)
+        # TODO: A dequantized model has no quantization config anymore: it saves unquantized because of the per-layer attribution. We'll bring that back.
         return _IdentityOp()
