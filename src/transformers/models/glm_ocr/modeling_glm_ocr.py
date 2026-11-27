@@ -155,18 +155,19 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
 
-    # Keep half or full tensor for later concatenation
     rotary_dim = cos.shape[-1]
-    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
-    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
+    if rotary_dim < q.shape[-1]:
+        q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+        k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
 
-    # Apply rotary embeddings on the first half or full tensor
-    q_embed = (q_rot * cos) + (rotate_half_llm(q_rot) * sin)
-    k_embed = (k_rot * cos) + (rotate_half_llm(k_rot) * sin)
+        q_embed = (q_rot * cos) + (rotate_half_llm(q_rot) * sin)
+        k_embed = (k_rot * cos) + (rotate_half_llm(k_rot) * sin)
 
-    # Concatenate back to full shape
-    q_embed = torch.cat([q_embed, q_pass], dim=-1)
-    k_embed = torch.cat([k_embed, k_pass], dim=-1)
+        q_embed = torch.cat([q_embed, q_pass], dim=-1)
+        k_embed = torch.cat([k_embed, k_pass], dim=-1)
+    else:
+        q_embed = (q * cos) + (rotate_half_llm(q) * sin)
+        k_embed = (k * cos) + (rotate_half_llm(k) * sin)
     return q_embed, k_embed
 
 
