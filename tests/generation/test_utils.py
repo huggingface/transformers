@@ -4355,6 +4355,35 @@ class GenerationIntegrationTests(unittest.TestCase):
         # It must not crash above, and be the same here
         self.assertTrue(torch.equal(reference, assisted))
 
+    def test_prompt_lookup_decoding_recurrent_states_all_candidates_rejected(self):
+        """
+        Test that prompt lookup decoding matches greedy decoding for a model with recurrent states when the model rejects
+        all the candidate tokens of a round. The recurrent states must then be rolled back to the state before the first
+        candidate token, so the cache has to record one more state than the number of candidate tokens.
+        """
+        config = AutoConfig.for_model(
+            "mamba", vocab_size=64, hidden_size=16, state_size=4, num_hidden_layers=2, eos_token_id=None
+        )
+        set_seed(0)
+        model = AutoModelForCausalLM.from_config(config).eval()
+
+        # A repeated prompt, so that prompt lookup finds candidates. With random weights, the model rejects most of them
+        prompt = torch.randint(1, 60, (1, 6))
+        input_ids = torch.cat([prompt, prompt, prompt[:, :3]], dim=-1)
+        attention_mask = torch.ones_like(input_ids)
+        reference = model.generate(
+            input_ids=input_ids, attention_mask=attention_mask, do_sample=False, max_new_tokens=20
+        )
+        for prompt_lookup_num_tokens in (1, 3):
+            prompt_lookup = model.generate(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                do_sample=False,
+                max_new_tokens=20,
+                prompt_lookup_num_tokens=prompt_lookup_num_tokens,
+            )
+            self.assertTrue(torch.equal(reference, prompt_lookup))
+
     def test_mtp_mask_creation_uses_per_layer_config(self):
         config = AutoConfig.for_model(
             "llama",
