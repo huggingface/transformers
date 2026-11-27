@@ -18,9 +18,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
+from typing import Any
+
 import numpy as np
 
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...processing_utils import _UNMARKED, MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_attr
 
@@ -173,6 +176,36 @@ class Qwen3VLProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         return super().model_input_names + ["mm_token_type_ids"]
+
+    def get_text_with_replacements(
+        self,
+        text: list[str],
+        images_replacements: list[str] = [],
+        videos_replacements: list[str] = [],
+        audio_replacements: list[str] = [],
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        # `replace_video_token` already wraps every frame in `<|vision_start|>...<|vision_end|>`, so collapse the chat
+        # template's outer wrapper into a bare video token to avoid an extra vision start/end pair around all frames
+        wrapper = self.vision_start_token + self.video_token + self.vision_end_token
+        pattern = re.compile(_UNMARKED + re.escape(wrapper) if len(videos_replacements) > 0 else r"(?!)")
+        wrapper_starts = [{m.start() for m in pattern.finditer(sample)} for sample in text]
+        text = [pattern.sub(self.video_token, sample) for sample in text]
+        text, batch_offsets = super().get_text_with_replacements(
+            text, images_replacements, videos_replacements, audio_replacements
+        )
+
+        # Map the spans back to the uncollapsed text, which is what `return_assistant_tokens_mask` aligns against
+        removed = len(wrapper) - len(self.video_token)
+        for starts, offsets in zip(wrapper_starts, batch_offsets):
+            shift = 0
+            for offset in offsets:
+                start, end = offset["span"]
+                is_wrapper = start + shift in starts
+                offset["span"] = (start + shift, end + shift + removed * is_wrapper)
+                if is_wrapper:
+                    offset["text"] = wrapper
+                    shift += removed
+        return text, batch_offsets
 
     def _calculate_timestamps(self, indices: list[int] | np.ndarray, video_fps: float, merge_size: int = 2):
         if not isinstance(indices, list):

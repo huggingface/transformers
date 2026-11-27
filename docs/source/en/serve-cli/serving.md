@@ -47,6 +47,10 @@ transformers serve
 
 The `v1/chat/completions` API is based on the [Chat Completions API](https://platform.openai.com/docs/api-reference/chat). It supports text, image, audio, and video requests for LLMs, VLMs, and multimodal models. Use it with `curl`, the [`~huggingface_hub.InferenceClient`], or the [OpenAI](https://platform.openai.com/docs/quickstart) client.
 
+Streamed text comes in chunks of one or more tokens, in `v1/chat/completions`, `v1/completions` and `v1/responses`: when a client reads more slowly than the model generates, the text waiting for it goes out in one chunk. The number of chunks of an answer depends on the load, so join the text of the chunks rather than counting them.
+
+A streamed answer of `v1/chat/completions` or `v1/completions` reports its token usage only when the request asks for it, with `stream_options={"include_usage": true}`, as in OpenAI's API. The usage then comes in a last chunk of its own, whose `choices` list is empty.
+
 ### Text-based completions
 
 <hfoptions id="chat-completion-http">
@@ -1045,7 +1049,7 @@ for chunk in stream:
 
 The [Responses API](https://platform.openai.com/docs/api-reference/responses) is OpenAI's latest API endpoint for generation. It supports stateful interactions and integrates built-in tools to extend a model's capabilities. OpenAI [recommends](https://platform.openai.com/docs/guides/migrate-to-responses) using the Responses API over the Chat Completions API for new projects.
 
-The `v1/responses` API supports text, image, audio, and video requests through the `curl` command and [OpenAI](https://platform.openai.com/docs/quickstart) client.
+The `v1/responses` API supports text, image, audio, and video requests through the `curl` command and [OpenAI](https://platform.openai.com/docs/quickstart) client. As in OpenAI's API, a request streams only when it sets `"stream": true`.
 
 ### Text-based responses
 
@@ -1735,7 +1739,7 @@ Answers use the same question names. For example:
 
 ```json
 {
-  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "model": "Qwen/Qwen2.5-1.5B-Instruct@main",
   "answers": {
     "team": {"type": "choice", "choice": "technical", "probabilities": {"billing": 0.000006962256520637311, "technical": 0.999993085861206}, "confidence": 0.9999861717224121},
     "urgency": {"type": "score", "score": 1.6739138662815094, "legend": {"0": "low", "1": "medium", "2": "high"}, "probabilities": {"0": 0.0031353600788861513, "1": 0.31981542706489563, "2": 0.6770492196083069}, "confidence": 0.5108707791659981},
@@ -1923,11 +1927,15 @@ The stream ends with exactly one terminal event, `ready` (success) or `error` (f
 
 ## Timeout
 
-`transformers serve` handles requests for any model. Each model loads on demand and stays in GPU memory. Models unload automatically after 300 seconds of inactivity to free GPU memory. Set `--model-timeout` to a different value in seconds, or `-1` to disable unloading.
+`transformers serve` handles requests for any model, named in each request. Each model loads on demand and stays in GPU memory. Models unload automatically after 300 seconds of inactivity to free GPU memory. Set `--model-timeout` to a different value in seconds, or `-1` to disable unloading. A model given on the command line (`transformers serve MODEL`) never unloads. Each model runs in a process of its own, so the server's process stays free to handle HTTP, tokenize prompts and decode tokens while it generates; unloading a model stops its process.
+
+If a model's process dies (a crash, or the system killing it for lack of memory), its requests fail, `/health` answers 503, and the server exits with an error, for whatever runs it (a script, systemd, Kubernetes) to start it again.
 
 ```shell
 transformers serve --model-timeout 400
 ```
+
+A prompt must leave room for an answer in the model's context: a longer prompt gets an error with error code 400. Only the prompt is checked: the answer isn't cut where the context ends. Set `--max-model-len` to lower the limit, which saves memory with models of a very long context.
 
 ### Loading examples
 
@@ -2320,6 +2328,14 @@ print(second.output_text)
 
 </hfoption>
 </hfoptions>
+
+## API servers
+
+The API server is the process that handles HTTP, renders and tokenizes prompts, and decodes and streams answers, on one CPU core. When it becomes the limit, with many concurrent clients of a small or fast model, run several with `--api-server-count`. They need a model on the command line, which they share: it's loaded once, in its own process. With `--continuous-batching`, the requests of all the API servers are batched together. If one of these processes stops, the server stops the others and exits with an error.
+
+```sh
+transformers serve Qwen/Qwen2.5-0.5B-Instruct --continuous-batching --api-server-count 2
+```
 
 ## Port forwarding
 
