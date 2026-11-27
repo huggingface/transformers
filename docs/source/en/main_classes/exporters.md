@@ -138,6 +138,3 @@ between decomposing a model and exporting each component.
 
 [[autodoc]] exporters.decompose.is_multimodal
 
-[[autodoc]] exporters.precompute.register_export_input_preparer
-
-[[autodoc]] exporters.precompute.precompute_export_inputs

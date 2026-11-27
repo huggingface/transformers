@@ -444,9 +444,8 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
 
     @parameterized.expand([("square", 32, 32), ("non_square", 32, 64)])
     def test_video_forward(self, _, frame_height, frame_width):
-        # The video branch of `forward`: it concatenates the per-video `pooler_output` and, with
-        # `video_pruning_rate > 0`, drops redundant tokens on the tubelets' token grid, which is not square when the
-        # frames are not (the processor keeps the aspect ratio).
+        # The video branch of `forward`: with `video_pruning_rate > 0`, it drops redundant tokens on the tubelets'
+        # token grid, which is not square when the frames are not (the processor keeps the aspect ratio).
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         tester = self.model_tester
         num_tubelets = 2
@@ -470,7 +469,7 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
             with torch.no_grad():
                 logits = model(input_ids=input_ids, pixel_values_videos=pixel_values_videos).logits
                 # as in `generate()`, which passes precomputed features
-                video_features = model.get_video_features(pixel_values_videos, return_dict=True)
+                video_features = model.get_video_embeddings(pixel_values_videos, return_dict=True)
                 logits_from_features = model(input_ids=input_ids, mm_encoder_outputs={"video": video_features}).logits
                 logits_from_frames = model(input_ids=input_ids, pixel_values_videos=frames).logits
 

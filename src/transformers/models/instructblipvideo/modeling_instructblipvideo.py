@@ -31,12 +31,13 @@ from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndCrossAttentions,
+    BaseModelOutputWithPoolingAndSplitSizes,
     CausalLMOutputWithPast,
     Seq2SeqLMOutput,
 )
@@ -1019,7 +1020,7 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
 
 @auto_docstring
 @dataclass
-class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPooling):
+class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     vision_outputs (`BaseModelOutputWithPooling`):
         Outputs of the vision encoder.
@@ -1398,9 +1399,10 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
 
         # unbatch inputs back, each video-frame gets `num_query_tokens` seq length
         video_features = video_features.reshape(batch_size, self.config.num_query_tokens * frames, -1)
-        vision_outputs.pooler_output = video_features
-
-        vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
+        vision_outputs.split_sizes = torch.full(
+            video_features.shape[:1], video_features.shape[1], device=video_features.device
+        )
+        vision_outputs.pooler_output = video_features.flatten(0, 1)
         return vision_outputs
 
 

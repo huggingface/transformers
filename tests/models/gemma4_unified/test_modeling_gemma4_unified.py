@@ -384,6 +384,8 @@ class Gemma4UnifiedVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin,
     all_generative_model_classes = (Gemma4UnifiedForConditionalGeneration,) if is_torch_available() else ()
     additional_model_inputs = ["mm_token_type_ids"]
     test_resize_embeddings = False
+    # No vision tower: the frames' patches are embedded directly, so there is no tower output shape to check
+    skip_test_video_features_output_shape = True
 
     def setUp(self):
         self.model_tester = Gemma4UnifiedVision2TextModelTester(self)
@@ -391,14 +393,12 @@ class Gemma4UnifiedVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin,
         self.skip_mm_output_format()
 
     def skip_mm_output_format(self):
-        # This test doesn't have any audio/videos in input
+        # This test doesn't have any audio in input, and without a vision tower videos have no hidden states or attentions
         skippable_tests = [
             "test_get_image_features_hidden_states",
             "test_get_image_features_attentions",
             "test_get_video_features_hidden_states",
             "test_get_video_features_attentions",
-            "test_get_video_features_output",
-            "test_get_video_features_pooler_output",
             "test_get_audio_features_hidden_states",
             "test_get_audio_features_attentions",
             "test_get_audio_features_output",
@@ -407,6 +407,17 @@ class Gemma4UnifiedVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin,
         for test in skippable_tests:
             if self._testMethodName.startswith(test):
                 self.skipTest(reason="Gemma4 unified does not collect any hidden states or attentions (no mm tower)")
+
+    def _video_features_prepare_config_and_inputs(self):
+        # Videos are frames encoded like images, concatenated over all videos, with each video's frame count
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        num_frames = 2
+        inputs_dict = {
+            "pixel_values_videos": inputs_dict["pixel_values"].repeat_interleave(num_frames, dim=0),
+            "video_position_ids": inputs_dict["image_position_ids"].repeat_interleave(num_frames, dim=0),
+            "num_frames_per_video": torch.full((self.model_tester.batch_size,), num_frames, device=torch_device),
+        }
+        return config, inputs_dict
 
     @unittest.skip("We need 4 layers to correctly test cache sharing.")
     def test_num_layers_is_small(self):

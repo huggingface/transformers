@@ -37,6 +37,7 @@ from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -556,7 +557,7 @@ class GlmImageVQVAEVectorQuantizer(nn.Module):
 
 @auto_docstring
 @dataclass
-class GlmImageVQVAEModelOutput(BaseModelOutputWithPooling):
+class GlmImageVQVAEModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     quantized_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
         Quantized last hidden state from the VQ-VAE model.
@@ -1124,12 +1125,21 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
+        images_per_sample: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
+        r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            Each image's grid, each sample's target image last: the target grids are dropped, as `pixel_values` holds
+            the source images only.
+        images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            The number of images per sample, its target image included. Without it, the batch is one sample.
+        """
+        image_grid_thw = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
         pixel_values = pixel_values.type(self.visual.dtype)
-        image_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
-        return image_outputs
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        split_sizes = image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -1164,18 +1174,17 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
 
     def get_data_dependent_inputs(
         self,
+        pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
         **kwargs,
     ) -> dict[str, Any]:
         """What the forward derives from the processor's outputs with data-dependent ops: the vision
-        tower's (see [`GlmImageVisionModel.get_data_dependent_inputs`]) for the source images, prefixed `image_`,
-        as `get_image_features` takes them."""
-        if image_grid_thw is None:
+        tower's (see [`GlmImageVisionModel.get_data_dependent_inputs`]) for the source images in `pixel_values`,
+        prefixed `image_`, as `get_image_embeddings` takes them."""
+        if pixel_values is None or image_grid_thw is None:
             return {}
         source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
-        if source_grids.shape[0] == 0:
-            return {}
         tower_inputs = self.visual.get_data_dependent_inputs(source_grids)
         return {f"image_{name}": value for name, value in tower_inputs.items()}
 
@@ -1205,12 +1214,13 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
         # to recompute from). Skip when input_ids is provided without cache to avoid shape
         # mismatches from stale rope_deltas (e.g., training forward pass after generation).
         elif self.rope_deltas is not None and (cache_length > 0 or input_ids is None):
-            batch_size, seq_length, _ = inputs_embeds.shape
+            tokens = inputs_embeds if inputs_embeds is not None else input_ids
+            batch_size, seq_length = tokens.shape[:2]
             if self._cached_decode_position_ids is not None:
                 step = cache_length - self._prefill_len
                 position_ids = self._cached_decode_position_ids[:, :, step : step + seq_length].permute(1, 0, 2)
             else:
-                position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + cache_length
+                position_ids = torch.arange(seq_length, device=tokens.device) + cache_length
                 position_ids = position_ids.view(1, 1, -1).repeat(3, batch_size, 1)
         else:
             # Can't build correct 3D positions. Let the model infer it
@@ -1245,13 +1255,13 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
-            mm_encoder_outputs["image"] = self.get_image_features(
-                pixel_values, source_grids, return_dict=True, **kwargs
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
+                pixel_values, image_grid_thw, images_per_sample, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_ids = self.get_image_tokens(mm_encoder_outputs["image"].pooler_output)
+            source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
+            image_ids = self.get_image_tokens(mm_encoder_outputs["image"].pooler_output, source_grids)
             image_ids = image_ids.view(-1).to(input_ids.device)
             special_image_mask = self.get_placeholder_mask(input_ids, image_ids)
             input_ids = input_ids.masked_scatter(special_image_mask, image_ids)
@@ -1298,49 +1308,12 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
             image_tokens (`torch.LongTensor` of shape `(total_patches,)`):
                 Discrete token indices from the VQVAE codebook.
         """
-        all_image_toks = []
-        for hs in hidden_states:
-            vqmodel_outputs: GlmImageVQVAEModelOutput = self.vqmodel.encode(hs[None, ...])
-            all_image_toks.append(vqmodel_outputs.image_tokens)
-        return torch.cat(all_image_toks, dim=0)
-
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        images_per_sample: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            The number of image inputs per each sample in the batch.
-        """
-        if (
-            images_per_sample is not None
-            and image_grid_thw is not None
-            and sum(images_per_sample) == len(image_grid_thw)
-        ):
-            image_grid_thw = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
-
-        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
-
-        reshaped_embeds = []
-        for i, embed in enumerate(image_embeds):
-            grid_t, grid_h, grid_w = image_grid_thw[i].tolist()
-            embed = embed.view(grid_t, grid_h, grid_w, -1)
-            # grid-h is always one for images, so we squeeze the extrac dim back in reality
-            embed = embed.permute(0, 3, 1, 2).reshape(-1, grid_h, grid_w)
-            reshaped_embeds.append(embed.contiguous())
-
-        vision_outputs.pooler_output = reshaped_embeds
-        # Per-image feature maps for the image tokenizer, not the flat rows `split_sizes` counts
-        vision_outputs.split_sizes = None
-
-        return vision_outputs
+        # One encode per image, as one call over all images holds all their [positions, codes] distances at once
+        if isinstance(hidden_states, torch.Tensor):
+            hidden_states = hidden_states.split(
+                (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+            )
+        return torch.cat([self.vqmodel.encode(states.T[None, :, :, None]).image_tokens for states in hidden_states])
 
     def get_image_grids_for_generation(
         self,
@@ -1380,13 +1353,17 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
+        images_per_sample: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of each source image's patch grid.
+            Each image's grid, each sample's target image last: the target grids are dropped, as `pixel_values` holds
+            the source images only.
+        images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            The number of images per sample, its target image included. Without it, the batch is one sample.
         """
-        return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
+        return self.model.get_image_embeddings(pixel_values, image_grid_thw, images_per_sample, **kwargs)
 
     def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
         r"""See [`GlmImageModel.get_data_dependent_inputs`]."""
@@ -1494,9 +1471,21 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             image_outputs=outputs.image_outputs,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
+    def prepare_inputs_for_generation(self, input_ids, is_first_iteration=False, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids, is_first_iteration=is_first_iteration, **kwargs
+        )
+        # The prefill derives the positions from the image grids, and each decode step takes its own from them
         model_inputs["position_ids"] = None
+        if not is_first_iteration and self.model.rope_deltas is not None:
+            model_inputs["position_ids"] = self.model.compute_3d_position_ids(
+                input_ids=model_inputs.get("input_ids"),
+                image_grid_thw=None,
+                images_per_sample=None,
+                inputs_embeds=model_inputs.get("inputs_embeds"),
+                attention_mask=None,
+                cache=model_inputs.get("cache"),
+            )
         return model_inputs
 
     def _prepare_multimodal_encoder_kwargs_for_generation(self, model_kwargs):
@@ -1505,11 +1494,12 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         if "pixel_values" in model_kwargs:
             if model_kwargs["mm_encoder_outputs"].get("image") is not None:
                 raise ValueError("You cannot pass both: raw pixels and pre-computed embeddings for input image")
-            encoder_kwargs = {
-                k: v for k, v in model_kwargs.items() if k in ["pixel_values", "image_grid_thw", "images_per_sample"]
-            }
-            encoder_kwargs["return_dict"] = True
-            model_kwargs["mm_encoder_outputs"]["image"] = self.get_image_features(**encoder_kwargs)
+            model_kwargs["mm_encoder_outputs"]["image"] = self.get_image_embeddings(
+                model_kwargs["pixel_values"],
+                model_kwargs.get("image_grid_thw"),
+                model_kwargs.get("images_per_sample"),
+                return_dict=True,
+            )
             model_kwargs.pop("pixel_values")
 
         return model_kwargs

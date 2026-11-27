@@ -32,8 +32,13 @@ from ...masking_utils import (
     sliding_window_overlay,
 )
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
-from ...modeling_multimodal_utils import flatten_items, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, SequenceClassifierOutputWithPast
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    SequenceClassifierOutputWithPast,
+)
 from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
     dynamic_rope_update,
@@ -43,6 +48,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoConfig
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -50,7 +56,6 @@ from ..gemma2.modeling_gemma2 import (
     Gemma2MLP,
     Gemma2Model,
     Gemma2PreTrainedModel,
-    Gemma2RMSNorm,
     Gemma2RotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -247,9 +252,8 @@ class Gemma3MLP(Gemma2MLP):
         super().__init__(config)
 
 
-class Gemma3RMSNorm(Gemma2RMSNorm):
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__(dim=dim, eps=eps)
+class Gemma3RMSNorm(GemmaRMSNorm):
+    pass
 
 
 class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
@@ -320,8 +324,8 @@ class Gemma3Attention(Gemma2Attention):
         self.is_sliding = self.layer_type == "sliding_attention"
         self.is_causal = not self.config.use_bidirectional_attention
 
-        self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = Gemma3RMSNorm(config.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Gemma3RMSNorm(config.head_dim, eps=config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -420,7 +424,6 @@ GEMMA3_START_DOCSTRING = None
 
 
 class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
-    base_model_prefix = "model"
     input_modalities = ("image", "text")
     _no_split_modules = ["Gemma3DecoderLayer"]
     _supports_sdpa = True
@@ -656,9 +659,6 @@ def create_masks_for_vision_model(
 
 
 class Gemma3Model(PaliGemmaModel):
-    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
-    accepts_loss_kwargs = False
-
     _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
 
     def __init__(self, config: Gemma3Config):
@@ -669,13 +669,13 @@ class Gemma3Model(PaliGemmaModel):
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
         last_hidden_state = vision_outputs.last_hidden_state
-        vision_outputs.pooler_output = self.multi_modal_projector(last_hidden_state)
-
-        vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
-        return vision_outputs
+        features = self.multi_modal_projector(last_hidden_state)
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        vision_outputs.pooler_output = features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring
@@ -718,8 +718,7 @@ class Gemma3Model(PaliGemmaModel):
             mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )

@@ -50,9 +50,10 @@ class JambaConfig(PreTrainedConfig):
 
     model_type = "jamba"
     base_model_tp_plan = {
-        "layers.*.feed_forward.experts.gate_up_proj": "packed_colwise",
-        "layers.*.feed_forward.experts.down_proj": "rowwise",
-        "layers.*.feed_forward.experts": "moe_tp_experts",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
     }
     base_model_ep_plan = {
         "layers.*.feed_forward.experts.gate_up_proj": "grouped_gemm",

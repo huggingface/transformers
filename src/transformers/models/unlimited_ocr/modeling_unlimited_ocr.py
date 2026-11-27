@@ -44,6 +44,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
@@ -78,7 +79,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @dataclass
-class UnlimitedOcrModelOutputWithPooling(BaseModelOutputWithPooling):
+class UnlimitedOcrModelOutputWithPooling(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     local_last_hidden_state (`torch.Tensor` of shape `(total_local_patches, sequence_length, hidden_size)`, *optional*):
         Last hidden state from the vision encoder for local (cropped) patches.
@@ -1126,7 +1127,7 @@ class UnlimitedOcrTextTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.topk_method = config.topk_method
         self.num_group = config.n_group
@@ -1259,6 +1260,7 @@ class UnlimitedOcrTextPreTrainedModel(PreTrainedModel):
         "attentions": UnlimitedOcrTextAttention,
         "router_logits": OutputRecorder(UnlimitedOcrTextTopkRouter, index=0),
     }
+    _keep_in_fp32_modules_strict = ["gate.weight"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -1613,10 +1615,6 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             return False
         return self.prefill_max_cache_len <= self.prefill_length
 
-    # We never want to set it, but this is needed as the parent tries it - so just do nothing
-    @is_croppable.setter
-    def is_croppable(self, x): ...
-
 
 class UnlimitedOcrTextRotaryEmbedding(nn.Module):
     def __init__(self, config: UnlimitedOcrTextConfig):
@@ -1958,8 +1956,7 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 

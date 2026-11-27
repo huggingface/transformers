@@ -379,21 +379,23 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
         w_bar = max(encoder_patch_size, round_by_factor(width, total_factor))
         return h_bar * w_bar > max_image_tokens * encoder_patch_size**2 * downsample_factor**2 * max_pixels_tolerance
 
-    def resize_and_split(
+    def _get_split_layout(
         self,
-        images: "torch.Tensor",
+        height: int,
+        width: int,
         downsample_factor: int,
         min_tiles: int,
         max_tiles: int,
-        use_thumbnail: bool,
         min_image_tokens: int,
         max_image_tokens: int,
         encoder_patch_size: int,
         tile_size: int,
         max_pixels_tolerance: float,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-    ) -> tuple[list["torch.Tensor"], list[list[int]], list[list[int]], list[list[tuple[int, int]]]]:
-        batch_size, _, height, width = images.shape
+    ) -> tuple[bool, int, int, int, int]:
+        """
+        Returns whether an image of the given size is split into tiles, its `(num_rows, num_cols)` tile grid and
+        its `(height, width)` after the single-tile (or thumbnail) resize.
+        """
         do_image_splitting = not min_tiles == max_tiles == 1
         is_image_large = self._is_image_too_large(
             height=height,
@@ -413,8 +415,44 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
             encoder_patch_size=encoder_patch_size,
         )
 
+        do_split = is_image_large and do_image_splitting
+        num_rows = num_cols = 1
+        if do_split:
+            num_cols, num_rows, *_ = self._get_grid_layout(
+                height, width, min_tiles=min_tiles, max_tiles=max_tiles, tile_size=tile_size
+            )
+        return do_split, num_rows, num_cols, new_height, new_width
+
+    def resize_and_split(
+        self,
+        images: "torch.Tensor",
+        downsample_factor: int,
+        min_tiles: int,
+        max_tiles: int,
+        use_thumbnail: bool,
+        min_image_tokens: int,
+        max_image_tokens: int,
+        encoder_patch_size: int,
+        tile_size: int,
+        max_pixels_tolerance: float,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+    ) -> tuple[list["torch.Tensor"], list[list[int]], list[list[int]], list[list[tuple[int, int]]]]:
+        batch_size, _, height, width = images.shape
+        do_split, _, _, new_height, new_width = self._get_split_layout(
+            height,
+            width,
+            downsample_factor=downsample_factor,
+            min_tiles=min_tiles,
+            max_tiles=max_tiles,
+            min_image_tokens=min_image_tokens,
+            max_image_tokens=max_image_tokens,
+            encoder_patch_size=encoder_patch_size,
+            tile_size=tile_size,
+            max_pixels_tolerance=max_pixels_tolerance,
+        )
+
         # Big image will be cropped into patches and small images are just resized
-        if is_image_large and do_image_splitting:
+        if do_split:
             images, num_cols, num_rows = self.crop_image_to_patches(
                 images,
                 min_tiles=min_tiles,

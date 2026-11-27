@@ -160,7 +160,7 @@ class OrtFusionConfig:
 
     def __post_init__(self):
         if self.provider not in ORT_PROVIDERS:
-            raise ValueError(f"`provider` must be 'cpu', 'cuda', 'webgpu' or 'dml', got {self.provider!r}")
+            raise ValueError(f"`provider` must be one of {ORT_PROVIDERS}, got {self.provider!r}")
         if self.mixture_of_experts and self.provider != "cuda":
             raise ValueError("`mixture_of_experts` fuses ONNX Runtime's CUDA `MoE`: it needs `provider='cuda'`.")
 
@@ -219,26 +219,32 @@ class ExecutorchConfig(DynamoConfig):
             - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
             - `"mlx"` — GPU inference via the ExecuTorch MLX backend on Apple Silicon.
-        alloc_graph_input (`bool`, *optional*, defaults to `True`):
+        alloc_graph_input (`bool`, *optional*):
             Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,
             the runtime uses the caller-provided input buffers directly instead of copying into the
             arena — so an in-place `USER_INPUT_MUTATION` (e.g. a `StaticCache` write) lands in the
-            caller's tensor rather than an arena copy.
-        alloc_graph_output (`bool`, *optional*, defaults to `True`):
+            caller's tensor rather than an arena copy. Defaults to `False` for a program writing into an input
+            when ExecuTorch writes it in place (1.7, or a nightly from 2026-11-17), else `True`.
+        run_reinplace_pass (`bool`, *optional*):
+            Whether ExecuTorch rewrites ops in place where safe, so a program writing into its cache writes there
+            instead of into a copy it plans and returns. Defaults to `True` where `alloc_graph_input` defaults to
+            `False`.
+        alloc_graph_output (`bool`, *optional*):
             Whether the memory-planning pass reserves arena memory for graph outputs. When `False`,
-            the caller must bind output buffers at runtime (`Method::set_output_data_ptr`); binding an
-            output to its mutated input's buffer avoids the copy-out roundtrip.
-        alloc_mutable_buffers (`bool`, *optional*, defaults to `True`):
+            the caller binds every output to its own buffer (`Method.set_output`), which [`ExportedModel`] doesn't.
+            Defaults to `True`.
+        alloc_mutable_buffers (`bool`, *optional*):
             Whether the memory-planning pass reserves arena memory for mutable buffers (model-resident
-            state). Passed through to the `MemoryPlanningPass`.
+            state). Defaults to `True`.
     """
 
     export_format: ExportFormat = ExportFormat.EXECUTORCH
 
     backend: str = "xnnpack"
-    alloc_graph_input: bool = True
-    alloc_graph_output: bool = True
-    alloc_mutable_buffers: bool = True
+    alloc_graph_input: bool | None = None
+    run_reinplace_pass: bool | None = None
+    alloc_graph_output: bool | None = None
+    alloc_mutable_buffers: bool | None = None
 
 
 @dataclass

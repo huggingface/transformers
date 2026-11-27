@@ -202,6 +202,12 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     def setUp(self):
         self.model_tester = HiggsAudioV2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=HiggsAudioV2Config)
+        # Collect garbage right before every CUDA graph capture. Otherwise, Triton kernels left over from earlier
+        # compilations (unreachable, in reference cycles) can be finalized by an automatic GC pass *inside* the capture:
+        # `CompiledKernel.__del__` -> `cuModuleUnload` is not allowed during a capture and invalidates it
+        # ("operation failed due to a previous error during capture"). torch >= 2.15 no longer collects by default.
+        if hasattr(torch.compiler.config, "force_cudagraph_gc"):
+            self.enterContext(torch.compiler.config.patch(force_cudagraph_gc=True))
 
     def _get_logits_processor_kwargs(self, do_sample=False, config=None):
         # The base `GenerationTesterMixin` adds logits processors (e.g. repetition_penalty, bad_words_ids)

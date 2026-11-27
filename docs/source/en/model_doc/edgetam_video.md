@@ -288,4 +288,5 @@ Tracked 2 objects through 200 frames
 
 [[autodoc]] EdgeTamVideoModel
     - forward
+    - get_image_embeddings
     - get_image_features

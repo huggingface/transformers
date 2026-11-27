@@ -34,6 +34,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -606,7 +607,6 @@ class MiniCPMOcrPreTrainedModel(PreTrainedModel):
         "MiniCPMOcrVisionEncoderLayer",
         "MiniCPMOcrViTWindowAttentionMerger",
     ]
-    _is_stateful = True
 
 
 @auto_docstring(
@@ -632,7 +632,7 @@ class MiniCPMOcrModel(MiniCPMOcrPreTrainedModel, MultimodalMixin):
         target_sizes: torch.IntTensor,
         downsample_mode: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         target_sizes (`torch.IntTensor` of shape `(num_images, 2)`):
             Height and width (in patches) of each image.
@@ -653,13 +653,10 @@ class MiniCPMOcrModel(MiniCPMOcrPreTrainedModel, MultimodalMixin):
 
         if use_vit_merger:
             target_sizes = target_sizes // 2
-        vision_output.pooler_output = torch.cat(self.merger(vision_output.last_hidden_state, target_sizes), dim=0)
-        merge_height, merge_width = self.merger.merge_kernel_size
-        rounds = self.merger.merger_times
-        vision_output.split_sizes = (target_sizes[:, 0] // merge_height**rounds) * (
-            target_sizes[:, 1] // merge_width**rounds
-        )
-        return vision_output
+        merged = self.merger(vision_output.last_hidden_state, target_sizes)
+        vision_output.pooler_output = torch.cat(merged, dim=0)
+        split_sizes = torch.tensor([len(features) for features in merged], device=target_sizes.device)
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_output, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -791,7 +788,7 @@ class MiniCPMOcrModel(MiniCPMOcrPreTrainedModel, MultimodalMixin):
         target_sizes_videos: torch.IntTensor,
         downsample_mode: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor` of shape `(1, channels, patch_size, seq_len)`):
             NaViT-packed pixel patches for all video frames. The video processor concatenates

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import itertools
+from typing import Any
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -27,6 +28,7 @@ from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
@@ -35,9 +37,14 @@ from ...modeling_outputs import (
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import MultiModalData, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import accepts_precomputed_kwargs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
-from ...vision_utils import get_vision_pixel_shuffle_index
+from ...vision_utils import (
+    get_vision_attention_seqlens,
+    get_vision_interpolation_indices_and_weights,
+    get_vision_pixel_shuffle_index,
+)
 from ..ernie4_5.modeling_ernie4_5 import apply_rotary_pos_emb  # noqa: F401
 from ..hunyuan_vl.configuration_hunyuan_vl import HunYuanVLVisionConfig
 from ..hunyuan_vl.image_processing_hunyuan_vl import HunYuanVLImageProcessor
@@ -255,6 +262,24 @@ class HYV4VLVisionModel(HunYuanVLVisionTransformer):
     # Only the text attention (sinks + DSA) is restricted to eager
     _supports_sdpa = True
     _supports_flash_attn = True
+
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` with data-dependent ops: the attention's `cu_seqlens` and
+        `max_seqlen`, the position table's `interp_indices` and `interp_weights`, and the patch merger's
+        `pixel_shuffle_index` and `merger_layout_index` (without begin and end tokens)."""
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw, self.embeddings.position_edge, mode=self.config.interpolate_mode
+        )
+        merge_size = self.config.spatial_merge_size
+        return {
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": max_seqlen,
+            "interp_indices": interp_indices,
+            "interp_weights": interp_weights,
+            "pixel_shuffle_index": get_vision_pixel_shuffle_index(grid_thw, merge_size),
+            "merger_layout_index": get_vision_merger_layout_index(grid_thw, merge_size, begin_end=False),
+        }
 
 
 class HYV4VLRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
@@ -500,6 +525,7 @@ class HYV4VLModel(Qwen2VLModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_embeddings(
@@ -507,24 +533,13 @@ class HYV4VLModel(Qwen2VLModel):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         vision_outputs = self.vision_tower(pixel_values.to(self.vision_tower.dtype), grid_thw=image_grid_thw, **kwargs)
         vision_outputs.pooler_output = vision_outputs.pooler_output.squeeze(0)
-        merge_size = self.config.vision_config.spatial_merge_size
-        frames, height, width = image_grid_thw.unbind(-1)
         # Each merged row carries one extra newline token
-        vision_outputs.split_sizes = frames * (height // merge_size) * (width // merge_size + 1)
-        return vision_outputs
-
-    @can_return_tuple
-    @auto_docstring
-    def get_video_embeddings(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
+        merge = self.config.vision_config.spatial_merge_size
+        split_sizes = image_grid_thw[:, 0] * (image_grid_thw[:, 1] // merge) * (image_grid_thw[:, 2] // merge + 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def forward(
         self,
@@ -605,6 +620,12 @@ class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _keep_in_fp32_modules_strict = ["lm_head"]
+
+    def __init__(self, config: HYV4VLConfig):
+        super().__init__(config)
+        self.lm_head = nn.Linear(
+            config.text_config.hidden_size, config.text_config.vocab_size, bias=False, dtype=torch.float32
+        )
 
     def forward(
         self,
@@ -920,13 +941,13 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
             `int`: Number of video patches per video, or `tuple[int, int, int, int]` with the number of patches and
             the `(grid_t, grid_h, grid_w)` grids.
         """
-        videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
-        do_resize = videos_kwargs.get("do_resize") if videos_kwargs.get("do_resize") is not None else self.do_resize
-        size = videos_kwargs.get("size", None) or self.size
-        max_image_size = videos_kwargs.get("max_image_size", None) or self.max_image_size
-        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
-        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+        videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
+        do_resize = videos_kwargs["do_resize"]
+        size = videos_kwargs["size"]
+        max_image_size = videos_kwargs["max_image_size"]
+        patch_size = videos_kwargs["patch_size"]
+        merge_size = videos_kwargs["merge_size"]
+        temporal_patch_size = videos_kwargs["temporal_patch_size"]
 
         if do_resize:
             height, width = self.smart_resize(
@@ -934,7 +955,7 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
                 frame_width=width,
                 num_frames=num_frames,
                 factor=patch_size * merge_size,
-                max_pixels=size["longest_edge"],
+                max_pixels=size.longest_edge,
                 max_image_size=max_image_size["longest_edge"],
             )
 

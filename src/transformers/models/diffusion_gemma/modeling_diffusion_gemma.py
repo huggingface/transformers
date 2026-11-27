@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -43,6 +44,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     CausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -136,16 +138,16 @@ class DiffusionGemmaTextRotaryEmbedding(nn.Module):
 
 
 class DiffusionGemmaRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6, with_scale: bool = True):
+    def __init__(self, hidden_size: int, eps: float = 1e-6, with_scale: bool = True):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
         self.with_scale = with_scale
 
         if self.with_scale:
-            self.weight = nn.Parameter(torch.ones(dim), requires_grad=True)
+            self.weight = nn.Parameter(torch.ones(hidden_size), requires_grad=True)
 
     def _norm(self, hidden_states: torch.Tensor):
-        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
+        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.variance_epsilon
         # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to address compiler differences between Torch and JAX
         return hidden_states * torch.pow(mean_squared, -0.5)
 
@@ -298,9 +300,9 @@ class DiffusionGemmaEncoderTextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-        self.q_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.v_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps, with_scale=False)
+        self.q_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.v_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -401,9 +403,9 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-        self.q_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.v_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps, with_scale=False)
+        self.q_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.v_norm = DiffusionGemmaRMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -1017,6 +1019,30 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, MultimodalMixin)
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_position_ids: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
+        r"""
+        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
+            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
+        """
+        vision_outputs = self.vision_tower(
+            pixel_values=pixel_values,
+            pixel_position_ids=image_position_ids,
+            **kwargs,
+        )
+        last_hidden_state = vision_outputs.last_hidden_state
+        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+        output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
+        k_squared = math.isqrt(image_position_ids.shape[1] // output_length) ** 2
+        split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
+
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ) -> tuple[torch.BoolTensor, torch.BoolTensor, torch.BoolTensor]:
@@ -1075,7 +1101,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, MultimodalMixin)
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values,
                 image_position_ids,
                 return_dict=True,
@@ -1096,7 +1122,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, MultimodalMixin)
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            self.create_masks_for_generate(
+            causal_mask_mapping = self.create_masks_for_generate(
                 config=self.config.get_text_config(),
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
@@ -1127,28 +1153,6 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, MultimodalMixin)
     def set_per_layer_input_embeddings(self, value):
         self.language_model.embed_tokens_per_layer = value
 
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_position_ids: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
-            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
-        """
-        vision_outputs = self.vision_tower(
-            pixel_values=pixel_values,
-            pixel_position_ids=image_position_ids,
-            **kwargs,
-        )
-        last_hidden_state = vision_outputs.last_hidden_state
-        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
-        return vision_outputs
-
-    def get_video_features(self, *args, **kwargs):
-        raise NotImplementedError("DiffusionGemma does not support video inputs.")
-
     @staticmethod
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def create_masks_for_generate(
@@ -1171,12 +1175,13 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, MultimodalMixin)
 
         # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
         # Smaller Gemma models use a conventional casual attention mask
-        if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
-            block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
-            if mm_token_type_ids is not None:
-                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
-
-            mask_kwargs["block_sequence_ids"] = block_sequence_ids
+        if (
+            getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision"
+            and mm_token_type_ids is not None
+        ):
+            mask_kwargs["block_sequence_ids"] = get_block_sequence_ids_for_mask(
+                mm_token_type_ids, device=inputs_embeds.device
+            )
 
         return create_masks_for_generate(**mask_kwargs)
 

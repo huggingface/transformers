@@ -66,7 +66,6 @@ from .utils import (
     patch_model_outputs,
     quantize_converted_model,
     register_fx_node_fix,
-    register_fx_program_fix,
     register_patch,
 )
 
@@ -121,7 +120,7 @@ class OpenVINOExporter(DynamoExporter):
     requires_trust_remote_code = False
 
     required_packages = ["torch", "openvino"]
-    tested_versions = {"torch": "2.12.0", "openvino": "2026.3.1"}
+    tested_versions = {"torch": "2.13.0", "openvino": "2026.4.1"}
 
     def export_program(
         self,
@@ -569,11 +568,11 @@ def _freeze_batchless_states(
     pairs: dict[str, str],
     sample_inputs: MutableMapping[str, Any],
 ) -> None:
-    """Replace batch-less round-tripped tensors with baked constants (in place, updating ``pairs``).
+    """Take batch-less round-tripped tensors out of ``pairs`` (in place): state needs a batch dim to reorder beams on.
 
-    A round-tripped tensor without a batch dim (e.g. Cohere2's scalar ``_sliding_window_tensor``)
-    is config-derived, not per-sequence state — there is nothing to reorder between beams and
-    nothing to reset between prompts, so it becomes a graph constant instead of an OV variable.
+    One the graph passes through unchanged (e.g. Cohere2's scalar ``_sliding_window_tensor``) is config-derived, not
+    per-sequence state: it becomes a graph constant. One the graph updates (a `StaticCache` layer's `cumulative_length`)
+    stays a plain input and output, so the caller gets it advanced: baked, it would stay at its traced value.
     """
     sample_leaves = get_leaf_tensors(sample_inputs)
     changed = False
@@ -581,15 +580,15 @@ def _freeze_batchless_states(
         port = ov_model.input(input_name)
         if port.get_partial_shape().rank.get_length() > _STATE_BATCH_DIM:
             continue
-        sample = sample_leaves.get(input_name.partition(".")[2])
-        if sample is None:
-            continue
         parameter = port.get_node()
+        result_source = ov_model.output(pairs.pop(input_name)).get_node().input_value(0).get_node()
+        sample = sample_leaves.get(input_name.partition(".")[2])
+        if result_source.get_friendly_name() != parameter.get_friendly_name() or sample is None:
+            continue
         constant = ov_ops.constant(sample.cpu().numpy())
         for consumer in port.get_target_inputs():
             consumer.replace_source_output(constant.output(0))
         ov_model.remove_parameter(parameter)
-        del pairs[input_name]
         changed = True
     if changed:
         ov_model.validate_nodes_and_infer_types()
@@ -921,63 +920,6 @@ def _fix_sym_min_max(gm, node):
         node.target = max
         return True
     return False
-
-
-@register_fx_program_fix("openvino")
-def _fix_to_dtype_layout_in_subgraphs(exported_program):
-    """Rewrite every ``aten.to.{dtype,dtype_layout,device,other}`` node to ``aten._to_copy``
-    (keeping only the dtype kwarg), in the top-level graph and every submodule graph.
-
-    OV's PyTorch frontend has no ``aten.to.*`` translators at all — an unhandled variant falls
-    back to a dangling ``torch::None`` constant that fails conversion (e.g. the
-    ``wrap_with_set_grad_enabled`` HigherOrderOp subgraph in Chameleon's rotary path hits
-    ``aten.to.dtype_layout``). Rewriting the FX target here — before conversion — lets our
-    ``_convert_to_copy`` override handle every case (it also swallows complex-dtype casts)."""
-    # Walk the top-level graph AND every submodule's graph (higher-order-op subgraphs).
-    graphs = [exported_program.graph_module]
-    graphs.extend(m for _, m in exported_program.graph_module.named_children() if hasattr(m, "graph"))
-    for gm_or_submod in graphs:
-        for node in list(gm_or_submod.graph.nodes):
-            if node.op != "call_function":
-                continue
-            target = node.target
-            if target is torch.ops.aten.to.dtype:
-                # ``aten.to.dtype(tensor, dtype)`` — dtype is positional arg[1].
-                dtype = node.args[1] if len(node.args) > 1 else node.kwargs.get("dtype")
-                node.target = torch.ops.aten._to_copy.default
-                node.args = (node.args[0],)
-                node.kwargs = {"dtype": dtype} if dtype is not None else {}
-            elif target in (torch.ops.aten.to.dtype_layout, torch.ops.aten.to.device, torch.ops.aten.to.other):
-                dtype = node.kwargs.get("dtype")
-                node.target = torch.ops.aten._to_copy.default
-                node.args = (node.args[0],)
-                node.kwargs = {"dtype": dtype} if dtype is not None else {}
-        gm_or_submod.recompile()
-
-
-@register_fx_program_fix("openvino")
-def _fix_while_loop_additional_inputs(exported_program):
-    """Carry each ``while_loop``'s additional inputs through the loop, the body handing them back unchanged.
-
-    ``torch.export`` lifts the tensors a loop body reads without updating (Mamba's discretized states) out of its
-    closure as additional inputs. OV's frontend takes every input as carried, and rejects the loop when its body
-    returns fewer outputs (``body_fn must return same number of outputs as carried inputs``)."""
-    graph_module = exported_program.graph_module
-    for node in list(graph_module.graph.nodes):
-        if node.op != "call_function" or node.target is not torch.ops.higher_order.while_loop:
-            continue
-        cond, body, carried, additional = node.args
-        if not additional:
-            continue
-        body_module = getattr(graph_module, body.target)
-        placeholders = [n for n in body_module.graph.nodes if n.op == "placeholder"]
-        output = next(n for n in body_module.graph.nodes if n.op == "output")
-        output.args = ((*output.args[0], *placeholders[len(carried) :]),)
-        body_module.recompile()
-        node.args = (cond, body, (*carried, *additional), ())
-        if "val" in node.meta:
-            node.meta["val"] = (*node.meta["val"], *(value.meta["val"] for value in additional))
-    graph_module.recompile()
 
 
 @register_fx_node_fix("openvino")
@@ -1460,27 +1402,6 @@ def _tiled_experts_forward(self, hidden_states, top_k_index, top_k_weights):
     return weighted_out.sum(dim=0)
 
 
-@register_patch("openvino", "torch.nn.functional.layer_norm")
-def _patch_layer_norm(original):
-    """Substitute identity ``weight=ones``/``bias=zeros`` when either is ``None``.
-
-    OV's frontend records a ``torch::None`` constant for any unwired optional, then refuses to
-    convert it (``None constant cannot be converted to OpenVINO opset``). LayerNorm without
-    affine still computes ``(x - mean) / sqrt(var + eps)``; passing identity tensors keeps the
-    math unchanged and gives OV concrete operands. Affects Chameleon (no-affine RMSNorm path)
-    and any model that calls ``F.layer_norm(..., weight=None, bias=None)``.
-    """
-
-    def patch(input, normalized_shape, weight=None, bias=None, eps=1e-5):
-        if weight is None:
-            weight = torch.ones(normalized_shape, dtype=input.dtype, device=input.device)
-        if bias is None:
-            bias = torch.zeros(normalized_shape, dtype=input.dtype, device=input.device)
-        return original(input, normalized_shape, weight, bias, eps)
-
-    return patch
-
-
 @register_patch("openvino", "torch.nn.functional.interpolate")
 def _patch_interpolate(original):
     """Carry `antialias=True` resampling into the graph as explicit weights.
@@ -1575,52 +1496,6 @@ def _patch_sdpa(original):
             if scale != default_scale:
                 query = query * (scale / default_scale)
         return original(query, key, value, attn_mask, *args, **kwargs)
-
-    return patch
-
-
-@register_patch("openvino", "transformers.models.qwen3_vl.modeling_qwen3_vl.Qwen3VLTextModel._deepstack_process")
-def _patch_qwen3vl_deepstack(original):
-    """Rewrite qwen3-vl deepstack injection to avoid boolean-mask indexing.
-
-    ``_deepstack_process`` does ``hidden_states[visual_pos_masks] += visual_embeds``, whose selected
-    length is data-dependent — OV can't trace the dynamic shape. Rebuild the per-position visual
-    features with ``cumsum`` + ``index_select`` (a Gather OV keeps dynamic) and add them through a
-    ``float(mask)`` multiply, which is numerically identical.
-    """
-
-    def patch(self, hidden_states, visual_pos_masks, visual_embeds):
-        visual_embeds = visual_embeds.to(hidden_states.dtype)
-        batch, seq_len, dim = hidden_states.shape
-        flat_mask = visual_pos_masks.reshape(-1)
-        indices = torch.clamp(torch.cumsum(flat_mask.long(), dim=0) - 1, min=0)
-        full_visual = torch.index_select(visual_embeds, 0, indices).reshape(batch, seq_len, dim)
-        return hidden_states + full_visual * flat_mask.to(hidden_states.dtype).reshape(batch, seq_len, 1)
-
-    return patch
-
-
-@register_patch(
-    "openvino",
-    "transformers.models.wavlm.modeling_wavlm.WavLMPreTrainedModel._get_feature_vector_attention_mask",
-    "transformers.models.data2vec.modeling_data2vec_audio.Data2VecAudioPreTrainedModel._get_feature_vector_attention_mask",
-)
-def _patch_feature_vector_attention_mask(original):
-    """Build the downsampled attention mask with a broadcast comparison instead of a scatter.
-
-    The wav2vec2-family ``_get_feature_vector_attention_mask`` sets a one-hot at ``output_lengths - 1``
-    via integer advanced-index assignment, then flip/cumsum/flip to fill the earlier positions — OV
-    can't convert the ``aten.index_put`` (integer indices become an unconvertible ``SequenceMark``).
-    ``arange(seq) < output_lengths`` is identical (every position before each row's length is attended)
-    and export-clean.
-    """
-
-    def patch(self, feature_vector_length, attention_mask, add_adapter=None):
-        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
-        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
-        output_lengths = output_lengths.to(torch.long)
-        positions = torch.arange(feature_vector_length, device=attention_mask.device)
-        return positions.unsqueeze(0) < output_lengths.unsqueeze(1)
 
     return patch
 
@@ -1897,7 +1772,7 @@ def _patch_index_copy(original):
     """``index_copy`` as a ``scatter`` of the source along ``dim``.
 
     OV has no translator for ``aten.index_copy``: its decompositions rewrite it in the top-level graph, but not in a
-    ``while_loop``'s body (Mamba's recurrence under export), which then fails to convert."""
+    ``while_loop``'s body (the ``scan`` patch's), which then fails to convert."""
 
     def patch(input, dim, index, source):
         dim = dim % source.dim()
@@ -2133,7 +2008,7 @@ def _patch_scatter_reduce(original):
 
 @register_patch("openvino", "transformers.exporters.exporter_dynamo._scan")
 def _patch_scan(_original):
-    """The gated delta rule's ``scan`` as a ``while_loop``, which OV's frontend lowers to a ``Loop`` (it has no
+    """``scan`` (the chunked gated delta rule's, Mamba's recurrence) as a ``while_loop``, which OV's frontend lowers to a ``Loop`` (it has no
     ``scan`` conversion). The ``while_loop`` operator itself, not ``torch``'s wrapper, whose dynamo cache hands a later
     export the body an earlier one traced; the operator lifts no closure, so the scanned tensors are carried."""
     from torch._higher_order_ops.while_loop import while_loop_op

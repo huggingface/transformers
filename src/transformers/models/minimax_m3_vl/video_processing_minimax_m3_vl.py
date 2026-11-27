@@ -104,12 +104,12 @@ class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
         Returns:
             `int`: Number of video patches per video.
         """
-        videos_kwargs = videos_kwargs or {}
-        min_pixels = videos_kwargs.get("min_pixels", self.min_pixels)
-        max_pixels = videos_kwargs.get("max_pixels", self.max_pixels)
-        patch_size = videos_kwargs.get("patch_size", self.patch_size)
-        merge_size = videos_kwargs.get("merge_size", self.merge_size)
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size", self.temporal_patch_size)
+        videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
+        min_pixels = videos_kwargs["min_pixels"]
+        max_pixels = videos_kwargs["max_pixels"]
+        patch_size = videos_kwargs["patch_size"]
+        merge_size = videos_kwargs["merge_size"]
+        temporal_patch_size = videos_kwargs["temporal_patch_size"]
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
             height, width, factor=factor, min_pixels=min_pixels, max_pixels=max_pixels

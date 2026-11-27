@@ -29,7 +29,6 @@ from typing import Any, NamedTuple
 
 from ..utils.import_utils import is_torch_available
 from .components import Component, ModalityEncoder, PaddedSequenceClassifier, PatchVisionEncoder, TokenEmbedder
-from .precompute import _find_config_attr, precompute_export_inputs
 
 
 if is_torch_available():
@@ -195,6 +194,18 @@ _MODALITY_SPECS = (
 )
 
 
+def _find_config_attr(config: Any, name: str) -> Any | None:
+    """The first non-`None` `name` on `config` or any of its (recursive) `sub_configs`."""
+    value = getattr(config, name, None)
+    if value is not None:
+        return value
+    for sub_key in getattr(config, "sub_configs", {}):
+        sub = getattr(config, sub_key, None)
+        if sub is not None and (value := _find_config_attr(sub, name)) is not None:
+            return value
+    return None
+
+
 def anyres_patch_counts(config: Any, image_sizes) -> list[int]:
     """Per-image patch counts (tiles plus the base patch) from `image_sizes`; config-only."""
     from ..image_processing_utils import select_best_resolution
@@ -338,7 +349,6 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
             }
             components[name] = Component(PatchVisionEncoder(owner), tower_inputs)
             continue
-        feature_inputs = precompute_export_inputs(model.config, feature_inputs)
         # The image features keep the shape the model returns them in (`image_hidden_states`): flat (LLaVA), or one
         # row per image (Gemma3, PaliGemma).
         returned = getattr(outputs, "image_hidden_states", None) if name == "vision_embeddings_model" else None

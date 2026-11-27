@@ -31,10 +31,11 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -53,7 +54,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @dataclass
-class BaseModelOutputWithVisualIndicatorFeatures(BaseModelOutputWithPooling):
+class BaseModelOutputWithVisualIndicatorFeatures(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     visual_indicator_features (`torch.Tensor` of shape `(batch_size, visual_indicator_size)`):
         Visual indicator features extracted from the model, which can be used for auxiliary tasks or further processing.
@@ -485,10 +486,11 @@ class Ovis2Model(Ovis2PreTrainedModel, MultimodalMixin):
             self.visual_vocab_size,
             dtype=torch.long,
         ).to(image_features.device)
-        image_outputs.pooler_output = image_features
         image_outputs.visual_indicator_features = self.visual_embeddings_table(visual_indicator)
-
-        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
+        image_outputs.split_sizes = torch.full(
+            image_features.shape[:1], image_features.shape[1], device=image_features.device
+        )
+        image_outputs.pooler_output = image_features.flatten(0, 1)
         return image_outputs
 
     def get_placeholder_mask(

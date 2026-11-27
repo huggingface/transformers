@@ -24,8 +24,8 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import flatten_items, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_int
@@ -498,7 +498,7 @@ class InternVLModel(LlavaModel):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`)
             The tensors corresponding to the input images.
@@ -532,10 +532,9 @@ class InternVLModel(LlavaModel):
 
         # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
-        vision_outputs.pooler_output = vision_features
-
-        vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
-        return vision_outputs
+        split_sizes = torch.full(vision_features.shape[:1], vision_features.shape[1], device=vision_features.device)
+        vision_outputs.pooler_output = vision_features.flatten(0, 1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring
@@ -543,7 +542,7 @@ class InternVLModel(LlavaModel):
         self,
         pixel_values_videos: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(num_frames, channels, height, width)`):
             The frames of the input videos, encoded like images.

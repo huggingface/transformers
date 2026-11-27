@@ -30,7 +30,7 @@ if is_torch_distributed_available():
     import torch.distributed as dist
     from torch.distributed.tensor import DTensor
     from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
-    from torch.distributed.tensor.placement_types import Shard
+    from torch.distributed.tensor.placement_types import Shard, _StridedShard
 
     def _local_shard_size_and_offset(size_on_dim: int, num_chunks: int, rank: int) -> tuple[int, int]:
         """Local shard size and offset for this rank, torch renamed this API across 2.6 to 2.10+."""
@@ -72,6 +72,10 @@ class DtensorShardOperation:
     | TP + FSDP, same tensor dim (contiguous TP case)   | [Shard(d), Shard(d)]                         |
     | TP + FSDP, same tensor dim (fused/interleaved TP) | [_StridedShard(d, sf=tp_size), Shard(d)]     |
     | TP + FSDP, different dims                         | [Shard(d1), Shard(d2)]                       |
+
+    There is an additional case when we have to force non-empty chunks. This will transform any Shard(n) placements
+    into a [Shard(n), Replicate()].
+    This is intended to solved cases where you have 6 key value heads and 8 process -> 2 process shard(n) replicated 4 times.
 
     Loading (this class)
     --------------------
@@ -137,17 +141,17 @@ class DtensorShardOperation:
 
             # prepare the slices to fetch on disk for each tensor dimension.
             intervals_by_dim = [[(0, size)] for size in source_shape]
+            has_strided_shard = False
             for dim_idx, planned_ops in enumerate(planned_ops_by_dim):
                 intervals = intervals_by_dim[dim_idx]
                 for placement, rank, world_size in planned_ops:
-                    if placement.is_shard():
-                        intervals = self._compute_contiguous_slice(intervals, rank, world_size)
-                    else:
+                    if isinstance(placement, _StridedShard):
+                        has_strided_shard = True
                         intervals = self._compute_strided_slice(intervals, rank, world_size, placement.split_factor)
+                    else:
+                        intervals = self._compute_contiguous_slice(intervals, rank, world_size)
                 intervals_by_dim[dim_idx] = intervals
 
-            has_strided_shard = any(not placement.is_shard() for _, placement in dim_placements)
-            # finally fetch from the disk only the slices
             # finally fetch from the disk only the slices
             if has_strided_shard:
                 # Multi-interval dim: read each piece separately, then concatenate.

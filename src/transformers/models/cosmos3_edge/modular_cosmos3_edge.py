@@ -13,13 +13,11 @@
 # limitations under the License.
 """PyTorch Cosmos3 Edge reasoner model."""
 
-import re
 from typing import Any
 
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
@@ -33,6 +31,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
@@ -50,7 +49,7 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoMetadata
-from ...vision_utils import get_vision_attention_seqlens
+from ...vision_utils import get_vision_attention_seqlens, get_vision_interpolation_indices_and_weights
 from ..clip.modeling_clip import CLIPMLP
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
@@ -247,67 +246,31 @@ _COSMOS3_EDGE_DROPPED_GENERATOR_KEYS = [
 class Cosmos3EdgeVisionEmbeddings(Siglip2VisionEmbeddings):
     """SigLIP2 patch and learned-position embeddings for packed Edge vision inputs."""
 
-    @staticmethod
-    def resize_positional_embeddings(
-        positional_embeddings: torch.Tensor,
-        grid_thw: torch.LongTensor,
-        spatial_merge_size: int,
-    ) -> torch.Tensor:
-        """Resize a learned reference grid independently for every packed image or video frame.
+    def resize_positional_embeddings(self):
+        raise AttributeError("Cosmos3EdgeVisionEmbeddings interpolates the position table in `forward`")
 
-        Args:
-            positional_embeddings (`torch.Tensor`):
-                Learned positional embeddings of shape `(height, width, hidden_size)`.
-            grid_thw (`torch.LongTensor`):
-                Temporal, height, and width patch-grid dimensions for every packed image or video.
-            spatial_merge_size (`int`):
-                Number of patches merged along each spatial axis by the projector.
-
-        Returns:
-            `torch.Tensor`: Positional embeddings packed in the same block-major order as the input patches.
+    def forward(self, pixel_values: torch.Tensor, grid_thw: torch.LongTensor, **kwargs) -> torch.Tensor:
         """
-        # The checkpoint uses a learned square reference grid, interpolated independently for every packed frame.
-        positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
-        source_dtype = positional_embeddings.dtype
-        # Upcast to float32 on CPU because antialias is not supported for bfloat16/float16 on CPU.
-        if positional_embeddings.device.type == "cpu":
-            positional_embeddings = positional_embeddings.float()
-
-        position_chunks = []
-        for temporal, height, width in grid_thw.tolist():
-            resized_embeddings = F.interpolate(
-                positional_embeddings,
-                size=(height, width),
-                mode="bilinear",
-                align_corners=False,
-                antialias=True,
-            )
-            resized_embeddings = resized_embeddings.squeeze(0).permute(1, 2, 0).to(source_dtype)
-            resized_embeddings = resized_embeddings.reshape(
-                height // spatial_merge_size,
-                spatial_merge_size,
-                width // spatial_merge_size,
-                spatial_merge_size,
-                -1,
-            )
-            # Preserve the processor's block-major 2x2 patch order before the projector groups adjacent patches.
-            resized_embeddings = resized_embeddings.transpose(1, 2).reshape(height * width, -1)
-            position_chunks.append(resized_embeddings.repeat(temporal, 1))
-
-        return torch.cat(position_chunks, dim=0)
-
-    def forward(self, pixel_values: torch.Tensor, grid_thw: torch.LongTensor) -> torch.Tensor:
+        Args:
+            pixel_values (`torch.Tensor`):
+                Packed patches of shape (num_patches, num_channels * patch_size * patch_size)
+            grid_thw (`torch.LongTensor`):
+                The temporal, height and width patch grid of every packed image or video, of shape (num_grids, 3)
+        """
         # Apply patch embeddings to already patchified pixel values.
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
 
-        # Get image-specific positional embeddings in the packed block-major order expected by the checkpoint.
-        positional_embeddings = self.position_embedding.weight.reshape(
-            self.position_embedding_size, self.position_embedding_size, -1
+        # The learned square table resized to every packed frame (antialiased bilinear), in the block-major patch order
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            self.position_embedding_size,
+            spatial_merge_size=self.config.spatial_merge_size,
+            antialias=True,
+            kwargs=kwargs,
         )
-        position_embeddings = self.resize_positional_embeddings(
-            positional_embeddings, grid_thw, self.config.spatial_merge_size
-        )
+        table = self.position_embedding.weight
+        position_embeddings = (table[interp_indices].float() * interp_weights[..., None]).sum(1).to(table.dtype)
         torch_compilable_check(
             patch_embeds.shape[0] == position_embeddings.shape[0],
             "The packed visual patch count does not match `grid_thw`.",
@@ -536,9 +499,20 @@ class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
 
     def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
         """What the forward derives from `grid_thw` with data-dependent ops: the attention's `cu_seqlens` and
-        `max_seqlen`."""
+        `max_seqlen`, and the position table's `interp_indices` and `interp_weights`."""
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
-        return {"cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen}
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            self.embeddings.position_embedding_size,
+            spatial_merge_size=self.config.spatial_merge_size,
+            antialias=True,
+        )
+        return {
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": max_seqlen,
+            "interp_indices": interp_indices,
+            "interp_weights": interp_weights,
+        }
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
@@ -548,7 +522,7 @@ class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height, and width patch-grid dimensions for each packed image or video.
         """
-        hidden_states = self.embeddings(pixel_values, grid_thw)
+        hidden_states = self.embeddings(pixel_values, grid_thw, **kwargs)
         hidden_states = self.encoder(hidden_states, grid_thw=grid_thw, **kwargs)
         last_hidden_state = self.post_layernorm(hidden_states)
         return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state, pooler_output=last_hidden_state)
@@ -585,21 +559,13 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         image_embeds = self.projector(vision_outputs.last_hidden_state)
         vision_outputs.pooler_output = image_embeds
-        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
-        return vision_outputs
-
-    def get_video_embeddings(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
+        split_sizes = image_grid_thw.prod(-1) // self.projector.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_rope_index(
         self,
@@ -975,75 +941,13 @@ class Cosmos3EdgeProcessor(Qwen3VLProcessor):
         timestamps = [idx / video_fps for idx in indices]
         return [(timestamps[i] + timestamps[i + merge_size - 1]) / 2 for i in range(0, len(timestamps), merge_size)]
 
-    def get_text_with_replacements(
-        self,
-        text: list[str],
-        images_replacements: list[str] = [],
-        videos_replacements: list[str] = [],
-        audio_replacements: list[str] = [],
-    ) -> tuple[list[str], list[dict]]:
-        """Replace placeholders while treating the template's full video wrapper as one unit.
-
-        The Edge chat template emits ``<|vision_start|><|video_pad|><|vision_end|>``. Each video must become a
-        separate timestamped vision segment for every frame, so replacing only ``<|video_pad|>`` would leave an
-        invalid outer vision wrapper around all frames.
-        """
-        token_groups = []
-        if images_replacements:
-            token_groups.append(f"(?P<image>{re.escape(self.image_token)})")
-        if videos_replacements:
-            video_wrapper = re.escape(self.vision_start_token + self.video_token + self.vision_end_token)
-            token_groups.append(f"(?P<video>{video_wrapper}|{re.escape(self.video_token)})")
-        if audio_replacements and getattr(self, "audio_token", None) is not None:
-            token_groups.append(f"(?P<audio>{re.escape(self.audio_token)})")
-        if not token_groups:
-            return text, []
-
-        replacements = {
-            "image": iter(images_replacements),
-            "video": iter(videos_replacements),
-            "audio": iter(audio_replacements),
-        }
-        pattern = "|".join(token_groups)
-        batch_replacement_offsets = []
-
-        for batch_index, sample in enumerate(text):
-            last_end = 0
-            offset = 0
-            expanded_sample = []
-            replacement_offsets = []
-            for match in re.finditer(pattern, sample):
-                start, end = match.span()
-                expanded_sample.append(sample[last_end:start])
-                modality = match.lastgroup
-                replacement = next(replacements[modality])
-                start_with_offset = start + offset
-                replacement_offsets.append(
-                    {
-                        "type": modality,
-                        "span": (start, end),
-                        "new_span": (start_with_offset, start_with_offset + len(replacement)),
-                        "text": match.group(),
-                        "replacement": replacement,
-                    }
-                )
-                expanded_sample.append(replacement)
-                offset += len(replacement) - (end - start)
-                last_end = end
-
-            expanded_sample.append(sample[last_end:])
-            text[batch_index] = "".join(expanded_sample)
-            batch_replacement_offsets.append(replacement_offsets)
-        return text, batch_replacement_offsets
-
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """Compute placeholder counts for serving frameworks without materializing pixels."""
+        merged_kwargs = self._merge_kwargs(**kwargs)
         vision_data = {}
-        images_kwargs = dict(kwargs.get("images_kwargs", kwargs))
-        videos_kwargs = dict(kwargs.get("videos_kwargs", kwargs))
-
         if image_sizes is not None:
-            merge_size = images_kwargs.get("merge_size", self.image_processor.merge_size)
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(**merged_kwargs["images_kwargs"])
+            merge_size = images_kwargs["merge_size"]
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(height, width, images_kwargs)
                 for height, width in image_sizes
@@ -1052,7 +956,8 @@ class Cosmos3EdgeProcessor(Qwen3VLProcessor):
             vision_data["num_image_tokens"] = [num_patches // merge_size**2 for num_patches in num_image_patches]
 
         if video_sizes is not None:
-            merge_size = videos_kwargs.get("merge_size", self.video_processor.merge_size)
+            videos_kwargs = self.video_processor._merge_and_standardize_kwargs(**merged_kwargs["videos_kwargs"])
+            merge_size = videos_kwargs["merge_size"]
             num_video_patches = [
                 self.video_processor.get_num_of_video_patches(num_frames, height, width, videos_kwargs)
                 for num_frames, height, width in video_sizes

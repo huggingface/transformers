@@ -26,7 +26,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import (
@@ -536,12 +536,13 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         vision_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = self.mm_projector(vision_outputs.pooler_output).squeeze(1)
         vision_outputs.pooler_output = image_embeds
-        vision_outputs.split_sizes = image_grid_thw[:, 1:].prod(-1) // math.prod(self.vision_tower.merge_kernel_size)
-        return vision_outputs
+        merge_kernel_size = self.vision_tower.merge_kernel_size[0] * self.vision_tower.merge_kernel_size[1]
+        split_sizes = image_grid_thw[:, 1:].prod(-1) // merge_kernel_size
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -551,7 +552,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
@@ -641,16 +642,14 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = mm_encoder_outputs["image"].pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = mm_encoder_outputs["video"].pooler_output
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -769,7 +768,7 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
     def _prepare_position_ids_for_generation(self, **kwargs):
         raise AttributeError("Kimi doesn't use m-rope!")
 
-    def _placeholder_token_id(self, **super_kwargs):
+    def _modality_token_id(self, **super_kwargs):
         raise AttributeError("Uses its own video token")
 
 
@@ -848,8 +847,8 @@ class Kimi_K25Processor(Qwen2VLProcessor):
         merged_kwargs = self._merge_kwargs(**kwargs)
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = merged_kwargs["images_kwargs"]
-            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(**merged_kwargs["images_kwargs"])
+            merge_size = images_kwargs["merge_size"]
 
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
@@ -859,11 +858,9 @@ class Kimi_K25Processor(Qwen2VLProcessor):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = merged_kwargs["videos_kwargs"]
-            merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
-            temporal_patch_size = (
-                videos_kwargs.get("temporal_patch_size", None) or self.video_processor.temporal_patch_size
-            )
+            videos_kwargs = self.video_processor._merge_and_standardize_kwargs(**merged_kwargs["videos_kwargs"])
+            merge_size = videos_kwargs["merge_size"]
+            temporal_patch_size = videos_kwargs["temporal_patch_size"]
             num_video_patches = [
                 self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
             ]

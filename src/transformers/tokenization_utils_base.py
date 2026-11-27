@@ -67,6 +67,7 @@ from .utils.chat_parsing import parse_response as _template_parse_response
 from .utils.chat_template_utils import (
     _get_control_token_patterns,
     _get_template_literal_text,
+    _normalize_chat_messages,
     mark_control_tokens,
     render_jinja_template,
 )
@@ -3156,12 +3157,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             conversations = [conversation]
             is_batched = False
 
-        # Normalize: drop the keys whose value is None.
-        # Some APIs (e.g. OpenAI) return `content=None` or `tool_calls=None`, but many chat templates crash or
-        # produce wrong output (e.g. rendering literal "None") on them, while they handle a missing key.
-        conversations = [
-            [{k: v for k, v in msg.items() if v is not None} for msg in conversation] for conversation in conversations
-        ]
+        # Normalize: convert message objects to dicts and drop the keys whose value is None
+        conversations = [_normalize_chat_messages(conversation) for conversation in conversations]
 
         if continue_final_message:
             if add_generation_prompt:

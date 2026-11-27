@@ -94,21 +94,21 @@ Install the dependencies for the backend you plan to export to.
 <hfoption id="Dynamo">
 
 ```bash
-pip install transformers "torch==2.12.0"
+pip install transformers "torch==2.13.0"
 ```
 
 </hfoption>
 <hfoption id="ONNX">
 
 ```bash
-pip install transformers "torch==2.12.0" "onnx==1.21.0" "onnxscript==0.7.0" onnxruntime
+pip install transformers "torch==2.13.0" "onnx==1.23.2" "onnxscript==0.7.2" onnxruntime
 ```
 
 </hfoption>
 <hfoption id="ExecuTorch XNNPACK">
 
 ```bash
-pip install transformers "torch==2.12.0" "executorch==1.3.1"
+pip install transformers "torch==2.13.0" "executorch==1.5.1"
 ```
 
 </hfoption>
@@ -121,8 +121,8 @@ with the MLX exporter tests. Install it from the standard ExecuTorch nightly reg
 ```bash
 pip install transformers
 pip install \
-  "executorch==1.6.0.dev20260924" \
-  "torch==2.15.0.dev20260924" \
+  "executorch==1.6.0.dev20261126" \
+  "torch==2.16.0.dev20261126" \
   --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 ```
 
@@ -133,7 +133,7 @@ For source builds, see the [MLX installation guide](https://docs.pytorch.org/exe
 <hfoption id="OpenVINO">
 
 ```bash
-pip install transformers "torch==2.12.0" "openvino==2026.3.1"
+pip install transformers "torch==2.13.0" "openvino==2026.4.1"
 ```
 
 </hfoption>
@@ -400,8 +400,8 @@ names them:
   the graph.
 
 Scattering the features into the embeddings stays outside the graphs, and so do the tensors a vision tower would
-compute from the image grid with data-dependent ops (position ids, window indices, ...): they're computed from the
-config ([`~exporters.precompute.precompute_export_inputs`]) and fed to the graph.
+compute from the image grid with data-dependent ops (position ids, window indices, ...): the model's own
+`get_data_dependent_inputs` computes them, and they're fed to the graph.
 
 ```python
 from transformers import AutoModelForImageTextToText, AutoProcessor
@@ -683,25 +683,10 @@ own arena. What that takes is the only per-backend part left:
   each pair to one device buffer, so the cache is read and updated in place across the loop with no host
   round-trips.
 
-- **ExecuTorch (XNNPACK)** — turn off the memory-planning allocations on [`ExecutorchConfig`] so the in-place
-  write can land in the caller's own tensor (see the reference for what each flag does):
-
-  ```python
-  config = ExecutorchConfig(
-      backend="xnnpack",
-      dynamic=True,
-      alloc_graph_input=False,
-      alloc_graph_output=False,
-      alloc_mutable_buffers=False,
-  )
-  ```
-
-  > [!NOTE]
-  > The zero-copy in-place write also needs the caller to bind output buffers at runtime via
-  > `Method::set_output_data_ptr` — **not surfaced by the Python runtime** (`executorch.runtime.Method`
-  > exposes only `execute`/`set_inputs`/`get_outputs`). The flags above set it up, but the in-place
-  > write is a **C++-only** path (see the ExecuTorch decode-loop example below). From Python, read the
-  > updated cache back from the method outputs each step.
+- **ExecuTorch** — a program writing into its cache writes there in place (the exporter turns on ExecuTorch's
+  reinplace pass), and with ExecuTorch 1.7 (or a nightly from 2026-11-17) the cache isn't planned either, so the
+  runtime writes it into the `StaticCache` you pass in and returns those same tensors: one copy of the cache, as with
+  Dynamo. Older versions return the updated cache as new tensors instead.
 
 <details>
 
@@ -713,9 +698,8 @@ fixed-size cache, feed the whole prompt once (empty cache → prefill), then one
 (advanced by the number of new tokens each step), plus the cache, and gets back logits for every query
 position. Where each token lands in the cache is tracked internally by the static cache, so there's
 nothing extra to thread through the call. How the cache is set up differs per runtime (a `StaticCache`
-object for Dynamo, raw device buffers for ONNX Runtime, caller arrays in C++ for ExecuTorch), so each
-tab builds its own below. The Dynamo and ONNX Runtime tabs update the cache in place; ExecuTorch's
-in-place path is C++ (its Python runtime can't, as noted above).
+object for Dynamo and ExecuTorch, raw device buffers for ONNX Runtime), so each tab builds its own below.
+Every tab updates the cache in place.
 
 <hfoptions id="decode-loop">
 <hfoption id="Dynamo">
@@ -823,75 +807,37 @@ for position in range(prompt_len, max_cache_len):
 </hfoption>
 <hfoption id="ExecuTorch XNNPACK">
 
-ExecuTorch's on-device runtime is C++, and the in-place cache update relies on
-`Method::set_output_data_ptr` — **not surfaced by the Python runtime** (`executorch.runtime.Method`
-exposes only `execute`/`set_inputs`/`get_outputs`), so the zero-copy decode is a C++-only path. Bind
-each mutated-cache **output** onto its matching cache **input** buffer, and the new K/V/counter land in
-the caller's `StaticCache` buffers with no copies. As in the other tabs the shapes and sizes come from the
-artifact itself — here the program's `method_meta` (`input_tensor_meta`/`output_tensor_meta` →
-`TensorInfo::nbytes()`), the C++ has no Python runtime to query:
+The `decode` runner writes the static cache into the `StaticCache` you pass in and returns those same tensors
+(ExecuTorch 1.7, or a nightly from 2026-11-17), so the loop is the Dynamo one, on the CPU:
 
-```cpp
-#include <executorch/extension/data_loader/file_data_loader.h>
-#include <executorch/extension/tensor/tensor_ptr.h>
-#include <executorch/runtime/executor/method.h>
-#include <executorch/runtime/executor/program.h>
+```python
+import copy
+import torch
+from transformers.exporters import ExportedModel
 
-using namespace executorch::runtime;
-using executorch::extension::FileDataLoader;
-using executorch::extension::make_tensor_ptr;
+exported = ExportedModel.from_pretrained("qwen3-static-executorch")
+decode = exported.runners["decode"]
 
-// load the exported decode and its `forward` method (Result error-checks elided for brevity)
-auto loader = FileDataLoader::from("decode.pte");
-auto program = Program::load(&loader.get());
+# the program carries an initialized StaticCache template — reuse it (reset to empty)
+_, example_kwargs = exported.components["decode"].program.example_inputs
+cache = copy.deepcopy(example_kwargs["cache"])
+cache.reset()
 
-// method-execution memory: a fixed arena for bookkeeping + one buffer per the method's memory plan
-std::array<uint8_t, 4 * 1024 * 1024> arena;
-MemoryAllocator method_allocator(arena.size(), arena.data());
-auto meta = program->method_meta("forward");
-std::vector<std::vector<uint8_t>> planned(meta->num_memory_planned_buffers());
-std::vector<Span<uint8_t>> planned_spans;
-for (size_t i = 0; i < planned.size(); ++i) {
-    planned[i].resize(meta->memory_planned_buffer_size(i).get());
-    planned_spans.push_back({planned[i].data(), planned[i].size()});
-}
-HierarchicalAllocator planned_allocator({planned_spans.data(), planned_spans.size()});
-MemoryManager memory_manager(&method_allocator, &planned_allocator);
-auto decode = std::move(program->load_method("forward", &memory_manager).get());
+def causal_mask(positions, cache_len):   # [1, 1, len(positions), cache_len]
+    return (torch.arange(cache_len)[None, :] <= positions[:, None])[None, None]
 
-// shapes and sizes come from method_meta — no external config. Inputs are [ids, mask, position_ids,
-// cache×N]; outputs are [returned cache×N, logits, mutated cache×N].
-const size_t num_cache_tensors = meta->num_inputs() - 3;
-const size_t logits_out_idx = num_cache_tensors;
-std::vector<size_t> cache_nbytes(num_cache_tensors), cache_out_idx(num_cache_tensors);
-for (size_t i = 0; i < num_cache_tensors; ++i) {
-    cache_nbytes[i] = meta->input_tensor_meta(3 + i)->nbytes();
-    cache_out_idx[i] = num_cache_tensors + 1 + i;   // mutated cache = the last N outputs
-}
-const size_t logits_nbytes = meta->output_tensor_meta(logits_out_idx)->nbytes();
+# prefill: the whole prompt in one call
+positions = torch.arange(prompt_len)
+logits = decode(input_ids=prompt_ids, attention_mask=causal_mask(positions, max_cache_len),
+                position_ids=positions[None], cache=cache).logits
+next_token = logits[:, -1:].argmax(-1)
 
-// one set of StaticCache buffers (K/V + per-layer counters) is reused across steps, bound in place each call
-auto forward = [&](const TensorPtr& input_ids, const TensorPtr& mask, const TensorPtr& position_ids) {
-    decode.set_input(EValue(*input_ids), 0);
-    decode.set_input(EValue(*mask), 1);
-    decode.set_input(EValue(*position_ids), 2);
-    for (int i = 0; i < num_cache_tensors; ++i)
-        decode.set_input(EValue(*cache_tensor[i]), 3 + i);
-    // bind each mutated-cache output onto that same input tensor's data → the write lands in place, zero copies
-    for (int i = 0; i < num_cache_tensors; ++i)
-        decode.set_output_data_ptr(cache_tensor[i]->mutable_data_ptr(), cache_nbytes[i], cache_out_idx[i]);
-    decode.set_output_data_ptr(logits_data, logits_nbytes, logits_out_idx);
-    decode.execute();                 // cache updated in place; logits written to logits_data
-    return argmax_last(logits_data);  // greedy pick
-};
-
-// prefill the whole prompt, then decode one token per step — the cache carries in place across all calls
-int64_t next_token = forward(prompt_ids, prompt_mask, prompt_positions);
-for (int64_t position = prompt_len; position < max_cache_len; ++position) {
-    next_token = forward(make_tensor_ptr({1, 1}, &next_token, ScalarType::Long),
-                         causal_mask(position),  // [1, 1, 1, max_cache_len] bool
-                         make_tensor_ptr({1, 1}, &position, ScalarType::Long));
-}
+# decode: one token per call, the cache written in place
+for position in range(prompt_len, max_cache_len):
+    positions = torch.tensor([position])
+    logits = decode(input_ids=next_token, attention_mask=causal_mask(positions, max_cache_len),
+                    position_ids=positions[None], cache=cache).logits
+    next_token = logits[:, -1:].argmax(-1)
 ```
 
 </hfoption>
@@ -917,8 +863,8 @@ config = OnnxConfig(ort_fusions="dml")
 
 | | `"cpu"` | `"cuda"` | `"webgpu"` | `"dml"` |
 |---|---|---|---|---|
-| Attention with a key-value cache | `GroupQueryAttention`, rotary included | `GroupQueryAttention` with its query and key norms; the prefill keeps `MultiHeadAttention` for now ([slower](https://github.com/microsoft/onnxruntime/issues/33869)) | `GroupQueryAttention`, rotary as its own `RotaryEmbedding` | `MultiHeadAttention`, rotary as its own `RotaryEmbedding` |
-| Other attention | plain ops for now ([slower](https://github.com/microsoft/onnxruntime/issues/33873)) | `MultiHeadAttention` | `MultiHeadAttention` | `MultiHeadAttention` |
+| Attention with a key-value cache | `GroupQueryAttention`, rotary included | `GroupQueryAttention` with its query and key norms; the prefill keeps `MultiHeadAttention` for now (slower) | `GroupQueryAttention`, rotary as its own `RotaryEmbedding` | `MultiHeadAttention`, rotary as its own `RotaryEmbedding` |
+| Other attention | plain ops for now (slower) | `MultiHeadAttention` | `MultiHeadAttention` | `MultiHeadAttention` |
 | Mixture of experts | unfused | `MoE`, opted into | unfused | unfused |
 | CUDA graphs | — | static exports can replay | — | — |
 

@@ -31,9 +31,10 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -57,7 +58,7 @@ logger = logging.get_logger(__name__)
     """
 )
 @dataclass
-class GotOcr2VisionEncoderOutput(BaseModelOutputWithPooling):
+class GotOcr2VisionEncoderOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     image_embeds (`torch.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The image embeddings obtained by applying the projection layer to the pooler_output.
@@ -527,12 +528,12 @@ class GotOcr2Model(GotOcr2PreTrainedModel, MultimodalMixin):
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         last_hidden_state = image_outputs.last_hidden_state
-        image_outputs.pooler_output = self.multi_modal_projector(last_hidden_state)
-
-        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
+        features = self.multi_modal_projector(last_hidden_state)
+        image_outputs.split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs.pooler_output = features.flatten(0, 1)
         return image_outputs
 
     def get_placeholder_mask(
@@ -591,8 +592,7 @@ class GotOcr2Model(GotOcr2PreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )

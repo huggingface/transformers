@@ -39,7 +39,6 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_openai_privacy_filter import OpenAIPrivacyFilterConfig
 
 
-@use_kernel_forward_from_hub("RMSNorm")
 class OpenAIPrivacyFilterRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
@@ -195,7 +194,7 @@ class OpenAIPrivacyFilterAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.sliding_window = config.sliding_window + 1  # Account for FA symmetry using -1
-        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
+        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads, dtype=torch.float32))
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(

@@ -57,9 +57,11 @@ from .utils import apply_patches, import_dotted_path, patch_attributes, prepare_
 
 if is_torch_available():
     import torch
+    from torch._subclasses.fake_tensor import is_fake
     from torch.export import ExportedProgram
+    from torch.fx.experimental.symbolic_shapes import statically_known_true
 
-    from ..cache_utils import Cache, DynamicLayer
+    from ..cache_utils import Cache, DynamicLayer, StaticLayer
     from ..modeling_utils import PreTrainedModel
 
 
@@ -89,7 +91,7 @@ class DynamoExporter(HfExporter):
 
     required_packages = ["torch"]
     min_versions = {"torch": "2.11.0"}
-    tested_versions = {"torch": "2.12.0"}
+    tested_versions = {"torch": "2.13.0"}
 
     def export_program(
         self,
@@ -229,40 +231,25 @@ def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
     "transformers.cache_utils.DynamicSlidingWindowLayer.update",
     "transformers.cache_utils.DynamicSlidingWindowLayer.get_mask_sizes",
     "transformers.cache_utils.DynamicSlidingWindowLayer.get_seq_length",
+    "transformers.cache_utils.StaticSlidingWindowLayer.update",
+    "transformers.cache_utils.StaticSlidingWindowLayer.get_mask_sizes",
+    "transformers.cache_utils.StaticSlidingWindowLayer.get_seq_length",
 )
 def _patch_sliding_window_layer(original):
-    """Trace sliding-window cache layers as a full `DynamicLayer`; the sliding mask still applies the window.
+    """Trace sliding-window cache layers as full ones (`DynamicLayer`, `StaticLayer`); the sliding mask still applies
+    the window.
 
     A trace bakes in the sliding layer's Python token counter and its cut to the window, so the exported decode breaks
     past the window. Temporary: it goes once huggingface/transformers#49542 keeps sliding-window decode on one graph.
     """
-    return getattr(DynamicLayer, original.__name__)
+    full_layer = StaticLayer if original.__qualname__.startswith("StaticSlidingWindowLayer") else DynamicLayer
+    return getattr(full_layer, original.__name__)
 
 
 @register_patch("dynamo", "transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeTop2Router._cast_classifier")
 def _patch_classifier_cast(_original):
     """Disable classifier dtype cast in nllb-moe (not traceable)."""
     return lambda self, *args, **kwargs: None
-
-
-@register_patch("dynamo", "torch.nn.functional.scaled_dot_product_attention")
-def _patch_sdpa(original):
-    """Route SDPA through the MATH backend on CPU during tracing — CPU SDPA's flash/efficient
-    paths guard on ``Eq(batch, 1)`` (upstream https://github.com/pytorch/pytorch/issues/180202),
-    which trips ``GuardOnDataDependentSymNode`` whenever the batch dim comes from a data-dependent
-    op like ``pixel_values[bool_mask]`` (Idefics2/3 and most VLMs). The MATH decomposition has no
-    batch-1 dispatch, so the guard never fires. CUDA exports are left alone — the GPU kernels
-    don't have this guard, and we want the flash/efficient decompositions there.
-    """
-    from torch.nn.attention import SDPBackend, sdpa_kernel
-
-    def patch(query, *args, **kwargs):
-        if query.device.type == "cpu":
-            with sdpa_kernel(SDPBackend.MATH):
-                return original(query, *args, **kwargs)
-        return original(query, *args, **kwargs)
-
-    return patch
 
 
 @register_patch(
@@ -332,13 +319,14 @@ def _reshaped_vision_attention_forward(
     )
     num_segments = cu_seqlens.shape[0] - 1
     # The reshape-into-batch below needs equal-length segments.
-    segment_lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-    torch_compilable_check(
-        uneven_segments or (segment_lengths == segment_lengths[0]).all(),
-        "Chunked vision attention requires uniform segment lengths during export. "
-        "Ensure all images have the same resolution (use do_resize=True in the processor) "
-        "or pad inputs to a common size.",
-    )
+    if not uneven_segments:
+        segment_lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+        torch_compilable_check(
+            (segment_lengths == segment_lengths[0]).all(),
+            "Chunked vision attention requires uniform segment lengths during export. "
+            "Ensure all images have the same resolution (use do_resize=True in the processor) "
+            "or pad inputs to a common size.",
+        )
 
     if hasattr(self, "qkv"):
         # Grouped-query attention (q_dim != kv_dim, e.g. Exaone4.5) splits asymmetrically;
@@ -407,14 +395,14 @@ def _reshaped_vision_attention_forward(
         value_states,
         attn_mask=attention_mask,
         is_causal=False,
-        scale=self.scaling,
+        scale=getattr(self, "scaling", getattr(self, "scale", None)),
         dropout_p=0.0 if not self.training else self.attention_dropout,
         enable_gqa=getattr(self, "num_key_value_heads", self.num_heads) != self.num_heads,
     )
 
     # (n_seg, heads, seg_len, dim) → (n_seg, seg_len, heads, dim) → (seq, heads*dim).
     attn_output = attn_output.transpose(1, 2).reshape(seq_length, -1)
-    out_proj = self.proj if hasattr(self, "proj") else self.out_proj
+    out_proj = next(getattr(self, name) for name in ("proj", "out_proj", "o_proj") if hasattr(self, name))
     attn_output = out_proj(attn_output)
 
     if needs_batch_restore:
@@ -428,6 +416,7 @@ def _reshaped_vision_attention_forward(
     # Combined `qkv` + `(cos, sin)` rotary + `.proj`
     "transformers.models.qwen2_vl.modeling_qwen2_vl.VisionAttention.forward",
     "transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLVisionAttention.forward",
+    "transformers.models.llava_onevision1_5.modeling_llava_onevision1_5.LlavaOnevision15VisionAttention.forward",
     "transformers.models.qwen3_vl.modeling_qwen3_vl.Qwen3VLVisionAttention.forward",
     "transformers.models.qwen3_vl_moe.modeling_qwen3_vl_moe.Qwen3VLMoeVisionAttention.forward",
     "transformers.models.qwen3_5.modeling_qwen3_5.Qwen3_5VisionAttention.forward",
@@ -438,8 +427,10 @@ def _reshaped_vision_attention_forward(
     "transformers.models.glm_ocr.modeling_glm_ocr.GlmOcrVisionAttention.forward",
     "transformers.models.dots3_note.modeling_dots3_note.Dots3NoteVisionAttention.forward",
     "transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe.Ernie4_5_VLMoeVisionAttention.forward",
+    "transformers.models.glm5_next.modeling_glm5_next.Glm5NextVisionAttention.forward",
     # Combined `qkv` + optional `(cos, sin)` rotary + `.proj`
     "transformers.models.cohere_compass.modeling_cohere_compass.CohereCompassVisionAttention.forward",
+    "transformers.models.glm_image.modeling_glm_image.GlmImageVisionAttention.forward",
     # Asymmetric `qkv` split + `(cos, sin)` rotary + `.proj`
     "transformers.models.exaone4_5.modeling_exaone4_5.Exaone4_5_VisionAttention.forward",
     # Separate `.q` / `.k` / `.v` + single rotary tensor + `.proj`
@@ -451,6 +442,7 @@ def _reshaped_vision_attention_forward(
     # Separate `_proj` + `(cos, sin)` rotary + `.out_proj` (tuple return)
     "transformers.models.lfm3_vl.modeling_lfm3_vl.Lfm3VlVisionAttention.forward",
     "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
+    "transformers.models.ovis2_5.modeling_ovis2_5.Ovis2_5VisionAttention.forward",
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",
     "transformers.models.minimax_m3_vl.modeling_minimax_m3_vl.MiniMaxM3VLVisionAttention.forward",
     "transformers.models.inkling2.modeling_inkling2.Inkling2VisionAttention.forward",
@@ -458,6 +450,11 @@ def _reshaped_vision_attention_forward(
     "transformers.models.minicpm_ocr.modeling_minicpm_ocr.MiniCPMOcrVisionAttention.forward",
     "transformers.models.minicpmv4_6.modeling_minicpmv4_6.MiniCPMV4_6VisionAttention.forward",
     "transformers.models.minicpmv4_7.modeling_minicpmv4_7.MiniCPMV4_7VisionAttention.forward",
+    # Separate `_proj` + `.o_proj`, no rotary (tuple return)
+    "transformers.models.hunyuan_vl.modeling_hunyuan_vl.HunYuanVLVisionAttention.forward",
+    "transformers.models.hy_v4_vl.modeling_hy_v4_vl.HYV4VLVisionAttention.forward",
+    # Separate `_proj` + `.out_proj`, no rotary (single return)
+    "transformers.models.cosmos3_edge.modeling_cosmos3_edge.Cosmos3EdgeVisionAttention.forward",
     # Audio attention: separate `_proj` + `.out_proj`, no rotary
     "transformers.models.qwen2_5_omni.modeling_qwen2_5_omni.Qwen2_5OmniAudioAttention.forward",
     "transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe.Qwen3OmniMoeAudioAttention.forward",
@@ -579,21 +576,6 @@ def _patch_chunk_gated_delta_rule(_original):
     return patch
 
 
-def _scan(combine_fn, init, xs):
-    """`torch`'s `scan` of `combine_fn` over the leading dim of `xs`, which a backend that can't lower it patches.
-
-    The `scan` operator itself, not `torch`'s `scan` wrapper: the wrapper traces the loop body with dynamo, whose cache
-    hands a later export the body an earlier one traced, sizes baked in.
-    """
-    from torch._higher_order_ops.scan import scan_op
-
-    def flat_combine_fn(carry, *chunk):
-        carry, output = combine_fn(carry, list(chunk))
-        return [carry, output]
-
-    return scan_op(flat_combine_fn, [init], list(xs), additional_inputs=())
-
-
 def _unit_lower_triangular_inverse(matrix):
     """The inverse of the unit lower triangular matrix holding `matrix`'s strictly lower triangle, its size a power of
     two, by doubling inverted diagonal blocks: `[[A, 0], [C, B]]` inverts to `[[A^-1, 0], [-B^-1 C A^-1, B^-1]]`."""
@@ -618,6 +600,75 @@ def _unit_lower_triangular_inverse(matrix):
         blocks = torch.cat([top, bottom], dim=-2)
         block *= 2
     return blocks.reshape_as(matrix)
+
+
+@register_patch(
+    "dynamo",
+    "transformers.models.falcon_mamba.modeling_falcon_mamba.mamba_selective_scan",
+    "transformers.models.jamba.modeling_jamba.mamba_selective_scan",
+    "transformers.models.mamba.modeling_mamba.mamba_selective_scan",
+    "transformers.models.zamba.modeling_zamba.mamba_selective_scan",
+)
+def _patch_mamba_selective_scan(_original):
+    """Mamba's recurrence for any sequence length: a trace unrolls its loop over positions for the traced length, so
+    the loop runs as a `scan`."""
+
+    def patch(
+        hidden_states,
+        dt,
+        A,
+        B,
+        C,
+        D=None,
+        z=None,
+        delta_bias=None,
+        delta_softplus=False,
+        return_last_state=False,
+        **kwargs,
+    ):
+        batch_size, intermediate_size, _ = hidden_states.shape
+        input_dtype = hidden_states.dtype
+        if delta_bias is not None:
+            dt = dt + delta_bias.to(dt.dtype)[..., None]
+        if delta_softplus:
+            dt = torch.nn.functional.softplus(dt)
+
+        discrete_A = torch.exp(A[None, :, None, :] * dt[:, :, :, None])
+        deltaB_u = dt[:, :, :, None] * B.transpose(1, 2)[:, None, :, :].float() * hidden_states[:, :, :, None].float()
+
+        def step(ssm_state, position):
+            discrete_A, deltaB_u, C = position
+            ssm_state = discrete_A * ssm_state + deltaB_u
+            return ssm_state, torch.bmm(ssm_state.to(input_dtype), C.unsqueeze(-1)).squeeze(-1)
+
+        # Positions on the leading dim, as `scan` iterates it
+        positions = [x.movedim(2, 0).contiguous() for x in (discrete_A, deltaB_u, C)]
+        ssm_state = deltaB_u.new_zeros(batch_size, intermediate_size, A.shape[-1])
+        ssm_state, scan_output = _scan(step, ssm_state, positions)
+        scan_output = scan_output.permute(1, 2, 0)
+
+        if D is not None:
+            scan_output = scan_output + hidden_states * D[None, :, None]
+        if z is not None:
+            scan_output = scan_output * torch.nn.functional.silu(z)
+        return (scan_output, ssm_state) if return_last_state else scan_output
+
+    return patch
+
+
+def _scan(combine_fn, init, xs):
+    """`torch`'s `scan` of `combine_fn` over the leading dim of `xs`, which a backend that can't lower it patches.
+
+    The `scan` operator itself, not `torch`'s `scan` wrapper: the wrapper traces the loop body with dynamo, whose cache
+    hands a later export the body an earlier one traced, sizes baked in.
+    """
+    from torch._higher_order_ops.scan import scan_op
+
+    def flat_combine_fn(carry, *chunk):
+        carry, output = combine_fn(carry, list(chunk))
+        return [carry, output]
+
+    return scan_op(flat_combine_fn, [init], list(xs), additional_inputs=())
 
 
 # ── Stage 3: Pytree registration ─────────────────────────────────────────────
@@ -648,6 +699,36 @@ def _maybe_sym_constant(sym: Any) -> Any:
     if isinstance(sym, torch.SymFloat):
         return node.maybe_as_float()
     return node.maybe_as_int()
+
+
+# A cache layer's ints that are sizes of its tensors, as `(tensor attribute, axis)`. Saved as that size rather than as
+# a number, they don't pin an export to the capacity, batch or past length it was traced with: the export reads them
+# from the tensors it gets. A value that isn't that size (a sliding window past its length) stays a number.
+_CACHE_SIZE_FIELDS = {"max_cache_len": ("keys", -2), "batch_size": ("keys", 0), "cumulative_length": ("keys", -2)}
+
+
+def _size_field(obj: Any, field: str, value: Any) -> dict | None:
+    """The context of `obj.<field>` if it is the size of one of `obj`'s tensors (`_CACHE_SIZE_FIELDS`)."""
+    tensor_name, axis = _CACHE_SIZE_FIELDS.get(field, (None, None))
+    tensor = getattr(obj, tensor_name, None) if tensor_name else None
+    if not isinstance(value, (int, torch.SymInt)) or isinstance(value, bool) or not isinstance(tensor, torch.Tensor):
+        return None
+    if tensor.dim() == 0 or not statically_known_true(value == tensor.shape[axis]):
+        return None
+    return {"_t": "dim", "of": tensor_name, "axis": axis}
+
+
+# A cache layer's int counters that mirror one of its tensor counters: `StaticSlidingWindowLayer`'s, when its window is
+# larger than the cache (`_is_croppable`) so never fills. Saved as that tensor's value: a sliding layer traces as a full
+# one (`_patch_sliding_window_layer`), which never reads the int
+_CACHE_MIRROR_FIELDS = {"cumulative_length_int": "cumulative_length"}
+
+
+def _mirror_field(obj: Any, field: str, value: Any) -> dict | None:
+    """The context of `obj.<field>` if it mirrors one of `obj`'s tensor counters (`_CACHE_MIRROR_FIELDS`)."""
+    if field not in _CACHE_MIRROR_FIELDS or not getattr(obj, "_is_croppable", False):
+        return None
+    return {"_t": "mirror", "of": _CACHE_MIRROR_FIELDS[field]}
 
 
 def _flatten_to_context(obj: Any, tensors: list) -> Any:
@@ -718,7 +799,10 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
         # skipped until the binding is refactored away (e.g. into a `Cache` subclass).
         raise TypeError("Cannot flatten a bound method for pytree context")
     if hasattr(obj, "__dict__"):
-        state = {k: _flatten_to_context(v, tensors) for k, v in vars(obj).items()}
+        state = {
+            k: _size_field(obj, k, v) or _mirror_field(obj, k, v) or _flatten_to_context(v, tensors)
+            for k, v in vars(obj).items()
+        }
         return {"_t": "obj", "p": _class_to_path(cls), "s": state}
 
     raise TypeError(f"Cannot flatten {type(obj).__name__} for pytree context")
@@ -770,8 +854,20 @@ def _unflatten_from_context(ctx: Any, tensors: list) -> Any:
     if t == "obj":
         cls = _path_to_class(ctx["p"])
         instance = cls.__new__(cls)
+        derived = {k: v for k, v in ctx["s"].items() if isinstance(v, dict) and v.get("_t") in ("dim", "mirror")}
+        # In the saved order (a placeholder until the tensor it's read from is set): the order is part of the spec
         for k, v in ctx["s"].items():
-            instance.__dict__[k] = _unflatten_from_context(v, tensors)
+            instance.__dict__[k] = None if k in derived else _unflatten_from_context(v, tensors)
+        for k, v in derived.items():
+            source = instance.__dict__[v["of"]]
+            # Some unflatten placeholder leaves only to describe the structure (ExecuTorch's emitter)
+            if not isinstance(source, torch.Tensor):
+                continue
+            if v["_t"] == "dim":
+                instance.__dict__[k] = source.shape[v["axis"]]
+            else:
+                # Traced, the value can't be read; the window never fills, which is all the int decides there
+                instance.__dict__[k] = 0 if is_fake(source) else int(source)
         return instance
 
     raise TypeError(f"Unknown tag {t!r} in pytree context")
