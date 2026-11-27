@@ -672,6 +672,26 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_generate_with_cache(*config_and_inputs)
 
+    def test_chunked_prefill_with_decoder_prompt(self):
+        config = self.model_tester.get_config()
+        model = T5ForConditionalGeneration(config).to(torch_device).eval()
+        input_ids = torch.tensor([[5, 6, 7, 8, 9, 1], [4, 3, 1, 0, 0, 0]], device=torch_device)
+        decoder_input_ids = torch.tensor([[0, 2, 3, 4, 5], [0, 0, 0, 6, 7]], device=torch_device)
+        decoder_attention_mask = torch.tensor([[1, 1, 1, 1, 1], [0, 0, 1, 1, 1]], device=torch_device)
+        kwargs = {
+            "attention_mask": input_ids.ne(config.pad_token_id),
+            "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": decoder_attention_mask,
+            "max_new_tokens": 2,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+            "output_logits": True,
+        }
+        expected = model.generate(input_ids, **kwargs)
+        chunked = model.generate(input_ids, **kwargs, prefill_chunk_size=2)
+        torch.testing.assert_close(chunked.logits, expected.logits)
+        self.assertTrue(torch.equal(chunked.sequences, expected.sequences))
+
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
