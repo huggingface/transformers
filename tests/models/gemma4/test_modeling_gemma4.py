@@ -13,8 +13,10 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma4 model."""
 
+import gc
 import tempfile
 import unittest
+import weakref
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -126,6 +128,21 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
             reloaded = Gemma4TextConfig.from_pretrained(tmpdirname)
 
         self.assertEqual(reloaded.sliding_window, config.sliding_window)
+
+    def test_activation_checkpointing_forward_without_backward_frees_shared_kv_states(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Gemma4TextModel(config).to(torch_device)
+        model.activation_checkpointing_enable()
+        model.train()
+
+        outputs = model(**inputs_dict, return_shared_kv_states=True)
+        kv_refs = [weakref.ref(t) for kv in outputs.shared_kv_states.values() for t in kv]
+        self.assertGreater(len(kv_refs), 0)
+
+        del outputs
+        gc.collect()
+        num_alive = sum(ref() is not None for ref in kv_refs)
+        self.assertEqual(num_alive, 0, f"{num_alive}/{len(kv_refs)} shared K/V tensors leaked")
 
     @unittest.skip(
         "Gemma4 cannot use random inputs_embeds, as it needs to reverse them when input_ids is not provided"
