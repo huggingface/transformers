@@ -327,7 +327,7 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, return_dict=True, **kwargs)
+        outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
         features = outputs.feature_maps
 
         logits = self.decode_head(features)
