@@ -56,7 +56,9 @@ def build_attention_mask_from_topk(
     if is_flash_attention_requested(config):
         return None
 
-    mask = build_selection_mask(topk_indices, kv_length).unsqueeze(1)
+    mask = build_selection_mask(topk_indices, kv_length)
+    if mask.ndim == 3:
+        mask = mask.unsqueeze(1)
 
     # SDPA
     if config._attn_implementation == "sdpa":
@@ -144,6 +146,18 @@ def prepare_compression_groups(
     return groups[:, :-1], tail
 
 
+def select_topk_indices(scores: torch.Tensor, budget: int, deterministic: bool = False) -> torch.Tensor:
+    """Select the highest-scoring entries, returning -1 for masked selections."""
+    k = min(budget, scores.shape[-1])
+    if deterministic:
+        top_scores, indices = scores.sort(dim=-1, descending=True, stable=True)
+        top_scores, indices = top_scores[..., :k], indices[..., :k]
+    else:
+        top_scores, indices = scores.topk(k, dim=-1)
+
+    return indices.masked_fill(top_scores == float("-inf"), -1)
+
+
 def select_compression_indices(
     scores: torch.Tensor,
     attention_mask: torch.Tensor,
@@ -198,14 +212,7 @@ def select_compression_indices(
     scores = scores.masked_fill(invalid, float("-inf"))
 
     group_budget = budget if return_groups else budget // group_size
-    k = min(group_budget, scores.shape[-1])
-    if deterministic:
-        top_scores, groups = scores.sort(dim=-1, descending=True, stable=True)
-        top_scores, groups = top_scores[..., :k], groups[..., :k]
-    else:
-        top_scores, groups = scores.topk(k, dim=-1)
-
-    groups = groups.masked_fill(top_scores == float("-inf"), -1)
+    groups = select_topk_indices(scores, group_budget, deterministic=deterministic)
 
     if return_groups:
         return groups

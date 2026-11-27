@@ -26,7 +26,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...masking_utils import create_causal_mask, create_compression_mask
-from ...modeling_compression_utils import build_attention_mask_from_topk
+from ...modeling_compression_utils import build_attention_mask_from_topk, select_topk_indices
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -329,12 +329,10 @@ class MiniMaxM3VLAttention(MiniMaxM2Attention):
         block_indices = None
         if self.indexer is not None:
             block_indices, topk_indices = self.indexer(hidden_states, position_embeddings, attention_mask, cache)
-            if self.config._attn_implementation in ("eager", "sdpa"):
-                batch, num_heads, q_len, _ = topk_indices.shape
+            if topk_indices is not None:
                 attention_mask = build_attention_mask_from_topk(
-                    self.config, topk_indices.flatten(0, 1), query_states, key_states.shape[2]
+                    self.config, topk_indices, query_states, key_states.shape[2]
                 )
-                attention_mask = attention_mask.reshape(batch, num_heads, q_len, -1)
                 attention_mask = attention_mask.repeat_interleave(self.num_key_value_groups, dim=1)
             else:
                 kwargs["cache_position"] = (
@@ -404,59 +402,50 @@ class MiniMaxM3VLIndexer(nn.Module):
         cache: Cache | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch, q_len, _ = hidden_states.shape
-        physical_counts = torch.arange(attention_mask.shape[-1], device=attention_mask.device) + attention_mask[:, :1]
-        query_positions = physical_counts[:, -q_len:] - 1
-
-        idx_q = self.q_proj(hidden_states).view(batch, q_len, -1, self.head_dim)
-        idx_q = self.q_norm(idx_q).transpose(1, 2)  # [B, H_idx, Sq, D]
-        idx_k = self.k_proj(hidden_states).view(batch, q_len, 1, self.head_dim)
-        idx_k = self.k_norm(idx_k).transpose(1, 2)  # [B, 1, Sq, D]
+        idx_q = self.q_norm(self.q_proj(hidden_states).view(batch, q_len, -1, self.head_dim)).transpose(1, 2)
+        idx_k = self.k_norm(self.k_proj(hidden_states).view(batch, q_len, 1, self.head_dim)).transpose(1, 2)
         cos, sin = position_embeddings
         idx_q, idx_k = apply_rotary_pos_emb(idx_q, idx_k, cos[..., : self.head_dim], sin[..., : self.head_dim])
 
+        # Blocks are anchored to physical KV slots, not valid-token ranks.
+        physical_counts = torch.arange(attention_mask.shape[-1], device=attention_mask.device) + attention_mask[:, :1]
+        query_positions = physical_counts[:, -q_len:] - 1
         if cache is not None:
             idx_k = cache.update_compressed_states(idx_k.squeeze(1), self.layer_idx, physical_counts, q_len).unsqueeze(
                 1
             )
 
+        # Recover the padding mask, accounting for the negative static-cache prefix.
         k_len = idx_k.shape[2]
-        num_key_blocks = -(-k_len // self.block_size)  # ceil-div
-        pad = num_key_blocks * self.block_size - k_len
+        key_positions = torch.arange(k_len, device=idx_k.device)
+        mask_positions = (key_positions - attention_mask[:, :1]).clamp_max(attention_mask.shape[-1] - 2)
+        key_valid = attention_mask.diff(dim=-1).gather(1, mask_positions) > 0
+        visible = (key_positions <= query_positions[..., None]) & key_valid[:, None, :]
 
         scores = torch.matmul(idx_q.float(), idx_k.float().transpose(-1, -2))
-        k_positions = torch.arange(k_len, device=idx_q.device)
-        token_future = k_positions[None, None, None, :] > query_positions[:, None, :, None]
-        scores = scores.masked_fill(token_future, float("-inf"))
-        if pad:
+        scores = scores.masked_fill(~visible[:, None], float("-inf"))
+
+        # Max-pool scores within each block.
+        if pad := -k_len % self.block_size:
             scores = F.pad(scores, (0, pad), value=float("-inf"))
-        scores = scores.view(batch, self.num_heads, q_len, num_key_blocks, self.block_size)
-        # Max-pool scores within each block
-        block_scores = scores.amax(dim=-1)  # -> [B, H_idx, S_q, num_key_blocks]
+        block_scores = scores.unflatten(-1, (-1, self.block_size)).amax(dim=-1)
 
-        q_block = query_positions // self.block_size  # [B, S_q]
-
+        # Prioritize local blocks that contain at least one valid key.
         if self.local_blocks > 0:
-            local = torch.arange(self.local_blocks, device=idx_q.device)
-            local_idx = (q_block[..., None] - local.view(1, 1, -1)).clamp(min=0)
-            local_idx = local_idx.unsqueeze(1).expand(-1, self.num_heads, -1, -1)
-            block_scores.scatter_(-1, local_idx, float("inf"))
+            block_positions = torch.arange(block_scores.shape[-1], device=idx_k.device)
+            distance = query_positions[..., None] // self.block_size - block_positions
+            local = (distance >= 0) & (distance < self.local_blocks)
+            block_scores = block_scores.masked_fill(local[:, None] & (block_scores != float("-inf")), float("inf"))
 
-        # Future/empty blocks keep their -inf scores, so tagging them -1 yields left-packed block indices
-        topk = min(self.topk_blocks, num_key_blocks)
-        topk_scores, topk_indices = block_scores.topk(topk, dim=-1)
-        block_indices = topk_indices.masked_fill(topk_scores == float("-inf"), -1)
-
+        block_indices = select_topk_indices(block_scores, self.topk_blocks)
         if self.config._attn_implementation not in ("eager", "sdpa"):
             return block_indices, None
 
-        # Expand selected blocks into physical token indices
-        offsets = torch.arange(self.block_size, device=idx_q.device)
+        # Expand selected blocks and reuse the visibility mask.
+        offsets = torch.arange(self.block_size, device=idx_k.device)
         indices = (block_indices[..., None] * self.block_size + offsets).flatten(-2).clamp_min(-1)
-
-        # Exclude padded and future tokens
-        mask_positions = (indices.flatten(1) - attention_mask[:, :1]).clamp(0, attention_mask.shape[-1] - 2)
-        valid = attention_mask.diff(dim=-1).gather(1, mask_positions).reshape_as(indices) > 0
-        valid &= indices <= query_positions.reshape(batch, 1, q_len, 1)
+        visible = visible[:, None].expand(-1, self.num_heads, -1, -1)
+        valid = visible.gather(-1, indices.clamp(0, k_len - 1)) & (indices < k_len)
 
         return block_indices, indices.masked_fill(~valid, -1)
 
