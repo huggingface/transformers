@@ -121,6 +121,10 @@ class MLXModelRunner(ModelRunner):
                 for position, output in enumerate(outputs)
             ]
         result = self.unflatten([outputs_torch[position] for position in self.output_positions])
+        # A cache written in place throughout is the loop's own. One that also returns new tensors (a growing cache's
+        # keys beside LFM2's conv states written in place) is the graph's, holding the loop's tensors for the rest.
         if share_outputs and kwargs.get("cache") is not None and "cache" in result:
-            result["cache"] = kwargs["cache"]
+            in_place = {id(tensor) for tensor in stale.values()}
+            if all(id(leaf) in in_place for leaf in torch.utils._pytree.tree_leaves(result["cache"])):
+                result["cache"] = kwargs["cache"]
         return result

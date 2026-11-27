@@ -649,6 +649,10 @@ if is_mlx_available():
         "aten.sum.dim_IntList": lambda x, dim=None, keepdim=False, dtype=None: _astype(
             mx.sum(x, axis=_axes(dim), keepdims=keepdim), dtype
         ),
+        "aten.prod.dim_int": lambda x, dim, keepdim=False, dtype=None: _astype(
+            mx.prod(x, axis=dim, keepdims=keepdim), dtype
+        ),
+        "aten.prod.default": lambda x, dtype=None: _astype(mx.prod(x), dtype),
         "aten.mean.dim": lambda x, dim=None, keepdim=False, dtype=None: _astype(
             mx.mean(x, axis=_axes(dim), keepdims=keepdim), dtype
         ),
