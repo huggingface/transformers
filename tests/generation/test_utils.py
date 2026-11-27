@@ -119,7 +119,7 @@ if is_torch_available():
     )
     from transformers.generation.utils import ALL_CACHE_NAMES, DeferredStopCheck, _speculative_sampling
     from transformers.modeling_layers import MtpModel
-    from transformers.modeling_multimodal_utils import placeholder_features, split_modality_outputs
+    from transformers.modeling_multimodal_utils import split_modality_outputs
 
 from unittest.mock import patch
 
@@ -1652,8 +1652,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 flat = inputs_dict.pop("mm_encoder_outputs")
                 if not flat:
                     self.skipTest(reason="The tester's inputs give no multimodal outputs")
-                if any(not isinstance(placeholder_features(outputs), torch.Tensor) for outputs in flat.values()):
-                    self.skipTest(reason="The model has no flat getter (e.g. GLM-Image)")
                 per_item = {modality: split_modality_outputs(outputs) for modality, outputs in flat.items()}
                 expected = model(**inputs_dict, mm_encoder_outputs=flat).logits
                 logits = model(**inputs_dict, mm_encoder_outputs=per_item).logits
@@ -1664,8 +1662,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
     def test_expand_multimodal_encoder_outputs_across_devices(self):
         """Tests that beam expansion handles `mm_encoder_outputs` on another device than the text, as with `device_map`."""
         for model_class in self.all_generative_model_classes:
-            if not any(hasattr(model_class, f"get_{modality}_embeddings") for modality in ["image", "video"]):
-                self.skipTest("Model has no flat multimodal getters")
+            if not any(modality in model_class.input_modalities for modality in ["image", "video"]):
+                self.skipTest("Model takes no images or videos")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             if config.is_encoder_decoder or "input_ids" not in inputs_dict:

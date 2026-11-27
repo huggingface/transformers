@@ -5603,6 +5603,32 @@ class ModelTesterMixin(ExportTesterMixin):
 
             check_attentions_output(inputs_dict, config, model_class)
 
+    def test_placeholder_modalities_have_flat_getters(self):
+        """A model scattering a modality's features into its placeholder tokens has the flat getter
+        (`get_<modality>_embeddings`): one tensor for any number of items, where the per-item split of
+        `get_<modality>_features` would fix the count in an exported or a compiled graph."""
+        from transformers.modeling_multimodal_utils import MultimodalMixin
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            # Dual encoders (CLIP) and RNN-T speech models take the modality but have no placeholders to scatter into
+            if not hasattr(model_class, "get_placeholder_mask"):
+                continue
+            model = model_class(copy.deepcopy(config))
+            for modality in set(model_class.input_modalities) & {"image", "video", "audio"}:
+                # A modality no encoder computes features for (a TTS model's own audio latents) has nothing to flatten
+                if not hasattr(model_class, f"get_{modality}_features"):
+                    continue
+                getter = f"get_{modality}_embeddings"
+                own = getattr(model_class, getter, None)
+                # `MultimodalMixin`'s, or none, hands a head's call to its base model, `model.model`
+                if own is None or own is getattr(MultimodalMixin, getter):
+                    own = getattr(type(getattr(model, "model", None)), getter, None)
+                self.assertTrue(
+                    own is not None and own is not getattr(MultimodalMixin, getter),
+                    f"{model_class.__name__} takes {modality} inputs into placeholders but has no `{getter}`",
+                )
+
     @parameterized.expand([True, False, None])
     def test_get_image_features_output(self, return_dict: bool | None):
         for model_class in self.all_model_classes:
