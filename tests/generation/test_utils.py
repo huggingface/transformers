@@ -5953,6 +5953,48 @@ class GenerationIntegrationTests(unittest.TestCase):
 class TokenHealingTestCase(unittest.TestCase):
     @parameterized.expand(
         [
+            (["a b "],),
+            (["a b ", "a "],),
+            (["a b", "a "],),
+        ]
+    )
+    def test_generate_aligns_healed_prompt(self, prompts):
+        from tokenizers import Tokenizer, decoders, models, pre_tokenizers
+
+        from transformers import GPT2Config, TokenizersBackend
+
+        vocab = {"<|endoftext|>": 0, "a": 1, "b": 2, "Ġ": 3, "Ġb": 4}
+        backend = Tokenizer(models.BPE(vocab=vocab, merges=[("Ġ", "b")]))
+        backend.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+        backend.decoder = decoders.ByteLevel()
+        tokenizer = TokenizersBackend(
+            tokenizer_object=backend,
+            bos_token="<|endoftext|>",
+            eos_token="<|endoftext|>",
+            pad_token="<|endoftext|>",
+            padding_side="left",
+        )
+        config = GPT2Config(vocab_size=len(vocab), n_layer=1, n_head=2, n_embd=16, bos_token_id=0, eos_token_id=0)
+        model = GPT2LMHeadModel(config).to(torch_device).eval()
+        original = tokenizer(prompts, padding=True, return_tensors="pt").to(torch_device)
+        normalized = tokenizer([prompt.strip() for prompt in prompts], padding=True, return_tensors="pt").to(
+            torch_device
+        )
+        generation_kwargs = {
+            "max_new_tokens": 1,
+            "pad_token_id": tokenizer.pad_token_id,
+            "return_dict_in_generate": True,
+            "output_logits": True,
+        }
+
+        expected = model.generate(**normalized, **generation_kwargs)
+        actual = model.generate(**original, token_healing=True, tokenizer=tokenizer, **generation_kwargs)
+
+        torch.testing.assert_close(actual.sequences[:, :-1], normalized.input_ids)
+        torch.testing.assert_close(actual.logits[0], expected.logits[0])
+
+    @parameterized.expand(
+        [
             ("url", 'The link is <a href="http:', 'The link is <a href="http://'),
             # aggressive_healing: "http" shouldn't be replaced with "https"
             ("aggressive_healing", 'The link is <a href="http', 'The link is <a href="http'),
