@@ -49,6 +49,7 @@ from .utils import (
     BaseHandler,
     Modality,
     ReasoningText,
+    StopSequenceFilter,
     ToolCall,
     _StreamError,
     build_response_parser,
@@ -203,6 +204,7 @@ class ChatCompletionHandler(BaseHandler):
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
+        stop_filter = StopSequenceFilter(gen_config.stop_strings)
 
         async def sse_gen() -> AsyncGenerator[str, None]:
             try:
@@ -223,6 +225,8 @@ class ChatCompletionHandler(BaseHandler):
                     sse_parts: list[str] = []
                     for item in batch:
                         if item is None:
+                            if content := stop_filter.flush():
+                                sse_parts.append(self._build_chunk_sse(request_id, model=model_id, content=content))
                             done = True
                             break
                         if isinstance(item, _StreamError):
@@ -248,8 +252,8 @@ class ChatCompletionHandler(BaseHandler):
                             tool_call_index += 1
                         elif isinstance(item, ReasoningText):
                             sse_parts.append(self._build_chunk_sse(request_id, model=model_id, reasoning_content=item))
-                        else:
-                            sse_parts.append(self._build_chunk_sse(request_id, model=model_id, content=item))
+                        elif content := stop_filter.feed(item):
+                            sse_parts.append(self._build_chunk_sse(request_id, model=model_id, content=content))
 
                     if sse_parts:
                         yield "".join(sse_parts)
@@ -309,6 +313,8 @@ class ChatCompletionHandler(BaseHandler):
         content, reasoning_content, parsed_tool_calls = parse_assistant_message(
             processor, model, generated_ids, input_ids=inputs["input_ids"], cleaned_content=content, tools=tools
         )
+        if content:
+            content = StopSequenceFilter(gen_config.stop_strings).apply(content)
         tool_calls = None
         if parsed_tool_calls:
             tool_calls = [

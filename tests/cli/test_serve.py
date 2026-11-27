@@ -41,6 +41,7 @@ from transformers.cli.serving.utils import (
     BaseHandler,
     GenerationState,
     Modality,
+    StopSequenceFilter,
     ToolCall,
     build_response_parser,
     get_gen_models,
@@ -525,6 +526,129 @@ class TestBuildGenerationConfig(unittest.TestCase):
         self.assertEqual(result.max_new_tokens, 50)
 
 
+class TestStopSequenceFilter(unittest.TestCase):
+    """OpenAI returns the text before the stop sequence, without the stop sequence itself."""
+
+    def test_cuts_before_the_stop_sequence(self):
+        # The last token can carry text past the stop sequence
+        self.assertEqual(StopSequenceFilter([" 5"]).apply("1 2 3 4 5."), "1 2 3 4")
+
+    def test_cuts_at_the_earliest_stop_sequence(self):
+        self.assertEqual(StopSequenceFilter(["four", " 3"]).apply("1 2 3 four"), "1 2")
+
+    def test_accepts_a_single_string(self):
+        self.assertEqual(StopSequenceFilter("END").apply("doneEND"), "done")
+
+    def test_without_stop_sequences_keeps_the_text(self):
+        for stop in (None, [], [""]):
+            self.assertEqual(StopSequenceFilter(stop).apply("1 2 3"), "1 2 3")
+
+    def test_streaming_holds_back_a_possible_stop_sequence(self):
+        stop_filter = StopSequenceFilter(["<END>"])
+        sent = [stop_filter.feed(chunk) for chunk in ["Hi <", "E", "N", "D> extra", " more"]]
+        self.assertEqual(sent, ["Hi ", "", "", "", ""])
+        self.assertEqual(stop_filter.flush(), "")
+
+    def test_streaming_releases_held_text_that_is_not_a_stop_sequence(self):
+        stop_filter = StopSequenceFilter(["<END>"])
+        sent = [stop_filter.feed(chunk) for chunk in ["a <E", "ND", "ING> b <"]]
+        self.assertEqual(sent, ["a ", "", "<ENDING> b "])
+        self.assertEqual(stop_filter.flush(), "<")
+
+
+class _StopStringGenerateManager:
+    """Replays the text `generate` returns when it stops on a stop string: the stop string is still in it."""
+
+    TOKENS = [" 4", " 5", " 6", " 7."]
+
+    def generate_streaming(self, model, processor, inputs, gen_config, request_id, response_parser=None):
+        queue = asyncio.Queue()
+        for item in [*self.TOKENS, None]:
+            queue.put_nowait(item)
+        return queue, MagicMock(total_tokens=len(self.TOKENS))
+
+    async def generate_non_streaming(self, model, processor, inputs, gen_config, request_id):
+        return "".join(self.TOKENS), 3, list(range(len(self.TOKENS)))
+
+
+@require_serve
+class TestStopSequenceExcludedFromResponses(unittest.TestCase):
+    """`stop=[" 7"]` must return " 4 5 6", as the OpenAI API does, not the text up to and past the stop string."""
+
+    @staticmethod
+    def _gen_config():
+        from transformers import GenerationConfig
+
+        return GenerationConfig(stop_strings=[" 7"], max_new_tokens=20)
+
+    @staticmethod
+    def _streamed_events(response) -> list[dict]:
+        async def collect():
+            return "".join([part async for part in response.body_iterator])
+
+        body = asyncio.run(collect())
+        return [json.loads(line[len("data: ") :]) for line in body.splitlines() if line.startswith("data: {")]
+
+    def test_completion(self):
+        handler = CompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        response = asyncio.run(
+            handler._non_streaming(
+                "req", MagicMock(), MagicMock(), "m", {}, self._gen_config(), _StopStringGenerateManager()
+            )
+        )
+        self.assertEqual(json.loads(response.body)["choices"][0]["text"], " 4 5 6")
+
+    def test_completion_streaming(self):
+        handler = CompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        response = handler._streaming(
+            "req",
+            MagicMock(),
+            MagicMock(),
+            "m",
+            {"input_ids": [1, 2, 3]},
+            self._gen_config(),
+            _StopStringGenerateManager(),
+        )
+        events = self._streamed_events(response)
+        self.assertEqual("".join(event["choices"][0]["text"] for event in events), " 4 5 6")
+        self.assertEqual(events[-1]["choices"][0]["finish_reason"], "stop")
+
+    def test_chat_completion(self):
+        handler = ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        with patch(
+            "transformers.cli.serving.chat_completion.parse_assistant_message",
+            side_effect=lambda *args, cleaned_content, **kwargs: (cleaned_content, None, None),
+        ):
+            response = asyncio.run(
+                handler._non_streaming(
+                    "req",
+                    MagicMock(),
+                    MagicMock(),
+                    "m",
+                    {"input_ids": [1, 2, 3]},
+                    self._gen_config(),
+                    gen_manager=_StopStringGenerateManager(),
+                )
+            )
+        self.assertEqual(json.loads(response.body)["choices"][0]["message"]["content"], " 4 5 6")
+
+    def test_chat_completion_streaming(self):
+        handler = ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        with patch("transformers.cli.serving.chat_completion.build_response_parser", return_value=None):
+            response = handler._streaming(
+                "req",
+                MagicMock(),
+                MagicMock(),
+                "m",
+                {"input_ids": [1, 2, 3]},
+                self._gen_config(),
+                gen_manager=_StopStringGenerateManager(),
+            )
+        events = self._streamed_events(response)
+        self.assertEqual("".join(event["choices"][0]["delta"].get("content") or "" for event in events), " 4 5 6")
+        self.assertEqual(events[-1]["choices"][0]["finish_reason"], "stop")
+
+
 @require_serve
 class TestValidation(unittest.TestCase):
     def _make_handler(self):
@@ -896,6 +1020,7 @@ class TestChatCompletion(ServeIntegrationTestCase):
         resp = self.client.chat.completions.create(
             model=self.MODEL, messages=[{"role": "user", "content": "Count to 10"}], stop=["5"]
         )
+        self.assertNotIn("5", resp.choices[0].message.content)
         self.assertNotIn("6", resp.choices[0].message.content)
 
     def test_multi_turn(self):
@@ -1085,6 +1210,7 @@ class TestCompletion(ServeIntegrationTestCase):
             max_tokens=20,
             stop=["six"],
         )
+        self.assertNotIn("six", result.choices[0].text)
         self.assertNotIn("seven", result.choices[0].text)
 
     def test_suffix(self):

@@ -169,6 +169,54 @@ class ReasoningText(str):
     """
 
 
+class StopSequenceFilter:
+    """Removes the OpenAI ``stop`` sequence from generated text.
+
+    ``generate`` stops after a stop string, but the decoded text still contains it, plus anything the last token adds
+    after it. The OpenAI API returns only the text before the stop sequence. When streaming, text that could be the
+    start of a stop sequence is held back until the next chunk shows whether it is one.
+
+    Args:
+        stop_strings (`str` or `list[str]`, *optional*): The request's stop sequences.
+    """
+
+    def __init__(self, stop_strings: str | list[str] | None):
+        stop_strings = [stop_strings] if isinstance(stop_strings, str) else stop_strings or []
+        self._stop_strings = [stop for stop in stop_strings if stop]
+        self._held = ""
+        self._stopped = False
+
+    def feed(self, text: str) -> str:
+        """Returns the part of ``text`` that can be sent now."""
+        if self._stopped:
+            return ""
+        if not self._stop_strings:
+            return text
+        self._held += text
+        matches = [index for stop in self._stop_strings if (index := self._held.find(stop)) != -1]
+        if matches:
+            self._stopped = True
+            text, self._held = self._held[: min(matches)], ""
+            return text
+        # Hold back the longest tail that a stop sequence starts with
+        held = max(
+            (n for stop in self._stop_strings for n in range(1, len(stop)) if self._held.endswith(stop[:n])),
+            default=0,
+        )
+        text = self._held[: len(self._held) - held]
+        self._held = self._held[len(self._held) - held :]
+        return text
+
+    def flush(self) -> str:
+        """Returns the held-back text once generation is over."""
+        text, self._held = self._held, ""
+        return text
+
+    def apply(self, text: str) -> str:
+        """Returns ``text`` cut before its first stop sequence (for non-streaming responses)."""
+        return self.feed(text) + self.flush()
+
+
 class CBWorkerDeadError(RuntimeError):
     """Raised when a request is submitted to a CB worker that has died.
 
