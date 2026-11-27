@@ -243,6 +243,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         factor: int,
         temporal_factor: int = 2,
         cap_pixels_per_frame: bool | None = None,
+        max_video_tokens: int | None = None,
         **kwargs,
     ) -> "torch.Tensor":
         """Resize dynamically based on input video aspect ratio."""
@@ -253,7 +254,8 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         if cap_pixels_per_frame:
             # the per-frame cap (`size.longest_edge`) is bounded by an even share of the `max_video_tokens`
             num_frames = videos.shape[1]
-            total_pixels = int(self.max_video_tokens * factor * factor * 0.9)
+            max_video_tokens = self.max_video_tokens if max_video_tokens is None else max_video_tokens
+            total_pixels = int(max_video_tokens * factor * factor * 0.9)
             max_pixels = max(
                 min(max_pixels, total_pixels * temporal_factor // num_frames), int(size.shortest_edge * 1.05)
             )
@@ -328,6 +330,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         merge_size: int | None = None,
         cap_pixels_per_frame: bool | None = None,
         return_tensors: str | TensorType | None = None,
+        max_video_tokens: int | None = None,
         **kwargs,
     ):
         if cap_pixels_per_frame is None:
@@ -352,6 +355,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                     factor=patch_size * merge_size,
                     temporal_factor=temporal_patch_size,
                     cap_pixels_per_frame=cap_pixels_per_frame,
+                    max_video_tokens=max_video_tokens,
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)

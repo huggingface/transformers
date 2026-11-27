@@ -189,6 +189,7 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
         factor: int,
         temporal_factor: int,
         cap_pixels_per_frame: bool | None = None,
+        max_video_tokens: int | None = None,
         **kwargs,
     ) -> "torch.Tensor":
         """Resize dynamically based on input video aspect ratio."""
@@ -199,7 +200,8 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
         max_pixels = size.longest_edge
         if cap_pixels_per_frame:
             # per-frame pixels are capped at `max_video_tokens` patches or the budget's even share per frame
-            frame_cap = self.max_video_tokens * factor * factor
+            max_video_tokens = self.max_video_tokens if max_video_tokens is None else max_video_tokens
+            frame_cap = max_video_tokens * factor * factor
             pixels_per_frame = max(min(frame_cap, size.longest_edge // num_frames), int(size.shortest_edge * 1.05))
             max_pixels = pixels_per_frame * num_frames
 
@@ -275,6 +277,7 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
         merge_size: int | None = None,
         cap_pixels_per_frame: bool | None = None,
         return_tensors: str | TensorType | None = None,
+        max_video_tokens: int | None = None,
         **kwargs,
     ):
         if cap_pixels_per_frame is None:
@@ -299,6 +302,7 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
                     factor=patch_size * merge_size,
                     temporal_factor=temporal_patch_size,
                     cap_pixels_per_frame=cap_pixels_per_frame,
+                    max_video_tokens=max_video_tokens,
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
@@ -361,7 +365,9 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
         factor = patch_size * merge_size
         if cap_pixels_per_frame:
             # Keep the count in sync with `resize` when the per-frame cap is active.
-            frame_cap = self.max_video_tokens * factor * factor
+            max_video_tokens = videos_kwargs["max_video_tokens"]
+            max_video_tokens = self.max_video_tokens if max_video_tokens is None else max_video_tokens
+            frame_cap = max_video_tokens * factor * factor
             pixels_per_frame = max(min(frame_cap, max_pixels // num_frames), int(min_pixels * 1.05))
             max_pixels = pixels_per_frame * num_frames
 

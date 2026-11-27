@@ -421,6 +421,24 @@ class Qwen3VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             with self.assertNoLogs(logger.name, level="WARNING"):
                 self._process_frames(video_processing_class, 2, size, cap_pixels_per_frame=False)
 
+    def test_max_video_tokens_call_time_override(self):
+        size = {"longest_edge": 768 * 32 * 32 * 4, "shortest_edge": 32 * 32}
+        config = {"size": size, "do_sample_frames": False, "cap_pixels_per_frame": True}
+        video = np.zeros((4, 256, 256, 3), dtype=np.uint8)
+        for video_processing_class in self.video_processor_list:
+            processor = video_processing_class(**config)
+            capped_processor = video_processing_class(**config, max_video_tokens=24)
+            expected = capped_processor(video, return_tensors="pt")[self.input_name].shape[0]
+            default = processor(video, return_tensors="pt")[self.input_name].shape[0]
+            self.assertLess(expected, default)
+
+            with self.subTest(path="preprocess"):
+                result = processor(video, max_video_tokens=24, return_tensors="pt")[self.input_name]
+                self.assertEqual(result.shape[0], expected)
+            with self.subTest(path="estimate"):
+                patches = processor.get_num_of_video_patches(4, 256, 256, {"max_video_tokens": 24})
+                self.assertEqual(patches, expected)
+
     def test_num_frames_equal_temporal_patch_size_plus_two(self):
         for video_processing_class in self.video_processor_list:
             video_processor_dict = self.video_processor_dict.copy()
