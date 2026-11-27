@@ -31,7 +31,7 @@ from transformers.distributed.tensor_parallel import (
     get_kv_heads_per_rank,
 )
 from transformers.distributed.utils import TransformersDeviceMesh
-from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
+from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test, require_kernels
 
 from ..distributed_testing_utils import run_distributed
 
@@ -59,6 +59,24 @@ def _test_checkpoint_with_both_tied_keys_impl(_rank, model_path, equal):
     input_ids = torch.arange(10, device=model_tp.device)[None]
     with torch.no_grad():
         torch.testing.assert_close(model_tp(input_ids).logits.cpu(), model(input_ids).logits.cpu())
+
+
+def _test_norm_grad_impl(_rank, model_id):
+    distributed_config = DistributedConfig(tp_size=dist.get_world_size())
+    input_ids = torch.arange(16)[None]
+
+    model = AutoModelForCausalLM.from_pretrained(model_id, use_kernels=False, dtype=torch.float32)
+    model(input_ids, labels=input_ids).loss.backward()
+    grad = model.model.layers[0].self_attn.q_norm.weight.grad
+
+    for use_kernels in (False, True):
+        model_tp = AutoModelForCausalLM.from_pretrained(
+            model_id, distributed_config=distributed_config, use_kernels=use_kernels, dtype=torch.float32
+        )
+        model_tp(input_ids.to(model_tp.device), labels=input_ids.to(model_tp.device)).loss.backward()
+        grad_tp = model_tp.model.layers[0].self_attn.q_norm.weight.grad
+
+        torch.testing.assert_close(grad_tp.cpu(), grad, rtol=1e-4, atol=1e-6, msg=f"{use_kernels=}")
 
 
 @is_tensor_parallel_test
@@ -374,6 +392,13 @@ class TestTensorParallelLayer(TestCasePlus):
 
                 self.assertEqual(module.random_attr, 123)
                 self.assertFalse(hasattr(module, "num_experts"))
+
+    @require_kernels
+    def test_norm_grad_with_and_without_kernels(self):
+        """A per-head norm only sees its rank's heads, so the ranks' gradients of its weight are summed. Kernels
+        replace the norm's `forward` after the model is loaded: the sum must still happen."""
+        model_id = "trl-internal-testing/tiny-Qwen3ForCausalLM"
+        run_distributed(world_size=2)(_test_norm_grad_impl)(model_id)
 
 
 @is_tensor_parallel_test
