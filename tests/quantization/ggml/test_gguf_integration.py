@@ -14,6 +14,7 @@
 """Integration tests for loading GGUF checkpoints through `from_pretrained`."""
 
 import math
+import os
 import tempfile
 import unittest
 import unittest.mock
@@ -25,18 +26,22 @@ from transformers import (
     GenerationConfig,
     GgufConfig,
     Lfm2ForCausalLM,
+    Qwen2_5_VLConfig,
+    Qwen2_5_VLForConditionalGeneration,
+    Qwen2ForCausalLM,
     Qwen3_5ForCausalLM,
     Qwen3_5MoeForCausalLM,
 )
 from transformers.testing_utils import (
     require_gguf,
     require_kernels,
+    require_torch,
     require_torch_accelerator,
     require_torch_mps,
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available
+from transformers.utils import is_gguf_available, is_torch_available
 
 
 if is_torch_available():
@@ -201,6 +206,10 @@ class GgufModelIntegrationTesterMixin(GgufTokenizerTesterMixin):
                 state_dict[mapped] = tensor
         return state_dict
 
+    def reference_config(self):
+        """The reference model's config, as a dict to match the GGUF-loaded one's."""
+        return AutoConfig.from_pretrained(self.reference_repo).get_text_config().to_dict()
+
     def completion(self, model):
         """What the model greedily continues `self.prompt` with."""
         inputs = self.reference_tokenizer(self.prompt, return_tensors="pt").to(model.device)
@@ -244,7 +253,7 @@ class GgufModelIntegrationTesterMixin(GgufTokenizerTesterMixin):
         # `eos=<|im_end|>`, while the config still names `<|endoftext|>`. The file is the better source —
         # it is what makes a chat model stop where its tokenizer says — so this compares the rest.
         token_ids = {"bos_token_id", "eos_token_id", "pad_token_id", "sep_token_id", "unk_token_id"}
-        reference = AutoConfig.from_pretrained(self.reference_repo).get_text_config().to_dict()
+        reference = self.reference_config()
         actual = self.model.config.to_dict()
 
         differing = []
@@ -501,6 +510,114 @@ class Lfm2GgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
 
     prompt = "The capital of France is Paris. The capital of Germany is"
     expected_completion = " Berlin"
+
+
+@require_torch_accelerator
+@slow
+class Qwen25VLGgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
+    """The file holds the language model alone, which loads as a Qwen2, while the reference repo is the whole VLM."""
+
+    gguf_repo = "unsloth/Qwen2.5-VL-3B-Instruct-GGUF"
+    gguf_file = "Qwen2.5-VL-3B-Instruct-BF16.gguf"
+    quantized_gguf_file = "Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf"
+    reference_repo = "Qwen/Qwen2.5-VL-3B-Instruct"
+    model_class = Qwen2ForCausalLM
+
+    prompt = "The capital of France is Paris. The capital of Germany is"
+    expected_completion = " Berlin"
+
+    def reference_state_dict(self):
+        """The reference's language model, keyed as in a Qwen2."""
+        reference = Qwen2_5_VLForConditionalGeneration.from_pretrained(self.reference_repo, dtype=torch.bfloat16)
+        return {
+            name.replace("model.language_model.", "model."): tensor
+            for name, tensor in reference.state_dict().items()
+            if not name.startswith("model.visual.")
+        }
+
+    def reference_config(self):
+        """A Qwen2 has no use for the mrope section, nor for `max_window_layers` without a sliding window."""
+        config = super().reference_config()
+        del config["model_type"], config["max_window_layers"]
+        config["rope_parameters"] = {"rope_type": "default", "rope_theta": config["rope_parameters"]["rope_theta"]}
+        return config
+
+
+@require_gguf
+@require_torch
+@unittest.skipUnless(is_gguf_available("0.16.0"), "writing a `qwen2vl` file requires gguf >= 0.16.0")
+class Qwen2VLGgufTest(unittest.TestCase):
+    """`qwen2vl`, from a file written here the way llama.cpp writes the language model of Qwen2-VL and Qwen2.5-VL."""
+
+    @staticmethod
+    def write_language_model(model, path):
+        from gguf import MODEL_ARCH, GGUFWriter, get_tensor_name_map
+
+        text_config = model.config.text_config
+        writer = GGUFWriter(path, "qwen2vl")
+        writer.add_context_length(text_config.max_position_embeddings)
+        writer.add_embedding_length(text_config.hidden_size)
+        writer.add_feed_forward_length(text_config.intermediate_size)
+        writer.add_block_count(text_config.num_hidden_layers)
+        writer.add_head_count(text_config.num_attention_heads)
+        writer.add_head_count_kv(text_config.num_key_value_heads)
+        writer.add_layer_norm_rms_eps(text_config.rms_norm_eps)
+        writer.add_rope_freq_base(text_config.rope_parameters["rope_theta"])
+        # padded to four axes, as llama.cpp does
+        writer.add_rope_dimension_sections(text_config.rope_parameters["mrope_section"] + [0])
+        writer.add_token_list([f"<{i}>" for i in range(text_config.vocab_size)])
+
+        names = get_tensor_name_map(MODEL_ARCH.QWEN2VL, text_config.num_hidden_layers)
+        for name, tensor in model.state_dict().items():
+            # the vision encoder goes to the mmproj file, and a tied output projection is not written at all
+            if name.startswith("model.visual.") or (name == "lm_head.weight" and model.config.tie_word_embeddings):
+                continue
+            name = names.get_name(name.replace("model.language_model.", "model."), try_suffixes=(".weight", ".bias"))
+            writer.add_tensor(name, tensor.numpy())
+        writer.write_header_to_file()
+        writer.write_kv_data_to_file()
+        writer.write_tensors_to_file()
+        writer.close()
+
+    def test_loads_as_qwen2_with_the_same_logits(self):
+        """A text-only Qwen2 holding the language model, which gives the Qwen2.5-VL logits on text."""
+        for tie_word_embeddings in (False, True):
+            with self.subTest(tie_word_embeddings=tie_word_embeddings), tempfile.TemporaryDirectory() as directory:
+                torch.manual_seed(0)
+                config = Qwen2_5_VLConfig(
+                    text_config={
+                        "vocab_size": 99,
+                        "hidden_size": 32,
+                        "intermediate_size": 64,
+                        "num_hidden_layers": 2,
+                        "num_attention_heads": 2,
+                        "num_key_value_heads": 1,
+                        # the 8 rotary frequencies of a 16-dim head, split over the three axes
+                        "rope_parameters": {"rope_type": "default", "rope_theta": 1e6, "mrope_section": [2, 3, 3]},
+                        "bos_token_id": None,
+                        "eos_token_id": None,
+                    },
+                    vision_config={"depth": 1, "hidden_size": 16, "intermediate_size": 16, "num_heads": 2},
+                    tie_word_embeddings=tie_word_embeddings,
+                )
+                reference = Qwen2_5_VLForConditionalGeneration(config).eval()
+                self.write_language_model(reference, os.path.join(directory, "model.gguf"))
+
+                model, loading_info = AutoModelForCausalLM.from_pretrained(
+                    directory, gguf_file="model.gguf", device_map="cpu", output_loading_info=True
+                )
+
+                self.assertIsInstance(model, Qwen2ForCausalLM)
+                self.assertEqual(model.config.tie_word_embeddings, tie_word_embeddings)
+                self.assertEqual(model.config.rope_parameters, {"rope_type": "default", "rope_theta": 1e6})
+                for key in ("missing_keys", "unexpected_keys", "mismatched_keys"):
+                    self.assertEqual(loading_info[key], set(), key)
+
+                input_ids = torch.randint(0, 99, (2, 12))
+                with torch.no_grad():
+                    expected = reference(input_ids=input_ids).logits
+                    actual = model(input_ids=input_ids).logits
+                torch.testing.assert_close(actual, expected)
 
 
 @slow
