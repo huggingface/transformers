@@ -4350,7 +4350,10 @@ class GenerationMixin(ContinuousMixin):
             # In case we are restarting from non-empty Cache and the input_ids also contain the old ones, we need to slice
             next_sequence_length = 0 if next_sequence_length is None else next_sequence_length
             prefill_ids = input_ids[:, -next_sequence_length:]
-            input_chunks = torch.split(prefill_ids, chunk_size, dim=-1)
+            if use_inputs_embeds:
+                input_chunks = inputs_embeds[:, -next_sequence_length:, :].split(chunk_size, dim=1)
+            else:
+                input_chunks = prefill_ids.split(chunk_size, dim=-1)
             raw_mm_keys = [
                 key
                 for key in MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL
@@ -4395,8 +4398,15 @@ class GenerationMixin(ContinuousMixin):
                             )
 
             past_length = cache.get_seq_length()
-            for chunk_idx, input_chunk in enumerate(input_chunks):
-                current_length = past_length + input_chunk.shape[-1]
+            for chunk_idx, chunk in enumerate(input_chunks):
+                if use_inputs_embeds:
+                    model_kwargs["inputs_embeds"] = chunk
+                    start = chunk_idx * chunk_size
+                    input_chunk = prefill_ids[..., start : start + chunk_size]
+                    current_length = past_length + chunk.shape[1]
+                else:
+                    input_chunk = chunk
+                    current_length = past_length + chunk.shape[-1]
                 if attention_mask is not None:
                     model_kwargs["attention_mask"] = attention_mask[:, :current_length]
                 if position_ids is not None:
@@ -4418,6 +4428,8 @@ class GenerationMixin(ContinuousMixin):
                 past_length = current_length
 
             # Recreate the kwargs based on the full length
+            if use_inputs_embeds:
+                model_kwargs["inputs_embeds"] = inputs_embeds
             model_kwargs["attention_mask"] = attention_mask
             model_kwargs["position_ids"] = position_ids
             model_kwargs.update(token_types)

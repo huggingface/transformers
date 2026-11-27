@@ -587,6 +587,54 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(torch.equal(no_chunked_only_new_ids, chunked_only_new_ids))
         self.assertTrue(torch.equal(chunked_only_new_ids, chunked_full_ids[:, -chunked_only_new_ids.shape[-1] :]))
 
+    @parameterized.expand(
+        [
+            ("embeds_only", False, 0),
+            ("with_ids", True, 0),
+            ("cached_embeds_only", False, 3),
+            ("cached_with_ids", True, 3),
+        ]
+    )
+    def test_chunked_prefill_inputs_embeds(self, _, include_input_ids, prefix_length):
+        set_seed(0)
+        config = LlamaConfig(
+            hidden_size=32,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            num_hidden_layers=2,
+            intermediate_size=32,
+            vocab_size=50,
+        )
+        model = LlamaForCausalLM(config).to(torch_device).eval()
+        input_ids = torch.arange(10, 17, device=torch_device).unsqueeze(0)
+        with torch.no_grad():
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+            cache = model(input_ids[:, :prefix_length], use_cache=True).cache if prefix_length else None
+
+        kwargs = {
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": torch.ones_like(input_ids),
+            "max_new_tokens": 1,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+            "output_logits": True,
+        }
+        if include_input_ids:
+            kwargs["input_ids"] = input_ids
+        expected = model.generate(**kwargs, cache=copy.deepcopy(cache))
+
+        chunk_lengths = []
+
+        def record_chunk_length(_, args, kwargs):
+            chunk_lengths.append(kwargs["inputs_embeds"].shape[1])
+
+        with model.register_forward_pre_hook(record_chunk_length, with_kwargs=True):
+            actual = model.generate(**kwargs, cache=cache, prefill_chunk_size=2)
+
+        self.assertEqual(chunk_lengths, [2, 2, 2, 1] if not prefix_length else [2, 2])
+        self.assertEqual(actual.cache.get_seq_length(), input_ids.shape[1])
+        torch.testing.assert_close(actual.logits[0], expected.logits[0])
+
     @staticmethod
     def _get_tiny_llava():
         set_seed(3)
