@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
 from ...integrations import use_kernel_forward_from_hub
@@ -683,7 +685,6 @@ class BevformerTemporalSelfAttention(nn.Module):
         self.value_proj = nn.Linear(config.d_model, config.d_model)
         self.output_proj = nn.Linear(config.d_model, config.d_model)
         self.num_bev_queue = num_bev_queue
-        self._reset_parameters()
 
     def forward(
         self,
@@ -752,26 +753,6 @@ class BevformerTemporalSelfAttention(nn.Module):
         output = output.view(batch_size, self.num_bev_queue, num_queries, self.d_model).mean(dim=1)
         output = self.output_proj(output)
         return output, attention_weights
-
-    def _reset_parameters(self):
-        nn.init.constant_(self.sampling_offsets.weight, 0.0)
-        thetas = torch.arange(self.n_heads, dtype=torch.float32) * (2.0 * np.pi / self.n_heads)
-        grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
-        grid_init = (
-            (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
-            .view(self.n_heads, 1, 1, 1, 2)
-            .repeat(1, self.num_bev_queue, self.n_levels, self.n_points, 1)
-        )
-        for i in range(self.n_points):
-            grid_init[:, :, :, i, :] *= i + 1
-        with torch.no_grad():
-            self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-        nn.init.constant_(self.attention_weights.weight, 0.0)
-        nn.init.constant_(self.attention_weights.bias, 0.0)
-        nn.init.xavier_uniform_(self.value_proj.weight)
-        nn.init.constant_(self.value_proj.bias, 0.0)
-        nn.init.xavier_uniform_(self.output_proj.weight)
-        nn.init.constant_(self.output_proj.bias, 0.0)
 
 
 class BevformerSpatialCrossAttention(nn.Module):
@@ -1083,12 +1064,6 @@ class BevformerEncoder(nn.Module):
         # Camera & Level embeddings
         self.level_embeds = nn.Parameter(torch.empty(config.num_feature_levels, config.d_model))
         self.cams_embeds = nn.Parameter(torch.empty(config.num_cameras, config.d_model))
-        self.init_weights()
-
-    def init_weights(self):
-        """Initialize level & camera embeddings matching upstream BEVFormer."""
-        nn.init.normal_(self.level_embeds)
-        nn.init.normal_(self.cams_embeds)
 
     @staticmethod
     def get_reference_points(
@@ -1652,10 +1627,40 @@ class BevformerPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, BevformerEncoder):
-            if hasattr(module, "level_embeds") and module.level_embeds is not None:
-                torch.nn.init.normal_(module.level_embeds, mean=0.0, std=0.01)
-            if hasattr(module, "cams_embeds") and module.cams_embeds is not None:
-                torch.nn.init.normal_(module.cams_embeds, mean=0.0, std=0.01)
+            init.normal_(module.level_embeds)
+            init.normal_(module.cams_embeds)
+        elif isinstance(
+            module,
+            (
+                BevformerMultiscaleDeformableAttention,
+                BevformerSpatialDeformableAttention,
+                BevformerTemporalSelfAttention,
+            ),
+        ):
+            init.constant_(module.sampling_offsets.weight, 0.0)
+            default_dtype = torch.get_default_dtype()
+            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
+                2.0 * math.pi / module.n_heads
+            )
+            grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
+            grid_init = (
+                (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
+                .view(module.n_heads, 1, 1, 2)
+                .repeat(1, module.n_levels, module.n_points, 1)
+            )
+            for i in range(module.n_points):
+                grid_init[:, :, i, :] *= i + 1
+            if isinstance(module, BevformerTemporalSelfAttention):
+                grid_init = grid_init.unsqueeze(1).repeat(1, module.num_bev_queue, 1, 1, 1)
+
+            init.copy_(module.sampling_offsets.bias, grid_init.reshape(-1))
+            init.constant_(module.attention_weights.weight, 0.0)
+            init.constant_(module.attention_weights.bias, 0.0)
+            init.xavier_uniform_(module.value_proj.weight)
+            init.constant_(module.value_proj.bias, 0.0)
+            if not isinstance(module, BevformerSpatialDeformableAttention):
+                init.xavier_uniform_(module.output_proj.weight)
+                init.constant_(module.output_proj.bias, 0.0)
 
 
 class BevformerModel(BevformerPreTrainedModel):
