@@ -27,7 +27,6 @@ except ImportError:
 from .convert_slow_tokenizer import import_protobuf
 from .tokenization_python import PreTrainedTokenizer
 from .tokenization_utils_base import (
-    CONVERTIBLE_VOCAB_FILES,
     INIT_TOKENIZER_DOCSTRING,
     AddedToken,
     generate_merges,
@@ -58,7 +57,6 @@ class SentencePieceBackend(PreTrainedTokenizer):
 
     _backend_name = "sentencepiece"
     vocab_files_names = VOCAB_FILES_NAMES
-    vocab_file_candidates = CONVERTIBLE_VOCAB_FILES["sentencepiece"]
 
     def __init__(self, **kwargs):
         # Ensure optional dependency is available before loading
