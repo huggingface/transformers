@@ -285,10 +285,10 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of image placeholder tokens per image.
         """
-        images_kwargs = images_kwargs or {}
-        size = images_kwargs.get("size", self.size)
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        dynamic_hd = images_kwargs.get("dynamic_hd", self.dynamic_hd)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        size = images_kwargs["size"]
+        patch_size = images_kwargs["patch_size"]
+        dynamic_hd = images_kwargs["dynamic_hd"]
 
         image_size = size["height"]
         mask_size = image_size // patch_size
