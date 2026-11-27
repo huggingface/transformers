@@ -151,13 +151,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
             return True
         return False
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        # clean cache due to triton ops
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        elif torch.xpu.is_available():
-            torch.xpu.empty_cache()
-
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
@@ -165,6 +158,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
         **kwargs,
     ):
         from ..integrations import replace_with_mxfp4_linear
+
+        self.text_config = model.config.get_text_config()
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+        )
 
         # if we are using kernels, we can't use the quantized model, since the forward pass is different and needs special handling
         # only CPU and XPU kernels can work with pre-quantized models
@@ -183,13 +181,16 @@ class Mxfp4HfQuantizer(HfQuantizer):
             )
             self.quantization_config.dequantize = True
 
-        self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
-        )
-
         model = replace_with_mxfp4_linear(
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
+
+    def quantized_module(self, name, module):
+        from ..integrations.mxfp4 import Mxfp4GptOssExperts
+
+        if isinstance(module, Mxfp4GptOssExperts):
+            return module  # swapped with its MLP by `replace_with_mxfp4_linear`
+        return None
 
     def get_state_dict_and_metadata(self, model):
         from ..integrations.mxfp4 import Mxfp4GptOssExperts, Mxfp4ReverseDeserialize
@@ -217,10 +218,34 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
         return Mxfp4Quantize(self)
 
+    # `Mxfp4GptOssExperts`, as GPT-OSS saves them
     serialized_names = {
-        "gate_up_proj": ["gate_up_proj_blocks", "gate_up_proj_scales"],
-        "down_proj": ["down_proj_blocks", "down_proj_scales"],
+        "gate_up_proj_blocks": ["gate_up_proj_blocks", "gate_up_proj_scales"],
+        "down_proj_blocks": ["down_proj_blocks", "down_proj_scales"],
     }
+
+    def get_weight_conversions(self):
+        from ..core_model_loading import WeightRenaming
+
+        if not self.pre_quantized:  # GPT-OSS's experts, quantized on the fly into their serialized names
+            return [WeightRenaming(r"experts\.(gate_up_proj|down_proj)$", r"experts.\1_blocks")]
+        # GPT-OSS's: the others load through the model's converters
+        conversions = [
+            c for c in super().get_weight_conversions() if c._original_target_patterns[0].endswith("_blocks")
+        ]
+        if not self.quantization_config.dequantize:
+            return conversions
+        # Dequantized into the original experts' `gate_up_proj`
+        return [
+            c.copy(
+                c._original_source_patterns,
+                [c._original_target_patterns[0].removesuffix("_blocks")],
+                operations=c.operations,
+            )
+            for c in conversions
+        ]
+
+    checkpoint_renames = {}
 
     def get_load_operations(self):
         from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize
