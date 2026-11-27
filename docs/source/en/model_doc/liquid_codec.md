@@ -20,15 +20,10 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Liquid Codec is the speech codec of LFM3-Audio by [Liquid AI](https://liquid.ai/). It turns 24 kHz audio
-into 12 parallel codebooks of 2016 codes at 12.5 frames per second and back: a causal [LFM3](./lfm3) encoder over
-the spectrogram of [`LiquidCodecFeatureExtractor`], finite scalar quantization, and a causal LFM3 decoder followed by an
-inverse STFT. The decoder is causal, so audio can be synthesized frame by frame as the codes arrive.
+Liquid Codec is the speech codec of LFM3-Audio by [Liquid AI](https://liquid.ai/): 24 kHz audio to 12 codebooks of
+2016 codes at 12.5 Hz, and back. Causal [LFM3](./lfm3) encoder and decoder, finite scalar quantization, ISTFT head.
 
 ## Usage
-
-[`LiquidCodecFeatureExtractor`] computes the spectrogram the codec encodes, [`~LiquidCodecModel.encode`] turns it into
-audio codes, and [`~LiquidCodecModel.decode`] turns the codes back into audio.
 
 ```python
 from transformers import AutoFeatureExtractor, AutoModel
@@ -38,10 +33,12 @@ model_id, revision = "LiquidAI/Liquid-Codec", "refs/pr/1"
 model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id, revision=revision)
 
-url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
+url = "https://hf.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
 audio = load_audio(url, sampling_rate=feature_extractor.sampling_rate)
 inputs = feature_extractor(
-    audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
+    audio=audio,
+    sampling_rate=feature_extractor.sampling_rate,
+    return_tensors="pt",
 ).to(model.device, model.dtype)
 
 audio_codes = model.encode(**inputs).audio_codes
@@ -51,7 +48,7 @@ audio_values = model.decode(audio_codes).audio_values
 print("Audio values shape:", audio_values.shape)
 # Audio values shape: torch.Size([1, 142080])
 
-# Equivalently, you can do encoding and decoding in one step
+# or encode and decode in one step
 model_output = model(**inputs)
 audio_codes = model_output.audio_codes
 audio_values = model_output.audio_values
@@ -59,13 +56,7 @@ audio_values = model_output.audio_values
 
 ### Batch processing
 
-Clips of different lengths are padded to the longest one. Pass the masks along: `encode` returns the
-`audio_codes_mask` of the valid frames of each clip, and `decode` the `audio_values_mask` of its valid samples. The
-encoder and the decoder are causal, so each clip is coded exactly as it would be alone.
-
-> [!NOTE]
-> Only right padding is supported: the masks must hold the valid frames of each clip first, as
-> [`LiquidCodecFeatureExtractor`] returns them.
+Pass the masks along: `encode` returns `audio_codes_mask`, `decode` returns `audio_values_mask`. Right padding only.
 
 ```python
 from transformers import AutoFeatureExtractor, AutoModel
@@ -75,13 +66,15 @@ model_id, revision = "LiquidAI/Liquid-Codec", "refs/pr/1"
 model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id, revision=revision)
 
-samples = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/"
+samples = "https://hf.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/"
 audios = [
     load_audio(samples + name, sampling_rate=feature_extractor.sampling_rate)
     for name in ("librispeech_mr_quilter.wav", "dude_where_is_my_car.wav")
 ]
 inputs = feature_extractor(
-    audio=audios, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
+    audio=audios,
+    sampling_rate=feature_extractor.sampling_rate,
+    return_tensors="pt",
 ).to(model.device, model.dtype)
 
 encoder_output = model.encode(**inputs)
@@ -90,23 +83,24 @@ print("Audio codes shape:", encoder_output.audio_codes.shape)
 print("Frames per clip:", encoder_output.audio_codes_mask.sum(-1).tolist())
 # Frames per clip: [74, 814]
 
-decoder_output = model.decode(encoder_output.audio_codes, encoder_output.audio_codes_mask)
+decoder_output = model.decode(
+    encoder_output.audio_codes,
+    encoder_output.audio_codes_mask,
+)
 print("Samples per clip:", decoder_output.audio_values_mask.sum(-1).tolist())
 # Samples per clip: [142080, 1562880]
 
-# drop the padding of each clip
+# drop the padding
 audio_values = [
-    values[mask] for values, mask in zip(decoder_output.audio_values, decoder_output.audio_values_mask)
+    values[mask]
+    for values, mask in zip(decoder_output.audio_values, decoder_output.audio_values_mask)
 ]
 ```
 
 ### Streaming decoding
 
-The decoder is causal, so audio can be synthesized chunk by chunk as the codes arrive. With `use_streaming=True`,
-`decode` returns two caches to pass to the next chunk: `decoder_cache`, the state of the decoder, and
-`istft_cache`, the last samples of the chunk, which the next chunk still contributes to. At the end of the
-stream, `istft_cache.flush()` returns those last samples. Streaming decodes one stream per batch row, so
-`audio_codes_mask` is not supported.
+With `use_streaming=True`, `decode` returns `decoder_cache` and `istft_cache` to pass to the next chunk.
+`istft_cache.flush()` returns the last samples. `audio_codes_mask` is not supported.
 
 ```python
 import torch
@@ -117,14 +111,16 @@ model_id, revision = "LiquidAI/Liquid-Codec", "refs/pr/1"
 model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id, revision=revision)
 
-url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
+url = "https://hf.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
 audio = load_audio(url, sampling_rate=feature_extractor.sampling_rate)
 inputs = feature_extractor(
-    audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
+    audio=audio,
+    sampling_rate=feature_extractor.sampling_rate,
+    return_tensors="pt",
 ).to(model.device, model.dtype)
 audio_codes = model.encode(**inputs).audio_codes
 
-chunk_size = 4  # codec frames per chunk
+chunk_size = 4  # codec frames per chunk, arbitrary
 decoder_cache, istft_cache = None, None
 chunks = []
 for start in range(0, audio_codes.shape[-1], chunk_size):
@@ -135,18 +131,14 @@ for start in range(0, audio_codes.shape[-1], chunk_size):
         use_streaming=True,
     )
     decoder_cache, istft_cache = outputs.decoder_cache, outputs.istft_cache
-    chunks.append(outputs.audio_values)  # play or send this chunk
+    chunks.append(outputs.audio_values)
 
-# end of the stream
 chunks.append(istft_cache.flush().audio_values)
 
 audio_values = torch.cat(chunks, dim=-1)
 print("Audio values shape:", audio_values.shape)
 # Audio values shape: torch.Size([1, 142080])
 ```
-
-A batch can be streamed too: pass the `audio_codes_mask` of each chunk to `decode`, and every chunk, as well as
-`flush()`, returns its `audio_values_mask`.
 
 ## LiquidCodecConfig
 
