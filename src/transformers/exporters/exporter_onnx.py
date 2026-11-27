@@ -32,11 +32,8 @@ into an ONNX model via `torch.onnx.export`:
 4. **ONNX translations** (`_ONNX_TRANSLATION_TABLE`): custom onnxscript functions
    passed as `custom_translation_table` that override the default torchlib
    lowering for specific aten ops where it's buggy or missing.
-5. **ONNX IR fixes** (`_IR_FIXES` via `apply_onnx_ir_fixes`): post-export in-place
-   fixes on the `ONNXProgram` IR for ORT compatibility.
-
-A backend-model quantizer (e.g. [`~exporters.quantizers.OnnxRuntimeQuantizer`]) then runs on the fixed model, before
-it's saved.
+5. **ONNX IR fixes** (`_IR_FIXES` via `apply_onnx_ir_fixes`): in-place fixes for ORT compatibility on the final
+   model, after the ORT fusions and a backend-model quantizer (e.g. [`~exporters.quantizers.OnnxRuntimeQuantizer`]).
 """
 
 from __future__ import annotations
@@ -170,13 +167,11 @@ class OnnxExporter(DynamoExporter):
             )
 
         _name_graph_outputs(onnx_program.model.graph, outputs_names)
-        # The fusions read the graph as the exporter wrote it (the experts' `GatherND` lookups)
         if ort_fusions is not None:
             fuse_for_onnxruntime(onnx_program.model, ort_fusions)
-
-        apply_onnx_ir_fixes(onnx_program)
-
         onnx_model = quantize_converted_model(onnx_program.model, sample_inputs, config)
+
+        apply_onnx_ir_fixes(onnx_model)
         record_output_structure(metadata, traced_outputs[-1])
         return onnx_model, metadata
 
@@ -997,9 +992,9 @@ _IR_FIXES = [
 ]
 
 
-def apply_onnx_ir_fixes(onnx_program: ONNXProgram) -> None:
+def apply_onnx_ir_fixes(model: onnx_ir.Model) -> None:
     """Apply each `(graph_like) -> None` IR fix to the main graph and every function."""
-    graphs = [onnx_program.model.graph, *onnx_program.model.functions.values()]
+    graphs = [model.graph, *model.functions.values()]
     for fix in _IR_FIXES:
         for graph in graphs:
             fix(graph)
