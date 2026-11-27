@@ -72,18 +72,24 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
 
     def test_training_loss_on_packed_questions(self):
         model = JevForDecision(copy.deepcopy(self.config)).train()
-        choice_target = torch.tensor([1.0, 0.0])
-        score_target = torch.tensor([0.25, 0.75, 0.0])
+        questions = [
+            Question.from_request(
+                "intent", {"type": "choice", "criteria": {"refund": None, "tracking": None}}, self.decision_config
+            ),
+            Question.from_request(
+                "urgency", {"type": "score", "criteria": ["Low", "Medium", "High"]}, self.decision_config
+            ),
+        ]
+        prompt = {"input_ids": torch.tensor([[1, 2, 3, 4, 5, 6]]), "marks": torch.tensor([3, 6])}
+        targets = [[0.0, 1.0, 0.0], [0.0, 0.25, 0.75, 0.0]]
+        batch = model.prepare_decision_inputs([(prompt, questions)], targets=targets)
         outputs = model(
-            input_ids=torch.tensor([[1, 2, 3, 4, 5, 6]]),
-            marks=torch.tensor([[3, 6]]),
-            num_options=torch.tensor([[2, 3]]),
-            question_type_ids=torch.tensor([[Question.questions_types.index(kind) for kind in ("choice", "score")]]),
-            labels=torch.cat((choice_target, score_target))[None],
+            **batch,
             loss_weights=torch.tensor([[0.5, 2.0]]),
             num_items_in_batch=3,
         )
 
+        choice_target, score_target = (torch.tensor(target[1:]) for target in targets)
         choice_logits, score_logits = outputs.logits.detach().split((2, 3))
         choice_kl = torch.nn.functional.cross_entropy(choice_logits, choice_target)
         score_log_probs = score_logits.log_softmax(-1)
