@@ -578,6 +578,9 @@ class Lfm3VlProcessor(Qwen3VLProcessor):
     def model_input_names(self):
         raise AttributeError("Lfm3Vl doesn't need to override it")
 
+    def get_text_with_replacements(self):
+        raise AttributeError("Lfm3Vl expects the chat template's outer vision wrapper, so it uses the default")
+
 
 __all__ = [
     "Lfm3VlConfig",
