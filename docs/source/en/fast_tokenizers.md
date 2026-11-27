@@ -255,7 +255,7 @@ A checkpoint resolves to a generic `TokenizersBackend` for one of three reasons.
 
 The affected model types and checkpoints grow as configs are corrected on the Hub. For the current set, see the `MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS` and `MODEL_IDS_TO_TOKENIZERS_BACKEND` definitions in [tokenization_auto.py](https://github.com/huggingface/transformers/blob/main/src/transformers/models/auto/tokenization_auto.py).
 
-The fallback is automatic and doesn't change how you call [`~AutoTokenizer.from_pretrained`]. The resulting tokenizer encodes and decodes exactly as `tokenizer.json` specifies. To load a different backend, pass `backend="sentencepiece"` (or `"tokenizers"`, `"mistral_common"`). If the checkpoint can't be loaded with it, the default tokenizer is loaded with a warning.
+The fallback is automatic and doesn't change how you call [`~AutoTokenizer.from_pretrained`]. The resulting tokenizer encodes and decodes exactly as `tokenizer.json` specifies.
 
 Check which backend a tokenizer is using with the `backend` property.
 
@@ -265,6 +265,32 @@ from transformers import AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
 tokenizer.backend
 'tokenizers'
+```
+
+To load a specific backend, call its class directly, for example [`SentencePieceBackend`] or [`TokenizersBackend`].
+
+```py
+from transformers import SentencePieceBackend
+
+tokenizer = SentencePieceBackend.from_pretrained("google-t5/t5-small")
+```
+
+### Convert from a vocabulary file
+
+Some checkpoints ship a `tokenizer.json` that doesn't match their original vocabulary file. Pass `convert_from` to build the tokenizer from that file instead of `tokenizer.json`.
+
+| `convert_from`    | Files looked for, in order                                                                          |
+| ----------------- | --------------------------------------------------------------------------------------------------- |
+| `"sentencepiece"` | `tokenizer.model`, `spiece.model`, `sentencepiece.bpe.model`, `sentencepiece.model`, `spm.model`, `spm_char.model` |
+| `"tiktoken"`      | `tiktoken.model`, `tokenizer.model`                                                                 |
+| `"tekken"`        | `tekken.json`                                                                                       |
+
+Set `add_eos_token=True` if the checkpoint appends an end-of-sequence token, because that setting only lives in `tokenizer.json`.
+
+```py
+from transformers import TokenizersBackend
+
+tokenizer = TokenizersBackend.from_pretrained("google/umt5-small", convert_from="sentencepiece", add_eos_token=True)
 ```
 
 ## Inspect the tokenizer architecture

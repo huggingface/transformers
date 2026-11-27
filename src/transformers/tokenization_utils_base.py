@@ -165,6 +165,20 @@ TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 FULL_TOKENIZER_FILE = "tokenizer.json"
 _re_tokenizer_file = re.compile(r"tokenizer\.(.*)\.json")
 
+# Vocabulary files a tokenizer can be converted from, in order of priority, for each format
+CONVERTIBLE_VOCAB_FILES = {
+    "sentencepiece": (
+        "tokenizer.model",
+        "spiece.model",
+        "sentencepiece.bpe.model",
+        "sentencepiece.model",
+        "spm.model",
+        "spm_char.model",
+    ),
+    "tiktoken": ("tiktoken.model", "tokenizer.model"),
+    "tekken": ("tekken.json",),
+}
+
 
 class TruncationStrategy(ExplicitEnum):
     """
@@ -1003,6 +1017,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
     ]
 
     _backend_name: str | None = None  # set by each backend class, reported by `tokenizer.backend`
+    # Other names of `vocab_file` to look for when a checkpoint doesn't have `vocab_files_names["vocab_file"]`
+    vocab_file_candidates: tuple[str, ...] = ()
 
     def __init__(self, **kwargs):
         self.init_inputs = ()
@@ -1573,6 +1589,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             subfolder (`str`, *optional*):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co (e.g. for
                 facebook/rag-token-base), specify it here.
+            convert_from (`str`, *optional*):
+                Build the tokenizer from the checkpoint's vocabulary file instead of its `tokenizer.json`. One of
+                `"sentencepiece"` (e.g. `tokenizer.model` or `spiece.model`), `"tiktoken"` (`tiktoken.model` or
+                `tokenizer.model`) or `"tekken"` (`tekken.json`).
             inputs (additional positional arguments, *optional*):
                 Will be passed along to the Tokenizer `__init__` method.
             trust_remote_code (`bool`, *optional*, defaults to `False`):
@@ -1618,6 +1638,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         from_auto_class = kwargs.pop("_from_auto", False)
         kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
         gguf_file = kwargs.get("gguf_file")
+        convert_from = kwargs.pop("convert_from", None)
+        if convert_from is not None and convert_from not in CONVERTIBLE_VOCAB_FILES:
+            raise ValueError(
+                f"`convert_from` must be one of {', '.join(map(repr, CONVERTIBLE_VOCAB_FILES))}, got {convert_from!r}."
+            )
 
         user_agent = {"file_type": "tokenizer", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -1727,17 +1752,63 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         elif pretrained_model_name_or_path and os.path.isdir(pretrained_model_name_or_path):
             remote_files = os.listdir(pretrained_model_name_or_path)
 
-        if "tokenizer_file" in vocab_files and vocab_files["tokenizer_file"] not in "\n".join(remote_files):
-            # mistral tokenizer names are different, but we can still convert them if
-            # mistral common is not there
-            other_pattern = r"tekken\.json|tokenizer\.model\.*|tiktoken\.model" + "|".join(
-                getattr(cls, "VOCAB_FILES_NAMES", {}).keys()
+        # Files of the checkpoint, relative to `subfolder`
+        if is_local:
+            local_dir = os.path.join(pretrained_model_name_or_path, subfolder or "")
+            listed_files = set(os.listdir(local_dir)) if os.path.isdir(local_dir) else set()
+        else:
+            prefix = f"{subfolder}/" if subfolder else ""
+            listed_files = {f.removeprefix(prefix) for f in remote_files if f.startswith(prefix)}
+
+        def has_file(filename):
+            if listed_files:
+                return filename in listed_files
+            # The repo couldn't be listed (e.g. offline), look for the file in the cache instead
+            return (
+                cached_file(
+                    pretrained_model_name_or_path,
+                    filename,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    token=token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
+                )
+                is not None
             )
-            if match := re.search(other_pattern, "\n".join(remote_files)):
-                if "spm_file" in vocab_files:
-                    vocab_files["spm_file"] = match.group()
-                else:
-                    vocab_files["vocab_file"] = match.group()
+
+        if single_file_id is None and not gguf_file:
+            if convert_from is not None:
+                # Build the tokenizer from the vocabulary file instead of `tokenizer.json`
+                vocab_files.pop("tokenizer_file", None)
+                if kwargs.get("vocab_file") is None:
+                    candidates = CONVERTIBLE_VOCAB_FILES[convert_from]
+                    vocab_file = next((filename for filename in candidates if has_file(filename)), None)
+                    if vocab_file is None:
+                        raise OSError(
+                            f"{pretrained_model_name_or_path} has no {convert_from} vocabulary file to convert from "
+                            f"(one of {', '.join(candidates)})."
+                        )
+                    vocab_files["vocab_file"] = vocab_file
+            elif "tokenizer_file" in vocab_files and vocab_files["tokenizer_file"] not in listed_files:
+                # Without `tokenizer.json`, convert from the mistral or tiktoken vocabulary if there is one
+                candidates = CONVERTIBLE_VOCAB_FILES["tekken"] + CONVERTIBLE_VOCAB_FILES["tiktoken"]
+                if vocab_file := next((filename for filename in candidates if filename in listed_files), None):
+                    vocab_files["spm_file" if "spm_file" in vocab_files else "vocab_file"] = vocab_file
+
+            # Checkpoints name the same vocabulary file differently (e.g. `tokenizer.model` or `spiece.model`)
+            if (
+                cls.vocab_file_candidates
+                and kwargs.get("vocab_file") is None
+                and "vocab_file" in vocab_files
+                and not has_file(vocab_files["vocab_file"])
+            ):
+                if vocab_file := next((f for f in cls.vocab_file_candidates if has_file(f)), None):
+                    vocab_files["vocab_file"] = vocab_file
 
         resolved_vocab_files = {}
         for file_id, file_path in vocab_files.items():

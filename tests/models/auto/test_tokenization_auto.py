@@ -22,6 +22,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 import transformers
@@ -42,7 +43,6 @@ from transformers import (
     RobertaTokenizer,
     Siglip2Tokenizer,
     TokenizersBackend,
-    is_sentencepiece_available,
     is_tokenizers_available,
     logging,
 )
@@ -66,7 +66,6 @@ from transformers.testing_utils import (
     RequestCounter,
     require_mistral_common,
     require_sentencepiece,
-    require_tiktoken,
     require_tokenizers,
     slow,
 )
@@ -81,12 +80,10 @@ from test_module.custom_tokenization import CustomTokenizer  # noqa E402
 
 if is_tokenizers_available():
     from test_module.custom_tokenization_fast import CustomTokenizerFast
+    from tokenizers import Tokenizer
 
 if is_mistral_common_available():
     from transformers.tokenization_mistral_common import MistralCommonBackend
-
-if is_sentencepiece_available():
-    import sentencepiece as spm
 
 
 class AutoTokenizerTest(unittest.TestCase):
@@ -191,56 +188,28 @@ class AutoTokenizerTest(unittest.TestCase):
 
     @require_tokenizers
     @require_sentencepiece
-    @require_tiktoken
-    @require_mistral_common
     @parameterized.expand(
         [
-            ("hf-internal-testing/llama-tokenizer", "tokenizers", "TokenizersBackend"),
-            ("hf-internal-testing/llama-tokenizer", "sentencepiece", "SentencePieceBackend"),
-            ("google-t5/t5-small", "tokenizers", "TokenizersBackend"),
-            ("google-t5/t5-small", "sentencepiece", "SentencePieceBackend"),
-            ("hf-internal-testing/llama3-tokenizer-tiktoken", "tokenizers", "TokenizersBackend"),
-            ("mistralai/Ministral-8B-Instruct-2410", "tokenizers", "TokenizersBackend"),
-            ("mistralai/Ministral-8B-Instruct-2410", "mistral_common", "MistralCommonBackend"),
-            ("mistralai/Mistral-7B-Instruct-v0.3", "mistral_common", "MistralCommonBackend"),
+            ("sentencepiece", "google/umt5-small", "spiece.model"),
+            ("tiktoken", "NousResearch/Llama-3.2-1B", "original/tokenizer.model"),
+            ("tekken", "mistralai/Ministral-8B-Instruct-2410", "tekken.json"),
         ]
     )
-    def test_backend_kwarg(self, repo_id, backend, backend_class_name):
-        tokenizer = AutoTokenizer.from_pretrained(repo_id, backend=backend)
-        self.assertIsInstance(tokenizer, getattr(transformers, backend_class_name))
-        self.assertEqual(tokenizer.backend, backend)
-
-        text = "This is a test 😊 I was born in 92000, and this is falsé."
-        if backend == "sentencepiece":
-            # The SentencePiece backend tokenizes exactly like the SentencePiece model
-            sp_model = spm.SentencePieceProcessor(model_file=tokenizer.vocab_file)
-            self.assertEqual(tokenizer.encode(text, add_special_tokens=False), sp_model.encode(text))
-        elif backend == "mistral_common":
-            # The mistral-common backend tokenizes like the tokenizers backend
-            tokenizers_tokenizer = AutoTokenizer.from_pretrained(repo_id, backend="tokenizers")
-            self.assertEqual(tokenizer.encode(text), tokenizers_tokenizer.encode(text))
-
-    @require_tokenizers
-    @require_tiktoken
-    @require_mistral_common
-    @parameterized.expand(
-        [
-            ("google-bert/bert-base-cased", "sentencepiece"),
-            ("hf-internal-testing/llama3-tokenizer-tiktoken", "sentencepiece"),
-            ("google-t5/t5-small", "mistral_common"),
-            ("google-bert/bert-base-cased", "pil"),
-        ]
-    )
-    def test_backend_kwarg_falls_back_to_default_tokenizer(self, repo_id, backend):
-        default_tokenizer = AutoTokenizer.from_pretrained(repo_id)
-        tokenizer = AutoTokenizer.from_pretrained(repo_id, backend=backend)
-        self.assertIs(type(tokenizer), type(default_tokenizer))
-        self.assertEqual(tokenizer.backend, "tokenizers")
-
-        # The requested backend is not saved
+    def test_convert_from(self, convert_from, repo_id, vocab_file):
+        text = "Hello world,\tthis is  a test.\n"
         with tempfile.TemporaryDirectory() as tmp_dir:
-            tokenizer.save_pretrained(tmp_dir)
-            self.assertNotIn("backend", get_tokenizer_config(tmp_dir))
+            # The checkpoint has both a vocabulary file and a `tokenizer.json`
+            vocab_file = shutil.copy(hf_hub_download(repo_id, vocab_file), tmp_dir)
+            tokenizer_file = shutil.copy(hf_hub_download(repo_id, "tokenizer.json"), tmp_dir)
+
+            # Without `convert_from`, the tokenizer is loaded from `tokenizer.json`
+            default_tokenizer = TokenizersBackend.from_pretrained(tmp_dir)
+            self.assertEqual(default_tokenizer.encode(text), Tokenizer.from_file(tokenizer_file).encode(text).ids)
+
+            # With `convert_from`, it's converted from the vocabulary file and `tokenizer.json` is ignored
+            tokenizer = TokenizersBackend.from_pretrained(tmp_dir, convert_from=convert_from)
+            self.assertEqual(tokenizer.vocab_file, vocab_file)
+            self.assertNotEqual(tokenizer.encode(text), default_tokenizer.encode(text))
 
     @require_tokenizers
     def test_tokenizer_identifier_with_correct_config(self):
