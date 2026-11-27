@@ -746,13 +746,17 @@ class ContinuousBatchingManager:
         """Switch the attn implementation to one that is CB compatible. If auto_switch_to_flash is True, and the attn
         implementation is SDPA or eager, also switch to flash if it is supported and available."""
         # The self._original_attn_impl is set only if the attn implementation is changed (makes this fn idempotent)
-        original_attn_impl = model.config._attn_implementation
+        # Only the text model generates: in a multimodal model, flash may be unsupported for the whole model (e.g. image
+        # tokens attending each other both ways) but supported by its language model
+        text_config = model.config.get_text_config()
+        text_model = model if text_config is model.config else model.get_decoder()
+        original_attn_impl = text_config._attn_implementation
         target_implem = original_attn_impl
 
         # Check if flash attention is supported and available
         is_flash = is_flash_attention_requested(requested_attention_implementation=target_implem)
         is_paged = target_implem == "paged|eager"
-        if not is_flash and not is_paged and model._supports_flash_attn and auto_switch_to_flash:
+        if not is_flash and not is_paged and text_model._supports_flash_attn and auto_switch_to_flash:
             # Try to use FA3, then FA2, then give up. Both regular package or kernels is fine.
             if is_flash_attn_3_available(kernels_fallback_ok=True):
                 version = 3
@@ -785,7 +789,7 @@ class ContinuousBatchingManager:
 
         # If the target implementation is different from the original, set it and save the original
         if target_implem != original_attn_impl:
-            model.set_attn_implementation(target_implem)
+            text_model.set_attn_implementation(target_implem)
             self._original_attn_impl = original_attn_impl
 
     def warmup(self) -> None:
