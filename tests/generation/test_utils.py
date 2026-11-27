@@ -3596,6 +3596,32 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(on_cpu.device.type, "cpu")
         self.assertTrue(torch.equal(on_cpu, on_device.cpu()))
 
+    @parameterized.expand([("prompt_lookup", False), ("assistant_model", False), ("assistant_model", True)])
+    @require_torch_accelerator
+    def test_assisted_generate_with_inputs_on_cpu(self, candidate_source, do_sample):
+        """
+        Same as `test_generate_with_inputs_on_cpu`, for assisted decoding: the candidates must stay on the inputs'
+        device so `prepare_inputs_for_generation` moves the attention mask and position ids along with them.
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        encoded = tokenizer("Hello world, hello world, hello", return_tensors="pt")
+        generation_kwargs = {"max_new_tokens": 5, "do_sample": do_sample}
+        if candidate_source == "prompt_lookup":
+            generation_kwargs["prompt_lookup_num_tokens"] = 2
+        else:
+            generation_kwargs["assistant_model"] = model
+
+        set_seed(0)
+        on_device = model.generate(**encoded.to(torch_device), **generation_kwargs)
+        set_seed(0)
+        on_cpu = model.generate(**encoded.to("cpu"), **generation_kwargs)
+
+        self.assertEqual(on_cpu.device.type, "cpu")
+        self.assertEqual(on_cpu.shape, on_device.shape)
+        if not do_sample:
+            self.assertTrue(torch.equal(on_cpu, on_device.cpu()))
+
     @require_torch_accelerator
     def test_generate_with_inputs_on_cpu_moves_tensors_in_dict_inputs(self):
         """
