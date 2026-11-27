@@ -20,6 +20,8 @@ from transformers import (
     ZeroShotClassificationPipeline,
     pipeline,
 )
+from transformers.pipelines.base import validate_hypothesis_template
+from transformers.pipelines.zero_shot_classification import ZeroShotClassificationArgumentHandler
 from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
@@ -286,3 +288,60 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
                 "scores": [0.817, 0.713, 0.018, 0.018],
             },
         )
+
+
+class HypothesisTemplateValidationTests(unittest.TestCase):
+    """`hypothesis_template` is formatted with the label, so it must not carry a format spec.
+
+    See https://github.com/huggingface/transformers/issues/35874. The same helper guards the audio and image
+    zero-shot pipelines, which format their candidate labels the same way.
+    """
+
+    def test_accepts_a_bare_placeholder(self):
+        for template in (
+            "This example is {}.",
+            "This is a sound of {}.",
+            "This is a photo of {}.",
+            "{}",
+            "{0}",
+            "A {{literal}} brace and {}.",
+        ):
+            with self.subTest(template=template):
+                validate_hypothesis_template(template)
+
+    def test_rejects_a_format_spec(self):
+        # A width is what makes this worth guarding: "{:>9999999999}".format(label) builds a 10GB string
+        # before the model is ever called, and hypothesis_template is caller-supplied.
+        for template in ("{:>9999999999}", "{:>10}", "{:x>50}"):
+            with self.subTest(template=template):
+                with self.assertRaises(ValueError):
+                    validate_hypothesis_template(template)
+
+    def test_rejects_conversions_and_lookups(self):
+        for template in ("{!r}", "{0!r}", "{0.__class__}", "{0[0]}", "{label}"):
+            with self.subTest(template=template):
+                with self.assertRaises(ValueError):
+                    validate_hypothesis_template(template)
+
+    def test_rejects_a_malformed_template(self):
+        with self.assertRaises(ValueError):
+            validate_hypothesis_template("{")
+
+    def test_argument_handler_rejects_a_format_spec(self):
+        handler = ZeroShotClassificationArgumentHandler()
+        with self.assertRaises(ValueError):
+            handler("Who are you voting for in 2020?", ["politics"], "{:>9999999999}")
+
+    def test_argument_handler_still_builds_pairs(self):
+        handler = ZeroShotClassificationArgumentHandler()
+        sequence_pairs, sequences = handler(
+            "Who are you voting for in 2020?", ["politics", "science"], "This example is {}."
+        )
+        self.assertEqual(
+            sequence_pairs,
+            [
+                ["Who are you voting for in 2020?", "This example is politics."],
+                ["Who are you voting for in 2020?", "This example is science."],
+            ],
+        )
+        self.assertEqual(sequences, ["Who are you voting for in 2020?"])

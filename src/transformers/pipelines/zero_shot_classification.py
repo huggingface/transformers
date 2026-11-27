@@ -4,7 +4,7 @@ import numpy as np
 
 from ..tokenization_python import TruncationStrategy
 from ..utils import add_end_docstrings, logging
-from .base import ArgumentHandler, ChunkPipeline, build_pipeline_init_args
+from .base import ArgumentHandler, ChunkPipeline, build_pipeline_init_args, validate_hypothesis_template
 
 
 logger = logging.get_logger(__name__)
@@ -24,6 +24,7 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
     def __call__(self, sequences, labels, hypothesis_template):
         if len(labels) == 0 or len(sequences) == 0:
             raise ValueError("You must include at least one label and at least one sequence.")
+        validate_hypothesis_template(hypothesis_template)
         if hypothesis_template.format(labels[0]) == hypothesis_template:
             raise ValueError(
                 f'The provided hypothesis_template "{hypothesis_template}" was not able to be formatted with the target labels. '
@@ -178,7 +179,8 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
                 template is `"This example is {}."` With the candidate label `"sports"`, this would be fed into the
                 model like `"<cls> sequence to classify <sep> This example is sports . <sep>"`. The default template
                 works well in many cases, but it may be worthwhile to experiment with different templates depending on
-                the task setting.
+                the task setting. Only a bare `{}` placeholder is accepted: a format spec such as `"{:>10}"` is
+                rejected, since it would size the hypothesis rather than insert the label.
             multi_label (`bool`, *optional*, defaults to `False`):
                 Whether or not multiple candidate labels can be true. If `False`, the scores are normalized such that
                 the sum of the label likelihoods for each sequence is 1. If `True`, the labels are considered
