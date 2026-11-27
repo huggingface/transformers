@@ -1690,6 +1690,29 @@ class Cache:
 
         return keys, values
 
+    def get_compression_tail(self, layer_idx: int, name: str = "indexer") -> torch.Tensor | None:
+        """Returns the compression tail for the given layer and stream, or None if not allocated."""
+        layer = self.layers[layer_idx]
+        if not isinstance(layer, (DynamicCompressedLayer, StaticCompressedLayer)):
+            raise ValueError(f"Cannot get compression tail for non-compressed layer {layer_idx}.")
+        return layer.compression_tails.get(name)
+
+    def update_compressed_states(
+        self,
+        states: torch.Tensor,
+        layer_idx: int,
+        attention_mask: torch.Tensor,
+        query_length: int,
+        group_size: int = 1,
+        name: str = "indexer",
+        tail: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Updates the compressed states and optional tail for the given layer and stream."""
+        layer = self.layers[layer_idx]
+        if not isinstance(layer, (DynamicCompressedLayer, StaticCompressedLayer)):
+            raise ValueError(f"Cannot update compressed states for non-compressed layer {layer_idx}.")
+        return layer.update_compressed_states(states, attention_mask, query_length, group_size, name, tail)
+
     def get_conv_state(self, layer_idx: int, state_idx: int = 0) -> torch.Tensor | None:
         """Returns the conv state `state_idx` for the layer `layer_idx`, or None if the layer is not initialized.
         Raises if the layer is not a linear attention layer."""

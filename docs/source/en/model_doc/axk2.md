@@ -30,7 +30,7 @@ with DeepSeek Sparse Attention (DSA) — plus three SK Telecom modifications:
 - **Sparse Gated Attention (SGA)**: every layer runs a lightweight *lightning indexer* that scores each
   query against the keys and keeps only the top-`index_topk` positions, which become an additive sparse
   mask folded into the MLA attention. The indexer maintains its own key cache alongside the main KV
-  cache (`DynamicIndexedLayer` / `StaticIndexedLayer`).
+  cache (`DynamicCompressedLayer` / `StaticCompressedLayer`).
 - **Gated RMSNorm**: `input_layernorm` (every layer) and `post_attention_layernorm` (MoE layers) are
   wrapped with a low-rank input-dependent sigmoid gate, `RMSNorm(x) * sigmoid(gate_mlp(RMSNorm(x)))`.
 - **Attention output gate**: the attention output is multiplied by an input-dependent sigmoid gate
