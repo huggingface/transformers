@@ -181,7 +181,6 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
 class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     config: GraniteMoeHybridConfig
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
-    _is_stateful = True
 
     def _init_weights(self, module):
         super()._init_weights(module)

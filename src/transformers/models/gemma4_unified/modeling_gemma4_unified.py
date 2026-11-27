@@ -1134,8 +1134,8 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
         # Merge text and audio
         audio_outputs = None
         if input_features is not None and input_features_mask is not None:
-            audio_output = self.get_audio_embeddings(input_features, input_features_mask, return_dict=True)
-            audio_features = audio_output.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+            audio_outputs = self.get_audio_embeddings(input_features, input_features_mask, return_dict=True)
+            audio_features = audio_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
 
             n_audio_tokens = audio_mask.sum()
             audio_mask = audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
@@ -1428,6 +1428,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Multim
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            audio_outputs=outputs.audio_outputs,
             shared_kv_states=outputs.shared_kv_states,
         )
 

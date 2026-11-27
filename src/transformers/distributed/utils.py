@@ -204,12 +204,31 @@ class TransformersDeviceMesh:
     def __init__(self, dense_mesh: DeviceMesh, expert_mesh: DeviceMesh):
         self._dense_mesh = dense_mesh
         self._expert_mesh = expert_mesh
+        self._unit_meshes: dict[int, DeviceMesh] = {}
 
     def get_mesh(self, dims: str | tuple[str, ...]) -> DeviceMesh:
         """Select expert axes for `ep`/`efsdp`, otherwise dense axes; DeviceMesh handles slicing."""
         dims = (dims,) if isinstance(dims, str) else dims
         mesh = self._expert_mesh if "ep" in dims or "efsdp" in dims else self._dense_mesh
         return mesh[dims]
+
+    def get_unit_mesh(self, unit_number: int) -> DeviceMesh:
+        """
+        A 2-D unit-view of the `tp` mesh. We reshape it as (units, replicas), so every rank owns whole units
+        (e.g. attention heads). Built once per number of groups: projections that agree on it share the mesh
+        and its process groups.
+        """
+        from torch.distributed.device_mesh import DeviceMesh
+
+        tp_mesh = self.get_mesh("tp")
+        groups = math.gcd(unit_number, tp_mesh.size())
+        if groups not in self._unit_meshes:
+            self._unit_meshes[groups] = DeviceMesh(
+                device_type=tp_mesh.device_type,
+                mesh=tp_mesh.mesh.reshape(groups, tp_mesh.size() // groups),
+                mesh_dim_names=["tp", "unit_replicate"],
+            )
+        return self._unit_meshes[groups]
 
 
 # Retained for the legacy transformers.integrations.tensor_parallel API.

@@ -89,6 +89,8 @@ NAMES_TO_NEVER_REPLACE = (
     "mamba2_split_conv1d_scan_combined",
     "mamba2_selective_state_update",
     "mamba2_chunk_scan",
+    "mamba_scan_forward",
+    "mamba2_scan_forward",
 )
 
 

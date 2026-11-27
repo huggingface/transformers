@@ -67,6 +67,10 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_subprocessor_defaults_1_images(self):
         pass
 
+    @unittest.skip("Kosmos2_5Processor requires images and can't be called with text only")
+    def test_processor_single_text_same_as_batched(self):
+        pass
+
     def test_image_procesor_load_save_reload(self):
         # make sure load from Hub repo. -> save -> reload locally work
         image_processor = Kosmos2_5ImageProcessor.from_pretrained(self.tmpdirname)

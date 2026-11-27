@@ -463,6 +463,8 @@ class FuyuProcessor(ProcessorMixin):
         if image_sizes is not None:
             size = kwargs.get("size") or self.image_processor.size
             padded_height, padded_width = size["height"], size["width"]
+            patch_size = self.image_processor.patch_size
+            patch_height, patch_width = patch_size.height, patch_size.width
 
             num_image_tokens = []
             num_image_patches = [1] * len(image_sizes)
@@ -474,18 +476,11 @@ class FuyuProcessor(ProcessorMixin):
                 image_unpadded_h = min(int(image_size[0] * optimal_scale_factor), image_size[0])
                 image_unpadded_w = min(int(image_size[1] * optimal_scale_factor), image_size[1])
 
-                # We can use torch here because Fuyu processor has hard dependency on torch. NOTE: Fuyu can't do multi-image
-                # thus the below (1, 1, 1) is hardcoded. Same as when calling the processor
-                model_image_input = self.image_processor.preprocess_with_tokenizer_info(
-                    image_input=torch.zeros(1, 1, 3, padded_height, padded_width),
-                    image_present=torch.ones(1, 1, 1),
-                    image_unpadded_h=torch.tensor([[image_unpadded_h]]),
-                    image_unpadded_w=torch.tensor([[image_unpadded_w]]),
-                    image_placeholder_id=0,  # dummy ids, we can be sure `id=0` is never out-of-range
-                    image_newline_id=0,
-                    variable_sized=True,
+                new_h = min(padded_height, math.ceil(image_unpadded_h / patch_height) * patch_height)
+                new_w = min(padded_width, math.ceil(image_unpadded_w / patch_width) * patch_width)
+                num_image_tokens.append(
+                    self.image_processor.get_num_patches(image_height=new_h, image_width=new_w, patch_size=patch_size)
                 )
-                num_image_tokens.append(model_image_input["image_input_ids"][0][0].shape[-1])
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
         return MultiModalData(**vision_data)
 

@@ -221,6 +221,7 @@ class LayoutXLMTokenizer(TokenizersBackend):
         pad_token_label=-100,
         only_label_first_subword=True,
         add_prefix_space=True,
+        _spm_precompiled_charsmap: str | None = None,
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
@@ -240,12 +241,13 @@ class LayoutXLMTokenizer(TokenizersBackend):
                 self._vocab.append((str(mask_token), 0.0))
 
         self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.Strip(left=False, right=True),
-                normalizers.Replace(Regex(" {2,}"), "▁"),
-            ]
-        )
+        self._spm_precompiled_charsmap = _spm_precompiled_charsmap
+        list_normalizers = []
+        if _spm_precompiled_charsmap is not None:
+            list_normalizers.append(normalizers.Precompiled(_spm_precompiled_charsmap))
+        list_normalizers.append(normalizers.Strip(left=False, right=True))
+        list_normalizers.append(normalizers.Replace(Regex(" {2,}"), "▁"))
+        self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
 
         prepend_scheme = _get_prepend_scheme(add_prefix_space, self)
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
@@ -273,6 +275,7 @@ class LayoutXLMTokenizer(TokenizersBackend):
             pad_token_box=pad_token_box,
             pad_token_label=pad_token_label,
             only_label_first_subword=only_label_first_subword,
+            _spm_precompiled_charsmap=_spm_precompiled_charsmap,
             **kwargs,
         )
 

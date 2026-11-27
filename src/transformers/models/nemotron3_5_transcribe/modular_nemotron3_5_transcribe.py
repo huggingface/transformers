@@ -318,7 +318,6 @@ class Nemotron3_5TranscribeAudioModelOutput(BaseModelOutputWithPoolingAndSplitSi
 
 class Nemotron3_5TranscribePreTrainedModel(AudioFlamingo3PreTrainedModel):
     _no_split_modules = None
-    _is_stateful = True
     _keys_to_ignore_on_load_unexpected = [
         r"^llm\.mtp\.",
         r"^perception\.preprocessor\.",
