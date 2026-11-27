@@ -641,6 +641,11 @@ def decompose_multimodal(
         returned = getattr(outputs, "image_hidden_states", None) if name == "vision_embeddings_model" else None
         flatten = not isinstance(returned, torch.Tensor) or returned.dim() == 2
         components[name] = Component(ModalityEncoder(owner, getter, spec.grid_key, flatten), feature_inputs)
+    if "language_model" in components:
+        language_model = components["language_model"]
+        components["language_model"] = replace(
+            language_model, inputs=_without_encoder_inputs(language_model.inputs, components)
+        )
     return components
 
 
@@ -763,10 +768,22 @@ def _capture_generation(
     return components, {name: list(calls) for name, calls in live.items() if calls}, cross_writers
 
 
+def _without_encoder_inputs(call_inputs: dict, components: dict) -> dict:
+    """`call_inputs` without the modalities' data-dependent inputs (`image_cu_seqlens`, ...), which `generate` and
+    the caller add to every call but only an encoder reads: a text graph traced on them would take them too."""
+    encoder_inputs = {
+        f"{spec.modality}_{name}"
+        for spec in _MODALITY_SPECS
+        if spec.component in components
+        for name in components[spec.component].inputs
+    }
+    return {key: value for key, value in call_inputs.items() if key not in encoder_inputs}
+
+
 def embedded_inputs(call_inputs: dict, components: dict) -> dict:
     """A text graph's captured kwargs, rewritten to take embeddings instead of token ids and modality inputs,
     so the runtime can scatter features in."""
-    call_inputs = copy.copy(call_inputs)
+    call_inputs = _without_encoder_inputs(call_inputs, components)
     for spec in _MODALITY_SPECS:
         for input_key in (*spec.input_keys, spec.grid_key):
             call_inputs.pop(input_key, None)

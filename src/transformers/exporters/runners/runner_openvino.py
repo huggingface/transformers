@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import functools
 import os
 from typing import Any
 
@@ -116,7 +117,36 @@ class OpenVINOModelRunner(ModelRunner):
             recorded = {name: value for name, value in dict(options).items() if name in supported}
         return cls(core.compile_model(program, device, {**recorded, **defaults, **(config or {})}), metadata)
 
+    @property
+    def stateful(self) -> bool:
+        # The stateful transformation folds the cache in and adds the `beam_idx` input that reorders it.
+        return any("beam_idx" in port.get_names() for port in self.compiled_model.inputs)
+
+    def reset_state(self) -> None:
+        """Start the state a stateful model keeps (its cache) over, for a new sequence."""
+        self.request.reset_state()
+
+    def load_state(self, other: OpenVINOModelRunner) -> None:
+        """Take over the state `other` holds, under the same variable names: the cache a prompt graph left, for the
+        decode graph to continue from."""
+        states = {state.name: state for state in self.request.query_state()}
+        for state in other.request.query_state():
+            states[state.name].state = state.state
+
     def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         feed = openvino_feed(self.compiled_model, kwargs)
         outputs = self.request.infer(feed, share_inputs=share_inputs, share_outputs=share_outputs)
-        return self.unflatten([openvino_output_tensor(outputs[port], port) for port in self.compiled_model.outputs])
+        return self.unflatten([openvino_output_tensor(outputs[port], port) for port in self._returned_ports])
+
+    @functools.cached_property
+    def _returned_ports(self) -> list:
+        """The output ports the model's outputs are rebuilt from: a stateful graph also returns the counters its state
+        leaves out (`_freeze_batchless_states`), of a field it doesn't return whole (the cache)."""
+        fields = self.out_spec.context
+        if not self.stateful or not isinstance(fields, list):
+            return list(self.compiled_model.outputs)
+        return [
+            port
+            for port in self.compiled_model.outputs
+            if any(name.removeprefix("output.").split(".")[0] in fields for name in port.get_names())
+        ]

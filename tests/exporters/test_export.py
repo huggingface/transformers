@@ -221,6 +221,10 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # query axis symbolic. Backend-agnostic (it's in the shared decomposition). Static generate, which
     # captures a single-token decode with no merge, still runs.
     "generate.dynamic": {
+        "T5Gemma2ForConditionalGeneration": (
+            "The runtime builds the cross-attention cache from the decoder config, whose sliding layers it copies; "
+            "the model's own `_prepare_cache_for_generation` makes it full, so the traced cache doesn't match."
+        ),
         # The multi-token decode graph also serves the prefill step, and these can't take that call.
         "NemotronH_Omni_Reasoning_V3": (
             "The Mamba2 chunked scan fixes the query axis to one chunk (`Guard failed: 8 >= inputs_embeds.size()[1] "
@@ -487,6 +491,10 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "EfficientNetForImageClassification": "Same `timeout` as `EfficientNetModel`.",
     },
     "executorch.generate": {},
+    "executorch.beams": {
+        "Qwen3_5ForCausalLM": "ExecuTorch's runtime refuses the beam-expanded batch's inputs (`set_inputs`: 0x10).",
+        "OlmoHybridForCausalLM": "Same beam-expanded inputs as `Qwen3_5ForCausalLM`.",
+    },
     "executorch.dynamic": {
         "Mask2FormerModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
         "Mask2FormerForUniversalSegmentation": "Same `timeout` failure as `Mask2FormerModel`.",
@@ -700,13 +708,21 @@ DYNAMIC_EXPORT_PARAMS = parameterized.expand(
 # (a symbolic query axis — continuation-from-past, or a plain prefill on an empty cache) rather than the
 # single-token step, since a single-token axis can't stay symbolic.
 _EXPORT_SHAPE_MODES = [False, True]  # dynamic=False (static shapes) / dynamic=True
-_EXPORT_GENERATION_CONFIGS = [None, GenerationConfig(cache_implementation="static")]
+_EXPORT_GENERATION_CONFIGS = [None, GenerationConfig(cache_implementation="static"), GenerationConfig(num_beams=2)]
+
+
+def _generation_config_name(generation_config) -> str:
+    if generation_config is None:
+        return ""
+    if generation_config.cache_implementation is not None:
+        return f"_{generation_config.cache_implementation}_cache"
+    return f"_{generation_config.num_beams}_beams"
+
 
 GENERATE_EXPORT_PARAMS = parameterized.expand(
     list(itertools.product(_EXPORT_SHAPE_MODES, _EXPORT_GENERATION_CONFIGS)),
     name_func=lambda f, _, p: (
-        f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}"
-        + (f"_{p.args[1].cache_implementation}_cache" if p.args[1] is not None else "")
+        f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}" + _generation_config_name(p.args[1])
     ),
 )
 
@@ -736,9 +752,7 @@ EXECUTORCH_GENERATE_EXPORT_PARAMS = parameterized.expand(
         )
     ],
     name_func=lambda f, _, p: (
-        f"{f.__name__}_{'dynamic' if p.args[1] else 'static'}"
-        + (f"_{p.args[2].cache_implementation}_cache" if p.args[2] is not None else "")
-        + f"_{p.args[0]}"
+        f"{f.__name__}_{'dynamic' if p.args[1] else 'static'}" + _generation_config_name(p.args[2]) + f"_{p.args[0]}"
     ),
 )
 
@@ -942,12 +956,15 @@ class ExportTesterMixin:
             if "for expert" in source_code and "use_experts_implementation" not in source_code:
                 self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
 
-    def _export_scopes(self, generate=False, dynamic=False, backend=None, static_cache=False) -> list[str]:
+    def _export_scopes(
+        self, generate=False, dynamic=False, backend=None, static_cache=False, beams=False
+    ) -> list[str]:
         """The ``EXPORT_SKIPS`` scopes matching the current test, broad to specific.
 
         ``"all"`` always applies, ``"generate"`` only for generate tests, ``"dynamic"`` / ``"static"``
         for that shape variant on every backend, ``"generate.dynamic"`` for the multi-token decode path,
-        ``"static-cache"`` for a variant whose ``generation_config`` requests a static cache,
+        ``"static-cache"`` for a variant whose ``generation_config`` requests a static cache, ``"beams"`` for one
+        searching several beams,
         ``"<backend>"`` for that backend, and ``"<backend>.<variant>"`` (including
         ``"<backend>.static-cache"``) for the more-specific intersections. ``backend`` can be several, broad to
         specific (ExecuTorch and its delegate).
@@ -960,6 +977,8 @@ class ExportTesterMixin:
         scopes.append("dynamic" if dynamic else "static")
         if static_cache:
             scopes.append("static-cache")
+        if beams:
+            scopes.append("beams")
         for backend in [backend] if isinstance(backend, str) else backend or []:
             scopes.append(backend)
             if generate:
@@ -967,6 +986,8 @@ class ExportTesterMixin:
             scopes.append(f"{backend}.dynamic" if dynamic else f"{backend}.static")
             if static_cache:
                 scopes.append(f"{backend}.static-cache")
+            if beams:
+                scopes.append(f"{backend}.beams")
         return scopes
 
     def _should_skip(self, model_class, generate=False, dynamic=False, backend=None, generation_config=None):
@@ -980,7 +1001,10 @@ class ExportTesterMixin:
         static_cache = _needs_static_cache(generation_config)
         if static_cache and not model_class._can_compile_fullgraph:
             return True
-        scopes = self._export_scopes(generate=generate, dynamic=dynamic, backend=backend, static_cache=static_cache)
+        beams = generation_config is not None and (generation_config.num_beams or 1) > 1
+        scopes = self._export_scopes(
+            generate=generate, dynamic=dynamic, backend=backend, static_cache=static_cache, beams=beams
+        )
         return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
     def _should_skip_exactness(self, model_class, generate=False, dynamic=False, backend=None, generation_config=None):
@@ -1386,7 +1410,13 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     """
 
     def _prepare_export_generate_model_and_inputs(
-        self, model_class, dynamic=False, device=torch_device, generation_config=None, multi_token_decode=False
+        self,
+        model_class,
+        dynamic=False,
+        device=torch_device,
+        generation_config=None,
+        multi_token_decode=False,
+        return_model=False,
     ):
         """Decompose a generative model into exportable components, captured from `generate` on the model tester's
         prompt, and again on a new one (`_new_inputs_model_tester`).
@@ -1401,6 +1431,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         Returns:
             `{name: (model, inputs, new_inputs)}`: as `_prepare_export_model_and_inputs`, plus `"prefill"` with
             `multi_token_decode`: the decode graph's call on the prefill step, not a graph of its own (see `_calls_served`).
+            With ``return_model``, also the model and the traced prompt's generate inputs: `(components, model, inputs)`.
         """
         config, inputs_dict = self.prepare_config_and_inputs_for_generate()
         # A prefill allocates an empty static cache in its graph, at the capacity it was traced with: one capacity for
@@ -1426,7 +1457,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             prompt_lengths = [p["input_ids"].shape[-1] for p in (inputs_dict, new_inputs_dict) if "input_ids" in p]
             generation_config.max_cache_len = max(prompt_lengths, default=0) + 8
 
-        captures = []
+        captures, prompts = [], []
         for prompt in (inputs_dict, new_inputs_dict):
             prompt = _clean_inputs_for_export(prompt, config)
             # `generate` drops a mask of all ones and infers one from pad tokens when given none, so a prompt drawn with
@@ -1436,6 +1467,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             elif "attention_mask" in inspect.signature(model.forward).parameters and "input_ids" in prompt:
                 prompt["attention_mask"] = torch.ones_like(prompt["input_ids"])
             prompt = cast_leaf_tensors(prompt, dtype=module_dtype(model), device=module_device(model))
+            prompts.append(prompt)
             components = decompose_for_generation(
                 model, prompt, generation_config=generation_config, multi_token_decode=multi_token_decode
             )
@@ -1451,7 +1483,72 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             }
             captures.append(components)
         components, new_components = captures
-        return {name: (component, inputs, new_components[name][1]) for name, (component, inputs) in components.items()}
+        components = {
+            name: (component, inputs, new_components[name][1]) for name, (component, inputs) in components.items()
+        }
+        return (components, model, prompts[0]) if return_model else components
+
+    def _check_generate(self, exporter, config, model, inputs, generation_config, dynamic, check_tokens):
+        """The whole generation export, run through its runtime, generates the model's tokens through
+        `generate`: ids step by step while both runs share a prefix (scores too in half precision), stopping at the
+        first step where they part, which only a near-tie in eager's scores excuses.
+
+        A static export bakes its cache's length, so it runs only on a static cache; a multi-modal one also bakes
+        the prompt's length into its embedding graphs, so it doesn't run.
+        """
+        static_cache = generation_config is not None and generation_config.cache_implementation == "static"
+        if not (dynamic or static_cache) or (not dynamic and is_multimodal(model)):
+            return
+        # Image features turned into VQ token ids (GLM-Image), which the runtime refuses to assemble
+        if getattr(model.config, "vq_config", None) is not None:
+            return
+        # Tensors only: the eager side's own `generate` may take more (whisper's `force_unique_generate_call`).
+        inputs = {key: value for key, value in inputs.items() if isinstance(value, torch.Tensor) and key != "labels"}
+        generation_config = copy.deepcopy(generation_config) if generation_config is not None else GenerationConfig()
+        # `eos_token_id=-1` keeps both sides running every step, so the ids compare directly.
+        generation_config.update(
+            max_new_tokens=4,
+            min_new_tokens=4,
+            do_sample=False,
+            eos_token_id=-1,
+            output_scores=True,
+            return_dict_in_generate=True,
+        )
+        if static_cache:
+            text = next(inputs[key] for key in ("input_ids", "inputs_embeds", "input_features") if key in inputs)
+            generation_config.max_cache_len = text.shape[1] + 8
+        exported = exporter.export_for_generation(
+            model, copy.deepcopy(inputs), config, generation_config=generation_config, multi_token_decode=dynamic
+        )
+        # A single-token decode graph (a static export's) leaves the prompt to a graph of its own.
+        self.assertEqual("prefill_model" in exported.components, not dynamic)
+        with torch.no_grad():
+            expected = model.generate(**copy.deepcopy(inputs), generation_config=generation_config)
+        # The fresh export: saving and loading it back is `test_runtime.py`'s.
+        generated = exported.generate(**copy.deepcopy(inputs), generation_config=generation_config)
+        self.assertEqual(
+            len(generated.scores), len(expected.scores), "the export generated a different number of steps"
+        )
+        if not check_tokens:
+            return
+        half = module_dtype(model) in (torch.float16, torch.bfloat16)
+        start = expected.sequences.shape[1] - len(expected.scores)
+        for step, (expected_scores, generated_scores) in enumerate(zip(expected.scores, generated.scores)):
+            if half:
+                torch.testing.assert_close(generated_scores.cpu(), expected_scores.cpu(), atol=1.6e-2, rtol=1.6e-2)
+            expected_ids = expected.sequences[:, start + step].tolist()
+            generated_ids = generated.sequences[:, start + step].tolist()
+            if generated_ids == expected_ids:
+                continue
+            # The runs now carry different prefixes; only eager being on a coin flip excuses the split.
+            top2 = expected_scores.float().topk(2, dim=-1).values
+            self.assertLess(
+                (top2[:, 0] - top2[:, 1]).min().item(),
+                3.2e-2 if half else 5e-3,
+                f"the export picked {generated_ids} where eager picked {expected_ids} at step {step}, and eager was "
+                "confident about it",
+            )
+            break
 
     @staticmethod
     def _calls_served(components: dict, name: str) -> dict:
@@ -1485,11 +1582,12 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             check_exactness = not self._should_skip_exactness(
                 model_class, generate=True, dynamic=dynamic, backend="dynamo", generation_config=generation_config
             )
-            components = self._prepare_export_generate_model_and_inputs(
+            components, full_model, full_inputs = self._prepare_export_generate_model_and_inputs(
                 model_class,
                 dynamic=dynamic,
                 generation_config=generation_config,
                 multi_token_decode=dynamic,
+                return_model=True,
                 device=torch_device,
             )
             for name, (model, inputs, new_inputs) in components.items():
@@ -1516,6 +1614,11 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                         check_device=check_device,
                         served=self._calls_served(components, name),
                     )
+
+            with self.subTest(f"{model_class.__name__}/generate"):
+                self._check_generate(
+                    exporter, config, full_model, full_inputs, generation_config, dynamic, check_exactness
+                )
 
     # ──────────────────────── ONNX tests ─────────────────────────
 
@@ -1547,11 +1650,12 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             check_exactness = not self._should_skip_exactness(
                 model_class, generate=True, dynamic=dynamic, backend="onnx", generation_config=generation_config
             )
-            components = self._prepare_export_generate_model_and_inputs(
+            components, full_model, full_inputs = self._prepare_export_generate_model_and_inputs(
                 model_class,
                 dynamic=dynamic,
                 generation_config=generation_config,
                 multi_token_decode=dynamic,
+                return_model=True,
                 device=torch_device,
             )
             for name, (model, inputs, new_inputs) in components.items():
@@ -1570,6 +1674,11 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                         served=self._calls_served(components, name),
                         check_device=False,
                     )
+
+            with self.subTest(f"{model_class.__name__}/generate"):
+                self._check_generate(
+                    exporter, config, full_model, full_inputs, generation_config, dynamic, check_exactness
+                )
 
     # ──────────────────── OpenVINO tests ─────────────────────────
 
@@ -1595,11 +1704,12 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             check_exactness = not self._should_skip_exactness(
                 model_class, generate=True, dynamic=dynamic, backend="openvino", generation_config=generation_config
             )
-            components = self._prepare_export_generate_model_and_inputs(
+            components, full_model, full_inputs = self._prepare_export_generate_model_and_inputs(
                 model_class,
                 dynamic=dynamic,
                 generation_config=generation_config,
                 multi_token_decode=dynamic,
+                return_model=True,
                 device=torch_device,
             )
             for name, (model, inputs, new_inputs) in components.items():
@@ -1619,6 +1729,11 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                         check_device=False,
                         run=_run_openvino_program,
                     )
+
+            with self.subTest(f"{model_class.__name__}/generate"):
+                self._check_generate(
+                    exporter, config, full_model, full_inputs, generation_config, dynamic, check_exactness
+                )
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
@@ -1653,18 +1768,20 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 backend=("executorch", backend),
                 generation_config=generation_config,
             )
-            components = self._prepare_export_generate_model_and_inputs(
+            components, full_model, full_inputs = self._prepare_export_generate_model_and_inputs(
                 model_class,
                 dynamic=dynamic,
                 generation_config=generation_config,
                 multi_token_decode=dynamic,
+                return_model=True,
                 device="cpu",
             )
+            runs = True
             for name, (model, inputs, new_inputs) in components.items():
                 if name == "prefill":
                     continue
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    self._check_export(
+                    exported = self._check_export(
                         exporter,
                         config,
                         model,
@@ -1676,4 +1793,11 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                         served=self._calls_served(components, name),
                         check_device=False,
                         run=_run_executorch_program,
+                    )
+                    # An ExecuTorch runtime limitation, not an export defect: nothing to generate with
+                    runs = runs and exported is not None
+            if runs:
+                with self.subTest(f"{model_class.__name__}/generate"):
+                    self._check_generate(
+                        exporter, config, full_model, full_inputs, generation_config, dynamic, check_exactness
                     )

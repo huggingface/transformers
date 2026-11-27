@@ -188,12 +188,12 @@ class OpenVINOExporter(DynamoExporter):
 
 
 def _without_folded_outputs(outputs: Any, ov_model: openvino.Model) -> Any:
-    """`outputs` without the fields a stateful graph no longer returns: those whose every tensor was folded into
-    state (the cache)."""
+    """`outputs` without the fields a stateful graph no longer returns whole: those with a tensor folded into state
+    (the cache, whose batch-less counters stay outputs, which the generation loop advances itself)."""
     kept = {port.get_any_name().removeprefix("output.") for port in ov_model.outputs}
     if not isinstance(outputs, Mapping) or set(get_leaf_tensors(outputs)) <= kept:
         return outputs
-    fields = {key: value for key, value in outputs.items() if set(get_leaf_tensors({key: value})) & kept}
+    fields = {key: value for key, value in outputs.items() if set(get_leaf_tensors({key: value})) <= kept}
     return fields if type(outputs) is dict else type(outputs)(**fields)
 
 
