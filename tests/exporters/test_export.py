@@ -1006,8 +1006,8 @@ class ExportTesterMixin:
                 return
             if type(outputs) is not dict:
                 self.assertIs(type(outputs), type(eager_outputs), msg)
-                outputs = get_leaf_tensors(outputs)
-            actual, eager = outputs, get_leaf_tensors(eager_outputs)
+            # A component may return a dict of nested outputs (Qwen3-VL's deepstack features): flattened like eager's
+            actual, eager = get_leaf_tensors(outputs), get_leaf_tensors(eager_outputs)
             self.assertTrue(actual, f"The export returns no outputs {msg}.")
             self.assertEqual(set(actual), set(eager), msg)
             if check_exactness:
