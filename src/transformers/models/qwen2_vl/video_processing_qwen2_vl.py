@@ -402,10 +402,11 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         Returns:
             `int`: Number of video patches per video.
         """
-        size = videos_kwargs.get("size", None) or self.size
-        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
-        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+        videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
+        size = videos_kwargs["size"]
+        patch_size = videos_kwargs["patch_size"]
+        merge_size = videos_kwargs["merge_size"]
+        temporal_patch_size = videos_kwargs["temporal_patch_size"]
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(

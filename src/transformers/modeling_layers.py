@@ -632,6 +632,8 @@ class MtpModel(PreTrainedModel):
             final_mtp_patterns.append(pattern)
         if len(final_mtp_patterns) == 0:
             raise ValueError(f"{main_model.__class__.__name__} does not seem to register any known MTP layer patterns")
+        # Base model weights that the mtp layers also load
+        final_mtp_patterns.extend(getattr(main_model, "_keys_shared_with_mtp", []))
         return re.compile("|".join(rf"({pattern})" for pattern in final_mtp_patterns))
 
     def get_weight_conversions(self, main_model: PreTrainedModel) -> list[WeightTransform]:

@@ -1,7 +1,7 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test run-mic record-mic codex claude clean-ai
+.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test run-mic record-mic
 
 
 # Checker lists. The two CI jobs (CircleCI runs `make check-code-quality` and
@@ -85,19 +85,6 @@ record-mic:
 	@pr="$(PR)"; test -n "$$pr" || pr=$$(gh pr view --repo huggingface/transformers --json number --jq .number) || exit 1; \
 	gh workflow run record-mic.yml --repo huggingface/transformers -f pr="$$pr" -f models="$(MODEL)" && \
 	echo "record-mic requested for #$$pr ($(MODEL)); the result is posted on the PR"
-
-codex:
-	mkdir -p .agents
-	rm -rf .agents/skills
-	ln -snf ../.ai/skills .agents/skills
-
-claude:
-	mkdir -p .claude
-	rm -rf .claude/skills
-	ln -snf ../.ai/skills .claude/skills
-
-clean-ai:
-	rm -rf .agents/skills .claude/skills
 
 
 # Release stuff

@@ -196,12 +196,10 @@ class InklingImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of image patches per image.
         """
-        images_kwargs = images_kwargs or {}
-        size = images_kwargs.get("size", self.size)
-        rescale_image_frac = images_kwargs.get("rescale_image_frac", self.rescale_image_frac)
-        rescale_image_max_upscaled_long_edge = images_kwargs.get(
-            "rescale_image_max_upscaled_long_edge", self.rescale_image_max_upscaled_long_edge
-        )
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        size = images_kwargs["size"]
+        rescale_image_frac = images_kwargs["rescale_image_frac"]
+        rescale_image_max_upscaled_long_edge = images_kwargs["rescale_image_max_upscaled_long_edge"]
         height, width = get_rescaled_size(height, width, rescale_image_frac, rescale_image_max_upscaled_long_edge)
         num_rows, num_cols = get_patch_grid(height, width, size["height"])
         return num_rows * num_cols
