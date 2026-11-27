@@ -37,7 +37,6 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     logging,
-    no_inherit_decorator,
     torch_int,
 )
 from ...utils.deprecation import deprecate_kwarg
@@ -461,10 +460,10 @@ class Step3p7ImageProcessor(TorchvisionBackend):
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
         """Return the number of local patches for an image of the given size."""
-        images_kwargs = images_kwargs or {}
-        size = images_kwargs.get("size", self.size)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        size = images_kwargs["size"]
         image_size = size["height"]
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        patch_size = images_kwargs["patch_size"]
         num_patches_x, num_patches_y = self._plan_patches(width, height, image_size, patch_size)[3:5]
         return num_patches_x * num_patches_y
 
@@ -834,10 +833,7 @@ class Step3p7MLP(DeepseekV4MLP):
         return self.down_proj(gate * up)
 
 
-@no_inherit_decorator
 class Step3p7Experts(DeepseekV4Experts):
-    _fp8_experts_clamp_after_activation = True
-
     def __init__(self, config, swiglu_limit=None):
         super().__init__(config)
         self.intermediate_dim = config.moe_intermediate_size

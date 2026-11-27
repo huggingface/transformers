@@ -311,13 +311,13 @@ class HYV4VLVideoProcessor(BaseVideoProcessor):
             `int`: Number of video patches per video, or `tuple[int, int, int, int]` with the number of patches and
             the `(grid_t, grid_h, grid_w)` grids.
         """
-        videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
-        do_resize = videos_kwargs.get("do_resize") if videos_kwargs.get("do_resize") is not None else self.do_resize
-        size = videos_kwargs.get("size", None) or self.size
-        max_image_size = videos_kwargs.get("max_image_size", None) or self.max_image_size
-        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
-        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+        videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
+        do_resize = videos_kwargs["do_resize"]
+        size = videos_kwargs["size"]
+        max_image_size = videos_kwargs["max_image_size"]
+        patch_size = videos_kwargs["patch_size"]
+        merge_size = videos_kwargs["merge_size"]
+        temporal_patch_size = videos_kwargs["temporal_patch_size"]
 
         if do_resize:
             height, width = self.smart_resize(
@@ -325,7 +325,7 @@ class HYV4VLVideoProcessor(BaseVideoProcessor):
                 frame_width=width,
                 num_frames=num_frames,
                 factor=patch_size * merge_size,
-                max_pixels=size["longest_edge"],
+                max_pixels=size.longest_edge,
                 max_image_size=max_image_size["longest_edge"],
             )
 

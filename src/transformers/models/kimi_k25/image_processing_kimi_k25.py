@@ -232,11 +232,11 @@ class Kimi_K25ImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of image patches per image.
         """
-        images_kwargs = images_kwargs or {}
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
         max_size_per_side = images_kwargs["size"]["max_height"] if "size" in images_kwargs else self.size["max_height"]
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        merge_size = images_kwargs.get("merge_size", self.merge_size)
-        max_patches = images_kwargs.get("max_patches", self.max_patches)
+        patch_size = images_kwargs["patch_size"]
+        merge_size = images_kwargs["merge_size"]
+        max_patches = images_kwargs["max_patches"]
 
         (resized_height, resized_width), (pad_height, pad_width) = navit_resize(
             height,

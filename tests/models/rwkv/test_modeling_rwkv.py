@@ -376,6 +376,10 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else:
             super().test_generate_from_inputs_embeds("greedy", 1)
 
+    @unittest.skip("Does not use a correct cache class")
+    def test_cached_decode_matches_cacheless(self):
+        pass
+
 
 @slow
 class RWKVIntegrationTests(unittest.TestCase):

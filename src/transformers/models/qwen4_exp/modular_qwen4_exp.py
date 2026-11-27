@@ -399,6 +399,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
         cache: Cache | None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         batch_size, seq_length, _ = hidden_states.shape
         hidden_shape = (batch_size, seq_length, -1, self.index_head_dim)
@@ -419,6 +420,19 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         if cache is not None:
             raw_keys = cache.update_indexer(raw_keys, self.layer_idx)
 
+        return self._select_tokens(hidden_states, q, raw_keys, full_cos, full_sin, attention_mask, **kwargs)
+
+    def _select_tokens(
+        self,
+        hidden_states: torch.Tensor,
+        q: torch.Tensor,
+        raw_keys: torch.Tensor,
+        full_cos: torch.Tensor,
+        full_sin: torch.Tensor,
+        attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        batch_size, seq_length, _ = hidden_states.shape
         # Note that the mask is never None here as we only allow eager and sdpa, and we do not allow sdpa's mask skip
         # It's always 4D with either bool (sdpa) or float (eager) and already gives us the valid indices
         visible_token_indices = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
@@ -494,7 +508,7 @@ class Qwen4ExpTextAttention(Qwen3_5Attention):
         cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        selected_token_mask = self.indexer(hidden_states, position_embeddings, attention_mask, cache)
+        selected_token_mask = self.indexer(hidden_states, position_embeddings, attention_mask, cache, **kwargs)
         # Combine the boolean selection mask with the causal mask (bool for sdpa, float for eager).
         if attention_mask.dtype == torch.bool:
             attention_mask = attention_mask & selected_token_mask
@@ -646,7 +660,9 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         padded_vocab_size = math.ceil(self.total_vocab_size / ngram_vocab_divisor) * ngram_vocab_divisor
         self.ngram_embedding = nn.Embedding(padded_vocab_size, head_dim_per_ngram)
 
-    def _shift_right_ignore_eos(self, token_ids: torch.Tensor, shift: int) -> torch.Tensor:
+    def _shift_right_ignore_eos(
+        self, token_ids: torch.Tensor, shift: int, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         if shift == 0:
             return token_ids
         batch_size, seq_len = token_ids.shape
@@ -663,7 +679,9 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         return torch.where(valid, shifted, token_ids.new_full((), self.eos_token_id))
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def forward(self, input_ids: torch.Tensor, cache: Cache | None) -> torch.Tensor:
+    def forward(
+        self, input_ids: torch.Tensor, cache: Cache | None, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         input_ids = input_ids.long()
         # This is a trick to store the previous N=self.context_len `input_ids` - indeed the manipulations are identical to storing
         # a past conv_state, so we can use an additional conv_states inside the Cache for it
@@ -689,7 +707,9 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
 
         # Get full token history
         token_history = torch.cat([previous_context, input_ids], dim=-1)
-        shifted_tokens = [self._shift_right_ignore_eos(token_history, shift) for shift in range(self.ngram_size)]
+        shifted_tokens = [
+            self._shift_right_ignore_eos(token_history, shift, **kwargs) for shift in range(self.ngram_size)
+        ]
 
         blocks = []
         for ngram in range(2, self.ngram_size + 1):
@@ -748,7 +768,9 @@ class Qwen4ExpTextPLELayer(nn.Module):
             bias=False,
         )
 
-    def _short_conv(self, hidden_states: torch.Tensor, cache: Cache | None) -> torch.Tensor:
+    def _short_conv(
+        self, hidden_states: torch.Tensor, cache: Cache | None, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
@@ -774,8 +796,9 @@ class Qwen4ExpTextPLELayer(nn.Module):
         input_ids: torch.Tensor,
         cache: Cache | None,
         conv_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        embeddings = self.ple_embedding(input_ids, cache)
+        embeddings = self.ple_embedding(input_ids, cache, **kwargs)
         key_normed = self.norm_key(self.key_proj(embeddings)).unflatten(-1, (self.hc_count, self.hidden_size))
         value = self.value_proj(embeddings)
         query_normed = self.norm_query(hidden_states).unflatten(-1, (self.hc_count, self.hidden_size))
@@ -787,7 +810,7 @@ class Qwen4ExpTextPLELayer(nn.Module):
         if conv_mask is not None:
             gated_value = apply_mask_to_padding_states(gated_value, conv_mask)
             gated_value_normed = apply_mask_to_padding_states(gated_value_normed, conv_mask)
-        output = gated_value + self._short_conv(gated_value_normed, cache)
+        output = gated_value + self._short_conv(gated_value_normed, cache, **kwargs)
         return output
 
 
@@ -818,7 +841,9 @@ class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         if self.ple is not None:
-            hidden_states = hidden_states + self.ple(hidden_states, ple_input_ids, cache, conv_mask=conv_mask)
+            hidden_states = hidden_states + self.ple(
+                hidden_states, ple_input_ids, cache, conv_mask=conv_mask, **kwargs
+            )
 
         hidden_states, hyper_input, injection_weights = self.attn_hyper_connection(hidden_states)
         if self.layer_type == "linear_attention":
