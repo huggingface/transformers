@@ -29,7 +29,7 @@ otherwise its key is used. Candidates do not see the current state or other cand
 ## Training
 
 CLM uses bidirectional InfoNCE over the candidates in each forward pass. Pass rendered prompts and targets to
-`prepare_decision_inputs` to pack the states and build a shared candidate pool.
+`prepare_inputs_for_decision` to pack the states and build a shared candidate pool.
 
 ```python
 from transformers import AutoModelForDecision, AutoTokenizer
@@ -41,7 +41,7 @@ request = {
     "questions": {"team": {"type": "choice", "criteria": {"billing": None, "delivery": None}}},
 }
 prompts = model.decision_config.prepare_inputs(request, tokenizer)
-batch = model.prepare_decision_inputs(prompts, targets=[[0.0, 1.0, 0.0]])
+batch = model.prepare_inputs_for_decision(prompts, targets=[[0.0, 1.0, 0.0]])
 model.train()
 model(**batch).loss.backward()
 ```
@@ -77,6 +77,6 @@ answers = decide({"state": "My invoice was charged twice.", "questions": {
 ## ClmForDecision
 
 [[autodoc]] ClmForDecision
-    - prepare_decision_inputs
+    - prepare_inputs_for_decision
     - forward
     - decide

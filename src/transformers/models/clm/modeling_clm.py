@@ -208,7 +208,7 @@ class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
             loss = self.loss_function(logits=logits, labels=labels, **kwargs)
         return ClmDecisionOutput(loss=loss, logits=logits)
 
-    def prepare_decision_inputs(
+    def prepare_inputs_for_decision(
         self,
         prompts: Sequence[tuple[dict, list[Question]]],
         *,

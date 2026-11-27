@@ -111,7 +111,7 @@ class ClmForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             prompts.extend(self.decision_config.prepare_inputs(request, self.tokenizer))
 
         targets = [[0.0, 0.75, 0.25], [0.0, 0.5, 0.5]]
-        inputs = model.prepare_decision_inputs(prompts, targets=targets)
+        inputs = model.prepare_inputs_for_decision(prompts, targets=targets)
         outputs = model(**inputs, num_items_in_batch=3)
 
         expected_targets = torch.tensor([[0.75, 0.25, 0.0], [0.0, 0.5, 0.5]])
