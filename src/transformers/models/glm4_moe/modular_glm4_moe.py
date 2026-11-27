@@ -27,11 +27,11 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3MLP,
     DeepseekV3Model,
     DeepseekV3PreTrainedModel,
-    DeepseekV3RMSNorm,
     DeepseekV3TopkRouter,
 )
 from ..glm.modeling_glm import GlmRotaryEmbedding
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb  # noqa
+from ..llama.modeling_llama import LlamaRMSNorm
 
 
 logger = logging.get_logger(__name__)
@@ -74,9 +74,6 @@ class Glm4MoeConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -186,7 +183,7 @@ class Glm4MoeTopkRouter(DeepseekV3TopkRouter):
         self.e_score_correction_bias = nn.Buffer(torch.zeros((self.num_experts), dtype=torch.float32))
 
 
-class Glm4MoeRMSNorm(DeepseekV3RMSNorm):
+class Glm4MoeRMSNorm(LlamaRMSNorm):
     pass
 
 

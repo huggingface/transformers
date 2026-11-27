@@ -19,10 +19,11 @@
 # limitations under the License.
 
 import re
+from typing import Any
 
 import numpy as np
 
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...processing_utils import _UNMARKED, MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
 
 
@@ -100,12 +101,11 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """Compute placeholder counts for serving frameworks without materializing pixels."""
+        merged_kwargs = self._merge_kwargs(**kwargs)
         vision_data = {}
-        images_kwargs = dict(kwargs.get("images_kwargs", kwargs))
-        videos_kwargs = dict(kwargs.get("videos_kwargs", kwargs))
-
         if image_sizes is not None:
-            merge_size = images_kwargs.get("merge_size", self.image_processor.merge_size)
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(**merged_kwargs["images_kwargs"])
+            merge_size = images_kwargs["merge_size"]
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(height, width, images_kwargs)
                 for height, width in image_sizes
@@ -114,7 +114,8 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
             vision_data["num_image_tokens"] = [num_patches // merge_size**2 for num_patches in num_image_patches]
 
         if video_sizes is not None:
-            merge_size = videos_kwargs.get("merge_size", self.video_processor.merge_size)
+            videos_kwargs = self.video_processor._merge_and_standardize_kwargs(**merged_kwargs["videos_kwargs"])
+            merge_size = videos_kwargs["merge_size"]
             num_video_patches = [
                 self.video_processor.get_num_of_video_patches(num_frames, height, width, videos_kwargs)
                 for num_frames, height, width in video_sizes
@@ -154,6 +155,36 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
     def model_input_names(self):
         return super().model_input_names + ["mm_token_type_ids"]
 
+    def get_text_with_replacements(
+        self,
+        text: list[str],
+        images_replacements: list[str] = [],
+        videos_replacements: list[str] = [],
+        audio_replacements: list[str] = [],
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        # `replace_video_token` already wraps every frame in `<|vision_start|>...<|vision_end|>`, so collapse the chat
+        # template's outer wrapper into a bare video token to avoid an extra vision start/end pair around all frames
+        wrapper = self.vision_start_token + self.video_token + self.vision_end_token
+        pattern = re.compile(_UNMARKED + re.escape(wrapper) if len(videos_replacements) > 0 else r"(?!)")
+        wrapper_starts = [{m.start() for m in pattern.finditer(sample)} for sample in text]
+        text = [pattern.sub(self.video_token, sample) for sample in text]
+        text, batch_offsets = super().get_text_with_replacements(
+            text, images_replacements, videos_replacements, audio_replacements
+        )
+
+        # Map the spans back to the uncollapsed text, which is what `return_assistant_tokens_mask` aligns against
+        removed = len(wrapper) - len(self.video_token)
+        for starts, offsets in zip(wrapper_starts, batch_offsets):
+            shift = 0
+            for offset in offsets:
+                start, end = offset["span"]
+                is_wrapper = start + shift in starts
+                offset["span"] = (start + shift, end + shift + removed * is_wrapper)
+                if is_wrapper:
+                    offset["text"] = wrapper
+                    shift += removed
+        return text, batch_offsets
+
     @staticmethod
     def _calculate_timestamps(
         indices: list[int] | np.ndarray,
@@ -167,67 +198,6 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
             indices.extend(indices[-1] for _ in range(merge_size - len(indices) % merge_size))
         timestamps = [idx / video_fps for idx in indices]
         return [(timestamps[i] + timestamps[i + merge_size - 1]) / 2 for i in range(0, len(timestamps), merge_size)]
-
-    def get_text_with_replacements(
-        self,
-        text: list[str],
-        images_replacements: list[str] = [],
-        videos_replacements: list[str] = [],
-        audio_replacements: list[str] = [],
-    ) -> tuple[list[str], list[dict]]:
-        """Replace placeholders while treating the template's full video wrapper as one unit.
-
-        The Edge chat template emits ``<|vision_start|><|video_pad|><|vision_end|>``. Each video must become a
-        separate timestamped vision segment for every frame, so replacing only ``<|video_pad|>`` would leave an
-        invalid outer vision wrapper around all frames.
-        """
-        token_groups = []
-        if images_replacements:
-            token_groups.append(f"(?P<image>{re.escape(self.image_token)})")
-        if videos_replacements:
-            video_wrapper = re.escape(self.vision_start_token + self.video_token + self.vision_end_token)
-            token_groups.append(f"(?P<video>{video_wrapper}|{re.escape(self.video_token)})")
-        if audio_replacements and getattr(self, "audio_token", None) is not None:
-            token_groups.append(f"(?P<audio>{re.escape(self.audio_token)})")
-        if not token_groups:
-            return text, []
-
-        replacements = {
-            "image": iter(images_replacements),
-            "video": iter(videos_replacements),
-            "audio": iter(audio_replacements),
-        }
-        pattern = "|".join(token_groups)
-        batch_replacement_offsets = []
-
-        for batch_index, sample in enumerate(text):
-            last_end = 0
-            offset = 0
-            expanded_sample = []
-            replacement_offsets = []
-            for match in re.finditer(pattern, sample):
-                start, end = match.span()
-                expanded_sample.append(sample[last_end:start])
-                modality = match.lastgroup
-                replacement = next(replacements[modality])
-                start_with_offset = start + offset
-                replacement_offsets.append(
-                    {
-                        "type": modality,
-                        "span": (start, end),
-                        "new_span": (start_with_offset, start_with_offset + len(replacement)),
-                        "text": match.group(),
-                        "replacement": replacement,
-                    }
-                )
-                expanded_sample.append(replacement)
-                offset += len(replacement) - (end - start)
-                last_end = end
-
-            expanded_sample.append(sample[last_end:])
-            text[batch_index] = "".join(expanded_sample)
-            batch_replacement_offsets.append(replacement_offsets)
-        return text, batch_replacement_offsets
 
 
 __all__ = ["Cosmos3EdgeProcessor"]

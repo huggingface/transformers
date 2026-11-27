@@ -588,7 +588,6 @@ class MiniCPMV4_7PreTrainedModel(PreTrainedModel):
         "MiniCPMV4_7VisionEncoderLayer",
         "MiniCPMV4_7ViTWindowAttentionMerger",
     ]
-    _is_stateful = True
 
 
 @auto_docstring(

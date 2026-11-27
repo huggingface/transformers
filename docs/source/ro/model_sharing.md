@@ -153,6 +153,6 @@ Un model card este un fișier `README.md` din repository-ul tău. Adaugă acest 
 - crearea și încărcarea manuală a unui fișier `README.md`
 - click pe butonul **Edit model card** din repository
 
-Aruncă o privire la [model card-ul](https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct) Llama 3.1 pentru un exemplu de ce să incluzi într-un model card.
+Aruncă o privire la [model card-ul](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct) Llama 3.1 pentru un exemplu de ce să incluzi într-un model card.
 
 Află mai multe despre metadata model card-ului (emisii de carbon, licență, link la articol, etc.) în ghidul [Model Cards](https://hf.co/docs/hub/model-cards#model-cards).

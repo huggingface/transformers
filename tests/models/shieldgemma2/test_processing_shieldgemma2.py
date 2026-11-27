@@ -180,6 +180,10 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_subprocessor_defaults_1_images(self):
         pass
 
+    @unittest.skip("model creates one sample per image and policy, so replacements don't map to images")
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        pass
+
     def test_processor_text_has_no_visual(self):
         # Overwritten: Shieldgemma has a complicated processing so we don't check id values
         processor = self.get_processor()

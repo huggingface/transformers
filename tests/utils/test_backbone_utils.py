@@ -16,10 +16,11 @@ import unittest
 
 import pytest
 
-from transformers import PreTrainedConfig
+from transformers import PreTrainedConfig, ResNetConfig
 from transformers.backbone_utils import (
     BackboneConfigMixin,
     BackboneMixin,
+    consolidate_backbone_kwargs_to_config,
 )
 from transformers.testing_utils import require_torch
 from transformers.utils.import_utils import is_torch_available
@@ -130,6 +131,13 @@ class BackboneUtilsTester(unittest.TestCase):
 
         # Check passes with valid inputs
         AnyBackboneConfig(stage_names=["a", "b", "c", "d"], out_features=["a", "b", "d"], out_indices=[0, 1, -1])
+
+    def test_consolidate_backbone_kwargs_to_config_with_null_backbone_kwargs(self):
+        """Regression test for configs with backbone_kwargs=None: https://github.com/huggingface/transformers/pull/51027"""
+        backbone_config, _ = consolidate_backbone_kwargs_to_config(
+            backbone_config=None, backbone="microsoft/resnet-18", backbone_kwargs=None
+        )
+        self.assertIsInstance(backbone_config, ResNetConfig)
 
     @require_torch
     def test_backbone_mixin(self):

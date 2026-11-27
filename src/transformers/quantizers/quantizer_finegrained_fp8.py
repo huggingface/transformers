@@ -188,7 +188,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             WeightRenaming(source_patterns=r"^(.+)\.scale", target_patterns=r"\1.weight_scale_inv"),
             WeightRenaming(source_patterns=r"\.qscale_weight", target_patterns=".weight_scale_inv"),
         ]
-        # Inkling2 has params ending with `.scale` which should not be renamed (e.g. `q_l2_clip.scale`)
-        if any(name.endswith("_l2_clip.scale") for name, _ in model.named_parameters()):
+        # Inkling2 has params ending with `.scale` which should not be renamed (e.g. `q_norm.scale`)
+        if model.config.model_type.startswith("inkling2"):
             scale_renames = scale_renames[1:]
         return scale_renames + super().update_weight_conversions(weight_conversions, model)

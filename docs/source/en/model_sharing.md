@@ -163,6 +163,6 @@ A model card is a `README.md` file in your repository. Add this file by:
 - manually creating and uploading a `README.md` file
 - clicking on the **Edit model card** button in the repository
 
-Take a look at the Llama 3.1 [model card](https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct) for an example of what to include on a model card.
+Take a look at the Llama 3.1 [model card](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct) for an example of what to include on a model card.
 
 Learn more about other model card metadata (carbon emissions, license, link to paper, etc.) available in the [Model Cards](https://hf.co/docs/hub/model-cards#model-cards) guide.
