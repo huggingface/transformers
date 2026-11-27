@@ -209,5 +209,7 @@ def _to_mlx_program(exported_program: ExportedProgram, mlx_arrays: dict[tuple, t
             for node in nodes
         ],
         "outputs": outputs,
+        # The input each of the first outputs is the new value of (the cache the graph writes)
+        "mutations": [spec.target for spec in signature.output_specs if spec.kind == OutputKind.USER_INPUT_MUTATION],
     }
     return MLXProgram(program_graph, weights), out_constants

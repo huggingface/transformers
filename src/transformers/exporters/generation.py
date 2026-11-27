@@ -173,6 +173,14 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
             torch.set_num_threads(threads)
             self._generating = False
 
+    def _reorder_cache(self, cache, beam_idx: torch.LongTensor):
+        """Beam search's reorder of the cache, and of the one a backend keeps as its own state (MLX's)."""
+        for runner in self.runners.values():
+            if hasattr(runner, "reorder_state"):
+                runner.reorder_state(beam_idx)
+        cache.reorder_cache(beam_idx)
+        return cache
+
     def _prepare_cache_for_generation(
         self, generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
     ):
