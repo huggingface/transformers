@@ -33,6 +33,18 @@ runs:
         persist-credentials: false
         path: vllm
 
+    - name: "[Temporary] Apply vLLM PR / show checkouts"
+      shell: bash
+      run: |
+        # [Temporary] vLLM PR #69934 (Python-only) on top of the wheel commit, pinned by its head SHA
+        curl -fsSL "https://github.com/vllm-project/vllm/compare/c331ec85faa6b1500f8650897cdbdf21d59e0b85...IlyasMoutawwakil:vllm:e90e8318ba1ee82027b695ab68a025e251e14490.diff" -o /tmp/vllm_pr_69934.diff
+        git -c safe.directory='*' -C vllm apply -v /tmp/vllm_pr_69934.diff
+        echo "[checkout] transformers HEAD: $(git -c safe.directory='*' -C transformers rev-parse HEAD)"
+        git -c safe.directory='*' -C transformers log -3 --format='[checkout]   %h %s'
+        echo "[checkout] vLLM HEAD: $(git -c safe.directory='*' -C vllm rev-parse HEAD)"
+        echo "[checkout] vLLM changes on top of HEAD:"
+        git -c safe.directory='*' -C vllm diff --stat
+
     - name: Set up Python 3.12 environment
       shell: bash
       run: |
