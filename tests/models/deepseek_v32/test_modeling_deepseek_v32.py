@@ -19,7 +19,7 @@ import pytest
 from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, skip_tpu, slow
+from transformers.testing_utils import require_torch, require_torch_accelerator, skip_tpu, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import (
@@ -213,6 +213,41 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("MoE routing on a tiny randomly-initialized model makes the overfit target unstable.")
     def test_training_overfit(self):
         pass
+
+    def test_indexer_topk_selector_is_replaceable(self):
+        """Every indexer selects its top-k through `topk_selector`, so a runtime can swap it."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.index_topk = 2
+        model = DeepseekV32ForCausalLM(config).to(torch_device).eval()
+        with torch.no_grad():
+            expected = model(**inputs_dict).logits
+
+        calls = []
+
+        class RecordingTopkSelector(torch.nn.Module):
+            def __init__(self, selector):
+                super().__init__()
+                self.selector = selector
+
+            def forward(self, query, key, weights, *args, **kwargs):
+                calls.append((query.shape, key.shape, weights.shape))
+                return self.selector(query, key, weights, *args, **kwargs)
+
+        for layer in model.model.layers:
+            indexer = layer.self_attn.indexer
+            indexer.topk_selector = RecordingTopkSelector(indexer.topk_selector)
+        with torch.no_grad():
+            logits = model(**inputs_dict).logits
+
+        batch_size, seq_len = inputs_dict["input_ids"].shape
+        n_heads, head_dim = config.index_n_heads, config.index_head_dim
+        shapes = (
+            (batch_size, seq_len, n_heads, head_dim),
+            (batch_size, seq_len, head_dim),
+            (batch_size, seq_len, n_heads),
+        )
+        self.assertEqual(calls, [shapes] * config.num_hidden_layers)
+        torch.testing.assert_close(logits, expected)
 
 
 @slow

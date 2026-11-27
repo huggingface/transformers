@@ -232,29 +232,14 @@ class HYV4Indexer(DeepseekV32Indexer):
         q = torch.cat([q_pass, q_rot], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_pass, k_rot], dim=-1).squeeze(2)  # [B, S, D]
 
-        if cache is not None:
-            k = cache.update_indexer(k, self.layer_idx)
-
-        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
-        scores = F.relu(scores)
-
-        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
-        # Apply softmax scale later
+        # The softmax scale is applied to the weights instead of the scores
         weights = (
             self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float()
             * (self.n_heads**-0.5)
             * self.softmax_scale
         )
-        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask.dtype == torch.bool:
-            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
-        else:
-            index_scores = index_scores + attention_mask
-
-        topk = min(self.index_topk, index_scores.shape[-1])
-        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
+        return self.topk_selector(q, k, weights, attention_mask, 1.0, cache=cache)  # [B, S, topk]
 
 
 class HYV4Attention(GlmMoeDsaAttention):
@@ -309,7 +294,7 @@ class HYV4Attention(GlmMoeDsaAttention):
                 hidden_states,
                 q_resid,
                 position_embeddings,
-                attention_mask[:, 0, :, :],
+                attention_mask,
                 position_ids,  # Kept for BC
                 cache=cache,
             )  # [B, S, topk]

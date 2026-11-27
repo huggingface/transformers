@@ -531,7 +531,7 @@ class Dots3NoteTextAttention(DeepseekV3Attention):
                 hidden_states,
                 q_resid,
                 position_embeddings,
-                attention_mask[:, 0],
+                attention_mask,
                 position_ids=None,  # Unused backward-compatibility argument in the shared indexer.
                 cache=cache,
             )
