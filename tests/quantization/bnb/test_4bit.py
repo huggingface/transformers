@@ -868,3 +868,113 @@ class Bnb4bitCompile(unittest.TestCase):
                 max_new_tokens=10,
                 cache_implementation="static",
             )
+
+
+@require_bitsandbytes
+@require_accelerate
+@slow
+@apply_skip_if_not_implemented
+class Bnb4bitExpertsTest(unittest.TestCase):
+    # MoE models store the weights of all the experts of a layer in 3D parameters instead of linear layers
+    model_name = "hf-internal-testing/tiny-random-Qwen3MoeForCausalLM"
+
+    def setUp(self):
+        self.model_4bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map=torch_device
+        )
+
+    def tearDown(self):
+        del self.model_4bit
+
+        gc.collect()
+        backend_empty_cache(torch_device)
+
+    def get_logits(self, model):
+        with torch.no_grad():
+            return model(torch.arange(16, device=torch_device)[None]).logits
+
+    def test_experts_are_4bit(self):
+        r"""
+        The 3D weights of the experts are packed in uint8 variables, two values per byte, and counted as such
+        """
+        experts = self.model_4bit.model.layers[0].mlp.experts
+        num_experts, out_features, in_features = experts.dequantized_shapes["gate_up_proj"]
+        self.assertIsInstance(experts.gate_up_proj, bnb.nn.Params4bit)
+        self.assertEqual(experts.gate_up_proj.dtype, torch.uint8)
+        self.assertEqual(experts.gate_up_proj.shape, (num_experts, out_features, in_features // 2))
+
+        model = AutoModelForCausalLM.from_pretrained(self.model_name)
+        self.assertEqual(self.model_4bit.num_parameters(), model.num_parameters())
+
+    def test_experts_chunks(self):
+        r"""
+        bitsandbytes quantizes fewer than 2**31 values at once: the experts of bigger weights are quantized in chunks
+        """
+        from transformers.integrations.bitsandbytes import Bnb4bitExperts
+
+        shape = torch.Size((256, 4096, 7168))  # e.g. the experts of DeepSeek-V3
+        chunks = Bnb4bitExperts.experts_chunks(shape)
+        self.assertEqual(list(range(256)), [expert for chunk in chunks for expert in range(256)[chunk]])
+        self.assertTrue(all(torch.empty(shape, device="meta")[chunk].numel() < 2**31 for chunk in chunks))
+
+    def test_skip_experts(self):
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True, llm_int8_skip_modules=["lm_head", "experts"]),
+            device_map=torch_device,
+        )
+        self.assertNotEqual(model.model.layers[0].mlp.experts.gate_up_proj.dtype, torch.uint8)
+
+    def test_experts_implementations(self):
+        r"""
+        Every experts implementation runs on the dequantized weights
+        """
+        logits = self.get_logits(self.model_4bit)
+        for experts_implementation in ("eager", "batched_mm", "grouped_mm"):
+            self.model_4bit.set_experts_implementation(experts_implementation)
+            torch.testing.assert_close(self.get_logits(self.model_4bit), logits)
+
+    def test_quant_storage_and_double_quant(self):
+        r"""
+        The 4-bit values can be stored in a floating point dtype (e.g. for FSDP), and the scales quantized in turn
+        """
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True, bnb_4bit_quant_storage=torch.bfloat16, bnb_4bit_use_double_quant=True
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_name, quantization_config=quantization_config, device_map=torch_device
+        )
+        experts = model.model.layers[0].mlp.experts
+        self.assertEqual(experts.gate_up_proj.dtype, torch.bfloat16)
+        self.assertEqual(experts.gate_up_proj_absmax.dtype, torch.uint8)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            reloaded = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=torch_device)
+        self.assertIsInstance(reloaded.model.layers[0].mlp.experts.gate_up_proj, bnb.nn.Params4bit)
+        self.assertTrue(torch.equal(self.get_logits(reloaded), self.get_logits(model)))
+
+    def test_serialization(self):
+        r"""
+        The 4-bit experts are saved as they are, and a model reloaded from them can be saved again
+        """
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.model_4bit.save_pretrained(tmpdirname)
+            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=torch_device)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=torch_device)
+
+        self.assertTrue(torch.equal(self.get_logits(model), self.get_logits(self.model_4bit)))
+
+    def test_dequantize(self):
+        r"""
+        Dequantizing gives the experts back their weights, close to the original ones
+        """
+        model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map=torch_device)
+        self.model_4bit.dequantize()
+
+        weight = self.model_4bit.model.layers[0].mlp.experts.gate_up_proj
+        expected = model.model.layers[0].mlp.experts.gate_up_proj
+        self.assertEqual(weight.dtype, expected.dtype)
+        self.assertLess(((weight - expected).norm() / expected.norm()).item(), 0.15)

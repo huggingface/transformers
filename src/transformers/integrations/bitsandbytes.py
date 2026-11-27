@@ -1,6 +1,7 @@
 import inspect
+import math
 
-from ..core_model_loading import ConversionOps
+from ..core_model_loading import ConversionOps, _IdentityOp
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import (
     get_available_devices,
@@ -27,6 +28,153 @@ if is_accelerate_available():
 logger = logging.get_logger(__name__)
 
 
+class Bnb4bitExperts:
+    """
+    Mixed into the experts class of a MoE model by `convert_experts_to_bnb_4bit`: the 3D weights of the experts are
+    stored in 4-bit, and the forward of the experts class runs on them dequantized.
+
+    Each weight of shape `(num_experts, out_features, in_features)` is stored as:
+    - `<name>`: the 4-bit values, two per byte, a parameter of `(num_experts, out_features, in_features // 2)` bytes,
+      viewed as `bnb_4bit_quant_storage`. It is a `bnb.nn.Params4bit`, which PEFT, TRL and Accelerate recognize as 4-bit
+      values, but holds no quantization state: the scales are in the buffers.
+    - `<name>_absmax`: the scale of each block of 64 values, a buffer of shape
+      `(num_experts, out_features * in_features // 64)`
+
+    With `bnb_4bit_use_double_quant`, the scales are quantized in turn, to 8 bits by blocks of 256 around their mean:
+    `<name>_absmax` holds them in uint8, `<name>_nested_absmax` the scale of each block and `<name>_absmax_offset` the
+    mean.
+    """
+
+    # The shape of each weight stored in 4-bit, once dequantized, e.g. `{"down_proj": (num_experts, out_features, in_features)}`
+    dequantized_shapes: dict[str, "torch.Size"]
+
+    def init_4bit_weights(self, dequantized_shapes: dict, quantization_config, pre_quantized: bool) -> None:
+        "Makes room for the 4-bit storage of the weights in `dequantized_shapes`."
+        self.dequantized_shapes = dequantized_shapes
+        self.quantization_config = quantization_config
+        for name, (num_experts, out_features, in_features) in dequantized_shapes.items():
+            device = self._parameters[name].device
+            num_blocks = out_features * in_features // 64
+            if quantization_config.bnb_4bit_use_double_quant:
+                absmax = torch.empty(num_experts, num_blocks, dtype=torch.uint8, device=device)
+                nested_absmax = torch.empty(
+                    math.ceil(num_experts * num_blocks / 256), dtype=torch.float32, device=device
+                )
+                self.register_buffer(f"{name}_nested_absmax", nested_absmax)
+                self.register_buffer(f"{name}_absmax_offset", torch.empty((), dtype=torch.float32, device=device))
+            else:
+                absmax = torch.empty(num_experts, num_blocks, dtype=torch.float32, device=device)
+            self.register_buffer(f"{name}_absmax", absmax)
+            if pre_quantized:
+                # The checkpoint holds the 4-bit values, otherwise the weight is loaded as it is and then quantized
+                packed = torch.empty(num_experts, out_features, in_features // 2, dtype=torch.uint8, device=device)
+                self.register_parameter(name, self.packed_parameter(packed))
+
+    def register_parameter(self, name: str, param: "nn.Parameter | None") -> None:
+        # The 4-bit values are kept in a `bnb.nn.Params4bit`, also when the loader sets those of a checkpoint in a plain
+        # parameter
+        if name in self.dequantized_shapes and param is not None and not isinstance(param, bnb.nn.Params4bit):
+            packed = self.packed_parameter(param.data)
+            # set by the loader, so that the weights aren't initialized
+            packed._is_hf_initialized = getattr(param, "_is_hf_initialized", False)
+            param = packed
+        super().register_parameter(name, param)
+
+    def forward(self, hidden_states: "torch.Tensor", *args, **kwargs) -> "torch.Tensor":
+        # Like `bnb.nn.Linear4bit`, the experts compute in the compute dtype, on their weights dequantized in place of
+        # the 4-bit ones for the call
+        compute_dtype = self.quantization_config.bnb_4bit_compute_dtype
+        packed = {name: self._parameters[name] for name in self.dequantized_shapes}
+        self._parameters.update({name: self.dequantize_weight(name) for name in packed})
+        try:
+            return super().forward(hidden_states.to(compute_dtype), *args, **kwargs).to(hidden_states.dtype)
+        finally:
+            self._parameters.update(packed)
+
+    def packed_parameter(self, packed: "torch.Tensor") -> "bnb.nn.Params4bit":
+        "The parameter that holds the 4-bit values `packed`, as bytes or already viewed as `bnb_4bit_quant_storage`."
+        config = self.quantization_config
+        return bnb.nn.Params4bit(
+            packed.view(config.bnb_4bit_quant_storage),
+            requires_grad=False,
+            blocksize=64,
+            compress_statistics=config.bnb_4bit_use_double_quant,
+            quant_type=config.bnb_4bit_quant_type,
+            quant_storage=config.bnb_4bit_quant_storage,
+            bnb_quantized=True,
+        )
+
+    @staticmethod
+    def experts_chunks(shape: "torch.Size") -> list[slice]:
+        """
+        Splits the experts of a weight of shape `shape` in chunks of fewer than 2**31 values, the most bitsandbytes
+        handles at once. A block of 64 values never spans two experts, so the chunks are quantized as the whole weight.
+        """
+        experts_per_chunk = max(1, (2**31 - 1) // shape[1:].numel())
+        return [slice(start, start + experts_per_chunk) for start in range(0, shape[0], experts_per_chunk)]
+
+    @torch.no_grad()
+    def quantize(self, weight: "torch.Tensor") -> dict[str, "torch.Tensor"]:
+        "Returns the tensors that store a weight in 4-bit, by the suffix of their name."
+        config = self.quantization_config
+        packed, absmax = [], []
+        for chunk in self.experts_chunks(weight.shape):
+            chunk_packed, quant_state = bnb.functional.quantize_4bit(
+                weight[chunk], blocksize=64, quant_type=config.bnb_4bit_quant_type
+            )
+            packed.append(chunk_packed.view(*weight[chunk].shape[:-1], -1))
+            absmax.append(quant_state.absmax.view(weight[chunk].shape[0], -1))
+        packed, absmax = self.packed_parameter(torch.cat(packed)), torch.cat(absmax)
+        if not config.bnb_4bit_use_double_quant:
+            return {"": packed, "_absmax": absmax}
+        # As `bnb.functional.quantize_4bit` does, over the scales of all the chunks at once
+        offset = absmax.mean()
+        absmax, nested_state = bnb.functional.quantize_blockwise(absmax - offset, blocksize=256)
+        return {"": packed, "_absmax": absmax, "_nested_absmax": nested_state.absmax, "_absmax_offset": offset}
+
+    @torch.no_grad()
+    def dequantize_weight(self, name: str, dtype: "torch.dtype | None" = None) -> "torch.Tensor":
+        "Returns the weight `name`, dequantized."
+        packed, absmax = self._parameters[name].data.view(torch.uint8), self._buffers[f"{name}_absmax"]
+        if self.quantization_config.bnb_4bit_use_double_quant:
+            nested_absmax, offset = self._buffers[f"{name}_nested_absmax"], self._buffers[f"{name}_absmax_offset"]
+            absmax = bnb.functional.dequantize_blockwise(absmax, absmax=nested_absmax, blocksize=256) + offset
+        weight = packed.new_empty(
+            self.dequantized_shapes[name], dtype=dtype or self.quantization_config.bnb_4bit_compute_dtype
+        )
+        for chunk in self.experts_chunks(weight.shape):
+            bnb.functional.dequantize_4bit(
+                packed[chunk],
+                absmax=absmax[chunk],
+                out=weight[chunk],
+                blocksize=64,
+                quant_type=self.quantization_config.bnb_4bit_quant_type,
+            )
+        return weight
+
+
+def convert_experts_to_bnb_4bit(experts: "nn.Module", quantization_config, pre_quantized: bool = False) -> None:
+    "Stores the 3D weights of the experts of a MoE layer in 4-bit, see `Bnb4bitExperts`."
+    shapes = {name: param.shape for name, param in experts.named_parameters(recurse=False) if param.ndim == 3}
+    if shapes:
+        experts.__class__ = type(f"Bnb4bit{type(experts).__name__}", (Bnb4bitExperts, type(experts)), {})
+        experts.init_4bit_weights(shapes, quantization_config, pre_quantized)
+
+
+def dequantize_bnb_4bit_experts(experts: "Bnb4bitExperts", dtype: "torch.dtype") -> None:
+    "Gives the experts back their class and their weights, dequantized."
+    weights = {name: experts.dequantize_weight(name, dtype) for name in experts.dequantized_shapes}
+    for name in weights:
+        for buffer in (f"{name}_absmax", f"{name}_nested_absmax", f"{name}_absmax_offset"):
+            if hasattr(experts, buffer):
+                delattr(experts, buffer)
+    # back to the experts class of the model first, whose `register_parameter` keeps the dequantized weights as they are
+    experts.__class__ = type(experts).__bases__[1]
+    del experts.dequantized_shapes, experts.quantization_config
+    for name, weight in weights.items():
+        experts.register_parameter(name, nn.Parameter(weight, requires_grad=False))
+
+
 class Bnb4bitQuantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
@@ -49,6 +197,10 @@ class Bnb4bitQuantize(ConversionOps):
             # update param name to get the weights instead of the quantized stats
             module, _ = get_module_from_name(model, param_name)
 
+            if isinstance(module, Bnb4bitExperts):
+                result.update({f"{param_name}{suffix}": tensor for suffix, tensor in module.quantize(value).items()})
+                continue
+
             # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
             # Since weights are saved in the correct "orientation", we skip transposing when loading.
             if issubclass(module.source_cls, Conv1D):
@@ -64,6 +216,11 @@ class Bnb4bitQuantize(ConversionOps):
 class Bnb4bitDeserialize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        # The state dict of the model already holds the serialized tensors
+        return _IdentityOp()
 
     def convert(
         self,
@@ -128,6 +285,11 @@ class Bnb8bitQuantize(ConversionOps):
 class Bnb8bitDeserialize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        # The state dict of the model already holds the serialized tensors
+        return _IdentityOp()
 
     def convert(
         self,
@@ -226,6 +388,10 @@ def replace_with_bnb_linear(
                     new_module.requires_grad_(False)
                     model.set_submodule(module_name, new_module)
                     has_been_replaced = True
+            elif module_name.endswith(".experts") and quantization_config.quantization_method() != "llm_int8":
+                # Fused MoE experts store their weights as 3D parameters instead of `nn.Linear` layers
+                convert_experts_to_bnb_4bit(module, quantization_config, pre_quantized)
+                has_been_replaced = True
 
     if not has_been_replaced:
         logger.warning(
@@ -296,7 +462,10 @@ def dequantize_and_replace(model, quantization_config=None, dtype=None):
 
     target_cls = bnb.nn.Linear8bitLt if quant_method == "llm_int8" else bnb.nn.Linear4bit
     for module_name, module in model.named_modules():
-        if isinstance(module, target_cls):
+        if isinstance(module, Bnb4bitExperts):
+            dequantize_bnb_4bit_experts(module, dtype or model.dtype)
+            has_been_replaced = True
+        elif isinstance(module, target_cls):
             with torch.device("meta"):
                 bias = getattr(module, "bias", None)
                 new_module = torch.nn.Linear(module.in_features, module.out_features, bias=bias is not None)

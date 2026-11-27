@@ -83,7 +83,11 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         import bitsandbytes as bnb
 
+        from ..integrations.bitsandbytes import Bnb4bitExperts
+
         module, name = get_module_from_name(model, param_name)
+        if isinstance(module, Bnb4bitExperts):
+            return name in module.dequantized_shapes
         return isinstance(module, bnb.nn.Linear4bit) and name != "bias"
 
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
