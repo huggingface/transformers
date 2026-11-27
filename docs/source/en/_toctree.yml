@@ -1681,6 +1681,8 @@
         title: Time Series Transformer
       - local: model_doc/timesfm
         title: TimesFM
+      - local: model_doc/timesfm3
+        title: TimesFM 3
       - local: model_doc/timesfm2_5
         title: TimesFM2.5
       title: Time series models
