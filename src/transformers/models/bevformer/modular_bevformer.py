@@ -40,9 +40,9 @@ from ...utils import (
 )
 from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrDecoderLayer,
+    DeformableDetrMLP,
     DeformableDetrMLPPredictionHead,
     DeformableDetrMultiscaleDeformableAttention,
-    MultiScaleDeformableAttention,
     inverse_sigmoid,
     replace_batch_norm,
 )
@@ -920,80 +920,30 @@ class BevformerSpatialDeformableAttention(DeformableDetrMultiscaleDeformableAtte
         )
 
 
-class BevformerTemporalSelfAttention(nn.Module):
-    """
-    Temporal Self-Attention module for BEVFormer.
+class BevformerTemporalSelfAttention(DeformableDetrMultiscaleDeformableAttention):
+    """Temporal self-attention over a 2-frame BEV queue (`[prev_bev, current_bev]`)."""
 
-    Fuses the previous frame's BEV representation (`prev_bev`) into the current frame's BEV query
-    representation using deformable multi-scale attention over a 2-frame history queue.
-
-    Args:
-        embed_dims (`int`, *optional*, defaults to 256):
-            Hidden embedding dimension.
-        num_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads.
-        num_levels (`int`, *optional*, defaults to 1):
-            Number of feature pyramid levels.
-        num_points (`int`, *optional*, defaults to 4):
-            Number of sampling points per attention head per feature level per temporal queue item.
-        num_bev_queue (`int`, *optional*, defaults to 2):
-            Number of temporal frames in the queue (default 2: previous frame and current frame).
-        dropout (`float`, *optional*, defaults to 0.1):
-            Dropout probability applied to the output projection.
-    """
-
-    def __init__(
-        self,
-        config: BevformerConfig | None = None,
-        embed_dims: int = 256,
-        num_heads: int = 8,
-        num_levels: int = 1,
-        num_points: int = 4,
-        num_bev_queue: int = 2,
-        dropout: float = 0.1,
-    ):
-        super().__init__()
-        if isinstance(config, BevformerConfig):
-            embed_dims = config.d_model
-            num_heads = config.encoder_attention_heads
-            num_levels = config.num_feature_levels
-            num_points = 4
-            dropout = config.dropout
-        if embed_dims % num_heads != 0:
-            raise ValueError(f"embed_dims ({embed_dims}) must be divisible by num_heads ({num_heads})")
-
-        self.embed_dims = embed_dims
-        self.num_heads = num_heads
-        self.num_levels = num_levels
-        self.num_points = num_points
+    def __init__(self, config: BevformerConfig, num_heads: int, n_points: int, num_bev_queue: int = 2):
+        super().__init__(config, num_heads=num_heads, n_points=n_points)
+        del self.disable_custom_kernels
+        self.n_levels = 1
         self.num_bev_queue = num_bev_queue
-        self.head_dim = embed_dims // num_heads
-
-        # The query vector concatenated with prev_bev has dimension 2 * embed_dims
-        self.sampling_offsets = nn.Linear(2 * embed_dims, num_bev_queue * num_heads * num_levels * num_points * 2)
-        self.attention_weights = nn.Linear(2 * embed_dims, num_bev_queue * num_heads * num_levels * num_points)
-        self.value_proj = nn.Linear(embed_dims, embed_dims)
-        self.output_proj = nn.Linear(embed_dims, embed_dims)
-        self.dropout = nn.Dropout(dropout)
-        self.deformable_attention = MultiScaleDeformableAttention()
-
+        # Offsets and weights are conditioned on [prev_bev, current_bev] across the temporal queue
+        self.sampling_offsets = nn.Linear(2 * self.d_model, num_bev_queue * num_heads * self.n_levels * n_points * 2)
+        self.attention_weights = nn.Linear(2 * self.d_model, num_bev_queue * num_heads * self.n_levels * n_points)
         self._reset_parameters()
 
     def _reset_parameters(self):
         nn.init.constant_(self.sampling_offsets.weight, 0.0)
-        thetas = torch.arange(self.num_heads, dtype=torch.float32) * (2.0 * np.pi / self.num_heads)
+        thetas = torch.arange(self.n_heads, dtype=torch.float32) * (2.0 * np.pi / self.n_heads)
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
         grid_init = (
             (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
-            .view(self.num_heads, 1, 1, 2)
-            .repeat(1, self.num_levels, self.num_points, 1)
+            .view(self.n_heads, 1, 1, 1, 2)
+            .repeat(1, self.num_bev_queue, self.n_levels, self.n_points, 1)
         )
-        for i in range(self.num_points):
-            grid_init[:, :, i, :] *= i + 1
-
-        grid_init = grid_init.view(1, self.num_heads, self.num_levels, self.num_points, 2).repeat(
-            self.num_bev_queue, 1, 1, 1, 1
-        )
+        for i in range(self.n_points):
+            grid_init[:, :, :, i, :] *= i + 1
         with torch.no_grad():
             self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
         nn.init.constant_(self.attention_weights.weight, 0.0)
@@ -1005,136 +955,71 @@ class BevformerTemporalSelfAttention(nn.Module):
 
     def forward(
         self,
-        query: torch.Tensor,
-        key: torch.Tensor | None = None,
-        value: torch.Tensor | None = None,
-        identity: torch.Tensor | None = None,
-        query_pos: torch.Tensor | None = None,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        position_embeddings: torch.Tensor | None = None,
         reference_points: torch.Tensor | None = None,
-        spatial_shapes: torch.Tensor | list[tuple[int, int]] | None = None,
+        spatial_shapes: torch.Tensor | None = None,
+        spatial_shapes_list: list[tuple[int, int]] | None = None,
         level_start_index: torch.Tensor | None = None,
-        prev_bev: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        """
-        Args:
-            query (`torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`):
-                Current BEV queries.
-            key (`torch.Tensor`, *optional*):
-                Unused key placeholder.
-            value (`torch.Tensor` of shape `(batch_size * 2, num_queries, embed_dims)`, *optional*):
-                Stacked previous and current BEV representation. If `None`, constructed from `prev_bev` and `query`.
-            identity (`torch.Tensor`, *optional*):
-                Residual tensor. If `None`, defaults to `query`.
-            query_pos (`torch.Tensor`, *optional*):
-                BEV positional embeddings added to `query`.
-            reference_points (`torch.Tensor` of shape `(batch_size, num_queries, 2)` or `(batch_size * 2, num_queries, 1, 2)`):
-                Reference points on the BEV grid.
-            spatial_shapes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
-                Spatial `(bev_height, bev_width)` shape.
-            level_start_index (`torch.Tensor`, *optional*):
-                Prefix sum index.
-            prev_bev (`torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`, *optional*):
-                Ego-motion compensated previous BEV embedding. If `None`, falls back to duplicating `query`.
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if position_embeddings is not None:
+            hidden_states = hidden_states + position_embeddings
 
-        Returns:
-            `torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`:
-                Fused BEV queries after temporal self-attention.
-        """
-        if identity is None:
-            identity = query
-
-        if query_pos is not None:
-            query_with_pos = query + query_pos
-        else:
-            query_with_pos = query
-
-        batch_size, num_queries, _ = query.shape
-
-        # Upstream queue fallback: frame 0 without history duplicates current query
-        if prev_bev is None:
-            prev_bev = query
-
-        if value is None:
-            # Stack [prev_bev, query] along batch dimension -> (2 * batch_size, num_queries, embed_dims)
-            value = torch.cat([prev_bev, query], dim=0)
-
-        # Concatenate previous BEV and current query along features for offset & weight generation
-        query_concat = torch.cat([prev_bev, query_with_pos], dim=-1)
-
-        # Reference points handling
-        if reference_points is None:
-            raise ValueError("`reference_points` must be provided to `BevformerTemporalSelfAttention`")
-
-        # If reference points are provided per-batch item (batch_size, num_queries, 2)
-        # Repeat for the 2 queue items -> (2 * batch_size, num_queries, 1, 2)
-        if reference_points.ndim == 3:
-            reference_points = reference_points.unsqueeze(2).repeat(self.num_bev_queue, 1, 1, 1)
-        elif reference_points.ndim == 4 and reference_points.shape[0] == batch_size:
-            reference_points = reference_points.repeat(self.num_bev_queue, 1, 1, 1)
-
-        total_batch_size = value.shape[0]
-        num_keys = value.shape[1]
-
-        value = self.value_proj(value)
-        value = value.view(total_batch_size, num_keys, self.num_heads, self.head_dim)
-
-        # Compute sampling offsets and attention weights from query_concat
-        sampling_offsets = self.sampling_offsets(query_concat).view(
-            batch_size, num_queries, self.num_heads, self.num_bev_queue, self.num_levels, self.num_points, 2
-        )
-        attention_weights = self.attention_weights(query_concat).view(
-            batch_size, num_queries, self.num_heads, self.num_bev_queue, self.num_levels * self.num_points
+        batch_size, num_queries, _ = hidden_states.shape
+        total_batch_size, sequence_length, _ = encoder_hidden_states.shape
+        total_elements = sum(height * width for height, width in spatial_shapes_list)
+        torch_compilable_check(
+            total_elements == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
         )
 
-        # Softmax normalized over (num_levels * num_points) per queue item
-        attention_weights = F.softmax(attention_weights, dim=-1).view(
-            batch_size, num_queries, self.num_heads, self.num_bev_queue, self.num_levels, self.num_points
-        )
+        # Delta 1: condition offsets and attention weights on [prev_bev, current_bev]
+        prev_bev = encoder_hidden_states.view(batch_size, self.num_bev_queue, sequence_length, self.d_model)[:, 0]
+        query_concat = torch.cat([prev_bev, hidden_states], dim=-1)
 
-        # Permute queue dimension into batch dimension matching value (2 * batch_size)
-        # (batch_size, num_queries, num_heads, num_bev_queue, num_levels, num_points, 2)
-        # -> (num_bev_queue, batch_size, num_queries, num_heads, num_levels, num_points, 2)
-        # -> (num_bev_queue * batch_size, num_queries, num_heads, num_levels, num_points, 2)
+        value = self.value_proj(encoder_hidden_states).view(
+            total_batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads
+        )
+        # Delta 2: fold num_bev_queue into the batch dimension while preserving upstream (n_heads, num_bev_queue) layout
         sampling_offsets = (
-            sampling_offsets.permute(3, 0, 1, 2, 4, 5, 6)
-            .contiguous()
-            .view(total_batch_size, num_queries, self.num_heads, self.num_levels, self.num_points, 2)
+            self.sampling_offsets(query_concat)
+            .view(batch_size, num_queries, self.n_heads, self.num_bev_queue, self.n_levels, self.n_points, 2)
+            .movedim(3, 1)
+            .reshape(total_batch_size, num_queries, self.n_heads, self.n_levels, self.n_points, 2)
         )
         attention_weights = (
-            attention_weights.permute(3, 0, 1, 2, 4, 5)
-            .contiguous()
-            .view(total_batch_size, num_queries, self.num_heads, self.num_levels, self.num_points)
+            F.softmax(
+                self.attention_weights(query_concat).view(
+                    batch_size, num_queries, self.n_heads, self.num_bev_queue, self.n_levels * self.n_points
+                ),
+                dim=-1,
+            )
+            .view(batch_size, num_queries, self.n_heads, self.num_bev_queue, self.n_levels, self.n_points)
+            .movedim(3, 1)
+            .reshape(total_batch_size, num_queries, self.n_heads, self.n_levels, self.n_points)
         )
 
-        if isinstance(spatial_shapes, list):
-            spatial_shapes_list = spatial_shapes
-            spatial_shapes_tensor = query.new_tensor(spatial_shapes, dtype=torch.long)
-        else:
-            spatial_shapes_tensor = spatial_shapes
-            spatial_shapes_list = spatial_shapes.tolist()
+        offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
+        sampling_locations = (
+            reference_points[:, :, None, :, None, :]
+            + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
+        )
 
-        offset_normalizer = torch.stack([spatial_shapes_tensor[..., 1], spatial_shapes_tensor[..., 0]], -1)
-
-        # reference_points: (2 * batch_size, num_queries, 1, 2) -> (2 * batch_size, num_queries, 1, 1, 1, 2)
-        ref_points_expanded = reference_points[:, :, None, :, None, :]
-        normalizer_expanded = offset_normalizer[None, None, None, :, None, :]
-
-        sampling_locations = ref_points_expanded + sampling_offsets / normalizer_expanded
-
-        output = self.deformable_attention(
+        output = self.attn(
             value,
-            spatial_shapes_tensor,
+            spatial_shapes,
             spatial_shapes_list,
             level_start_index,
             sampling_locations,
             attention_weights,
-            64,
+            self.im2col_step,
         )
 
-        # Fuse over the temporal queue dimension (num_bev_queue=2) via mean
-        output = output.view(self.num_bev_queue, batch_size, num_queries, self.embed_dims).mean(dim=0)
+        # Delta 3: fuse over the temporal queue via mean before output projection
+        output = output.view(batch_size, self.num_bev_queue, num_queries, self.d_model).mean(dim=1)
         output = self.output_proj(output)
-        return self.dropout(output) + identity
+        return output, attention_weights
 
 
 def point_sampling(
@@ -1232,7 +1117,6 @@ class BevformerSpatialCrossAttention(nn.Module):
         self.config = config
         self.embed_dims = config.d_model
         self.num_cams = config.num_cameras
-        self.dropout = nn.Dropout(config.dropout)
         self.pc_range = config.point_cloud_range
 
         self.deformable_attention = BevformerSpatialDeformableAttention(
@@ -1244,59 +1128,21 @@ class BevformerSpatialCrossAttention(nn.Module):
 
     def forward(
         self,
-        query: torch.Tensor,
-        key: torch.Tensor | None = None,
-        value: torch.Tensor | None = None,
-        identity: torch.Tensor | None = None,
-        query_pos: torch.Tensor | None = None,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        position_embeddings: torch.Tensor | None = None,
         reference_points_cam: torch.Tensor | None = None,
         bev_mask: torch.Tensor | None = None,
         spatial_shapes: torch.Tensor | None = None,
         spatial_shapes_list: list[tuple[int, int]] | None = None,
         level_start_index: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Forward pass for Spatial Cross Attention.
+        slots = torch.zeros_like(hidden_states)
 
-        Args:
-            query (`torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`):
-                Input BEV queries.
-            key (`torch.Tensor` of shape `(num_cams, num_keys, batch_size, embed_dims)`):
-                Flattened multi-camera feature maps.
-            value (`torch.Tensor` of shape `(num_cams, num_keys, batch_size, embed_dims)`):
-                Same as key.
-            identity (`torch.Tensor`, *optional*):
-                Residual tensor. Defaults to query.
-            query_pos (`torch.Tensor`, *optional*):
-                Positional encoding for BEV query.
-            reference_points_cam (`torch.Tensor` of shape `(num_cams, batch_size, num_queries, D, 2)`):
-                Projected 2D coordinates on camera views.
-            bev_mask (`torch.Tensor` of shape `(num_cams, batch_size, num_queries, D)`):
-                Boolean mask indicating valid projections.
-            spatial_shapes (`torch.Tensor` or `list`):
-                Spatial shapes `(H, W)` for each feature level.
-            level_start_index (`torch.Tensor`, *optional*):
-                Start indices for each feature level.
+        if position_embeddings is not None:
+            hidden_states = hidden_states + position_embeddings
 
-        Returns:
-            `torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`:
-                Aggregated and projected BEV features.
-        """
-        if key is None:
-            key = query
-        if value is None:
-            value = key
-
-        if identity is None:
-            inp_residual = query
-        else:
-            inp_residual = identity
-
-        slots = torch.zeros_like(query)
-
-        if query_pos is not None:
-            query = query + query_pos
-
-        batch_size, num_queries, _ = query.shape
+        batch_size, num_queries, _ = hidden_states.shape
         num_z_anchors = reference_points_cam.shape[3]
 
         indexes = []
@@ -1309,7 +1155,7 @@ class BevformerSpatialCrossAttention(nn.Module):
         max_len = max(lens) if len(lens) > 0 and max(lens) > 0 else 0
 
         if max_len > 0:
-            queries_rebatch = query.new_zeros([batch_size, self.num_cams, max_len, self.embed_dims])
+            queries_rebatch = hidden_states.new_zeros([batch_size, self.num_cams, max_len, self.embed_dims])
             reference_points_rebatch = reference_points_cam.new_zeros(
                 [batch_size, self.num_cams, max_len, num_z_anchors, 2]
             )
@@ -1318,11 +1164,13 @@ class BevformerSpatialCrossAttention(nn.Module):
                 for cam_idx, reference_points_per_img in enumerate(reference_points_cam):
                     idx = indexes[cam_idx]
                     if len(idx) > 0:
-                        queries_rebatch[b, cam_idx, : len(idx)] = query[b, idx]
+                        queries_rebatch[b, cam_idx, : len(idx)] = hidden_states[b, idx]
                         reference_points_rebatch[b, cam_idx, : len(idx)] = reference_points_per_img[b, idx]
 
-            num_cams, num_keys, bs, embed_dims = value.shape
-            value_reshaped = value.permute(2, 0, 1, 3).reshape(bs * self.num_cams, num_keys, self.embed_dims)
+            num_cams, num_keys, bs, embed_dims = encoder_hidden_states.shape
+            value_reshaped = encoder_hidden_states.permute(2, 0, 1, 3).reshape(
+                bs * self.num_cams, num_keys, self.embed_dims
+            )
 
             queries_in = queries_rebatch.view(bs * self.num_cams, max_len, self.embed_dims)
             ref_pts_in = reference_points_rebatch.view(bs * self.num_cams, max_len, num_z_anchors, 2)
@@ -1346,120 +1194,80 @@ class BevformerSpatialCrossAttention(nn.Module):
         count = count.permute(1, 2, 0).sum(-1)
         count = torch.clamp(count, min=1.0)
         slots = slots / count.unsqueeze(-1)
-        slots = self.output_proj(slots)
-
-        return self.dropout(slots) + inp_residual
+        return self.output_proj(slots)
 
 
-class BevformerEncoderLayer(nn.Module):
-    """Single layer of the BEVFormer BEV Encoder.
+class BevformerMLP(DeformableDetrMLP):
+    pass
 
-    Order of operations strictly matches upstream BEVFormer:
-    1. Temporal Self-Attention (`self_attn`) -> `norm1`
-    2. Spatial Cross-Attention (`cross_attn`) -> `norm2`
-    3. Feed-Forward Network (`ffn`) -> `norm3`
-    """
 
+class BevformerEncoderLayer(DeformableDetrDecoderLayer):
     def __init__(self, config: BevformerConfig):
-        super().__init__()
-        self.config = config
-        self.embed_dims = config.d_model
-
-        self.self_attn = BevformerTemporalSelfAttention(config)
-        self.norm1 = nn.LayerNorm(config.d_model, eps=1e-5)
-
-        self.cross_attn = BevformerSpatialCrossAttention(config)
-        self.norm2 = nn.LayerNorm(config.d_model, eps=1e-5)
-
-        self.ffn = nn.Sequential(
-            nn.Linear(config.d_model, config.encoder_ffn_dim),
-            nn.ReLU(inplace=True),
-            nn.Dropout(config.dropout),
-            nn.Linear(config.encoder_ffn_dim, config.d_model),
-            nn.Dropout(config.dropout),
+        super().__init__(config)
+        self.self_attn = BevformerTemporalSelfAttention(
+            config,
+            num_heads=config.encoder_attention_heads,
+            n_points=config.encoder_n_points,
         )
-        self.norm3 = nn.LayerNorm(config.d_model, eps=1e-5)
+        self.encoder_attn = BevformerSpatialCrossAttention(config)
+        self.mlp = BevformerMLP(config, self.hidden_size, config.encoder_ffn_dim)
 
     def forward(
         self,
-        query: torch.Tensor,
-        key: torch.Tensor | None = None,
-        value: torch.Tensor | None = None,
-        bev_pos: torch.Tensor | None = None,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        position_embeddings: torch.Tensor | None = None,
+        prev_bev: torch.Tensor | None = None,
         ref_2d: torch.Tensor | None = None,
-        ref_3d: torch.Tensor | None = None,
-        bev_h: int | None = None,
-        bev_w: int | None = None,
+        bev_spatial_shapes: torch.Tensor | None = None,
+        bev_spatial_shapes_list: list[tuple[int, int]] | None = None,
+        bev_level_start_index: torch.Tensor | None = None,
+        reference_points_cam: torch.Tensor | None = None,
+        bev_mask: torch.Tensor | None = None,
         spatial_shapes: torch.Tensor | None = None,
         spatial_shapes_list: list[tuple[int, int]] | None = None,
         level_start_index: torch.Tensor | None = None,
-        reference_points_cam: torch.Tensor | None = None,
-        bev_mask: torch.Tensor | None = None,
-        prev_bev: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Forward pass for one encoder layer.
+        residual = hidden_states
 
-        Args:
-            query (`torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`):
-                BEV queries.
-            key (`torch.Tensor` of shape `(num_cams, num_keys, batch_size, embed_dims)`):
-                Flattened multi-camera feature maps.
-            value (`torch.Tensor` of shape `(num_cams, num_keys, batch_size, embed_dims)`):
-                Flattened multi-camera feature maps.
-            bev_pos (`torch.Tensor`, *optional*):
-                Positional encoding for BEV query of shape `(batch_size, num_queries, embed_dims)`.
-            ref_2d (`torch.Tensor` of shape `(2 * batch_size, num_queries, 1, 2)`):
-                Hybrid 2D reference points for temporal self-attention.
-            ref_3d (`torch.Tensor` of shape `(batch_size, num_queries, D, 3)`):
-                3D pillar reference points.
-            bev_h (`int`):
-                Height of BEV feature map.
-            bev_w (`int`):
-                Width of BEV feature map.
-            spatial_shapes (`torch.Tensor`):
-                Spatial shapes of feature levels.
-            level_start_index (`torch.Tensor`):
-                Start indices for each feature level.
-            reference_points_cam (`torch.Tensor`):
-                Projected 2D coordinates on camera views.
-            bev_mask (`torch.Tensor`):
-                Visibility mask for projected points.
-            prev_bev (`torch.Tensor`, *optional*):
-                Previous BEV features queued with current BEV queries of shape `(2 * batch_size, num_queries, embed_dims)`.
-
-        Returns:
-            `torch.Tensor` of shape `(batch_size, num_queries, embed_dims)`:
-                Refined BEV queries.
-        """
         # 1. Temporal self-attention
-        query = self.self_attn(
-            query=query,
-            value=prev_bev,
-            query_pos=bev_pos,
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            encoder_hidden_states=prev_bev,
+            position_embeddings=position_embeddings,
             reference_points=ref_2d,
-            spatial_shapes=[(bev_h, bev_w)],
-            level_start_index=level_start_index,
+            spatial_shapes=bev_spatial_shapes,
+            spatial_shapes_list=bev_spatial_shapes_list,
+            level_start_index=bev_level_start_index,
         )
-        query = self.norm1(query)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+
+        residual = hidden_states
 
         # 2. Spatial cross-attention
-        query = self.cross_attn(
-            query=query,
-            key=key,
-            value=value,
-            query_pos=bev_pos,
+        hidden_states = self.encoder_attn(
+            hidden_states=hidden_states,
+            encoder_hidden_states=encoder_hidden_states,
+            position_embeddings=position_embeddings,
             reference_points_cam=reference_points_cam,
             bev_mask=bev_mask,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
             level_start_index=level_start_index,
         )
-        query = self.norm2(query)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
-        # 3. Feed-forward network with residual connection
-        query = self.norm3(query + self.ffn(query))
+        # 3. Feed-forward network
+        residual = hidden_states
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
 
-        return query
+        return hidden_states
 
 
 class BevformerEncoder(nn.Module):
@@ -1734,24 +1542,32 @@ class BevformerEncoder(nn.Module):
             (spatial_shapes_tensor.new_zeros((1,)), spatial_shapes_tensor.prod(1).cumsum(0)[:-1])
         )
 
+        bev_spatial_shapes_list = [(self.bev_h, self.bev_w)]
+        bev_spatial_shapes = torch.as_tensor(bev_spatial_shapes_list, dtype=torch.long, device=device)
+        bev_level_start_index = bev_spatial_shapes.new_zeros((1,))
+
         # 7. Execute encoder layers iteratively
         output = bev_queries
         for layer in self.layers:
+            layer_prev_bev = (
+                temporal_bev_queue
+                if temporal_bev_queue is not None
+                else torch.stack([output, output], dim=1).reshape(batch_size * 2, num_queries, -1)
+            )
             output = layer(
-                query=output,
-                key=feat_flatten,
-                value=feat_flatten,
-                bev_pos=bev_pos,
+                hidden_states=output,
+                encoder_hidden_states=feat_flatten,
+                position_embeddings=bev_pos,
+                prev_bev=layer_prev_bev,
                 ref_2d=hybrid_ref_2d,
-                ref_3d=ref_3d,
-                bev_h=self.bev_h,
-                bev_w=self.bev_w,
+                bev_spatial_shapes=bev_spatial_shapes,
+                bev_spatial_shapes_list=bev_spatial_shapes_list,
+                bev_level_start_index=bev_level_start_index,
+                reference_points_cam=reference_points_cam,
+                bev_mask=bev_mask,
                 spatial_shapes=spatial_shapes_tensor,
                 spatial_shapes_list=spatial_shapes,
                 level_start_index=level_start_index,
-                reference_points_cam=reference_points_cam,
-                bev_mask=bev_mask,
-                prev_bev=temporal_bev_queue,
             )
 
         return output
