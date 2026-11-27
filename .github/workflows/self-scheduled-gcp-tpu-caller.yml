@@ -1,0 +1,46 @@
+name: Self-hosted runner (GCP TPU scheduled CI caller)
+
+# The jobs are defined in huggingface/hf-workflows/.github/workflows/transformers_tpu_ci_scheduled.yaml. A full run
+# takes most of a day on the two runners, so runs never overlap.
+
+on:
+  schedule:
+    - cron: "17 0 * * *"
+  push:
+    branches:
+      - run_tpu_scheduled_ci_caller*
+  workflow_dispatch:
+
+concurrency:
+  group: gcp-tpu-scheduled-ci
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  model-ci:
+    name: Model CI
+    uses: huggingface/hf-workflows/.github/workflows/transformers_tpu_ci_scheduled.yaml@tpu-support
+    with:
+      job: run_models_gpu
+      slack_report_channel: "#tpu-hf-ci"
+      runner_group: gcp-ct6e-standard-4t
+      docker: huggingface/transformers-pytorch-tpu
+      ci_event: Scheduled CI (TPU)
+      report_repo_id: hf-gcp-tpu-internal/transformers_daily_ci
+      commit_sha: ${{ github.sha }}
+    secrets: inherit
+
+  pipeline-ci:
+    name: Pipeline CI
+    uses: huggingface/hf-workflows/.github/workflows/transformers_tpu_ci_scheduled.yaml@tpu-support
+    with:
+      job: run_pipelines_torch_gpu
+      slack_report_channel: "#tpu-hf-ci"
+      runner_group: gcp-ct6e-standard-4t
+      docker: huggingface/transformers-pytorch-tpu
+      ci_event: Scheduled CI (TPU)
+      report_repo_id: hf-gcp-tpu-internal/transformers_daily_ci
+      commit_sha: ${{ github.sha }}
+    secrets: inherit
