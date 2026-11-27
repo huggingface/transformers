@@ -451,7 +451,7 @@ class BeitPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
-    _no_split_modules = ["BeitLayer"]
+    _no_split_modules = ["BeitLayer", "BeitUperHead", "BeitFCNHead"]
     _supports_sdpa = True
     _supports_flash_attn = False
     _supports_flex_attn = False

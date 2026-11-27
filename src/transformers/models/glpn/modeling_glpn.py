@@ -370,7 +370,7 @@ class GLPNPreTrainedModel(PreTrainedModel):
     base_model_prefix = "glpn"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = []
+    _no_split_modules = ["GLPNLayer", "GLPNSelectiveFeatureFusion"]
 
 
 @auto_docstring

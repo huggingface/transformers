@@ -267,7 +267,7 @@ class BeitLayer(ViTLayer):
 
 @auto_docstring
 class BeitPreTrainedModel(ViTPreTrainedModel):
-    _no_split_modules = ["BeitLayer"]
+    _no_split_modules = ["BeitLayer", "BeitUperHead", "BeitFCNHead"]
     _keys_to_ignore_on_load_unexpected = [r".*relative_position_index.*"]
     _supports_flash_attn = False
     _supports_flex_attn = False

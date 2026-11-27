@@ -657,7 +657,7 @@ class Data2VecVisionPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Data2VecVisionLayer"]
+    _no_split_modules = ["Data2VecVisionLayer", "Data2VecVisionUperHead", "Data2VecVisionFCNHead"]
     _keys_to_ignore_on_load_unexpected = [r".*relative_position_index.*"]
     _supports_sdpa = True
 

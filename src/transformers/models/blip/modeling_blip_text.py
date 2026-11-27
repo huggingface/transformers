@@ -442,7 +442,7 @@ class BlipTextPreTrainedModel(PreTrainedModel):
 
     config: BlipTextConfig
     base_model_prefix = "bert"
-    _no_split_modules = []
+    _no_split_modules = ["BlipTextEmbeddings", "BlipTextLayer"]
     _can_record_outputs = {
         "hidden_states": BlipTextLayer,
         "attentions": [

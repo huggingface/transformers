@@ -415,7 +415,12 @@ class CLIPSegPreTrainedModel(PreTrainedModel):
     config: CLIPSegConfig
     base_model_prefix = "clip"
     input_modalities = ("image", "text")
-    _no_split_modules = ["CLIPSegTextEmbeddings", "CLIPSegEncoderLayer", "CLIPSegVisionEmbeddings"]
+    _no_split_modules = [
+        "CLIPSegTextEmbeddings",
+        "CLIPSegEncoderLayer",
+        "CLIPSegVisionEmbeddings",
+        "CLIPSegDecoderLayer",
+    ]
 
     supports_gradient_checkpointing = True
     _supports_sdpa = True

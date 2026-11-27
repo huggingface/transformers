@@ -570,7 +570,7 @@ class MobileViTV2PreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
-    _no_split_modules = ["MobileViTV2Layer"]
+    _no_split_modules = ["MobileViTV2Layer", "MobileViTV2InvertedResidual", "MobileViTV2ASPP"]
 
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""

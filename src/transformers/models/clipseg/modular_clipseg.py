@@ -246,6 +246,12 @@ class CLIPSegDecoderLayer(CLIPEncoderLayer):
 @auto_docstring
 class CLIPSegPreTrainedModel(CLIPPreTrainedModel):
     base_model_prefix = "clip"
+    _no_split_modules = [
+        "CLIPSegTextEmbeddings",
+        "CLIPSegEncoderLayer",
+        "CLIPSegVisionEmbeddings",
+        "CLIPSegDecoderLayer",
+    ]
     _can_record_outputs = {
         "hidden_states": [CLIPSegEncoderLayer, CLIPSegDecoderLayer],
         "attentions": CLIPSegAttention,
