@@ -1093,6 +1093,7 @@ class NopConfig(PreTrainedConfig):
         "stabilityai/tiny-random-stablelm-2",
         "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
         "naver-clova-ix/donut-base-finetuned-docvqa",
+        "almanach/camembertv2-base",
     ]
 
     @slow

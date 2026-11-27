@@ -37,6 +37,7 @@ from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5DecoderLayer,
     Qwen3_5GatedDeltaNet,
     causal_conv1d_fn,
+    causal_conv1d_forward,
     causal_conv1d_update,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
@@ -90,12 +91,9 @@ class LaraMiniConfig(Qwen3NextConfig):
         "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.shared_expert.gate_proj": "colwise",
         "layers.*.mlp.shared_expert.up_proj": "colwise",
         "layers.*.mlp.shared_expert.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         # The `linear_attn.in_proj_*` stay replicated: they are split from the checkpoint's fused `in_proj` at load time,
         # which the `Split` conversion can't do on a sharded tensor
         "layers.*.linear_attn.out_proj": "colwise_gather_output",
@@ -200,7 +198,13 @@ class LaraMiniAttention(Qwen3Attention):
 
 
 @use_kernelized_func(
-    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+    [
+        torch_recurrent_gated_delta_rule,
+        torch_chunk_gated_delta_rule,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class LaraMiniGatedDeltaNet(Qwen3_5GatedDeltaNet):
     """Qwen3.5 gated delta net. The published checkpoints fuse its input projections into one `in_proj` (rows

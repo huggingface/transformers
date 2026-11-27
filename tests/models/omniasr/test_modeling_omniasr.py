@@ -26,7 +26,7 @@ from transformers import (
     is_datasets_available,
     is_torch_available,
 )
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...alm_tester import ALMModelTest, ALMModelTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
@@ -95,6 +95,22 @@ class OmniASRForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase):
     )
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
+
+    @require_torch_accelerator
+    def test_get_audio_features_padding_mask_on_cpu(self):
+        """
+        A caller may keep `padding_mask` on the CPU while the audio is on the accelerator, to avoid
+        syncs. The audio features must then match the ones computed with the mask on the accelerator.
+        """
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = OmniASRModel(config).to(torch_device).eval()
+        input_values, padding_mask = inputs["input_values"], inputs["padding_mask"]
+
+        with torch.no_grad():
+            expected = model.get_audio_features(input_values, padding_mask=padding_mask, return_dict=True)
+            output = model.get_audio_features(input_values, padding_mask=padding_mask.cpu(), return_dict=True)
+
+        torch.testing.assert_close(output.pooler_output, expected.pooler_output)
 
 
 @require_torch

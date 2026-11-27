@@ -23,6 +23,8 @@ from ..auto import AutoConfig
 @strict
 class OmniASRCTCConfig(PreTrainedConfig):
     r"""
+    blank_token_id (`int`, *optional*, defaults to 0):
+        The token ID of the blank symbol used by the CTC loss.
     ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
         Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
         instance of [`OmniASRForCTC`].
@@ -59,9 +61,8 @@ class OmniASRCTCConfig(PreTrainedConfig):
     ctc_zero_infinity: bool = False
     initializer_range: float = 0.02
     audio_config: dict | PreTrainedConfig | None = None
-    bos_token_id: int | None = 0
+    blank_token_id: int = 0
     pad_token_id: int | None = 1
-    eos_token_id: int | None = 2
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

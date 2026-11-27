@@ -34,13 +34,14 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..bamba.modeling_bamba import apply_mask_to_padding_states, apply_rotary_pos_emb
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
-from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
 )
+from ..mamba.modeling_mamba import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ..mixtral.modeling_mixtral import MixtralForCausalLM
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeSparseMoeBlock, Qwen2MoeTopKRouter
 from ..qwen3_moe.modeling_qwen3_moe import (
@@ -98,7 +99,7 @@ class Qwen3NextRotaryEmbedding(Gemma2RotaryEmbedding):
         return inv_freq.to(device), attention_factor
 
 
-class Qwen3NextRMSNorm(Gemma3RMSNorm):
+class Qwen3NextRMSNorm(GemmaRMSNorm):
     pass
 
 
@@ -158,49 +159,6 @@ class Qwen3NextAttention(Qwen3MoeAttention):
 
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-
-
-@use_kernel_func_from_hub_with_fallback("causal_conv1d_update", "causal_conv1d")
-def causal_conv1d_update(
-    hidden_states: torch.Tensor,
-    conv_state: torch.Tensor,
-    weight: nn.Parameter,
-    bias: nn.Parameter | None = None,
-    activation: str | None = None,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    state_len = conv_state.shape[-1]
-
-    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
-    conv_state.copy_(hidden_states_new[:, :, -state_len:])
-    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
-    out = out[:, :, -seq_len:]
-    if activation is not None:
-        out = ACT2FN[activation](out)
-    return out.to(hidden_states.dtype)
-
-
-@use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")
-def causal_conv1d_fn(
-    hidden_states: torch.Tensor,
-    weight: nn.Parameter,
-    bias: nn.Parameter | None = None,
-    activation: str | None = None,
-    **kwargs,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    padding = weight.shape[-1] - 1
-
-    out = F.conv1d(
-        hidden_states.to(weight.dtype),
-        weight=weight.unsqueeze(1),
-        bias=bias,
-        padding=padding,
-        groups=hidden_size,
-    )[:, :, :seq_len]
-    if activation is not None:
-        out = ACT2FN[activation](out)
-    return out.to(hidden_states.dtype)
 
 
 # NOTE: the FLA package computes `x / torch.sqrt((x * x).sum(dim=dim, keepdim=True) + eps)` instead, so if we align
@@ -422,7 +380,13 @@ def torch_recurrent_gated_delta_rule(
 
 
 @use_kernelized_func(
-    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+    [
+        torch_recurrent_gated_delta_rule,
+        torch_chunk_gated_delta_rule,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class Qwen3NextGatedDeltaNet(nn.Module):
     def __init__(self, config: Qwen3NextConfig, layer_idx: int):
@@ -512,12 +476,11 @@ class Qwen3NextGatedDeltaNet(nn.Module):
 
         # Set up dimensions for reshapes later
         seq_len = hidden_states.shape[1]
-        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
+        # Retrieve the recurrent state if there is a cache. It may be None if the layer is not initialized.
         if cache is not None:
-            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
             recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
-            conv_state, recurrent_state = None, None
+            recurrent_state = None
 
         projected_states_qkvz = self.in_proj_qkvz(hidden_states)
         projected_states_ba = self.in_proj_ba(hidden_states)
@@ -527,30 +490,14 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         mixed_qkv = torch.cat((query, key, value), dim=-1)
         mixed_qkv = mixed_qkv.transpose(1, 2)
 
-        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
-            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
-            mixed_qkv = causal_conv1d_update(
-                mixed_qkv,
-                conv_state,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                self.activation,
-            )
-        else:
-            if cache is not None:
-                mixed_qkv = cache.update_conv_state(mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size)
-
-            mixed_qkv = causal_conv1d_fn(
-                mixed_qkv,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                activation=self.activation,
-                **kwargs,
-            )
-
-            # Drop the additional previous states
-            if cache is not None:
-                mixed_qkv = mixed_qkv[:, :, -seq_len:]
+        mixed_qkv = causal_conv1d_forward(
+            self.conv1d,
+            mixed_qkv,
+            cache,
+            self.layer_idx,
+            activation=self.activation,
+            **kwargs,
+        )
 
         mixed_qkv = mixed_qkv.transpose(1, 2)
         query, key, value = torch.split(
@@ -584,17 +531,61 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 **kwargs,
             )
         else:
-            core_attn_out, last_recurrent_state = torch_chunk_gated_delta_rule(
-                query,
-                key,
-                value,
-                g=g,
-                beta=beta,
+            num_intermediate_recurrent_states = (
+                cache.get_recurrent_states_to_keep(self.layer_idx) if cache is not None else 0
+            )
+            # Cannot be more than the number of tokens
+            num_intermediate_recurrent_states = min(num_intermediate_recurrent_states, seq_len)
+            # Since we want the last num_intermediate_recurrent_states, we need to artifically remove them from the chunks, and split the inputs
+            effective_sequence_length = seq_len - num_intermediate_recurrent_states
+            chunked_query, sequential_query = torch.tensor_split(query, [effective_sequence_length], dim=1)
+            chunked_key, sequential_key = torch.tensor_split(key, [effective_sequence_length], dim=1)
+            chunked_value, sequential_value = torch.tensor_split(value, [effective_sequence_length], dim=1)
+            chunked_beta, sequential_beta = torch.tensor_split(beta, [effective_sequence_length], dim=1)
+            chunked_g, sequential_g = torch.tensor_split(g, [effective_sequence_length], dim=1)
+
+            all_outputs = []
+            # First, perform the fast chunked computation
+            chunked_attn_out, chunked_last_recurrent_state = torch_chunk_gated_delta_rule(
+                chunked_query,
+                chunked_key,
+                chunked_value,
+                g=chunked_g,
+                beta=chunked_beta,
                 initial_state=recurrent_state,
                 output_final_state=cache is not None,
                 use_qk_l2norm_in_kernel=True,
                 cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
                 **kwargs,
+            )
+            all_outputs.append(chunked_attn_out)
+            # If we need to return intermediate recurrent state, we now do it sequentially after the chunked part
+            intermediate_recurrent_states = []
+            last_recurrent_state = chunked_last_recurrent_state
+            for i in range(num_intermediate_recurrent_states):
+                local_attn_out, last_recurrent_state = torch_recurrent_gated_delta_rule(
+                    sequential_query[:, i : i + 1, ...],
+                    sequential_key[:, i : i + 1, ...],
+                    sequential_value[:, i : i + 1, ...],
+                    g=sequential_g[:, i : i + 1, ...],
+                    beta=sequential_beta[:, i : i + 1, ...],
+                    initial_state=last_recurrent_state,
+                    output_final_state=True,
+                    use_qk_l2norm_in_kernel=True,
+                    **kwargs,
+                )
+                # Combine them
+                all_outputs.append(local_attn_out)
+                intermediate_recurrent_states.append(last_recurrent_state)
+
+            # Cat all outputs
+            core_attn_out = torch.cat(all_outputs, dim=1)
+
+            # In case we needed intermediate states, we return them, otherwise the last one is the chunked one
+            last_recurrent_state = (
+                intermediate_recurrent_states
+                if len(intermediate_recurrent_states) > 0
+                else chunked_last_recurrent_state
             )
 
         # Update cache
@@ -711,7 +702,6 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
         "hidden_states": Qwen3NextDecoderLayer,
         "attentions": Qwen3NextAttention,
     }
-    _is_stateful = True
     _can_compile_fullgraph = True
 
     def _init_weights(self, module):

@@ -270,7 +270,8 @@ class GenerationConfig(PushToHubMixin):
         watermarking_config (`BaseWatermarkingConfig` or `dict`, *optional*):
             Arguments used to watermark the model outputs by adding a small bias to randomly selected set of "green"
             tokens. See the docs of [`SynthIDTextWatermarkingConfig`] and [`WatermarkingConfig`] for more
-            details. If passed as `Dict`, it will be converted to a `WatermarkingConfig` internally.
+            details. If passed as `Dict`, it will be converted to a `SynthIDTextWatermarkingConfig` if it contains
+            `ngram_len`, and to a `WatermarkingConfig` otherwise.
 
         > Parameters that define the output variables of generate
 
@@ -435,7 +436,11 @@ class GenerationConfig(PushToHubMixin):
 
         self.watermarking_config = kwargs.pop("watermarking_config", None)
         if isinstance(self.watermarking_config, dict):
-            self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
+            # A serialized watermarking config doesn't store its class, so `ngram_len` (only in SynthID) tells them apart
+            config_class = (
+                SynthIDTextWatermarkingConfig if "ngram_len" in self.watermarking_config else WatermarkingConfig
+            )
+            self.watermarking_config = config_class.from_dict(self.watermarking_config)
 
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", None)
@@ -1361,7 +1366,9 @@ class GenerationConfig(PushToHubMixin):
             elif hasattr(self, key):
                 if not defaults_only or getattr(self, key) is None:
                     if key == "watermarking_config" and isinstance(value, dict):
-                        value = WatermarkingConfig.from_dict(value)
+                        # A serialized watermarking config doesn't store its class, so `ngram_len` (only in SynthID) tells them apart
+                        config_class = SynthIDTextWatermarkingConfig if "ngram_len" in value else WatermarkingConfig
+                        value = config_class.from_dict(value)
                     setattr(self, key, value)
                     to_remove.append(key)
 

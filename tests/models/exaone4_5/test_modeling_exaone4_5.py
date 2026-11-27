@@ -138,8 +138,8 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
                 ("cuda", (8, 6)): torch.tensor(
                     [[44.8527, 45.7216, 71.1159, 36.9564, 44.3283, 22.0527, 28.3233, 62.5739, 46.0708]]
                 ),
-                ("xpu", None): torch.tensor(
-                    [[45.2173, 45.4939, 71.0896, 37.1218, 44.3504, 22.1194, 28.6795, 62.5956, 45.9839]]
+                ("xpu", 5): torch.tensor(
+                    [[45.3240, 45.4474, 71.1335, 36.9607, 44.2124, 21.9089, 28.4014, 62.6306, 46.1001]]
                 ),
             }
         )
@@ -148,8 +148,8 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
                 ("cuda", (8, 6)): torch.tensor(
                     [42.2500, 43.0000, 42.5000, 44.7500, 49.5000, 46.0000, 46.5000, 46.5000, 45.7500, 46.2500]
                 ),
-                ("xpu", None): torch.tensor(
-                    [42.7500, 43.5000, 42.7500, 45.2500, 50.0000, 46.5000, 46.7500, 46.7500, 46.0000, 46.5000]
+                ("xpu", 5): torch.tensor(
+                    [42.7500, 43.5000, 43.0000, 45.5000, 50.0000, 46.5000, 46.7500, 46.7500, 46.0000, 46.5000]
                 ),
             }
         )
@@ -165,7 +165,7 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
                     '\nTell me about the Miracle on the Han river.\n\n<think>\n\n</think>\n\nThe **"Miracle on the Han River"**'
                     " is a term used to describe the rapid economic development and industrialization that South Korea experienced"
                 ),
-                ("xpu", None): (
+                ("xpu", 5): (
                     '\nTell me about the Miracle on the Han river.\n\n<think>\n\n</think>\n\nThe **"Miracle on the Han River"**'
                     " is a term used to describe the rapid economic development and industrialization that South Korea experienced"
                 ),
@@ -194,8 +194,8 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
                 ("cuda", 8): (
                     "\n\nDescribe the image.\n\n<think>\n\n</think>\n\nThe image captures a fluffy, young lynx kitten walking across a snowy surface, its thick"
                 ),
-                ("xpu", 3): (
-                    "\n\nDescribe the image.\n\n<think>\n\n</think>\n\nThe image captures a young, fluffy wild cat—likely a lynx kitten—walking through a"
+                ("xpu", 5): (
+                    "\n\nDescribe the image.\n\n<think>\n\n</think>\n\nThe image captures a young, fluffy wild cat—likely a lynx kitten or bobcat cub"
                 ),
             }
         )

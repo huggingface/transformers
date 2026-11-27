@@ -83,8 +83,10 @@ class LlavaProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
-            crop_size = images_kwargs.get("crop_size", None) or self.image_processor.crop_size
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
+            crop_size = images_kwargs["crop_size"]
             resized_height, resized_width = crop_size["height"], crop_size["width"]
 
             num_image_tokens = (resized_height // self.patch_size) * (resized_width // self.patch_size)

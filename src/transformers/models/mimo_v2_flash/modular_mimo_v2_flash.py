@@ -39,7 +39,7 @@ from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import Glm4MoeMLP, apply_rotary_pos_emb, repeat_kv
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..laguna.modeling_laguna import LagunaModel
-from ..mixtral.modeling_mixtral import MixtralRMSNorm
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen2.modeling_qwen2 import Qwen2Attention
 
 
@@ -75,9 +75,6 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
@@ -137,7 +134,7 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
         return kwargs
 
 
-class MiMoV2FlashRMSNorm(MixtralRMSNorm):
+class MiMoV2FlashRMSNorm(LlamaRMSNorm):
     pass
 
 

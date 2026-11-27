@@ -116,5 +116,5 @@ See the hqq [Backend](https://github.com/mobiusml/hqq/#backend) guide for the av
 
 ## Resources
 
-- [Half-Quadratic Quantization of Large Machine Learning Models](https://mobiusml.github.io/hqq_blog/) blog post
+- [Half-Quadratic Quantization of Large Machine Learning Models](https://dropbox.github.io/hqq_blog/) blog post
 - [hqq](https://github.com/mobiusml/hqq/) repository
