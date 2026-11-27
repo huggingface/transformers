@@ -26,13 +26,17 @@ import transformers
 from transformers import (
     CONFIG_MAPPING,
     FEATURE_EXTRACTOR_MAPPING,
+    IMAGE_PROCESSOR_MAPPING,
     MODEL_FOR_AUDIO_TOKENIZATION_MAPPING,
     PROCESSOR_MAPPING,
     TOKENIZER_MAPPING,
+    VIDEO_PROCESSOR_MAPPING,
     AutoConfig,
     AutoFeatureExtractor,
+    AutoImageProcessor,
     AutoProcessor,
     AutoTokenizer,
+    AutoVideoProcessor,
     BaseVideoProcessor,
     BertTokenizer,
     CLIPImageProcessor,
@@ -58,6 +62,8 @@ from transformers.testing_utils import (
     is_staging_test,
     require_scipy,
     require_tokenizers,
+    require_torch,
+    require_vision,
 )
 from transformers.tokenization_python import TOKENIZER_CONFIG_FILE
 from transformers.utils import (
@@ -357,6 +363,46 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
                 del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
             REGISTERED_TOKENIZER_CLASSES.pop("CustomTokenizer", None)
+
+    @require_vision
+    @require_torch
+    def test_custom_image_and_video_processors_save_load_roundtrip(self):
+        class CustomMultimodalProcessor(ProcessorMixin):
+            image_processor_class = "CustomImageProcessor"
+            video_processor_class = "CustomVideoProcessor"
+
+            def __init__(self, image_processor, video_processor):
+                super().__init__(image_processor, video_processor)
+
+        try:
+            AutoConfig.register("custom", CustomConfig)
+            AutoImageProcessor.register(
+                CustomConfig, image_processor_classes={"pil": CustomImageProcessor, "foo": CustomImageProcessor}
+            )
+            AutoVideoProcessor.register(CustomConfig, CustomVideoProcessor)
+
+            processor = CustomMultimodalProcessor(
+                image_processor=CustomImageProcessor(), video_processor=CustomVideoProcessor()
+            )
+
+            with tempfile.TemporaryDirectory() as first_dir, tempfile.TemporaryDirectory() as second_dir:
+                processor.save_pretrained(first_dir)
+                loaded = CustomMultimodalProcessor.from_pretrained(first_dir)
+                loaded.save_pretrained(second_dir)
+                reloaded = CustomMultimodalProcessor.from_pretrained(second_dir)
+
+            for new_processor in (loaded, reloaded):
+                self.assertIs(type(new_processor.image_processor), CustomImageProcessor)
+                self.assertIs(type(new_processor.video_processor), CustomVideoProcessor)
+                self.assertEqual(new_processor.image_processor.to_dict(), processor.image_processor.to_dict())
+                self.assertEqual(new_processor.video_processor.to_dict(), processor.video_processor.to_dict())
+        finally:
+            if "custom" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["custom"]
+            if CustomConfig in IMAGE_PROCESSOR_MAPPING._extra_content:
+                del IMAGE_PROCESSOR_MAPPING._extra_content[CustomConfig]
+            if CustomConfig in VIDEO_PROCESSOR_MAPPING._extra_content:
+                del VIDEO_PROCESSOR_MAPPING._extra_content[CustomConfig]
 
     def test_from_pretrained_dynamic_processor_conflict(self):
         class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
