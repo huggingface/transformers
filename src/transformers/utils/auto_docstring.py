@@ -92,8 +92,8 @@ _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
 
 # Pre-compiled patterns used repeatedly at runtime.  Compiling once here avoids
 # repeated compilation overhead (and cache lookups) on every decorator call.
-_re_example_or_return = re.compile(r"(?m)^([ \t]*)(?=Example|Return|```)")
-_re_return = re.compile(r"(?m)^([ \t]*)(?=Return)")
+_re_example_or_return = re.compile(r"(?m)^([ \t]*)(?=Example|Returns?(?::|[ \t]*$)|```)")
+_re_return = re.compile(r"(?m)^([ \t]*)(?=Returns?(?::|[ \t]*$))")
 _re_example = re.compile(r"(?m)^([ \t]*)(?=Example|```)")
 _re_args_section = re.compile(r"(?:Args:)(\n.*)?(\n)?$", re.DOTALL)
 _re_shape = re.compile(r"(of shape\s*(?:`.*?`|\(.*?\)))")
