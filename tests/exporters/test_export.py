@@ -1001,7 +1001,7 @@ class ExportTesterMixin:
         outputs = multimodal(**copy.deepcopy(inputs))
         self.assertIs(type(outputs), type(expected))
         if check_exactness:
-            encoder_state = tuple(f"{spec.token_field.replace('_token_id', '_outputs')}." for spec in _MODALITY_SPECS)
+            encoder_state = tuple(f"{spec.modality}_outputs." for spec in _MODALITY_SPECS)
             expected = get_leaf_tensors(expected)
             expected = {
                 key: value
