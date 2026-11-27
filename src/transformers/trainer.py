@@ -527,6 +527,28 @@ class Trainer:
         if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
             self.model_accepts_loss_kwargs = False
 
+            # `deepspeed_sp_compute_loss` relies on DeepSpeed scaling gradients over the SP group, which ZeRO-3 does
+            # since deepspeedai/DeepSpeed#8854 (it averaged them before), so the loss rescales for older versions.
+            # But the rescale only covers the average path: with `reduce_scatter: false` and
+            # `contiguous_gradients: true`, parameters in different buckets take different reduction paths
+            # (e.g. the weight and bias of the same layer) and the ones skipping the average are over-scaled.
+            if self.accelerator.state.deepspeed_plugin.zero_stage == 3:
+                import deepspeed
+
+                zero3_config = self.accelerator.state.deepspeed_plugin.hf_ds_config.config["zero_optimization"]
+                reduce_scatter = zero3_config.get("reduce_scatter", True)
+                contiguous_gradients = zero3_config.get("contiguous_gradients", True)
+                if (
+                    not reduce_scatter
+                    and contiguous_gradients
+                    and version.parse(deepspeed.__version__) < version.parse("0.20.2")
+                ):
+                    raise ImportError(
+                        "DeepSpeed sequence parallelism with ZeRO-3 requires `reduce_scatter: true` (the default) "
+                        "on `deepspeed<0.20.2`: with `reduce_scatter: false` and `contiguous_gradients: true`, "
+                        "some gradients are left scaled by sp_size. Alternatively, upgrade to `deepspeed>=0.20.2`."
+                    )
+
         model_to_inspect = unwrap_peft_model(self.model)
         default_label_names = find_labels(model_to_inspect.__class__)
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
