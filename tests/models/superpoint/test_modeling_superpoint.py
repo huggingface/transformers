@@ -17,6 +17,7 @@ from functools import cached_property
 
 import pytest
 
+from transformers import set_seed
 from transformers.models.superpoint.configuration_superpoint import SuperPointConfig
 from transformers.testing_utils import (
     is_flaky,
@@ -142,8 +143,40 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     @is_flaky(description="The `indices` computed with `topk()` in `top_k_keypoints` is not stable.")
-    def test_batching_equivalence(self):
-        super().test_batching_equivalence()
+    def test_batching_equivalence(self, atol=1e-5, rtol=1e-5):
+        set_seed(42)
+        config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            config.output_hidden_states = True
+            model = model_class(config).to(torch_device).eval()
+            batched_input_prepared = self._prepare_for_class(batched_input, model_class)
+            batch_size = self.model_tester.batch_size
+
+            with torch.no_grad():
+                model_batched_output = model(**batched_input_prepared)
+                for batch_idx in range(batch_size):
+                    single_row_input = {
+                        k: (
+                            v[batch_idx : batch_idx + 1]
+                            if isinstance(v, torch.Tensor) and v.shape[0] == batch_size
+                            else v
+                        )
+                        for k, v in batched_input_prepared.items()
+                    }
+                    model_row_output = model(**single_row_input)
+                    for key in model_batched_output:
+                        batched_val, single_val = model_batched_output[key], model_row_output[key]
+                        if isinstance(batched_val, (list, tuple)):
+                            for hb, hs in zip(batched_val, single_val):
+                                torch.testing.assert_close(hb[batch_idx : batch_idx + 1], hs, atol=atol, rtol=rtol)
+                        elif isinstance(batched_val, torch.Tensor):
+                            slices = (slice(batch_idx, batch_idx + 1),) + tuple(
+                                slice(0, idx) for idx in single_val.shape[1:]
+                            )
+                            if torch.is_floating_point(batched_val):
+                                torch.testing.assert_close(batched_val[slices], single_val, atol=atol, rtol=rtol)
+                            else:
+                                self.assertTrue(torch.equal(batched_val[slices], single_val))
 
     @unittest.skip(reason="SuperPointForKeypointDetection does not use inputs_embeds")
     def test_inputs_embeds(self):

@@ -17,8 +17,17 @@ from functools import cached_property
 
 from datasets import load_dataset
 
+from transformers import set_seed
 from transformers.models.lightglue.configuration_lightglue import LightGlueConfig
-from transformers.testing_utils import get_device_properties, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    get_device_properties,
+    require_torch,
+    require_vision,
+    set_config_for_less_flaky_test,
+    set_model_for_less_flaky_test,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -150,7 +159,59 @@ class LightGlueModelTest(ModelTesterMixin, unittest.TestCase):
         if device_properties[0] == "cuda" and device_properties[1] == 8:
             # TODO: (ydshieh) fix this
             self.skipTest(reason="After switching to A10, this test always fails, but pass on CPU or T4.")
-        super().test_batching_equivalence(atol=atol, rtol=rtol)
+
+        def check_output(batched_object, single_row_object, batch_idx, batch_size, model_name, key):
+            if isinstance(batched_object, (list, tuple)):
+                for batched_val, single_val in zip(batched_object, single_row_object):
+                    check_output(batched_val, single_val, batch_idx, batch_size, model_name, key)
+            elif batched_object is None or not isinstance(batched_object, torch.Tensor) or batched_object.dim() == 0:
+                return
+            else:
+                chunk = batched_object.shape[0] // batch_size
+                slice_ids = (slice(batch_idx * chunk, (batch_idx + 1) * chunk),) + tuple(
+                    slice(0, index) for index in single_row_object.shape[1:]
+                )
+                batched_row = batched_object[slice_ids]
+                if not torch.is_floating_point(batched_row):
+                    self.assertTrue(
+                        torch.equal(batched_row, single_row_object),
+                        msg=f"Batched and single-row integer outputs differ in {model_name} (batch_idx={batch_idx}, key={key}).",
+                    )
+                else:
+                    torch.testing.assert_close(batched_row, single_row_object, atol=atol, rtol=rtol)
+
+        set_seed(42)
+        config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
+        set_config_for_less_flaky_test(config)
+
+        for model_class in self.all_model_classes:
+            config.output_hidden_states = True
+            model = model_class(config).to(torch_device).eval()
+            set_model_for_less_flaky_test(model)
+            batched_input_prepared = self._prepare_for_class(batched_input, model_class)
+            batch_size = self.model_tester.batch_size
+
+            with torch.no_grad():
+                model_batched_output = model(**batched_input_prepared)
+                for batch_idx in range(batch_size):
+                    single_row_input = {
+                        k: (
+                            v[batch_idx : batch_idx + 1]
+                            if isinstance(v, torch.Tensor) and v.shape[0] == batch_size
+                            else v
+                        )
+                        for k, v in batched_input_prepared.items()
+                    }
+                    model_row_output = model(**single_row_input)
+                    for key in model_batched_output:
+                        check_output(
+                            model_batched_output[key],
+                            model_row_output[key],
+                            batch_idx,
+                            batch_size,
+                            model_class.__name__,
+                            key,
+                        )
 
     @unittest.skip(reason="LightGlueForKeypointMatching does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -296,6 +357,91 @@ class LightGlueModelTest(ModelTesterMixin, unittest.TestCase):
                     model(**model_inputs)
                 self.assertEqual(ValueError, cm.exception.__class__)
 
+    def test_batching_equivalence_with_early_stopping_and_pruning(self):
+        torch.manual_seed(42)
+        config = self.model_tester.get_config()
+        config.num_hidden_layers = 3
+        config.depth_confidence = 0.5
+        config.width_confidence = 0.5
+        config.filter_threshold = 0.0
+        model = LightGlueForKeypointMatching(config).to(torch_device).eval()
+
+        # Construct descriptors so batch pairs 1 & 3 exit at layer 0 while pair 0 runs through the final layer
+        kpts = torch.rand(4, 2, 8, 2, device=torch_device) * 50
+        desc = torch.randn(4, 2, 8, config.keypoint_detector_config.descriptor_decoder_dim, device=torch_device)
+        mask = torch.ones(4, 2, 8, device=torch_device, dtype=torch.int64)
+        with torch.no_grad():
+            model.token_confidence[0].token.weight.fill_(5.0)
+            model.token_confidence[0].token.bias.fill_(0.0)
+            model.token_confidence[1].token.weight.fill_(5.0)
+            model.token_confidence[1].token.bias.fill_(-5.0)
+            desc[0] = -2.0 + torch.randn_like(desc[0]) * 0.05
+            desc[1] = 2.0 + torch.randn_like(desc[1]) * 0.05
+            desc[2] = 0.1 + torch.randn_like(desc[2]) * 0.05
+            desc[3] = 2.5 + torch.randn_like(desc[3]) * 0.05
+
+            for sub_batch in (2, 4):
+                m_b, s_b, p_b, _, _ = model._match_image_pair(
+                    kpts[:sub_batch], desc[:sub_batch], 64, 64, mask=mask[:sub_batch]
+                )
+                for b in range(sub_batch):
+                    m_s, s_s, p_s, _, _ = model._match_image_pair(
+                        kpts[b : b + 1], desc[b : b + 1], 64, 64, mask=mask[b : b + 1]
+                    )
+                    self.assertTrue(torch.equal(m_b[b : b + 1], m_s))
+                    torch.testing.assert_close(s_b[b : b + 1], s_s, atol=1e-5, rtol=1e-5)
+                    self.assertTrue(torch.equal(p_b[b : b + 1], p_s))
+
+    def test_early_stop_and_pruning_option_combinations(self):
+        torch.manual_seed(0)
+        config = self.model_tester.get_config()
+        config.num_hidden_layers = 3
+        model = LightGlueForKeypointMatching(config).to(torch_device).eval()
+
+        kpts = torch.rand(2, 2, 8, 2, device=torch_device) * 50
+        desc = torch.randn(2, 2, 8, config.keypoint_detector_config.descriptor_decoder_dim, device=torch_device)
+        mask = torch.ones(2, 2, 8, device=torch_device, dtype=torch.int64)
+        with torch.no_grad():
+            model.token_confidence[0].token.weight.fill_(5.0)
+            model.token_confidence[0].token.bias.fill_(0.0)
+            desc[0] = -2.0 + torch.randn_like(desc[0]) * 0.05
+            desc[1] = 2.0 + torch.randn_like(desc[1]) * 0.05
+
+            for depth_conf, width_conf in ((0.5, -1.0), (-1.0, 0.5), (-1.0, 0.99), (-1.0, -1.0)):
+                model.depth_confidence = depth_conf
+                model.width_confidence = width_conf
+                m_b, s_b, p_b, _, _ = model._match_image_pair(kpts, desc, 64, 64, mask=mask)
+                self.assertEqual(m_b.shape, (2, 2, 8))
+                self.assertEqual(s_b.shape, (2, 2, 8))
+                self.assertEqual(p_b.shape, (2, 2, 8))
+                for b in range(2):
+                    m_s, s_s, p_s, _, _ = model._match_image_pair(
+                        kpts[b : b + 1], desc[b : b + 1], 64, 64, mask=mask[b : b + 1]
+                    )
+                    self.assertTrue(torch.equal(m_b[b : b + 1], m_s))
+                    torch.testing.assert_close(s_b[b : b + 1], s_s, atol=1e-5, rtol=1e-5)
+                    self.assertTrue(torch.equal(p_b[b : b + 1], p_s))
+
+    def test_final_keypoint_pruning_ignores_padding_indices(self):
+        config = self.model_tester.get_config()
+        model = LightGlueForKeypointMatching(config).to(torch_device).eval()
+
+        indices = torch.tensor([[0, 1, 3, -1], [0, 1, 2, 3]], device=torch_device)
+        matches = torch.tensor([[0, 1, 2, -1], [0, 1, -1, 2]], device=torch_device)
+        mscores = torch.tensor([[0.9, 0.8, 0.77, 0.0], [0.9, 0.8, 0.0, 0.77]], device=torch_device)
+        out_matches, out_scores = model._do_final_keypoint_pruning(indices, matches, mscores, num_keypoints=4)
+        self.assertEqual(out_matches[0, 0, 3].item(), 2)
+        torch.testing.assert_close(out_scores[0, 0, 3], torch.tensor(0.77, device=torch_device))
+
+        empty_indices = torch.empty((2, 0), device=torch_device, dtype=torch.int64)
+        empty_matches = torch.empty((2, 0), device=torch_device, dtype=torch.int64)
+        empty_scores = torch.empty((2, 0), device=torch_device)
+        out_empty_m, out_empty_s = model._do_final_keypoint_pruning(
+            empty_indices, empty_matches, empty_scores, num_keypoints=4
+        )
+        self.assertTrue(torch.equal(out_empty_m, torch.full((1, 2, 4), -1, device=torch_device, dtype=torch.int64)))
+        self.assertTrue(torch.equal(out_empty_s, torch.zeros((1, 2, 4), device=torch_device)))
+
 
 def prepare_imgs():
     dataset = load_dataset("hf-internal-testing/image-matching-test-dataset", split="train")
@@ -332,30 +478,30 @@ class LightGlueModelIntegrationTest(unittest.TestCase):
         predicted_matches_values1 = outputs.matches[1, 0, 10:30]
         predicted_matching_scores_values1 = outputs.matching_scores[1, 0, 10:30]
 
-        expected_number_of_matches0 = 866
+        expected_number_of_matches0 = 140
         expected_matches_values0 = torch.tensor(
-            [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
+            [14, -1, -1, 15, 17, 13, -1, -1, -1, -1, -1, -1, 5, -1, -1, 19, -1, 10, -1, 11],
             dtype=torch.int64,
             device=torch_device,
         )
         expected_matching_scores_values0 = torch.tensor(
+            [0.3796, 0, 0, 0.3772, 0.4439, 0.2411, 0, 0, 0.0032, 0, 0, 0, 0.2997, 0, 0, 0.6762, 0, 0.8826, 0, 0.5583],
+            device=torch_device,
+        )
+
+        expected_number_of_matches1 = 866
+        expected_matches_values1 = torch.tensor(
+            [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
+            dtype=torch.int64,
+            device=torch_device,
+        )
+        expected_matching_scores_values1 = torch.tensor(
             [
                 0.6188,0.7817,0.5686,0.9353,0.9801,0.9193,0.8632,0.9111,0.9821,0.5496,
                 0.9906,0.8682,0.9679,0.9914,0.9318,0.1910,0.9669,0.3240,0.9971,0.9923,
             ],
             device=torch_device
         )  # fmt:skip
-
-        expected_number_of_matches1 = 140
-        expected_matches_values1 = torch.tensor(
-            [14, -1, -1, 15, 17, 13, -1, -1, -1, -1, -1, -1, 5, -1, -1, 19, -1, 10, -1, 11],
-            dtype=torch.int64,
-            device=torch_device,
-        )
-        expected_matching_scores_values1 = torch.tensor(
-            [0.3796, 0, 0, 0.3772, 0.4439, 0.2411, 0, 0, 0.0032, 0, 0, 0, 0.2997, 0, 0, 0.6762, 0, 0.8826, 0, 0.5583],
-            device=torch_device,
-        )
 
         # expected_early_stopping_layer = 2
         # predicted_early_stopping_layer = torch.max(outputs.prune[1]).item()

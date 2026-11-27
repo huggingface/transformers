@@ -17,6 +17,7 @@ from functools import cached_property, reduce
 
 from datasets import load_dataset
 
+from transformers import set_seed
 from transformers.models.efficientloftr import EfficientLoFTRConfig, EfficientLoFTRModel
 from transformers.testing_utils import (
     require_torch,
@@ -309,15 +310,19 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
         number of differences in keypoint coordinates being less than a TODO given number
         """
 
-        def recursive_check(batched_object, single_row_object, model_name, key):
+        def recursive_check(batched_object, single_row_object, batch_idx, batch_size, model_name, key):
             if isinstance(batched_object, (list, tuple)):
                 for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
-                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+                    recursive_check(
+                        batched_object_value, single_row_object_value, batch_idx, batch_size, model_name, key
+                    )
             elif isinstance(batched_object, dict):
                 for batched_object_value, single_row_object_value in zip(
                     batched_object.values(), single_row_object.values()
                 ):
-                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+                    recursive_check(
+                        batched_object_value, single_row_object_value, batch_idx, batch_size, model_name, key
+                    )
             # do not compare returned loss (0-dim tensor) / codebook ids (int) / caching objects
             elif batched_object is None or not isinstance(batched_object, torch.Tensor):
                 return
@@ -328,9 +333,10 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
             elif not torch.is_floating_point(batched_object):
                 return
             else:
-                # indexing the first element does not always work
-                # e.g. models that output similarity scores of size (N, M) would need to index [0, 0]
-                slice_ids = tuple(slice(0, index) for index in single_row_object.shape)
+                chunk = batched_object.shape[0] // batch_size
+                slice_ids = (slice(batch_idx * chunk, (batch_idx + 1) * chunk),) + tuple(
+                    slice(0, index) for index in single_row_object.shape[1:]
+                )
                 batched_row = batched_object[slice_ids]
                 if key == "keypoints":
                     batched_row = torch.sum(batched_row, dim=-1)
@@ -361,6 +367,7 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
                         msg += str(e)
                         raise AssertionError(msg)
 
+        set_seed(42)
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
 
@@ -375,29 +382,36 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
             set_model_for_less_flaky_test(model)
 
             batch_size = self.model_tester.batch_size
-            single_row_input = {}
-            for key, value in batched_input_prepared.items():
-                if isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
-                    # e.g. musicgen has inputs of size (bs*codebooks). in most cases value.shape[0] == batch_size
-                    single_batch_shape = value.shape[0] // batch_size
-                    single_row_input[key] = value[:single_batch_shape]
-                else:
-                    single_row_input[key] = value
-
             with torch.no_grad():
                 model_batched_output = model(**batched_input_prepared)
-                model_row_output = model(**single_row_input)
-
             if isinstance(model_batched_output, torch.Tensor):
                 model_batched_output = {"model_output": model_batched_output}
-                model_row_output = {"model_output": model_row_output}
 
-            for key in model_batched_output:
-                # DETR starts from zero-init queries to decoder, leading to cos_similarity = `nan`
-                if hasattr(self, "zero_init_hidden_state") and "decoder_hidden_states" in key:
-                    model_batched_output[key] = model_batched_output[key][1:]
-                    model_row_output[key] = model_row_output[key][1:]
-                recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
+            for batch_idx in range(batch_size):
+                single_row_input = {}
+                for key, value in batched_input_prepared.items():
+                    if isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
+                        single_batch_shape = value.shape[0] // batch_size
+                        single_row_input[key] = value[
+                            batch_idx * single_batch_shape : (batch_idx + 1) * single_batch_shape
+                        ]
+                    else:
+                        single_row_input[key] = value
+
+                with torch.no_grad():
+                    model_row_output = model(**single_row_input)
+
+                if isinstance(model_row_output, torch.Tensor):
+                    model_row_output = {"model_output": model_row_output}
+
+                for key in model_batched_output:
+                    batched_val = model_batched_output[key]
+                    row_val = model_row_output[key]
+                    # DETR starts from zero-init queries to decoder, leading to cos_similarity = `nan`
+                    if hasattr(self, "zero_init_hidden_state") and "decoder_hidden_states" in key:
+                        batched_val = batched_val[1:]
+                        row_val = row_val[1:]
+                    recursive_check(batched_val, row_val, batch_idx, batch_size, model_name, key)
 
     def test_batching_independence(self):
         config = self.model_tester.get_config()
