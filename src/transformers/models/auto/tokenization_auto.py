@@ -452,6 +452,12 @@ MODEL_IDS_TO_TOKENIZERS_BACKEND = [
     "salesforce/blip2-flan-t5-*",
     "salesforce/instructblip-flan-t5-*",
     "stepfun-ai/step-3.7-*",
+    # These declare `GPT2Tokenizer`, but `tokenizer.json` splits digits before the ByteLevel step
+    "huggingfacetb/smollm-*",
+    "huggingfacetb/smollm2-*",
+    "huggingfacetb/smolvlm-*",
+    "huggingfacetb/smolvlm2-*",
+    "bigcode/starcoder2-*",
 ]
 
 
