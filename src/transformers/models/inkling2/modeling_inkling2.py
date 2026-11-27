@@ -194,13 +194,11 @@ class Inkling2LogScaledL2Clip(nn.Module):
         return self.log_scale(hidden_states, position_ids)
 
 
-@use_kernel_forward_from_hub("relative_position_bias_forward")
 def relative_position_bias_forward(
     rel_logits: torch.Tensor, relative_distance: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
 ) -> torch.Tensor:
     """
-    Relative position bias of the attention scores. Layers list it in `use_kernelized_func`, so that `kernelize` can
-    replace it, e.g. with an attention that reads the bias profiles at each pair's distance itself.
+    Relative position bias of the attention scores, a module-level function so that it can be replaced by name.
 
     Args:
         rel_logits (`torch.Tensor` of shape `(batch_size, num_heads, query_length, rel_extent)`):
@@ -218,7 +216,6 @@ def relative_position_bias_forward(
     return position_bias.masked_fill((relative_distance < 0) | (relative_distance >= rel_extent), 0.0)
 
 
-@use_kernelized_func(relative_position_bias_forward)
 class Inkling2RelativePositionBias(nn.Module):
     """
     Hidden-states conditioned relative position bias. `linear` and `norm` give each token per-head `relative_states`
@@ -416,7 +413,6 @@ class Inkling2ShortConvolution(nn.Module):
         return hidden_states.to(dtype=input_dtype)
 
 
-@use_kernel_forward_from_hub("dynamic_causal_conv1d_forward")
 def dynamic_causal_conv1d_forward(
     hidden_states: torch.Tensor,
     weights: torch.Tensor,
@@ -426,9 +422,8 @@ def dynamic_causal_conv1d_forward(
     **kwargs: Unpack[TransformersKwargs],
 ) -> torch.Tensor:
     """
-    Causal depthwise convolution whose taps change with each token, reading and updating its conv state in `cache`.
-    Layers list it in `use_kernelized_func`, so that `kernelize` can replace it, e.g. with a runtime that manages the
-    conv state itself.
+    Causal depthwise convolution whose taps change with each token, reading and updating its conv state in `cache`. A
+    module-level function so that it can be replaced by name.
 
     Args:
         hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, channels)`):
@@ -462,7 +457,6 @@ def dynamic_causal_conv1d_forward(
     return (windows * weights).sum(-1).reshape(batch_size, seq_len, channels)
 
 
-@use_kernelized_func(dynamic_causal_conv1d_forward)
 class Inkling2DynamicShortConvolution(nn.Module):
     """
     Short causal convolution whose taps are the sum of static per-channel weights and per-token weights projected from
