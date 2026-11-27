@@ -119,6 +119,8 @@ def convert_config(original_config: dict):
     audio_config["hidden_size"] = audio_config.pop("attention_dim")
     audio_config["num_attention_heads"] = audio_config.pop("attention_heads")
     audio_config["intermediate_size"] = audio_config.pop("linear_units")
+    if "depthwise_seperable_out_channel" in audio_config:
+        audio_config["depthwise_separable_out_channel"] = audio_config.pop("depthwise_seperable_out_channel")
     audio_config["nemo_conv_channels"] = audio_config.pop("nemo_conv_settings")["conv_channels"]
     audio_config["bias_max_distance"] = audio_config.pop("relative_attention_bias_args")["t5_bias_max_distance"]
     # add
@@ -194,8 +196,10 @@ def convert_and_save_processor(input_dir: str, output_dir: str):
     # we need to rename a few tokens but tokenizers doesn't allow doing that programmatically
     # To avoid consufion and manual renaming, the below part load and re-saved each json file
     vocab = json.load(open(f"{output_dir}/vocab.json", "r", encoding="utf-8"))
-    vocab["<|endoftext11|>"] = "<|audio|>"
-    vocab["<|endoftext10|>"] = "<|image|>"
+    if "<|endoftext11|>" in vocab:
+        vocab["<|audio|>"] = vocab.pop("<|endoftext11|>")
+    if "<|endoftext10|>" in vocab:
+        vocab["<|image|>"] = vocab.pop("<|endoftext10|>")
     json.dump(vocab, open(f"{output_dir}/vocab.json", "w", encoding="utf-8"))
 
     tokenizer = json.load(open(f"{output_dir}/tokenizer.json", "r", encoding="utf-8"))
