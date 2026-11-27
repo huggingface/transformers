@@ -265,6 +265,8 @@ class Kosmos2_5ImageProcessor(TorchvisionBackend):
                 "cols": cols,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
         return encoded_outputs

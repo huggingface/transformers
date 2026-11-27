@@ -54,6 +54,8 @@ class Sam2VideoVideoProcessor(BaseVideoProcessor):
                 **batch_feature.data,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
         return batch_feature
 

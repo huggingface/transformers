@@ -181,6 +181,8 @@ class NemotronH_Omni_Reasoning_V3ImageProcessor(TorchvisionBackend):
                 "image_grid_hw": torch.stack(image_grid_hw),  # (num_images, 2)
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

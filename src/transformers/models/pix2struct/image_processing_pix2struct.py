@@ -430,6 +430,8 @@ class Pix2StructImageProcessor(TorchvisionBackend):
         return BatchFeature(
             data={"flattened_patches": flattened_patches, "attention_mask": attention_masks},
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

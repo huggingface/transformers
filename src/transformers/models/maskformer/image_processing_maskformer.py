@@ -536,6 +536,8 @@ class MaskFormerImageProcessor(TorchvisionBackend):
         encoded_inputs = BatchFeature(
             data={"pixel_values": processed_images, "pixel_mask": processed_pixel_masks},
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
         if segmentation_maps is not None:
             mask_labels = reorder_images(processed_segmentation_maps_grouped, grouped_images_index)

@@ -1703,6 +1703,8 @@ class Inkling2ImageProcessor(TorchvisionBackend):
         return BatchFeature(
             data={"pixel_values": torch.cat(patches), "image_grid_thw": torch.tensor(image_grid_thw)},
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

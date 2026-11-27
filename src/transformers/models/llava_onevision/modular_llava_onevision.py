@@ -220,6 +220,8 @@ class LlavaOnevisionImageProcessor(LlavaNextImageProcessor):
         return BatchFeature(
             data={"pixel_values": processed_images, "image_sizes": image_sizes, "batch_num_images": batch_num_images},
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 
@@ -389,6 +391,8 @@ class LlavaOnevisionImageProcessorPil(LlavaNextImageProcessorPil):
                 "batch_num_images": batch_num_images,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

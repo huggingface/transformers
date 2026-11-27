@@ -232,6 +232,8 @@ class Kosmos2_5ImageProcessorPil(PilBackend):
                 "cols": cols,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
         return encoded_outputs

@@ -222,6 +222,8 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
                 "input_features_mask": spectrogram_mask,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def to_dict(self) -> dict[str, Any]:

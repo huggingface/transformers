@@ -273,6 +273,8 @@ class VideoLlama3ImageProcessor(TorchvisionBackend):
                 "image_merge_sizes": image_merge_sizes,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:

@@ -329,6 +329,8 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
         return BatchFeature(
             {"input_features": prepared_speech, "input_features_mask": prepared_speech_mask},
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

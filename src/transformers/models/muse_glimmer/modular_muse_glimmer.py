@@ -509,6 +509,8 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
         return BatchFeature(
             data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

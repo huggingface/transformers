@@ -126,6 +126,8 @@ class PPOCRV5ServerDetImageProcessor(TorchvisionBackend):
         return BatchFeature(
             data={"pixel_values": pixel_values, "target_sizes": target_sizes},
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
     def _unclip(self, contour_box, unclip_ratio):

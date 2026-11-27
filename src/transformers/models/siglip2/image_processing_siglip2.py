@@ -194,6 +194,8 @@ class Siglip2ImageProcessor(TorchvisionBackend):
                 "spatial_shapes": spatial_shapes,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
         return batch_feature
 

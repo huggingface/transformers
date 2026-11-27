@@ -510,6 +510,8 @@ class MllamaImageProcessorPil(PilBackend):
                 "aspect_ratio_mask": aspect_ratio_mask,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
         encoded_inputs["num_tiles"] = num_tiles
 

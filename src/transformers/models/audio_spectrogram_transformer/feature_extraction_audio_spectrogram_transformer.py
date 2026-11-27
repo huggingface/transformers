@@ -219,7 +219,7 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         features = [self._extract_fbank_features(waveform, max_length=self.max_length) for waveform in raw_speech]
 
         # convert into BatchFeature
-        padded_inputs = BatchFeature({"input_values": features})
+        padded_inputs = BatchFeature({"input_values": features}, device=device, dtype=dtype)
 
         # make sure list is in array format
         input_values = padded_inputs.get("input_values")

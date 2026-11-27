@@ -518,6 +518,8 @@ class DeepseekVLHybridImageProcessorPil(DeepseekVLImageProcessorPil):
         return BatchFeature(
             data={"pixel_values": processed_images, "high_res_pixel_values": high_res_processed_images},
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 
@@ -665,6 +667,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         return BatchFeature(
             data={"pixel_values": processed_images, "high_res_pixel_values": high_res_processed_images},
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 

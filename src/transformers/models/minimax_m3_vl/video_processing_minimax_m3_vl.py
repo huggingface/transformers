@@ -202,6 +202,8 @@ class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
                 "num_chunks_per_video": num_chunks_per_video,
             },
             tensor_type=return_tensors,
+            device=device,
+            dtype=dtype,
         )
 
 
