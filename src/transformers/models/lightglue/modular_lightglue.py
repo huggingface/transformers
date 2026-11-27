@@ -544,7 +544,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         else:
             # If the current layer is the last layer, we stop the forward pass through the transformer layers for
             # all pairs of images.
-            early_stopped_pairs = torch.ones(batch_size, dtype=torch.bool)
+            early_stopped_pairs = torch.ones(batch_size // 2, dtype=torch.bool, device=keypoint_confidences.device)
         return early_stopped_pairs
 
     def _get_keypoint_matching(self, descriptors, mask, layer_index, early_stops=None):
@@ -609,26 +609,16 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
     ):
         early_stops_indices = torch.stack(early_stops_indices)
         # Rearrange tensors to have the same order as the input batch
-        ids = torch.arange(early_stops_indices.shape[0])
-        order_indices = early_stops_indices[ids]
-        early_stops_indices = early_stops_indices[order_indices]
-        matches, final_pruned_keypoints_indices = (
-            pad_sequence(tensor, batch_first=True, padding_value=-1)
-            for tensor in [matches, final_pruned_keypoints_indices]
-        )
-        matching_scores, final_pruned_keypoints_iterations = (
-            pad_sequence(tensor, batch_first=True, padding_value=0)
-            for tensor in [matching_scores, final_pruned_keypoints_iterations]
-        )
-        matches, matching_scores, final_pruned_keypoints_indices, final_pruned_keypoints_iterations = (
-            tensor[early_stops_indices]
-            for tensor in [
-                matches,
-                matching_scores,
-                final_pruned_keypoints_indices,
-                final_pruned_keypoints_iterations,
-            ]
-        )
+        order_indices = torch.argsort(early_stops_indices)
+        matches = pad_sequence(matches, batch_first=True, padding_value=-1)[order_indices]
+        matching_scores = pad_sequence(matching_scores, batch_first=True, padding_value=0)[order_indices]
+        final_pruned_keypoints_iterations = pad_sequence(
+            final_pruned_keypoints_iterations, batch_first=True, padding_value=0
+        )[order_indices]
+        if final_pruned_keypoints_indices:
+            final_pruned_keypoints_indices = pad_sequence(
+                final_pruned_keypoints_indices, batch_first=True, padding_value=-1
+            )[order_indices]
         return final_pruned_keypoints_indices, final_pruned_keypoints_iterations, matches, matching_scores
 
     def _do_final_keypoint_pruning(
@@ -656,16 +646,21 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         _matching_scores = torch.zeros(
             (batch_size // 2, 2, num_keypoints), device=indices.device, dtype=matching_scores.dtype
         )
-        # Fill the matches and matching scores for each image pair
+        if indices.shape[1] == 0:
+            return _matches, _matching_scores
+
+        # Fill the matches and matching scores for each image pair, skipping -1 padding entries
         for i in range(batch_size // 2):
-            _matches[i, 0, indices0[i]] = torch.where(
-                matches0[i] == -1, -1, indices1[i].gather(0, matches0[i].clamp(min=0))
-            )
-            _matches[i, 1, indices1[i]] = torch.where(
-                matches1[i] == -1, -1, indices0[i].gather(0, matches1[i].clamp(min=0))
-            )
-            _matching_scores[i, 0, indices0[i]] = matching_scores0[i]
-            _matching_scores[i, 1, indices1[i]] = matching_scores1[i]
+            valid0 = indices0[i] != -1
+            valid1 = indices1[i] != -1
+            idx0 = indices0[i, valid0]
+            idx1 = indices1[i, valid1]
+            m0 = matches0[i, valid0]
+            m1 = matches1[i, valid1]
+            _matches[i, 0, idx0] = torch.where(m0 == -1, -1, indices1[i].gather(0, m0.clamp(min=0)))
+            _matches[i, 1, idx1] = torch.where(m1 == -1, -1, indices0[i].gather(0, m1.clamp(min=0)))
+            _matching_scores[i, 0, idx0] = matching_scores0[i, valid0]
+            _matching_scores[i, 1, idx1] = matching_scores1[i, valid1]
         return _matches, _matching_scores
 
     def _match_image_pair(
@@ -749,6 +744,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + attention
 
+            keypoint_confidences = None
             if do_early_stop:
                 if layer_index < self.num_layers - 1:
                     # Get the confidence of the keypoints for the current layer
@@ -761,7 +757,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
                     )
                 else:
                     # Early stopping always occurs at the last layer
-                    early_stopped_pairs = torch.ones(batch_size, dtype=torch.bool)
+                    early_stopped_pairs = torch.ones(descriptors.shape[0] // 2, dtype=torch.bool, device=device)
 
                 if torch.any(early_stopped_pairs):
                     # If a pair of images is considered early stopped, we compute the matches for the remaining
@@ -777,6 +773,21 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
                     if do_keypoint_pruning:
                         final_pruned_keypoints_indices.extend(list(pruned_keypoints_indices[early_stops]))
                         final_pruned_keypoints_iterations.extend(list(pruned_keypoints_iterations[early_stops]))
+                    else:
+                        final_pruned_keypoints_iterations.extend(
+                            list(
+                                torch.full(
+                                    (early_stopped_matches.shape[0], initial_num_keypoints),
+                                    layer_index + 1,
+                                    device=device,
+                                    dtype=pruned_keypoints_iterations.dtype,
+                                )
+                            )
+                        )
+
+                    # If all remaining pairs of images are early stopped, we stop the forward pass
+                    if torch.all(early_stopped_pairs):
+                        break
 
                     # Remove image pairs that have been early stopped from the forward pass
                     num_points_per_pair = num_points_per_pair[~early_stopped_pairs]
@@ -786,20 +797,13 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
                     )
                     keypoints = (keypoints_0, keypoint_1)
                     if do_keypoint_pruning:
-                        pruned_keypoints_indices, pruned_keypoints_iterations, keypoint_confidences = tuple(
-                            tensor[~early_stops]
-                            for tensor in [
-                                pruned_keypoints_indices,
-                                pruned_keypoints_iterations,
-                                keypoint_confidences,
-                            ]
+                        pruned_keypoints_indices, pruned_keypoints_iterations = tuple(
+                            tensor[~early_stops] for tensor in [pruned_keypoints_indices, pruned_keypoints_iterations]
                         )
-                # If all pairs of images are early stopped, we stop the forward pass through the transformer
-                # layers for all pairs of images.
-                if torch.all(early_stopped_pairs):
-                    break
+                        if keypoint_confidences is not None:
+                            keypoint_confidences = keypoint_confidences[~early_stops]
 
-            if do_keypoint_pruning:
+            if do_keypoint_pruning and layer_index < self.num_layers - 1:
                 # Prune keypoints from the input of the transformer layers for the next iterations if the confidence of
                 # the keypoints is below a certain threshold.
                 descriptors, keypoints, pruned_keypoints_indices, mask, pruned_keypoints_iterations = (
@@ -813,9 +817,19 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
                         layer_index,
                     )
                 )
+                if descriptors.shape[1] == 0:
+                    if do_early_stop:
+                        empty_matches = descriptors.new_empty((descriptors.shape[0], 0), dtype=torch.int64)
+                        empty_scores = descriptors.new_empty((descriptors.shape[0], 0))
+                        early_stops_indices.extend(list(image_indices))
+                        matches.extend(list(empty_matches))
+                        matching_scores.extend(list(empty_scores))
+                        final_pruned_keypoints_indices.extend(list(pruned_keypoints_indices))
+                        final_pruned_keypoints_iterations.extend(list(pruned_keypoints_iterations))
+                    break
 
-        if do_early_stop and do_keypoint_pruning:
-            # Concatenate early stopped outputs together and perform final keypoint pruning
+        if do_early_stop:
+            # Concatenate early stopped outputs together and restore original batch order
             final_pruned_keypoints_indices, final_pruned_keypoints_iterations, matches, matching_scores = (
                 self._concat_early_stopped_outputs(
                     early_stops_indices,
@@ -825,6 +839,25 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
                     matching_scores,
                 )
             )
+        else:
+            final_pruned_keypoints_indices = pruned_keypoints_indices
+            final_pruned_keypoints_iterations = (
+                pruned_keypoints_iterations
+                if do_keypoint_pruning
+                else torch.full(
+                    (batch_size, 2, initial_num_keypoints),
+                    self.num_layers,
+                    device=device,
+                    dtype=pruned_keypoints_iterations.dtype,
+                )
+            )
+            if descriptors.shape[1] == 0:
+                matches = descriptors.new_empty((batch_size * 2, 0), dtype=torch.int64)
+                matching_scores = descriptors.new_empty((batch_size * 2, 0))
+            else:
+                matches, matching_scores = self._get_keypoint_matching(descriptors, mask, self.num_layers - 1)
+
+        if do_keypoint_pruning:
             matches, matching_scores = self._do_final_keypoint_pruning(
                 final_pruned_keypoints_indices,
                 matches,
@@ -832,8 +865,8 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
                 initial_num_keypoints,
             )
         else:
-            matches, matching_scores = self._get_keypoint_matching(descriptors, mask, self.num_layers - 1)
-            final_pruned_keypoints_iterations = torch.ones_like(matching_scores) * self.num_layers
+            matches = matches.reshape(batch_size, 2, initial_num_keypoints)
+            matching_scores = matching_scores.reshape(batch_size, 2, initial_num_keypoints)
 
         final_pruned_keypoints_iterations = final_pruned_keypoints_iterations.reshape(
             batch_size, 2, initial_num_keypoints

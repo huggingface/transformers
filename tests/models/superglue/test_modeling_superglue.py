@@ -17,6 +17,7 @@ from functools import cached_property
 
 from datasets import load_dataset
 
+from transformers import set_seed
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
@@ -288,24 +289,29 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
         Discussed here : https://github.com/huggingface/transformers/pull/29886#issuecomment-2481539481
         """
 
-        def recursive_check(batched_object, single_row_object, model_name, key):
+        def recursive_check(batched_object, single_row_object, batch_idx, batch_size, model_name, key):
             if isinstance(batched_object, (list, tuple)):
                 for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
-                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+                    recursive_check(
+                        batched_object_value, single_row_object_value, batch_idx, batch_size, model_name, key
+                    )
             elif isinstance(batched_object, dict):
                 for batched_object_value, single_row_object_value in zip(
                     batched_object.values(), single_row_object.values()
                 ):
-                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+                    recursive_check(
+                        batched_object_value, single_row_object_value, batch_idx, batch_size, model_name, key
+                    )
             # do not compare returned loss (0-dim tensor) / codebook ids (int) / caching objects
             elif batched_object is None or not isinstance(batched_object, torch.Tensor):
                 return
             elif batched_object.dim() == 0:
                 return
             else:
-                # indexing the first element does not always work
-                # e.g. models that output similarity scores of size (N, M) would need to index [0, 0]
-                slice_ids = tuple(slice(0, index) for index in single_row_object.shape)
+                chunk = batched_object.shape[0] // batch_size
+                slice_ids = (slice(batch_idx * chunk, (batch_idx + 1) * chunk),) + tuple(
+                    slice(0, index) for index in single_row_object.shape[1:]
+                )
                 batched_row = batched_object[slice_ids]
                 self.assertFalse(
                     torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
@@ -330,6 +336,7 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
         def equivalence(tensor1, tensor2):
             return torch.max(torch.abs(tensor1 - tensor2))
 
+        set_seed(42)
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -340,25 +347,31 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config).to(torch_device).eval()
 
             batch_size = self.model_tester.batch_size
-            single_row_input = {}
-            for key, value in batched_input_prepared.items():
-                if isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
-                    # e.g. musicgen has inputs of size (bs*codebooks). in most cases value.shape[0] == batch_size
-                    single_batch_shape = value.shape[0] // batch_size
-                    single_row_input[key] = value[:single_batch_shape]
-                else:
-                    single_row_input[key] = value
-
             with torch.no_grad():
                 model_batched_output = model(**batched_input_prepared)
-                model_row_output = model(**single_row_input)
-
             if isinstance(model_batched_output, torch.Tensor):
                 model_batched_output = {"model_output": model_batched_output}
-                model_row_output = {"model_output": model_row_output}
 
-            for key in model_batched_output:
-                recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
+            for batch_idx in range(batch_size):
+                single_row_input = {}
+                for key, value in batched_input_prepared.items():
+                    if isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
+                        single_batch_shape = value.shape[0] // batch_size
+                        single_row_input[key] = value[
+                            batch_idx * single_batch_shape : (batch_idx + 1) * single_batch_shape
+                        ]
+                    else:
+                        single_row_input[key] = value
+
+                with torch.no_grad():
+                    model_row_output = model(**single_row_input)
+                if isinstance(model_row_output, torch.Tensor):
+                    model_row_output = {"model_output": model_row_output}
+
+                for key in model_batched_output:
+                    recursive_check(
+                        model_batched_output[key], model_row_output[key], batch_idx, batch_size, model_name, key
+                    )
 
 
 def prepare_imgs():
