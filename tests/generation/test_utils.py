@@ -88,6 +88,7 @@ if is_torch_available():
         EncoderDecoderCache,
         LinearAttentionAndFullAttentionLayer,
         LinearAttentionAndSlidingWindowAttentionLayer,
+        LinearAttentionCacheLayerMixin,
         LinearAttentionLayer,
         MtpCache,
         QuantoQuantizedLayer,
@@ -118,6 +119,7 @@ if is_torch_available():
     )
     from transformers.generation.utils import ALL_CACHE_NAMES, DeferredStopCheck, _speculative_sampling
     from transformers.modeling_layers import MtpModel
+    from transformers.modeling_multimodal_utils import split_modality_outputs
 
 from unittest.mock import patch
 
@@ -418,12 +420,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         """Greedy decoding with a cache must produce what recomputing the whole sequence produces.
 
         The two tests above run both configurations but only check their own shapes, so a cache that feeds
-        its layers the wrong positions or a mask of the wrong width passes both. Models whose state *is*
-        their cache (`_is_stateful`) have no cacheless form to compare against and are skipped.
+        its layers the wrong positions or a mask of the wrong width passes both.
         """
         for model_class in self.all_generative_model_classes:
-            if model_class._is_stateful:
-                self.skipTest(reason=f"{model_class.__name__} keeps recurrent state, so decode has no cacheless form")
             # Only the weights are pinned; the testers draw inputs from a `global_rng` this does not touch,
             # so the input varies per process — the invariant has to hold for any input.
             set_seed(42)
@@ -708,29 +707,28 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         # - assisted_decoding does not support `batch_size > 1`
 
         for model_class in self.all_generative_model_classes:
-            if model_class._is_stateful:
-                self.skipTest(reason="Stateful models don't support assisted generation")
-            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
-                self.skipTest(reason="Won't fix: old model with different cache format")
-            if any(
-                model_name in model_class.__name__.lower()
-                for model_name in [
-                    "moshi",
-                    "git",
-                    "prophetnet",
-                    "mllama",  # special cache sizes
-                    "blip2",  # overridden `generate()` all BLIP models
-                    "instructblip",
-                    "instructblipvideo",
-                ]
-            ):
-                self.skipTest(reason="May fix in the future: need model-specific fixes")
-
             # Set seed for deterministic test - ensures reproducible model initialization and inputs
             set_seed(42)
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
             set_config_for_less_flaky_test(config)
+
+            if config.model_type.replace("-", "_") in [
+                "moshi",
+                "git",
+                "prophetnet",
+                "mllama",  # special cache sizes
+                "blip_2",  # overridden `generate()` all BLIP models
+                "instructblip",
+                "instructblipvideo",
+                "zamba",  # special loop, and no real need to add support for now
+                "zaya",  # a bit specific, could work but need a bit more work and no need rn
+                "deepseek_v4",  # non standard cache, would require more work
+                "xlstm",  # extremely special cache mechanism, won't fix
+                "rwkv",  # does not use cache classes, won't fix
+                "reformer",  # does not use cache classes, won't fix
+            ]:
+                self.skipTest(reason="May fix in the future: need model-specific fixes")
 
             # force eager attention to support output attentions
             if self.has_attentions:
@@ -806,8 +804,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         # This test is mostly a copy of test_assisted_decoding_matches_greedy_search
 
         for model_class in self.all_generative_model_classes:
-            if model_class._is_stateful:
-                self.skipTest(reason="Stateful models don't support assisted generation")
             old_models = [  # models that we won't commit resources fixing because they are old and have little usage
                 # reformer: has a different cache format
                 "reformer",
@@ -886,26 +882,25 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         # match sample for the same seed, as the forward pass does not return the exact same logits (due to matmul with
         # different shapes, see https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535).
         for model_class in self.all_generative_model_classes:
-            if model_class._is_stateful:
-                self.skipTest(reason="Stateful models don't support assisted generation")
-            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
-                self.skipTest(reason="Won't fix: old model with different cache format")
-            if any(
-                model_name in model_class.__name__.lower()
-                for model_name in [
-                    "moshi",
-                    "git",
-                    "prophetnet",
-                    "mllama",  # special cache sizes
-                    "blip2",  # overridden `generate()` for all BLIP models
-                    "instructblip",
-                    "instructblipvideo",
-                ]
-            ):
-                self.skipTest(reason="May fix in the future: need model-specific fixes")
-
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
+
+            if config.model_type.replace("-", "_") in [
+                "moshi",
+                "git",
+                "prophetnet",
+                "mllama",  # special cache sizes
+                "blip_2",  # overridden `generate()` all BLIP models
+                "instructblip",
+                "instructblipvideo",
+                "zamba",  # special loop, and no real need to add support for now
+                "zaya",  # a bit specific, could work but need a bit more work and no need rn
+                "deepseek_v4",  # non standard cache, would require more work
+                "xlstm",  # extremely special cache mechanism, won't fix
+                "rwkv",  # does not use cache classes, won't fix
+                "reformer",  # does not use cache classes, won't fix
+            ]:
+                self.skipTest(reason="May fix in the future: need model-specific fixes")
 
             # force eager attention to support output attentions
             if self.has_attentions:
@@ -1572,6 +1567,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 self.skipTest(reason="This model is encoder-decoder VLM which is usually different per model arch")
 
             model = model_class(config).to(torch_device).eval()
+            if not model._supports_mm_encoder_outputs():
+                self.skipTest(reason=f"{model_class.__name__}.forward does not accept `mm_encoder_outputs`")
             model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
 
             generation_kwargs = {
@@ -1597,6 +1594,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if "blip" in model_class.__name__.lower():
                 self.skipTest(reason="Won't fix: old model that adds image placeholders during `forward`")
 
+            # TODO: audio too, once audio models' forwards read pre-encoded `mm_encoder_outputs["audio"]` and generate
+            # encodes it with `get_audio_embeddings` (https://github.com/huggingface/transformers/issues/50946)
             if not any(
                 modality in model_class.input_modalities and hasattr(model_class, f"get_{modality}_features")
                 for modality in ["image", "video"]
@@ -1620,6 +1619,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             # Passing both, pre-computed inputs and raw pixels will raise an error
             inputs_dict_with_encoded_outputs = model._prepare_multimodal_encoder_kwargs_for_generation(inputs_dict)
             mm_encoder_outputs = inputs_dict_with_encoded_outputs.pop("mm_encoder_outputs")
+            if not mm_encoder_outputs:
+                self.skipTest(reason="The tester's inputs give no multimodal outputs")
             with self.assertRaisesRegex(ValueError, "You cannot pass both: raw pixels and pre-computed embeddings"):
                 model.generate(
                     **original_inputs_dict,
@@ -1629,6 +1630,55 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
             # We still can pass inputs with no multimodal data at all - raw or precomputed
             model.generate(**inputs_dict_with_encoded_outputs, **generation_kwargs)
+
+    @pytest.mark.generate
+    def test_forward_with_per_item_multimodal_encoder_outputs(self):
+        """Tests that the deprecated per-item `mm_encoder_outputs` give the forward of the flat ones, which only holds
+        with `@merge_mm_encoder_outputs` on the forward."""
+        for model_class in self.all_generative_model_classes:
+            if not any(modality in model_class.input_modalities for modality in ["image", "video"]):
+                self.skipTest("Model takes no images or videos")
+            if "blip" in model_class.__name__.lower():
+                self.skipTest(reason="Won't fix: old model whose forward requires `pixel_values`")
+
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if config.is_encoder_decoder:
+                self.skipTest(reason="This model is encoder-decoder VLM which is usually different per model arch")
+            model = model_class(config).to(torch_device).eval()
+            if not model._supports_mm_encoder_outputs():
+                self.skipTest(reason=f"{model_class.__name__}.forward does not accept `mm_encoder_outputs`")
+            with torch.no_grad():
+                inputs_dict = model._prepare_multimodal_encoder_kwargs_for_generation(inputs_dict)
+                flat = inputs_dict.pop("mm_encoder_outputs")
+                if not flat:
+                    self.skipTest(reason="The tester's inputs give no multimodal outputs")
+                per_item = {modality: split_modality_outputs(outputs) for modality, outputs in flat.items()}
+                expected = model(**inputs_dict, mm_encoder_outputs=flat).logits
+                logits = model(**inputs_dict, mm_encoder_outputs=per_item).logits
+            torch.testing.assert_close(logits, expected)
+
+    @pytest.mark.generate
+    @require_torch_accelerator
+    def test_expand_multimodal_encoder_outputs_across_devices(self):
+        """Tests that beam expansion handles `mm_encoder_outputs` on another device than the text, as with `device_map`."""
+        for model_class in self.all_generative_model_classes:
+            if not any(modality in model_class.input_modalities for modality in ["image", "video"]):
+                self.skipTest("Model takes no images or videos")
+
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if config.is_encoder_decoder or "input_ids" not in inputs_dict:
+                self.skipTest(reason="Placeholders are counted on decoder-only `input_ids`")
+
+            model = model_class(config).to(torch_device).eval()
+            with torch.no_grad():
+                inputs_dict = model._prepare_multimodal_encoder_kwargs_for_generation(inputs_dict)
+            if not inputs_dict["mm_encoder_outputs"]:
+                self.skipTest(reason="The tester's inputs give no multimodal outputs")
+            model._expand_inputs_for_generation(
+                expand_size=2,
+                input_ids=inputs_dict["input_ids"].cpu(),
+                mm_encoder_outputs=inputs_dict["mm_encoder_outputs"],
+            )
 
     @pytest.mark.generate
     def test_generate_with_static_cache(self):
@@ -2306,12 +2356,14 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if not model_class._supports_attention_backend:
                 self.skipTest(f"{model_class.__name__} does not support new attention mask API")
 
-            if model_class._is_stateful:  # non-transformer models most probably have no packing support
-                self.skipTest(f"{model_class.__name__} doesn't support packing!")
-
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             # disable flakiness via norms as much as possible
             set_config_for_less_flaky_test(config)
+
+            # Linear attention models most probably have no packing support
+            dummy_cache = DynamicCache(config=config)
+            if any(isinstance(layer, LinearAttentionCacheLayerMixin) for layer in dummy_cache.layers):
+                self.skipTest(f"{model_class.__name__} doesn't support packing as it uses linear attention!")
 
             if config.is_encoder_decoder:
                 self.skipTest("Model is an encoder-decoder")
@@ -3227,6 +3279,35 @@ class UtilsFunctionsTest(unittest.TestCase):
         last_token_counts = collections.Counter(last_validated_token)
         self.assertTrue(last_token_counts[1] > last_token_counts[3] > last_token_counts[7] > 0)
         self.assertTrue(last_token_counts[8] > last_token_counts[3])
+
+    def test_speculative_sampling_never_accepts_zero_probability_token(self):
+        """Deterministic check that a draft token with target probability 0 is never accepted.
+
+        `torch.rand` returns exactly `0.0` with probability 2**-24 (float32). Even then, a draft token that the target
+        gives probability 0 (e.g. filtered out by top-k / top-p) must be rejected: `0.0 < 0` is False.
+        """
+        candidate_length = 1
+        # Draft: token 0 is very likely
+        q_probs = torch.tensor([[[0.97, 0.01, 0.01, 0.01]]])
+        # Target: token 0 is forbidden (probability 0) + a valid distribution for the bonus-token slot
+        inf = float("inf")
+        new_logits = torch.tensor([[[-inf, 1.0, 2.0, 3.0], [0.0, 0.0, 0.0, 0.0]]])
+
+        candidate_logits = q_probs.log()
+        prefix = torch.zeros(1, 5, dtype=torch.long)
+        candidate_input_ids = torch.cat([prefix, torch.tensor([[0]])], dim=-1)
+
+        with patch("transformers.generation.utils.torch.rand_like", return_value=torch.tensor([0.0])):
+            validated_tokens, n_matches = _speculative_sampling(
+                candidate_input_ids,
+                candidate_logits,
+                candidate_length,
+                new_logits,
+            )
+
+        # the forbidden draft token is rejected, and its replacement is sampled among the allowed tokens
+        self.assertEqual(n_matches.item(), 0)
+        self.assertIn(validated_tokens.tolist()[0][0], [1, 2, 3])
 
     def test_speculative_sampling_ensemble_weight_none_equals_standard(self):
         """With `assistant_ensemble_weight=None`, behaviour must be identical to standard speculative sampling."""

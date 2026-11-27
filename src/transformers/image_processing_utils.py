@@ -349,6 +349,17 @@ class BaseImageProcessor(ImageProcessingMixin):
     # Backwards compatibility for method that was renamed
     _further_process_kwargs = _standardize_kwargs
 
+    def _merge_and_standardize_kwargs(self, **kwargs) -> dict:
+        """
+        Fill in the kwargs that weren't passed from the instance attributes, then standardize them.
+
+        Use this wherever passed kwargs override the instance defaults, so that both are in the same canonical
+        format (e.g. `size` as a `SizeDict`).
+        """
+        for kwarg_name in self.valid_kwargs.__annotations__:
+            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
+        return self._standardize_kwargs(**kwargs)
+
     def _validate_preprocess_kwargs(
         self,
         do_rescale: bool | None = None,
@@ -390,12 +401,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         # Perform type validation on received kwargs
         validate_typed_dict(self.valid_kwargs, kwargs)
 
-        # Set default kwargs from self
-        for kwarg_name in self._valid_kwargs_names:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
-
-        # Update kwargs that need further processing before being validated
-        kwargs = self._standardize_kwargs(**kwargs)
+        kwargs = self._merge_and_standardize_kwargs(**kwargs)
 
         # Validate kwargs
         self._validate_preprocess_kwargs(**kwargs)

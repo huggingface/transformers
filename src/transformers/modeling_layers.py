@@ -28,6 +28,7 @@ from .cache_utils import Cache
 from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import WeightRenaming, convert_and_load_state_dict_in_model
 from .masking_utils import LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING, create_causal_mask
+from .modeling_multimodal_utils import MultimodalMixin
 from .modeling_outputs import (
     BaseModelOutputWithPast,
     QuestionAnsweringModelOutput,
@@ -91,7 +92,9 @@ class GradientCheckpointingLayer(nn.Module):
             # Subclasses of a layer are wrapped too (e.g. the `FSDP<Layer>` class that FSDP2 creates), so a `forward`
             # can be wrapped more than once. Only the outermost wrapper checkpoints.
             is_outermost = type(self).forward is forward_with_checkpointing
-            if self.gradient_checkpointing and self.training and is_outermost:
+            # Without gradients there is no backward to replay the layer, so it runs as is, cache included (e.g.
+            # generating from a model in training mode). `merge_with_config_defaults` keeps `use_cache` the same way.
+            if self.gradient_checkpointing and self.training and torch.is_grad_enabled() and is_outermost:
                 do_warn = False
                 layer_name = self.__class__.__name__
                 message = f"Caching is incompatible with gradient checkpointing in {layer_name}. Setting"
@@ -127,6 +130,8 @@ class GradientCheckpointingLayer(nn.Module):
 @auto_docstring
 class GenericForSequenceClassification:
     base_model_prefix = "model"
+    # The base model's, which a multimodal one computes for its forward (see `MultimodalMixin`)
+    get_data_dependent_inputs = MultimodalMixin.get_data_dependent_inputs
 
     def __init__(self, config):
         super().__init__(config)
@@ -203,6 +208,8 @@ class GenericForSequenceClassification:
 @auto_docstring
 class GenericForQuestionAnswering:
     base_model_prefix = "model"
+    # The base model's, which a multimodal one computes for its forward (see `MultimodalMixin`)
+    get_data_dependent_inputs = MultimodalMixin.get_data_dependent_inputs
 
     def __init__(self, config):
         super().__init__(config)
@@ -265,6 +272,8 @@ class GenericForQuestionAnswering:
 @auto_docstring
 class GenericForTokenClassification:
     base_model_prefix = "model"
+    # The base model's, which a multimodal one computes for its forward (see `MultimodalMixin`)
+    get_data_dependent_inputs = MultimodalMixin.get_data_dependent_inputs
 
     def __init__(self, config):
         super().__init__(config)
@@ -630,6 +639,8 @@ class MtpModel(PreTrainedModel):
             final_mtp_patterns.append(pattern)
         if len(final_mtp_patterns) == 0:
             raise ValueError(f"{main_model.__class__.__name__} does not seem to register any known MTP layer patterns")
+        # Base model weights that the mtp layers also load
+        final_mtp_patterns.extend(getattr(main_model, "_keys_shared_with_mtp", []))
         return re.compile("|".join(rf"({pattern})" for pattern in final_mtp_patterns))
 
     def get_weight_conversions(self, main_model: PreTrainedModel) -> list[WeightTransform]:

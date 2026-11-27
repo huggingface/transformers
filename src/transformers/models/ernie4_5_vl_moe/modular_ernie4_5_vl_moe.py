@@ -30,13 +30,14 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
@@ -55,11 +56,12 @@ from ..ernie4_5_moe.modeling_ernie4_5_moe import (
     Ernie4_5_MoeExperts,
     Ernie4_5_MoeMLP,
     Ernie4_5_MoeModel,
-    Ernie4_5_MoeRMSNorm,
     Ernie4_5_MoeStatics,
     Ernie4_5_MoeTopKRouter,
 )
+from ..glm4v.image_processing_glm4v import Glm4vImageProcessorKwargs
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
@@ -121,6 +123,7 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
     """
 
     model_type = "ernie4_5_vl_moe_text"
+    attribute_map = {"num_experts": "moe_num_experts", "num_experts_per_tok": "moe_k"}
     base_config_key = "text_config"
 
     base_model_tp_plan = {
@@ -128,12 +131,6 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.text_moe.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.text_moe.experts.down_proj": "rowwise",
-        "layers.*.mlp.text_moe.experts": "moe_tp_experts",
-        "layers.*.mlp.vision_moe.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.vision_moe.experts.down_proj": "rowwise",
-        "layers.*.mlp.vision_moe.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -159,6 +156,7 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
     moe_layer_end_index = AttributeError()
     moe_layer_interval = AttributeError()
     moe_layer_start_index = AttributeError()
+    num_mtp_layers = AttributeError()
 
     def __post_init__(self, **kwargs):
         if self.mlp_layer_types is None:
@@ -168,6 +166,9 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
             self.moe_intermediate_size = [1536, 512]
 
         PreTrainedConfig.__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        raise AttributeError("Not needed for Ernie 4.5 VL")
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
@@ -332,7 +333,7 @@ class Ernie4_5_VLMoeTextAttention(Ernie4_5_MoeAttention):
     pass
 
 
-class Ernie4_5_VLMoeRMSNorm(Ernie4_5_MoeRMSNorm):
+class Ernie4_5_VLMoeRMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -521,7 +522,7 @@ class Ernie4_5_VLMoePreTrainedModel(Qwen2_5_VLPreTrainedModel):
         "hidden_states": Ernie4_5_VLMoeDecoderLayer,
         "attentions": Ernie4_5_VLMoeTextAttention,
     }
-    _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
+    _keep_in_fp32_modules_strict = ["gate.weight", "e_score_correction_bias"]
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -649,7 +650,6 @@ class Ernie4_5_VLMoeVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
 
 class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretrainedModel):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Ernie4_5_VLMoeMoeBlock, index=1),
         "hidden_states": Ernie4_5_VLMoeVisionBlock,
         "attentions": Ernie4_5_VLMoeVisionAttention,
     }
@@ -936,28 +936,28 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         video_outputs = self.vision_tower(pixel_values_videos, video_grid_thw, **kwargs)
         video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw, **kwargs)
         video_outputs.pooler_output = video_embeds
-        video_outputs.split_sizes = (
+        split_sizes = (
             video_grid_thw.prod(-1)
-            // self.config.vision_config.spatial_merge_size**2
+            // self.vision_tower.spatial_merge_size**2
             // self.resampler_model.temporal_merge_size
         )
-        return video_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**video_outputs, split_sizes=split_sizes)
 
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
         image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw, **kwargs)
         image_outputs.pooler_output = image_embeds
-        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
-        return image_outputs
+        split_sizes = image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -1003,16 +1003,14 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = mm_encoder_outputs["image"].pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = mm_encoder_outputs["video"].pooler_output
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -1158,11 +1156,11 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration):
             router_logits=outputs.router_logits,
         )
 
-    def _placeholder_token_id(self, **super_kwargs):
+    def _modality_token_id(self, **super_kwargs):
         raise AttributeError("Uses its own video token")
 
 
-class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
+class Ernie4_5_VLMoeImageProcessorKwargs(Glm4vImageProcessorKwargs):
     r"""
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
@@ -1171,10 +1169,6 @@ class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
     """
-
-    patch_size: int
-    temporal_patch_size: int
-    merge_size: int
 
 
 class Ernie4_5_VLMoeImageProcessorPil(Qwen2VLImageProcessorPil):

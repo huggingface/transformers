@@ -29,7 +29,8 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput
+from ...modeling_multimodal_utils import MultimodalMixin
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPoolingAndSplitSizes, MaskedLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
@@ -44,7 +45,7 @@ from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...utils.generic import can_return_tuple
 from ...utils.output_capturing import capture_outputs
 from ...utils.type_validators import positive_int
-from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
+from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from ..laguna.modeling_laguna import LagunaRotaryEmbedding
 from ..lfm2_vl.image_processing_lfm2_vl import convert_image_to_patches
@@ -238,18 +239,18 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         The method applies the effective resize settings, then rounds each image dimension up to a whole patch.
         Values in `images_kwargs` override the processor settings.
         """
-        images_kwargs = images_kwargs or {}
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        max_side = images_kwargs.get("max_side", self.max_side)
-        size = self._standardize_kwargs(size=images_kwargs.get("size", self.size))["size"]
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        patch_size = images_kwargs["patch_size"]
+        max_side = images_kwargs["max_side"]
+        size = self._standardize_kwargs(size=images_kwargs["size"])["size"]
 
-        if images_kwargs.get("do_resize", self.do_resize):
+        if images_kwargs["do_resize"]:
             height, width = get_resize_output_size(height, width, max_side, size)
 
         return -(-height // patch_size) * (-(-width // patch_size))
 
 
-class NeoMMERMSNorm(Gemma4RMSNorm):
+class NeoMMERMSNorm(Gemma3nRMSNorm):
     pass
 
 
@@ -515,7 +516,7 @@ class NeoMMEPreTrainedModel(MuseGlimmerPreTrainedModel):
     The bare NeoMME model. It encodes text tokens and image patches with one bidirectional Transformer encoder.
     """
 )
-class NeoMMEModel(NeoMMEPreTrainedModel):
+class NeoMMEModel(NeoMMEPreTrainedModel, MultimodalMixin):
     def __init__(self, config: NeoMMEConfig):
         super().__init__(config)
         self.embed_tokens = NeoMMEEmbeddings(config)
@@ -535,16 +536,20 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects flattened image patches into the model hidden space.")
-    def get_image_features(
+    def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         if pixel_values.shape[-1] != self.config.patch_dim:  # trf-ignore: TRF041
             raise ValueError(
                 f"pixel_values has patch width {pixel_values.shape[-1]} but the model expects "
                 f"{self.config.patch_dim} (= 3 * patch_size ** 2 with patch_size={self.config.patch_size})"
             )
         image_features = self.patch_embeddings(pixel_values.to(self.patch_embeddings.norm.weight.dtype))
-        return BaseModelOutputWithPooling(last_hidden_state=image_features, pooler_output=image_features)
+        # Every image's patches in one list, placed by the ids alone: one item
+        split_sizes = torch.full((1,), image_features.shape[0], device=image_features.device)
+        return BaseModelOutputWithPoolingAndSplitSizes(
+            last_hidden_state=image_features, pooler_output=image_features, split_sizes=split_sizes
+        )
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, image_features: torch.Tensor) -> torch.BoolTensor:
         """Find patch placeholders and validate that every image feature has a destination."""
@@ -578,7 +583,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         """
         hidden_states = self.embed_tokens(input_ids)
         if pixel_values is not None:
-            image_outputs = self.get_image_features(pixel_values, return_dict=True)
+            image_outputs = self.get_image_embeddings(pixel_values, return_dict=True)
             image_mask = self.get_placeholder_mask(input_ids, image_outputs.pooler_output)
             hidden_states = hidden_states.masked_scatter(image_mask, image_outputs.pooler_output)
 

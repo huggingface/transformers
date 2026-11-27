@@ -362,20 +362,22 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_flash_attn_2_from_config(self):
         pass
 
-    def _image_features_prepare_config_and_inputs(self):
-        """
-        Helper method to extract only image-related inputs from the full set of inputs, for testing `get_image_features`.
+    def test_get_image_embeddings_drops_the_target_grid_without_images_per_sample(self):
+        """Without `images_per_sample` the batch is one sample, whose last grid is its target: dropped, as with it."""
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = GlmImageModel(config).to(torch_device).eval()
+        # The first sample alone: its source image's patches, then its source and target grids
+        grids = inputs["image_grid_thw"][:2]
+        pixel_values = inputs["pixel_values"][: grids[0].prod()]
+        with torch.no_grad():
+            expected = model.get_image_embeddings(pixel_values, grids, torch.tensor([2], device=torch_device))
+            actual = model.get_image_embeddings(pixel_values, grids)
+        torch.testing.assert_close(actual.split_sizes, expected.split_sizes)
+        torch.testing.assert_close(actual.pooler_output, expected.pooler_output)
 
-        GlmImage internally preprocesses the image_grid_thw input by selecting source grids,
-        so we need to prepare inputs accordingly for testing get_image_features. We also discard text-related inputs.
-        """
+    def _image_features_prepare_config_and_inputs(self):
+        """The image inputs alone: `get_image_features` drops each sample's target grid itself."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        # Select only source grids (every other grid starting from index 0)
-        # Grid layout: [s0_source, s0_target, s1_source, s1_target, ...]
-        num_grids_per_sample = 2  # 1 source + 1 target
-        batch_size = self.model_tester.batch_size
-        source_indices = [i * num_grids_per_sample for i in range(batch_size)]
-        inputs_dict["image_grid_thw"] = inputs_dict["image_grid_thw"][source_indices]
         del inputs_dict["input_ids"]
         del inputs_dict["attention_mask"]
         return config, inputs_dict

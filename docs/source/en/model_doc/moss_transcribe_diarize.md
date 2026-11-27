@@ -374,6 +374,7 @@ print(transcription)
 
 [[autodoc]] MossTranscribeDiarizeModel
     - forward
+    - get_audio_embeddings
     - get_audio_features
 
 ## MossTranscribeDiarizeForConditionalGeneration

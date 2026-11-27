@@ -23,7 +23,6 @@ from transformers.testing_utils import (
     cleanup,
     require_torch,
     require_torch_accelerator,
-    require_torch_large_accelerator,
     slow,
     torch_device,
 )
@@ -257,60 +256,6 @@ class DeepseekV3ModelTest(
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @require_torch_large_accelerator
-    @slow
-    def test_eager_matches_sdpa_generate(self):
-        """
-        Overwriting the common test as the test is flaky on tiny models
-        """
-        max_new_tokens = 30
-
-        tokenizer = AutoTokenizer.from_pretrained("bzantium/tiny-deepseek-v3")
-
-        model_sdpa = DeepseekV3ForCausalLM.from_pretrained(
-            "bzantium/tiny-deepseek-v3",
-            dtype=torch.float16,
-        ).to(torch_device)
-
-        self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-
-        model_eager = DeepseekV3ForCausalLM.from_pretrained(
-            "bzantium/tiny-deepseek-v3",
-            dtype=torch.float16,
-            attn_implementation="eager",
-        ).to(torch_device)
-
-        self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-        texts = [
-            "hi here's a longer context, getting longer and",
-            "Hello this is a very long sentence my friend, very long for real",
-            "Today I am in Paris and",
-        ]
-
-        # Free both ~10 GB models in finally so a mid-test OOM doesn't leak GPU memory into subsequent
-        # tests (cascade). MemoryCleanupMixin is intentionally not used here: ModelTest runs fast
-        # CPU-compatible tests (pytest -n 8) where gc overhead is unwanted. See PR #48720.
-        try:
-            for padding_side in ["left", "right"]:
-                tokenizer.padding_side = padding_side
-                tokenizer.pad_token = tokenizer.eos_token
-
-                inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
-
-                res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-                res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-
-                with self.subTest(f"{padding_side}"):
-                    torch.testing.assert_close(
-                        res_eager,
-                        res_sdpa,
-                        msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
-                    )
-        finally:
-            del model_eager, model_sdpa
-            cleanup(torch_device, gc_collect=True)
 
     @require_torch_accelerator
     def test_flex_attention_with_grads(self):

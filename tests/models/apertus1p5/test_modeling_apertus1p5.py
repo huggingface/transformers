@@ -94,11 +94,38 @@ class Apertus1p5Vision2TextModelTester(VLMModelTester):
         return {"image_sizes": torch.full((batch_size, 2), self.image_size, dtype=torch.long, device=torch_device)}
 
 
+class Apertus1p5ModelTestMixin:
+    """Overrides shared by the vision and audio test classes. The DeepSpeed tests are skipped because the WavTokenizer
+    audio tokenizer applies `weight_norm` in `__init__`, which needs the full conv weight and fails on the empty shards
+    created under DeepSpeed ZeRO-3."""
+
+    @unittest.skip("WavTokenizer `weight_norm` init is not compatible with DeepSpeed ZeRO-3")
+    def test_resize_embeddings_untied_with_deepspeed(self):
+        pass
+
+    @unittest.skip("WavTokenizer `weight_norm` init is not compatible with DeepSpeed ZeRO-3")
+    def test_resize_embeddings_untied_with_deepspeed_multi_gpu(self):
+        pass
+
+    @unittest.skip("WavTokenizer `weight_norm` init is not compatible with DeepSpeed ZeRO-3")
+    def test_resize_tokens_embeddings_with_deepspeed(self):
+        pass
+
+    @unittest.skip("WavTokenizer `weight_norm` init is not compatible with DeepSpeed ZeRO-3")
+    def test_resize_tokens_embeddings_with_deepspeed_multi_gpu(self):
+        pass
+
+
 @require_torch
-class Apertus1p5Vision2TextModelTest(VLMModelTest, unittest.TestCase):
+class Apertus1p5Vision2TextModelTest(Apertus1p5ModelTestMixin, VLMModelTest, unittest.TestCase):
     model_tester_class = Apertus1p5Vision2TextModelTester
     test_all_params_have_gradient = False  # the media tokenizers assign codes by argmax
     test_torch_exportable = False  # images are tokenized one by one at their own size
+
+    @unittest.skip("Its images are tokenized one by one at their own size, as padding would change their codes")
+    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
+        pass
+
     skip_test_image_features_output_shape = True  # per-image `pooler_output`, no `last_hidden_state`
 
     def test_pruned_lm_head(self):
@@ -193,10 +220,15 @@ class Apertus1p5Audio2TextModelTester(ALMModelTester):
 
 
 @require_torch
-class Apertus1p5Audio2TextModelTest(ALMModelTest, unittest.TestCase):
+class Apertus1p5Audio2TextModelTest(Apertus1p5ModelTestMixin, ALMModelTest, unittest.TestCase):
     model_tester_class = Apertus1p5Audio2TextModelTester
     test_all_params_have_gradient = False  # the media tokenizers assign codes by argmax
     test_torch_exportable = False  # clips are tokenized one by one at their own length
+
+    @unittest.skip("Its clips are tokenized one by one at their own length, as padding would change their codes")
+    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
+        pass
+
     skip_test_audio_features_output_shape = True  # per-clip `pooler_output`, no `last_hidden_state`
 
     def test_expand_inputs_for_generation_keeps_audio_groups(self):
@@ -356,6 +388,7 @@ class Apertus1p5IntegrationTest(unittest.TestCase):
             {
                 (None, None): ["mr crilger is the apostle of the middle classes and we're glad to welcome his gospel"],
                 ("cuda", (8, 6)): ["mr quilter is the apostle of the middle classes and we're glad to welcome his gospel"],
+                ("xpu", 5): ["mr quilter is the apostle of the middle classes and we're glad to welcome his gospel"],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -381,6 +414,12 @@ class Apertus1p5IntegrationTest(unittest.TestCase):
                     "The image shows two cats lying on a pink couch",
                 ],
                 ("cuda", (8, 6)): [
+                    "Two tabby cats are peacefully sleeping on a",
+                    "mr quilter is the apostle of the middle",
+                    "Bern",
+                    "The image shows two cats lying on a pink couch",
+                ],
+                ("xpu", 5): [
                     "Two tabby cats are peacefully sleeping on a",
                     "mr quilter is the apostle of the middle",
                     "Bern",

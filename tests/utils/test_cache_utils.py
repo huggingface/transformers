@@ -88,6 +88,8 @@ if is_torch_available():
         Fp8QuantizedLayer,
         LinearAttentionAndFullAttentionLayer,
         LinearAttentionAndSlidingWindowAttentionLayer,
+        LinearAttentionAndStaticFullAttentionLayer,
+        LinearAttentionAndStaticSlidingWindowAttentionLayer,
         LinearAttentionLayer,
         QuantoQuantizedLayer,
         StaticLayer,
@@ -1108,6 +1110,29 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = self.tokenizer.decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
+    def test_is_linear_property(self):
+        """Test that hybrid linear + attention layers report `is_linear=False` correctly."""
+        layer_classes = [
+            LinearAttentionLayer,
+            LinearAttentionAndFullAttentionLayer,
+            LinearAttentionAndSlidingWindowAttentionLayer,
+            LinearAttentionAndStaticFullAttentionLayer,
+            LinearAttentionAndStaticSlidingWindowAttentionLayer,
+        ]
+        is_expected_linear = [True, False, False, False, False]
+        init_kwargs = [
+            {},
+            {},
+            {"sliding_window": 5},
+            {"max_cache_len": 20},
+            {"max_cache_len": 20, "sliding_window": 5},
+        ]
+
+        for layer_cls, expected_result, kwargs in zip(layer_classes, is_expected_linear, init_kwargs):
+            cache = Cache(layers=[layer_cls(**kwargs)])
+            # The is_linear property is only based on the type of the layer, so check that the types do not derive
+            self.assertEqual(cache.is_linear, [expected_result])
+
 
 @require_torch_accelerator
 class CacheHardIntegrationTest(unittest.TestCase):
@@ -1915,6 +1940,31 @@ class SyntheticCacheTest(unittest.TestCase):
         self.assertEqual(
             static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "StaticCache Scenario 2 failed"
         )
+
+    def test_static_cache_keys_and_values_dtypes(self):
+        """Test StaticCache when keys and values have different dtypes.
+
+        Under autocast with a float32 model, RoPE returns float32 keys while the values stay in the autocast dtype.
+        """
+        static_cache = StaticCache(config=self.config, max_cache_len=self.max_cache_len)
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
+        static_cache.update(key_states=prefill, value_states=prefill.bfloat16(), layer_idx=0)
+        static_cache.update(
+            key_states=torch.tensor(3.0)[None, None, None, None],
+            value_states=torch.tensor(3.0, dtype=torch.bfloat16)[None, None, None, None],
+            layer_idx=0,
+        )
+        self.assertEqual(static_cache.layers[0].keys.dtype, torch.float32)
+        self.assertEqual(static_cache.layers[0].values.dtype, torch.bfloat16)
+        self.assertEqual(static_cache.layers[0].values[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 0.0])
+
+    def test_dynamic_cache_keys_and_values_dtypes(self):
+        """Test DynamicCache when keys and values have different dtypes, as in `test_static_cache_keys_and_values_dtypes`."""
+        dynamic_cache = DynamicCache(config=self.config)
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
+        dynamic_cache.update(key_states=prefill, value_states=prefill.bfloat16(), layer_idx=0)
+        self.assertEqual(dynamic_cache.layers[0].keys.dtype, torch.float32)
+        self.assertEqual(dynamic_cache.layers[0].values.dtype, torch.bfloat16)
 
     def test_sliding_window_cache(self):
         """Test fully sliding StaticCache with manually prefilled states and hardcoded assertions.

@@ -20,7 +20,7 @@ from torch import nn
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import (
     MultiModalData,
@@ -170,10 +170,12 @@ class LightOnOcrProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
 
-            size = images_kwargs.get("size", None) or self.image_processor.size
-            patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size
+            size = images_kwargs["size"]
+            patch_size = images_kwargs["patch_size"]
             if isinstance(patch_size, dict) and "height" in patch_size and "width" in patch_size:
                 patch_size = (patch_size["height"], patch_size["width"])
 
@@ -240,16 +242,16 @@ class LightOnOcrModel(Mistral3Model):
         pixel_values: torch.Tensor,
         image_sizes: torch.Tensor | list,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_encoder(pixel_values, image_sizes=image_sizes, return_dict=True, **kwargs)
         image_outputs.pooler_output = self.vision_projection(
             image_outputs.last_hidden_state.squeeze(0), image_sizes, **kwargs
         )
         downsample_ratio = self.config.vision_config.patch_size * self.config.spatial_merge_size
-        image_outputs.split_sizes = (
+        split_sizes = (
             torch.as_tensor(image_sizes, device=image_outputs.pooler_output.device) // downsample_ratio
         ).prod(dim=-1)
-        return image_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring
@@ -284,8 +286,7 @@ class LightOnOcrModel(Mistral3Model):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )

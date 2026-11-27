@@ -148,8 +148,8 @@ class SLANetSLAHead(SLANetPreTrainedModel):
 
         self.structure_attention_cell = SLANetAttentionGRUCell(
             config.post_conv_out_channels, config.hidden_size, config.out_channels
-        )
-        self.structure_generator = SLANetMLP(config.hidden_size, config.out_channels)
+        ).to(dtype=torch.float32)
+        self.structure_generator = SLANetMLP(config.hidden_size, config.out_channels).to(dtype=torch.float32)
 
         self.post_init()
 
