@@ -81,5 +81,13 @@ class VipLlavaConfig(PreTrainedConfig):
     image_seq_length: int = 576
     tie_word_embeddings: bool = False
 
+    def __post_init__(self, **kwargs):
+        # BC: the 7b checkpoint's config predates the `vision_feature_layers` -> `vision_feature_layer` rename and
+        # stores a stale singular value, while its weights use the 5-layer default. The old `projector_layernorm` key
+        # identifies such a config.
+        if "projector_layernorm" in kwargs and "vision_feature_layers" not in kwargs:
+            self.vision_feature_layer = (-2, -5, -8, -11, 6)
+        super().__post_init__(**kwargs)
+
 
 __all__ = ["VipLlavaConfig"]
