@@ -23,13 +23,12 @@ from copy import copy
 from enum import Enum
 from inspect import isclass
 from pathlib import Path
-from typing import Any, Literal, NewType, Union, get_type_hints
+from typing import Any, Literal, TypeAlias, Union, get_type_hints
 
 import yaml
 
-
-DataClass = NewType("DataClass", Any)
-DataClassType = NewType("DataClassType", Any)
+DataClass: TypeAlias = Any
+DataClassType: TypeAlias = Any
 
 
 # From https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
