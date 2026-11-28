@@ -331,6 +331,13 @@ SPECIAL_CASES_TO_ALLOW = {
     "InternLM3Config": True,
     "ExaoneConfig": True,
     "IQuestCoderConfig": True,
+    "NemotronLabsDiffusionConfig": [
+        "attention_bias",
+        "mlp_bias",
+        "dlm_loss_weight",
+        "ar_loss_weight",
+        "dp_varying_mask_ratio",
+    ],
     "Sapiens2Config": [
         "num_first_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
         "num_key_value_attention_heads",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
