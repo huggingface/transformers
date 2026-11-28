@@ -172,6 +172,7 @@ MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
     "pixel_attention_mask",
     "pixel_values_images",
     "pixel_values_local",
+    "image_spatial_crop",
     "patches_grid",
     "image_token_pooling",
     "image_grids",
