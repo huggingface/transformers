@@ -770,8 +770,8 @@ class Mamba2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "backbone"
     _no_split_modules = ["Mamba2Block"]
     supports_gradient_checkpointing = True
-    _can_compile_fullgraph = True
     _can_record_outputs = {"hidden_states": Mamba2Block}
+    _can_compile_fullgraph = True
 
     def _init_weights(self, module):
         """Initialize the weights."""
