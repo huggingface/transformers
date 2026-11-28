@@ -316,8 +316,8 @@ def prepare_inputs(
     anything [`~image_utils.load_image`] takes.
     """
     tokenizer = getattr(processor, "tokenizer", processor)
-    if MARK not in tokenizer.get_vocab():  # special: they split the text they're in, and requests can't write them
-        tokenizer.add_tokens([AddedToken(token, special=True, normalized=False) for token in (MARK, SPLIT)])
+    # special: they split the text they're in, and requests can't write them. Tokens already there are skipped
+    tokenizer.add_tokens([AddedToken(token, special=True, normalized=False) for token in (MARK, SPLIT)])
     sentinel_ids = tokenizer.convert_tokens_to_ids([MARK, SPLIT])
 
     if isinstance(request, str):  # parsed, so that `\u` escapes can't hide control tokens
