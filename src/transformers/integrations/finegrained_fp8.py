@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import functools
+import math
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -1128,50 +1129,70 @@ class Fp8Dequantize(ConversionOps):
         return unpacked.reshape(*packed.shape[:-1], 2 * packed.shape[-1])
 
     def _dequantize_one(
-        self, quantized: torch.Tensor, scales: torch.Tensor, output_dtype: torch.dtype | None = None
-    ) -> torch.Tensor:
-        # FP4 path: int8 / float4_e2m1fn_x2 stores two nibbles per byte. Unpack to fp32
-        # first so the rest of the routine sees a normal (rows, cols) float matrix.
-        fp4_dtype = getattr(torch, "float4_e2m1fn_x2", None)
-        if quantized.dtype == torch.int8 or (fp4_dtype is not None and quantized.dtype == fp4_dtype):
-            quantized_fp32 = self._unpack_fp4(quantized)
-        else:
-            quantized_fp32 = quantized.to(torch.float32)
-        rows, cols = quantized_fp32.shape[-2:]
-        # Derive block size from the scale grid rather than the global config: MoE experts
-        # ship MXFP4 with a ``[1, 32]`` block, dense linears ship FP8 with ``[128, 128]``,
-        # and the same dequant has to handle both within one checkpoint.
-        try:
-            scale_rows, scale_cols = scales.shape[-2:]
-        except Exception:
-            # scale can be a single tensor in extreme cases where it was not wrapped properly but is [1,0].
-            scale_rows, scale_cols = 1, 1
-        if rows % scale_rows or cols % scale_cols:
-            raise ValueError(
-                f"Weight shape ({rows}, {cols}) not divisible by scale grid ({scale_rows}, {scale_cols})."
-            )
-        block_m = rows // scale_rows
-        block_n = cols // scale_cols
-        # ``ue8m0`` (``float8_e8m0fnu``) scales have no CUDA ``mul`` kernel, and casting
-        # the FP8 weight to that dtype loses precision. Promote both sides to fp32 for
-        # the math; prefer the destination parameter's dtype when known so eager modules
-        # (e.g. plain ``nn.Linear``) keep the model's compute dtype after load.
-        if output_dtype is None:
-            output_dtype = (
-                scales.dtype if scales.dtype.is_floating_point and scales.element_size() >= 2 else torch.bfloat16
-            )
-        # MXFP8 checkpoints ship E8M0 exponents stored as ``torch.uint8`` (one byte per
-        # block) — the actual scale is `2 ** (byte - 127)`. Interpreting the raw bytes
-        # as scalar multipliers would be silently wrong, so unpack to fp32 here.
-        if scales.dtype == torch.uint8:
-            s_fp32 = (scales.to(torch.float32) - 127.0).exp2()
-        else:
-            s_fp32 = scales.to(torch.float32)
-        original_shape = quantized_fp32.shape
-        q = quantized_fp32.reshape(-1, scale_rows, block_m, scale_cols, block_n)
-        s = s_fp32.reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)
-        return (q * s).to(output_dtype).reshape(original_shape)
+            self, quantized: torch.Tensor, scales: torch.Tensor, output_dtype: torch.dtype | None = None
+        ) -> torch.Tensor:
+            # FP4 path: int8 / float4_e2m1fn_x2 stores two nibbles per byte. Unpack to fp32
+            # first so the rest of the routine sees a normal (rows, cols) float matrix.
+            fp4_dtype = getattr(torch, "float4_e2m1fn_x2", None)
+            if quantized.dtype == torch.int8 or (fp4_dtype is not None and quantized.dtype == fp4_dtype):
+                quantized_fp32 = self._unpack_fp4(quantized)
+            else:
+                quantized_fp32 = quantized.to(torch.float32)
+            rows, cols = quantized_fp32.shape[-2:]
 
+            try:
+                scale_rows, scale_cols = scales.shape[-2:]
+            except Exception:
+                # scale can be a single tensor in extreme cases where it was not wrapped properly but is [1,0].
+                scale_rows, scale_cols = 1, 1
+
+            # Determine block size directly from the quantizer's configuration
+            block = self.hf_quantizer.quantization_config.weight_block_size
+
+            # Check if exact division applies (enabling the memory-efficient broadcast path)
+            is_exact_division = rows % scale_rows == 0 and cols % scale_cols == 0
+
+            if (
+                block is not None
+                and len(block) == 2
+                and (scale_rows, scale_cols) == (math.ceil(rows / block[0]), math.ceil(cols / block[1]))
+            ):
+                block_m, block_n = block
+                use_repeat_interleave = True
+            elif is_exact_division:
+                block_m, block_n = rows // scale_rows, cols // scale_cols
+                use_repeat_interleave = False
+            else:
+                raise ValueError(
+                    f"Weight shape ({rows}, {cols}) not divisible by scale grid ({scale_rows}, {scale_cols}) and does not match weight_block_size {block}."
+                )
+
+            # ``ue8m0`` (``float8_e8m0fnu``) scales have no CUDA ``mul`` kernel, and casting
+            # the FP8 weight to that dtype loses precision. Promote both sides to fp32 for
+            # the math; prefer the destination parameter's dtype when known so eager modules
+            # (e.g. plain ``nn.Linear``) keep the model's compute dtype after load.
+            if output_dtype is None:
+                output_dtype = (
+                    scales.dtype if scales.dtype.is_floating_point and scales.element_size() >= 2 else torch.bfloat16
+                )
+            # MXFP8 checkpoints ship E8M0 exponents stored as ``torch.uint8`` (one byte per
+            # block) — the actual scale is `2 ** (byte - 127)`. Interpreting the raw bytes
+            # as scalar multipliers would be silently wrong, so unpack to fp32 here.
+            if scales.dtype == torch.uint8:
+                s_fp32 = (scales.to(torch.float32) - 127.0).exp2()
+            else:
+                s_fp32 = scales.to(torch.float32)
+
+            original_shape = quantized_fp32.shape
+
+            # Use memory-efficient broadcast path for exact divisions; use repeat_interleave/crop only for partial blocks
+            if use_repeat_interleave:
+                s = s_fp32.repeat_interleave(block_m, dim=-2).repeat_interleave(block_n, dim=-1)[..., :rows, :cols]
+                return (quantized_fp32 * s).to(output_dtype).reshape(original_shape)
+            else:
+                q = quantized_fp32.reshape(-1, scale_rows, block_m, scale_cols, block_n)
+                s = s_fp32.reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)
+                return (q * s).to(output_dtype).reshape(original_shape)
     def _get_target_dtype(self, model: torch.nn.Module | None, full_layer_name: str | None) -> torch.dtype | None:
         if model is None or full_layer_name is None:
             return None
