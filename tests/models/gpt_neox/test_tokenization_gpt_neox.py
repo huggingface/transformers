@@ -29,3 +29,9 @@ class GPTNeoXTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     integration_expected_token_ids = [1552, 310, 247, 1071, 49042, 221, 187, 42, 369, 5686, 275, 898, 6914, 13, 285, 436, 310, 21649, 860, 15, 187, 20025, 46549, 5225, 48561, 33656, 238, 12105, 187, 12764, 50276, 12092, 187, 12764, 50275, 12092, 46603, 50276, 187, 24387, 187, 29, 84, 31, 187, 5801, 29, 84, 31, 9088, 187, 510, 1563, 2876, 943, 320, 6283, 16202, 27, 24387, 15, 187, 1989, 209, 1817, 285, 209, 2869, 238, 26863, 50275, 1817, 50275, 35071, 187, 8262, 849, 403, 368, 2509]  # fmt: skip
     expected_tokens_from_ids = ['This', 'Ġis', 'Ġa', 'Ġtest', 'ĠðŁĺ', 'Ĭ', 'Ċ', 'I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ9', '2000', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġfals', 'Ã©', '.', 'Ċ', 'çĶŁ', 'æ´»', 'çļĦ', 'çľŁ', 'è°', 'Ľ', 'æĺ¯', 'Ċ', 'Hi', '  ', 'Hello', 'Ċ', 'Hi', '   ', 'Hello', 'ĊĊĠĊ', '  ', 'Ċ', 'ĠHello', 'Ċ', '<', 's', '>', 'Ċ', 'hi', '<', 's', '>', 'there', 'Ċ', 'The', 'Ġfollowing', 'Ġstring', 'Ġshould', 'Ġbe', 'Ġproperly', 'Ġencoded', ':', 'ĠHello', '.', 'Ċ', 'But', 'Ġ', 'ird', 'Ġand', 'Ġ', 'à¸', 'Ľ', 'à¸µ', '   ', 'ird', '   ', 'à¸Ķ', 'Ċ', 'Hey', 'Ġhow', 'Ġare', 'Ġyou', 'Ġdoing']  # fmt: skip
     integration_expected_decoded_text = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+
+    def test_eos_in_tokenizer_json_post_processor_is_not_added(self):
+        # The tokenizer.json post-processor adds EOS, but GPT-NeoX doesn't add BOS or EOS by default
+        tokenizer = GPTNeoXTokenizer.from_pretrained("allenai/OLMo-1B-hf")
+        self.assertFalse(tokenizer.add_eos_token)
+        self.assertNotEqual(tokenizer("hello").input_ids[-1], tokenizer.eos_token_id)
