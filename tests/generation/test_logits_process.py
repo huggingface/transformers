@@ -301,6 +301,23 @@ class LogitsProcessorTest(unittest.TestCase):
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == processed_scores))
 
+    def test_encoder_repetition_penalty_ignores_masked_padding(self):
+        encoder_input_ids = torch.tensor([[0, 0, 3], [1, 2, 3]], device=torch_device, dtype=torch.long)
+        encoder_attention_mask = torch.tensor([[0, 0, 1], [1, 1, 1]], device=torch_device, dtype=torch.long)
+        scores = self._get_uniform_logits(batch_size=2, length=10)
+
+        proc = EncoderRepetitionPenaltyLogitsProcessor(
+            penalty=2.0, encoder_input_ids=encoder_input_ids, encoder_attention_mask=encoder_attention_mask
+        )
+        processed_scores = proc(encoder_input_ids, scores.clone())
+
+        # the padding token (0) is untouched in the padded row, real prompt tokens are rewarded
+        self.assertAlmostEqual(processed_scores[0, 0].item(), scores[0, 0].item())
+        self.assertAlmostEqual(processed_scores[0, 3].item(), scores[0, 3].item() * 2)
+        # the unpadded row is rewarded as before, and the output keeps the vocabulary size
+        self.assertAlmostEqual(processed_scores[1, 1].item(), scores[1, 1].item() * 2)
+        self.assertEqual(processed_scores.shape, scores.shape)
+
     def test_top_k_dist_warper(self):
         input_ids = None
         vocab_size = 10

@@ -452,6 +452,8 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
             and 1.0 penalizes prompt tokens.
         encoder_input_ids (`torch.LongTensor`):
             The encoder_input_ids that should be repeated within the decoder ids.
+        encoder_attention_mask (`torch.LongTensor`, *optional*):
+            Attention mask of `encoder_input_ids`. Positions where it is `0` (padding) are not rewarded or penalized.
 
     Examples:
 
@@ -476,12 +478,18 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
     supports_continuous_batching: bool = False
 
-    def __init__(self, penalty: float, encoder_input_ids: torch.LongTensor):
+    def __init__(
+        self,
+        penalty: float,
+        encoder_input_ids: torch.LongTensor,
+        encoder_attention_mask: torch.LongTensor | None = None,
+    ):
         if not isinstance(penalty, float) or not (penalty > 0):
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
 
         self.penalty = 1 / penalty
         self.encoder_input_ids = encoder_input_ids
+        self.encoder_attention_mask = encoder_attention_mask
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
@@ -490,13 +498,24 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
             if scores.shape[0] > self.encoder_input_ids.shape[0]
             else self.encoder_input_ids
         )
+        vocab_size = scores.shape[-1]
+        if self.encoder_attention_mask is not None:
+            encoder_attention_mask = self.encoder_attention_mask.to(encoder_input_ids.device)
+            if scores.shape[0] > encoder_attention_mask.shape[0]:
+                encoder_attention_mask = encoder_attention_mask.repeat_interleave(
+                    scores.shape[0] // encoder_attention_mask.shape[0], dim=0
+                )
+            # Padding positions are redirected to an extra column that is dropped after the scatter
+            encoder_input_ids = encoder_input_ids.masked_fill(encoder_attention_mask == 0, vocab_size)
+
+        scores = torch.nn.functional.pad(scores, (0, 1))
         score = torch.gather(scores, 1, encoder_input_ids)
 
         # if score < 0 then hallucination penalty has to be multiplied to increase the token probabilities
         score = torch.where(score < 0, score * self.penalty, score / self.penalty)
 
         scores_processed = scores.scatter(1, encoder_input_ids, score)
-        return scores_processed
+        return scores_processed[:, :vocab_size]
 
 
 class TopPLogitsWarper(LogitsProcessor):
