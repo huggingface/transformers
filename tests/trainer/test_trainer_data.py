@@ -29,6 +29,7 @@ from torch import nn
 from transformers import (
     GPT2Config,
     GPT2LMHeadModel,
+    Qwen3MoeForCausalLM,
     Trainer,
     TrainingArguments,
 )
@@ -57,6 +58,7 @@ from transformers.trainer_pt_utils import (
 )
 from transformers.trainer_utils import RemoveColumnsCollator, find_executable_batch_size
 
+from ..models.qwen3_moe.test_modeling_qwen3_moe import Qwen3MoeModelTester
 from .trainer_test_utils import (
     AlmostAccuracy,
     CustomDataloaderTrainer,
@@ -308,6 +310,28 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
         log_probs[2, 3] = 0.0
         expected_loss = (1 - epsilon) * loss + epsilon * log_probs.sum() / (num_labels * 17)
         torch.testing.assert_close(label_smoothed_loss, expected_loss)
+
+    @require_accelerate
+    def test_label_smoothing_preserves_router_aux_loss(self):
+        config = Qwen3MoeModelTester(self, output_router_logits=True).get_config()
+        model = Qwen3MoeForCausalLM(config)
+        input_ids = torch.randint(0, config.vocab_size, (2, 16))
+        inputs = {"input_ids": input_ids, "labels": input_ids}
+        for eps, steps, training in [(0.0, 1, True), (1e-8, 1, True), (0.1, 2, True), (0.1, 2, False)]:
+            with self.subTest(eps=eps, steps=steps, training=training), tempfile.TemporaryDirectory() as tmp_dir:
+                model.train(training)
+                args = TrainingArguments(tmp_dir, use_cpu=True, report_to="none", label_smoothing_factor=eps)
+                trainer = Trainer(model=model, args=args)
+                trainer.current_gradient_accumulation_steps = steps
+                num_items = input_ids[:, 1:].numel() * (steps if training else 1) if steps > 1 else None
+                loss, outputs = trainer.compute_loss(
+                    model, inputs.copy(), return_outputs=True, num_items_in_batch=num_items
+                )
+                ce = LabelSmoother(eps)(outputs, input_ids, shift_labels=True, num_items_in_batch=num_items)
+                weight = model.router_aux_loss_coef / (steps if training else 1)
+                torch.testing.assert_close(loss, ce + weight * outputs.aux_loss)
+                aux_grad = torch.autograd.grad(loss, outputs.aux_loss)[0]
+                torch.testing.assert_close(aux_grad, torch.full_like(aux_grad, weight))
 
     def test_label_smoothing_multi_label_incompatibility(self):
         """Test that Trainer warns and disables label smoothing for multi-label classification"""

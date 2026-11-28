@@ -2229,6 +2229,19 @@ class Trainer:
             loss_scale = self.accelerator.num_processes // self.get_tp_size()
             loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
 
+        if labels is not None and self.compute_loss_func is None and isinstance(outputs, dict):
+            aux_loss = outputs.get("aux_loss")
+            aux_loss_coef = getattr(unwrapped_model, "router_aux_loss_coef", None)
+            if aux_loss is not None and aux_loss_coef is not None:
+                # Router loss is a per-microbatch mean, independent of token/DDP normalization.
+                aux_loss = aux_loss_coef * aux_loss.to(loss.device)
+                loss_is_scaled_for_ga = self.loss_is_scaled_for_ga
+                if loss_is_scaled_for_ga is None:
+                    loss_is_scaled_for_ga = self.model_accepts_loss_kwargs and num_items_in_batch is not None
+                if model.training and loss_is_scaled_for_ga:
+                    aux_loss = aux_loss / getattr(self, "current_gradient_accumulation_steps", 1)
+                loss = loss + aux_loss
+
         return (loss, outputs) if return_outputs else loss
 
     def compute_loss_context_manager(self) -> contextlib.ExitStack:
