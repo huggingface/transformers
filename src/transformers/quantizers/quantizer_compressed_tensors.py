@@ -12,11 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
+from collections.abc import Iterable
 from copy import deepcopy
+from typing import TYPE_CHECKING, Optional
 
 from ..utils import is_compressed_tensors_available, is_torch_available, is_torch_greater_or_equal, logging
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
+
+
+if TYPE_CHECKING:
+    from ..core_model_loading import WeightConverter, WeightRenaming
+    from ..modeling_utils import PreTrainedModel
 
 
 if is_torch_available():
@@ -24,6 +32,51 @@ if is_torch_available():
 
     from ..core_model_loading import WeightConverter
     from ..integrations.compressed_tensors import CompressedTensorsDequantize
+
+    class CompressedTensorsWeightConverter(WeightConverter):
+        """Subclass of WeightConverter for compressed-tensors.
+
+        When a model is dequantized into standard unquantized parameters in memory,
+        reverting the conversion on save should reverse only the base transformations
+        (e.g. un-fusing gate_up_proj -> gate_proj.weight, up_proj.weight) without
+        emitting companion serialized patterns (_packed, _scale, _shape).
+        """
+
+        def __init__(self, source_patterns, target_patterns, operations, base_source_patterns=None, **kwargs):
+            super().__init__(source_patterns, target_patterns, operations, **kwargs)
+            self.base_source_patterns = (
+                base_source_patterns if base_source_patterns is not None else self._original_source_patterns
+            )
+
+        def copy(self, source_patterns=None, target_patterns=None, **kwargs):
+            kwargs.setdefault("base_source_patterns", self.base_source_patterns)
+            return super().copy(source_patterns, target_patterns, **kwargs)
+
+        def reverse_transform(self):
+            from ..core_model_loading import _IdentityOp
+
+            rev_ops = []
+            for op in self.operations[::-1]:
+                rop = op.reverse_op
+                if not isinstance(rop, _IdentityOp):
+                    rev_ops.append(rop)
+            if not rev_ops:
+                rev_ops = [_IdentityOp()]
+
+            base = (
+                self.base_source_patterns if self.base_source_patterns is not None else self._original_source_patterns
+            )
+            rev_conv = WeightConverter(
+                source_patterns=self._original_target_patterns,
+                target_patterns=base,
+                operations=rev_ops,
+                force_cpu=self.force_cpu,
+            )
+            rev_conv.scope_prefix = self.scope_prefix
+            rev_conv.base_model_prefix = self.base_model_prefix
+            return rev_conv
+else:
+    CompressedTensorsWeightConverter = None
 
 
 logger = logging.get_logger(__name__)
@@ -55,6 +108,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def __init__(self, quantization_config: CompressedTensorsConfig, **kwargs):
         super().__init__(quantization_config, **kwargs)
 
+        self.use_fp8_kernel = False
         # Call post_init here to ensure proper config setup when `dequantize` /
         # `use_optimized_inference` are provided directly via CompressedTensorsConfig, and to avoid
         # duplicate logging.
@@ -167,6 +221,121 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         ]
     }
 
+    def is_quantized_converter(
+        self,
+        converter: "WeightConverter",
+        model: Optional["PreTrainedModel"] = None,
+        checkpoint_keys: Iterable[str] | None = None,
+        renamings: list["WeightRenaming"] | None = None,
+    ) -> bool:
+        if checkpoint_keys is not None:
+            return super().is_quantized_converter(
+                converter, model=model, checkpoint_keys=checkpoint_keys, renamings=renamings
+            )
+
+        compressor = getattr(self, "compressor", None)
+        ct_quant_config = getattr(compressor, "quantization_config", None)
+        if ct_quant_config is None:
+            return True
+        config_groups = getattr(ct_quant_config, "config_groups", None)
+        if not config_groups:
+            return getattr(self.quantization_config, "is_quantization_compressed", False)
+
+        patterns_to_check = list(converter._original_source_patterns) + list(converter._original_target_patterns)
+        for group in config_groups.values():
+            targets = getattr(group, "targets", None) or []
+            ignore = getattr(group, "ignore", None) or []
+            targets = [targets] if isinstance(targets, str) else targets
+            ignore = [ignore] if isinstance(ignore, str) else ignore
+
+            if not targets:
+                continue
+
+            for target in targets:
+                is_regex = target.startswith("re:")
+                t_pat = target.removeprefix("re:") if is_regex else target
+
+                for p in patterns_to_check:
+                    p_sample = p.replace("*", "0").removesuffix(".weight")
+                    samples = [p_sample, f".{p_sample}", f"model.{p_sample}", p.replace("*", "0")]
+                    if is_regex:
+                        if any(re.search(t_pat, s) for s in samples):
+                            if not any(
+                                (
+                                    re.search(ign.removeprefix("re:"), p_sample)
+                                    if ign.startswith("re:")
+                                    else ign in p_sample
+                                )
+                                for ign in ignore
+                            ):
+                                return True
+                    else:
+                        if any(t_pat in s or t_pat == s for s in samples):
+                            if not any(ign in p_sample for ign in ignore):
+                                return True
+
+                if model is not None:
+                    for name, mod in model.named_modules():
+                        mod_class = type(mod).__name__
+                        matches_target = False
+                        if is_regex:
+                            if re.search(t_pat, name) or re.search(t_pat, f"{name}.0"):
+                                matches_target = True
+                        else:
+                            if t_pat == name or t_pat == mod_class:
+                                matches_target = True
+
+                        if matches_target:
+                            is_ignored = False
+                            for ign in ignore:
+                                if ign.startswith("re:") and (
+                                    re.search(ign.removeprefix("re:"), name)
+                                    or re.search(ign.removeprefix("re:"), f"{name}.0")
+                                ):
+                                    is_ignored = True
+                                    break
+                                elif not ign.startswith("re:") and (ign == name or ign == mod_class):
+                                    is_ignored = True
+                                    break
+                            if not is_ignored:
+                                for tp in converter._original_target_patterns:
+                                    clean_tp = tp.removesuffix(".weight").replace("*", "")
+                                    if clean_tp in name or any(part in name for part in clean_tp.split(".") if part):
+                                        return True
+        return False
+
     def get_load_operations(self):
         # No `deserialize`: the serialized tensors load as is into the params compressed-tensors creates
         return {"dequantize": CompressedTensorsDequantize}
+
+    def update_weight_conversions(self, weight_conversions, model, checkpoint_keys=None):
+        updated = super().update_weight_conversions(weight_conversions, model, checkpoint_keys=checkpoint_keys)
+        if not is_torch_available() or CompressedTensorsWeightConverter is None:
+            return updated
+
+        for i, conv in enumerate(updated):
+            if isinstance(conv, WeightConverter) and any(
+                op.__class__.__name__ == "CompressedTensorsDequantize" for op in conv.operations
+            ):
+                orig = next(
+                    (
+                        c
+                        for c in weight_conversions
+                        if isinstance(c, WeightConverter)
+                        and c.target_patterns == conv.target_patterns
+                        and getattr(c, "scope_prefix", None) == getattr(conv, "scope_prefix", None)
+                    ),
+                    None,
+                )
+                base_sources = orig.source_patterns if orig is not None else conv.source_patterns
+                new_conv = CompressedTensorsWeightConverter(
+                    source_patterns=conv.source_patterns,
+                    target_patterns=conv.target_patterns,
+                    operations=conv.operations,
+                    force_cpu=conv.force_cpu,
+                    base_source_patterns=base_sources,
+                )
+                new_conv.scope_prefix = conv.scope_prefix
+                new_conv.base_model_prefix = conv.base_model_prefix
+                updated[i] = new_conv
+        return updated
