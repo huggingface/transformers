@@ -72,3 +72,15 @@ class Inkling2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             torch.testing.assert_close(encoding.pixel_values[0, :8, 8:16], dark_square)
             torch.testing.assert_close(encoding.pixel_values[0, 8:16, :8], dark_square)
             torch.testing.assert_close(encoding.pixel_values[0, 8:16, 8:16], light_square)
+
+    def test_normalized_rgba_and_rgb_inputs_match_pil(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            rgba = np.full((16, 17, 4), (64, 128, 192, 255), dtype=np.uint8)
+            rgba[:, 8:, 3] = 0
+            for pixels in (rgba, rgba[..., :3]):
+                with self.subTest(channels=pixels.shape[-1]):
+                    expected = image_processor(Image.fromarray(pixels), return_tensors="pt")
+                    actual = image_processor(pixels.astype(np.float32) / 255, do_rescale=False, return_tensors="pt")
+                    torch.testing.assert_close(actual.image_grid_thw, expected.image_grid_thw)
+                    torch.testing.assert_close(actual.pixel_values, expected.pixel_values)
