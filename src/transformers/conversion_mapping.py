@@ -1629,6 +1629,80 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
             WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
         ],
+        "BevformerModel": [
+            # ResNet-50 backbone
+            WeightRenaming(
+                r"img_backbone\.conv1\.weight", r"conv_encoder\.model\.embedder\.embedder\.convolution\.weight"
+            ),
+            WeightRenaming(r"img_backbone\.bn1\.", r"conv_encoder\.model\.embedder\.embedder\.normalization\."),
+            WeightRenaming(r"img_backbone\.layer1\.", r"conv_encoder\.model\.encoder\.stages\.0\.layers\."),
+            WeightRenaming(r"img_backbone\.layer2\.", r"conv_encoder\.model\.encoder\.stages\.1\.layers\."),
+            WeightRenaming(r"img_backbone\.layer3\.", r"conv_encoder\.model\.encoder\.stages\.2\.layers\."),
+            WeightRenaming(r"img_backbone\.layer4\.", r"conv_encoder\.model\.encoder\.stages\.3\.layers\."),
+            WeightRenaming(r"\.conv1\.", r"\.layer\.0\.convolution\."),
+            WeightRenaming(r"\.conv2\.", r"\.layer\.1\.convolution\."),
+            WeightRenaming(r"\.conv3\.", r"\.layer\.2\.convolution\."),
+            WeightRenaming(r"\.bn1\.", r"\.layer\.0\.normalization\."),
+            WeightRenaming(r"\.bn2\.", r"\.layer\.1\.normalization\."),
+            WeightRenaming(r"\.bn3\.", r"\.layer\.2\.normalization\."),
+            WeightRenaming(r"\.downsample\.0\.", r"\.shortcut\.convolution\."),
+            WeightRenaming(r"\.downsample\.1\.", r"\.shortcut\.normalization\."),
+            # FPN neck
+            WeightRenaming(r"img_neck\.lateral_convs\.(\d+)\.conv\.", r"fpn\.lateral_convs\.\1\."),
+            WeightRenaming(r"img_neck\.fpn_convs\.(\d+)\.conv\.", r"fpn\.fpn_convs\.\1\."),
+            # Embeddings, positional encodings, reference points & CAN-bus MLP
+            WeightRenaming(r"pts_bbox_head\.bev_embedding\.weight", r"query_embedding\.bev_embedding\.weight"),
+            WeightRenaming(r"pts_bbox_head\.query_embedding\.weight", r"query_embedding\.query_embedding\.weight"),
+            WeightRenaming(
+                r"pts_bbox_head\.positional_encoding\.row_embed\.weight", r"positional_encoding\.row_embed\.weight"
+            ),
+            WeightRenaming(
+                r"pts_bbox_head\.positional_encoding\.col_embed\.weight", r"positional_encoding\.col_embed\.weight"
+            ),
+            WeightRenaming(r"pts_bbox_head\.transformer\.level_embeds", r"encoder\.level_embeds"),
+            WeightRenaming(r"pts_bbox_head\.transformer\.cams_embeds", r"encoder\.cams_embeds"),
+            WeightRenaming(r"pts_bbox_head\.transformer\.reference_points\.", r"query_embedding\.reference_points\."),
+            WeightRenaming(r"pts_bbox_head\.transformer\.can_bus_mlp\.0\.", r"encoder\.can_bus_mlp\.fc1\."),
+            WeightRenaming(r"pts_bbox_head\.transformer\.can_bus_mlp\.2\.", r"encoder\.can_bus_mlp\.fc2\."),
+            WeightRenaming(
+                r"pts_bbox_head\.transformer\.can_bus_mlp\.norm\.", r"encoder\.can_bus_mlp\.can_bus_norm\."
+            ),
+            # Encoder & decoder layer prefixes (must precede per-layer leaf renames for clean reversal)
+            WeightRenaming(r"pts_bbox_head\.transformer\.encoder\.layers\.", r"encoder\.layers\."),
+            WeightRenaming(r"pts_bbox_head\.transformer\.decoder\.layers\.", r"decoder\.layers\."),
+            WeightRenaming(r"encoder\.layers\.(\d+)\.attentions\.0\.", r"encoder\.layers\.\1\.self_attn\."),
+            WeightRenaming(
+                r"decoder\.layers\.(\d+)\.attentions\.0\.attn\.out_proj\.", r"decoder\.layers\.\1\.self_attn\.o_proj\."
+            ),
+            WeightRenaming(r"\.attentions\.1\.", r"\.encoder_attn\."),
+            WeightRenaming(r"\.norms\.0\.", r"\.self_attn_layer_norm\."),
+            WeightRenaming(r"\.norms\.1\.", r"\.encoder_attn_layer_norm\."),
+            WeightRenaming(r"\.norms\.2\.", r"\.final_layer_norm\."),
+            WeightRenaming(r"\.ffns\.0\.layers\.0\.0\.", r"\.mlp\.fc1\."),
+            WeightRenaming(r"\.ffns\.0\.layers\.1\.", r"\.mlp\.fc2\."),
+            # Split decoder nn.MultiheadAttention in_proj_{weight,bias} -> {q,k,v}_proj.{weight,bias}
+            WeightConverter(
+                source_patterns="attentions.0.attn.in_proj_weight",
+                target_patterns=["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="attentions.0.attn.in_proj_bias",
+                target_patterns=["self_attn.q_proj.bias", "self_attn.k_proj.bias", "self_attn.v_proj.bias"],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
+        "BevformerFor3DObjectDetection": [
+            # Classification & regression heads
+            WeightRenaming(r"pts_bbox_head\.cls_branches\.(\d+)\.0\.", r"cls_branches\.\1\.fc1\."),
+            WeightRenaming(r"pts_bbox_head\.cls_branches\.(\d+)\.1\.", r"cls_branches\.\1\.layer_norm1\."),
+            WeightRenaming(r"pts_bbox_head\.cls_branches\.(\d+)\.3\.", r"cls_branches\.\1\.fc2\."),
+            WeightRenaming(r"pts_bbox_head\.cls_branches\.(\d+)\.4\.", r"cls_branches\.\1\.layer_norm2\."),
+            WeightRenaming(r"pts_bbox_head\.cls_branches\.(\d+)\.6\.", r"cls_branches\.\1\.fc_out\."),
+            WeightRenaming(r"pts_bbox_head\.reg_branches\.(\d+)\.0\.", r"reg_branches\.\1\.layers\.0\."),
+            WeightRenaming(r"pts_bbox_head\.reg_branches\.(\d+)\.2\.", r"reg_branches\.\1\.layers\.1\."),
+            WeightRenaming(r"pts_bbox_head\.reg_branches\.(\d+)\.4\.", r"reg_branches\.\1\.layers\.2\."),
+        ],
         "pp_doclayout_v4": [
             WeightRenaming("decoder_roor_order_head.", "decoder.successor_order_head.proj."),
             WeightRenaming("decoder_roor_global_pointer.", "decoder.successor_order_head.global_pointer."),
