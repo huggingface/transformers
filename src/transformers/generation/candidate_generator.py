@@ -1485,7 +1485,7 @@ class MTPCandidateGenerator(CandidateGenerator):
 
             # We need the last invalidated tokens, as well as the new one in a single passcfor efficiency
             mtp_input_ids = input_ids[:, -num_last_main_model_tokens - self.num_mtp_layers :]
-            mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens - self.num_mtp_layers :]
+            mtp_position_ids = model_kwargs["position_ids"][..., -num_last_main_model_tokens - self.num_mtp_layers :]
             if model_kwargs.get("attention_mask") is not None:
                 mtp_attention_mask = model_kwargs["attention_mask"][
                     :, -num_last_main_model_tokens - self.num_mtp_layers :
@@ -1496,7 +1496,7 @@ class MTPCandidateGenerator(CandidateGenerator):
         # If we have a single layer, or validated enough, we can simply pass the new tokens
         else:
             mtp_input_ids = input_ids[:, -num_last_main_model_tokens:]
-            mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens:]
+            mtp_position_ids = model_kwargs["position_ids"][..., -num_last_main_model_tokens:]
             if model_kwargs.get("attention_mask") is not None:
                 mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens:]
 
