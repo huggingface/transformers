@@ -1176,6 +1176,7 @@ class ContinuousBatchingManager:
             distributed_helper=self.distributed_helper,
             dtype=self.model.dtype,
             model_supports_logits_to_keep=callable(supports_logits_to_keep) and supports_logits_to_keep(),
+            do_sample=self.generation_config.do_sample,
         )
         # Update the approximation now that we know if there is prefix sharing
         self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing
