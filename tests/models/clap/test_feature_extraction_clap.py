@@ -130,6 +130,39 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+    def test_fusion_is_longer_follows_audio_length(self):
+        """`is_longer` must describe the clip, not a random pick from the batch."""
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        max_length = int(feature_extractor.max_length_s * feature_extractor.sampling_rate)
+        short = np.zeros(max_length, dtype=np.float64)
+        long = np.zeros(int(1.5 * max_length), dtype=np.float64)
+
+        # A single clip within the window is padded and stacked, never routed through fusion.
+        set_seed(0)
+        single = feature_extractor(short, truncation="fusion", return_tensors="np")
+        self.assertEqual(int(single["is_longer"].sum()), 0)
+
+        # The same clip in a batch is not selected at random, and the result is reproducible.
+        set_seed(0)
+        first = feature_extractor([short] * 4, truncation="fusion", return_tensors="np")
+        set_seed(1)
+        second = feature_extractor([short] * 4, truncation="fusion", return_tensors="np")
+        self.assertEqual(int(first["is_longer"].sum()), 0)
+        self.assertTrue(np.allclose(first["input_features"], second["input_features"]))
+
+        # Genuinely long audio is still marked, and only where it applies. A separate extractor is
+        # used because the toy config above produces too few mel frames for `_random_mel_fusion`.
+        real = self.feature_extraction_class(
+            feature_size=64, hop_length=160, chunk_length=8, sampling_rate=8000, max_length_s=10
+        )
+        window = real.nb_max_samples
+        mixed = real(
+            [np.zeros(window), np.zeros(int(1.5 * window)), np.zeros(window)],
+            truncation="fusion",
+            return_tensors="np",
+        )
+        self.assertEqual(mixed["is_longer"].ravel().tolist(), [False, True, False])
+
     # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_double_precision_pad
     def test_double_precision_pad(self):
         import torch
