@@ -2350,7 +2350,7 @@ class ProcessorMixin(PushToHubMixin):
         return {"sampling_rate": sampling_rate, "backend": backend}
 
     def _normalize_conversations(self, conversation) -> tuple[list, bool]:
-        """Batch a single conversation if needed, drop the keys whose value is None, and convert OpenAI image_url
+        """Batch a single conversation if needed, drop the keys whose value is None, and convert OpenAI image URL
         blocks to HF image blocks."""
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
@@ -2364,8 +2364,9 @@ class ProcessorMixin(PushToHubMixin):
         # Normalize: convert message objects to dicts and drop the keys whose value is None
         conversations = [_normalize_chat_messages(conversation) for conversation in conversations]
 
-        # Normalize OpenAI-style "image_url" content blocks to HuggingFace-style "image" blocks
-        # OpenAI format: {"type": "image_url", "image_url": {"url": "..."}}
+        # Normalize OpenAI image URL content blocks to HuggingFace-style "image" blocks.
+        # Chat Completions: {"type": "image_url", "image_url": {"url": "..."}}
+        # Responses: {"type": "input_image", "image_url": "..."}
         # HuggingFace format: {"type": "image", "url": "..."}
         for conversation in conversations:
             for message in conversation:
@@ -2373,7 +2374,11 @@ class ProcessorMixin(PushToHubMixin):
                     continue
                 new_content = []
                 for content in message["content"]:
-                    if isinstance(content, dict) and content.get("type") == "image_url" and "image_url" in content:
+                    if (
+                        isinstance(content, dict)
+                        and content.get("type") in ("image_url", "input_image")
+                        and "image_url" in content
+                    ):
                         image_url_info = content["image_url"]
                         url = image_url_info.get("url", "") if isinstance(image_url_info, dict) else image_url_info
                         new_content.append({"type": "image", "url": url})

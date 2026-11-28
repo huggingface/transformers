@@ -1722,7 +1722,7 @@ class ProcessorTesterMixin:
 
         @dataclasses.dataclass
         class ImageURLBlock:
-            image_url: dict
+            image_url: dict | str
             type: str = "image_url"
 
         dummy_template = (
@@ -1734,13 +1734,20 @@ class ProcessorTesterMixin:
         messages = [
             Message(
                 "user",
-                [ImageURLBlock({"url": "https://example.com/cat.png"}), {"type": "text", "text": "What is this?"}],
+                [
+                    ImageURLBlock({"url": "https://example.com/cat.png"}),
+                    ImageURLBlock("https://example.com/dog.png", type="input_image"),
+                    {"type": "text", "text": "What are these?"},
+                ],
             )
         ]
 
         # The message has a `.content`, but it's still a single conversation and not a batch, so we get a single string
         formatted_prompt = processor.apply_chat_template(messages, tokenize=False, chat_template=dummy_template)
-        self.assertEqual(formatted_prompt, "user: image=https://example.com/cat.png text=What is this?")
+        self.assertEqual(
+            formatted_prompt,
+            "user: image=https://example.com/cat.png image=https://example.com/dog.png text=What are these?",
+        )
 
     def test_apply_chat_template_assistant_mask(self):
         processor = self.get_processor()
