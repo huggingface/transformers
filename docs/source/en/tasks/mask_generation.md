@@ -126,8 +126,8 @@ processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
 ```
 
 To do point prompting, pass the input point to the processor, then take the processor output
-and pass it to the model for inference. To post-process the model output, pass the outputs and
-`original_sizes` are taken from the processor's initial output. We need to pass these
+and pass it to the model for inference. To post-process the model output, pass the outputs together with the
+`original_sizes` and `reshaped_input_sizes` taken from the processor's initial output. We need to pass these
 since the processor resizes the image, and the output needs to be extrapolated.
 
 ```python
@@ -136,7 +136,9 @@ input_points = [[[2592, 1728]]] # point location of the bee
 inputs = processor(image, input_points=input_points, return_tensors="pt").to(device)
 with torch.no_grad():
     outputs = model(**inputs)
-masks = processor.image_processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"].cpu())
+masks = processor.image_processor.post_process_masks(
+    outputs.pred_masks.cpu(), inputs["original_sizes"].cpu(), inputs["reshaped_input_sizes"].cpu()
+)
 ```
 
 We can visualize the three masks in the `masks` output.
@@ -192,6 +194,7 @@ with torch.no_grad():
 mask = processor.image_processor.post_process_masks(
     outputs.pred_masks.cpu(),
     inputs["original_sizes"].cpu(),
+    inputs["reshaped_input_sizes"].cpu(),
 )[0][0][0].numpy()
 ```
 
