@@ -189,17 +189,19 @@ class ContinuousBatchingLogitsProcessorList:
 
     def prepare_tensor_args(
         self, requests_in_batch: list[FutureRequestState], arg_storage: torch.Tensor
-    ) -> torch.Tensor:
+    ) -> list[torch.Tensor]:
+        """Writes the per-request arguments of the processors in `arg_storage`, one row per processor. Returns them as
+        built on the host, one tensor per processor."""
         # Since the logits processors are applied to new tokens only, we skip requests that don't have a new token
         requests_with_new_token = [request for request in requests_in_batch if request.has_new_token]
-        current_arg_id = 0
+        host_args = []
         for processor in self.logits_processor:
             if isinstance(processor, ContinuousBatchingLogitsProcessor):
                 tensorized_arg = processor.prepare_tensor_args(requests_with_new_token)
                 # TODO: FIXME: investigate if this does slow down sync generation
-                arg_storage[current_arg_id, : tensorized_arg.size(0)] = tensorized_arg.to(arg_storage.device)
-                current_arg_id += 1
-        return arg_storage
+                arg_storage[len(host_args), : tensorized_arg.size(0)] = tensorized_arg.to(arg_storage.device)
+                host_args.append(tensorized_arg)
+        return host_args
 
     def __call__(
         self, input_ids: torch.LongTensor, scores: torch.Tensor, logits_processor_args: torch.Tensor
