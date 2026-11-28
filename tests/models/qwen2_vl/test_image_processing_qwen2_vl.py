@@ -122,6 +122,15 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         best_resolution = smart_resize(561, 278, factor=28)
         self.assertEqual(best_resolution, (560, 280))
 
+    def test_smart_resize_upscale_is_bounded_by_source_area(self):
+        # min_pixels can come from an untrusted preprocessor_config.json, so it must not be able to
+        # inflate a tiny image to an arbitrary size.
+        h_bar, w_bar = smart_resize(1, 1, min_pixels=10**12, max_pixels=10**12)
+        self.assertLessEqual(h_bar * w_bar, 56 * 56)
+        # the factor floor still applies
+        self.assertGreaterEqual(h_bar, 28)
+        self.assertGreaterEqual(w_bar, 28)
+
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
