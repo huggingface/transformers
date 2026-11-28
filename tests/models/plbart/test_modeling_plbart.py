@@ -344,8 +344,8 @@ class PLBartJavaCsIntegrationTest(AbstractSeq2SeqIntegrationTest):
         "public int product(int a, int b, int c){return a*b*c;}",
     ]
     tgt_text = [
-        "public int maximum(int a, int b, int c){return Math.Max(",
-        "public int Product(int a, int b, int c){return a * b *",
+        "public int maximum(int a, int b, int c){return Math.Max(a",
+        "public int Product(int a, int b, int c){return a * b * c",
     ]
 
     @slow
@@ -430,7 +430,7 @@ class PLBartBaseIntegrationTest(AbstractSeq2SeqIntegrationTest):
         prediction: str = self.tokenizer.decode(outputs, clean_up_tokenization_spaces=True, skip_special_tokens=True)[
             0
         ]
-        self.assertEqual(prediction, "0 0 the 0 the 0 the 0 the 0 the 0 the 0 the 0 the")
+        self.assertEqual(prediction, "0 0 the 0 the 0 the 0 the 0 the 0 the 0 the 0 the 0")
 
 
 class PLBartStandaloneDecoderModelTester(ModelTesterConfigMixin):
