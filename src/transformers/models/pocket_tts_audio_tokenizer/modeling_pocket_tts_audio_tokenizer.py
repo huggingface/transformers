@@ -182,6 +182,9 @@ class PocketTTSAudioTokenizerDecoderOutput(ModelOutput):
 
         If `cache` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
         have their past key value states given to this model).
+    padding_cache (`PocketTTSAudioTokenizerConv1dPaddingCache`, *optional*):
+        Padding cache for the decoder's causal and transposed convolutions in order to support streaming via cache
+        padding.
     hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True`):
         Hidden states of the decoder transformer at the output of each layer plus its input.
     attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
@@ -190,6 +193,7 @@ class PocketTTSAudioTokenizerDecoderOutput(ModelOutput):
 
     audio_values: torch.Tensor | None = None
     decoder_cache: Cache | None = None
+    padding_cache: PocketTTSAudioTokenizerConv1dPaddingCache | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
 
@@ -1017,10 +1021,13 @@ class PocketTTSAudioTokenizerConvTranspose1d(nn.Module):
         stride: int = 1,
         groups: int = 1,
         bias=True,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.causal = config.use_causal_conv
         self.trim_right_ratio = config.trim_right_ratio
+        self.layer_idx = layer_idx
+        self.in_channels = in_channels
         self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride, groups=groups, bias=bias)
 
         if not (self.causal or self.trim_right_ratio == 1.0):
@@ -1044,6 +1051,12 @@ class PocketTTSAudioTokenizerConvTranspose1d(nn.Module):
 
         self.padding_left = padding_total - self.padding_right
 
+        # number of input steps to carry over when streaming. Each output step depends on the inputs up to
+        # `ceil((kernel_size - stride) / stride)` steps before it, so these are kept from the previous chunk and the
+        # outputs they contribute to are recomputed with the new chunk.
+        self.padding_total = math.ceil(padding_total / stride)
+        self.pad_mode = "constant"
+
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm
         if hasattr(nn.utils.parametrizations, "weight_norm"):
@@ -1054,12 +1067,24 @@ class PocketTTSAudioTokenizerConvTranspose1d(nn.Module):
     def remove_weight_norm(self):
         nn.utils.remove_weight_norm(self.conv)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, padding_cache=None):
+        if not self.causal and padding_cache is not None:
+            raise ValueError("`padding_cache` is not supported for non-causal convolutions.")
+
+        num_new_steps = hidden_states.shape[-1] * self.conv.stride[0]
+        if padding_cache is not None:
+            layer_padding_cache = padding_cache.update(hidden_states, self.layer_idx)
+            hidden_states = torch.cat([layer_padding_cache, hidden_states], dim=2)
+
         hidden_states = self.conv(hidden_states)
 
         # unpad
         end = hidden_states.shape[-1] - self.padding_right
         hidden_states = hidden_states[..., self.padding_left : end]
+
+        if padding_cache is not None:
+            # what the carried inputs produce was already returned by the previous chunk
+            hidden_states = hidden_states[..., -num_new_steps:]
         return hidden_states
 
 
@@ -1073,11 +1098,15 @@ class PocketTTSAudioTokenizerDecoder(nn.Module):
             PocketTTSAudioTokenizerConv1d(config, config.hidden_size, scaling * config.num_filters, config.kernel_size)
         ]
 
+        # keep track of the causal and transposed convolution layer names, both streamed through padding_cache
+        conv1d_layer_names = ["layers.0"]
+
         # Upsample to raw audio scale
         for ratio in config.upsampling_ratios:
             current_scale = scaling * config.num_filters
             # Add upsampling layers
             model += [nn.ELU()]
+            conv1d_layer_names.append(f"layers.{len(model)}")
             model += [
                 PocketTTSAudioTokenizerConvTranspose1d(
                     config, current_scale, current_scale // 2, kernel_size=ratio * 2, stride=ratio
@@ -1085,6 +1114,7 @@ class PocketTTSAudioTokenizerDecoder(nn.Module):
             ]
             # Add residual layers
             for j in range(config.num_residual_layers):
+                conv1d_layer_names.extend([f"layers.{len(model)}.block.1", f"layers.{len(model)}.block.3"])
                 model += [
                     PocketTTSAudioTokenizerResnetBlock(config, current_scale // 2, (config.dilation_growth_rate**j, 1))
                 ]
@@ -1092,14 +1122,31 @@ class PocketTTSAudioTokenizerDecoder(nn.Module):
 
         # Add final layers
         model += [nn.ELU()]
+        conv1d_layer_names.append(f"layers.{len(model)}")
         model += [
             PocketTTSAudioTokenizerConv1d(config, config.num_filters, config.audio_channels, config.last_kernel_size)
         ]
         self.layers = nn.ModuleList(model)
+        self._conv1d_layer_names = conv1d_layer_names
 
-    def forward(self, hidden_states):
+        # initialize layer_idx for the convolution submodules, necessary for padding_cache
+        for layer_idx, layername in enumerate(self._conv1d_layer_names):
+            conv_layer = self.get_submodule(layername)
+            setattr(conv_layer, "layer_idx", layer_idx)
+
+    def forward(self, hidden_states, padding_cache=None):
         for layer in self.layers:
-            hidden_states = layer(hidden_states)
+            if isinstance(
+                layer,
+                (
+                    PocketTTSAudioTokenizerConv1d,
+                    PocketTTSAudioTokenizerConvTranspose1d,
+                    PocketTTSAudioTokenizerResnetBlock,
+                ),
+            ):
+                hidden_states = layer(hidden_states, padding_cache=padding_cache)
+            else:
+                hidden_states = layer(hidden_states)
         return hidden_states
 
 
@@ -1133,6 +1180,9 @@ class PocketTTSAudioTokenizerDecoderModel(PocketTTSAudioTokenizerPreTrainedModel
         self.decoder_transformer = PocketTTSAudioTokenizerTransformerModel(config)
         self.decoder_seanet = PocketTTSAudioTokenizerDecoder(config)
 
+        if self.upsample is not None:
+            self.upsample.layer_idx = len(self.decoder_seanet._conv1d_layer_names)
+
         self.post_init()
 
     @capture_outputs
@@ -1143,6 +1193,8 @@ class PocketTTSAudioTokenizerDecoderModel(PocketTTSAudioTokenizerPreTrainedModel
         latents: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
+        padding_cache: PocketTTSAudioTokenizerConv1dPaddingCache | None = None,
+        use_streaming: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> PocketTTSAudioTokenizerDecoderOutput:
         r"""
@@ -1154,19 +1206,55 @@ class PocketTTSAudioTokenizerDecoderModel(PocketTTSAudioTokenizerPreTrainedModel
         cache (`Cache`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks) of the decoder transformer, used to
             speed up streaming decoding.
+        padding_cache (`PocketTTSAudioTokenizerConv1dPaddingCache`, *optional*):
+            Padding cache of the causal and transposed convolutions, used for streaming decoding.
+        use_streaming (`bool`, *optional*):
+            Whether to decode in streaming mode, returning the caches to pass to the next call.
 
         Decodes the given frames into an output audio waveform. Note that the output might be a bit bigger than the
         input. In that case, any extra steps at the end can be trimmed.
         """
-        hidden_states = self.upsample(latents)
-        decoder_outputs = self.decoder_transformer(hidden_states.transpose(1, 2), cache=cache, **kwargs)
-        audio_values = self.decoder_seanet(decoder_outputs.last_hidden_state.transpose(1, 2))
+        use_streaming = use_streaming if use_streaming is not None else self.config.use_streaming
+
+        if use_streaming and padding_cache is None:
+            per_layer_padding, per_layer_padding_mode, per_layer_in_channels = [], [], []
+            conv_layers = [self.decoder_seanet.get_submodule(name) for name in self.decoder_seanet._conv1d_layer_names]
+            if self.upsample is not None:
+                conv_layers.append(self.upsample)
+            for conv_layer in conv_layers:
+                per_layer_padding.append(conv_layer.padding_total)
+                per_layer_padding_mode.append(conv_layer.pad_mode)
+                per_layer_in_channels.append(conv_layer.in_channels)
+
+            padding_cache = PocketTTSAudioTokenizerConv1dPaddingCache(
+                num_layers=len(conv_layers),
+                per_layer_padding=per_layer_padding,
+                per_layer_padding_mode=per_layer_padding_mode,
+                per_layer_in_channels=per_layer_in_channels,
+            )
+
+        # always cache the decoder transformer when streaming, otherwise keep the caller's use_cache
+        use_cache = kwargs.pop("use_cache", None)
+        if use_streaming:
+            use_cache = True
+
+        hidden_states = self.upsample(latents, padding_cache=padding_cache)
+        decoder_outputs = self.decoder_transformer(
+            hidden_states.transpose(1, 2), cache=cache, use_cache=use_cache, **kwargs
+        )
+        audio_values = self.decoder_seanet(
+            decoder_outputs.last_hidden_state.transpose(1, 2), padding_cache=padding_cache
+        )
 
         # truncate based on padding mask
         if padding_mask is not None and padding_mask.shape[-1] < audio_values.shape[-1]:
             audio_values = audio_values[..., : padding_mask.shape[-1]]
 
-        return PocketTTSAudioTokenizerDecoderOutput(audio_values=audio_values, decoder_cache=decoder_outputs.cache)
+        return PocketTTSAudioTokenizerDecoderOutput(
+            audio_values=audio_values,
+            decoder_cache=decoder_outputs.cache,
+            padding_cache=padding_cache,
+        )
 
 
 @auto_docstring(
