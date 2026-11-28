@@ -609,10 +609,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                                     break
 
         elif self.type in {"ctc", "ctc_with_lm"}:
-            inputs = {
-                self.model.main_input_name: model_inputs.pop(self.model.main_input_name),
-                "attention_mask": attention_mask,
-            }
+            inputs = {self.model.main_input_name: model_inputs.pop(self.model.main_input_name)}
+            if attention_mask is not None:
+                inputs["attention_mask"] = attention_mask
             outputs = self.model(**inputs)
             logits = outputs.logits
 
