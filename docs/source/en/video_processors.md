@@ -38,6 +38,8 @@ Currently, if using base image processor for videos, it processes video data by 
 
 Fast video processors are available for all models and are loaded by default when an `AutoVideoProcessor` is initialized. When using a fast video processor, you can also set the `device` argument to specify the device on which the processing should be done. By default, the processing is done on the same device as the inputs if the inputs are tensors, or on the CPU otherwise. For even more speed improvement, we can compile the processor when using an accelerator as device.
 
+Install PyAV (`pip install av`) to decode the video with `load_video` in the following example.
+
 ```python
 import torch
 from transformers.video_utils import load_video
@@ -45,10 +47,10 @@ from transformers import AutoVideoProcessor
 
 device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
 
-video = load_video("video.mp4")
+video, metadata = load_video("video.mp4")
 processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device=device)
 processor = torch.compile(processor)
-processed_video = processor(video, return_tensors="pt")
+processed_video = processor(video, video_metadata=metadata, return_tensors="pt")
 ```
 
 ## Frame sampling

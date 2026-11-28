@@ -34,6 +34,8 @@ processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0
 
 Preprocessing runs on the input tensor's device, or on the CPU for other inputs. Set `device` to move videos to another device before preprocessing; this does not change the backend. You can also compile torchvision preprocessing with `torch.compile` when using an accelerator.
 
+Install PyAV (`pip install av`) to decode the video with `load_video` in the following example.
+
 ```python
 import torch
 from transformers.video_utils import load_video
@@ -41,10 +43,10 @@ from transformers import AutoVideoProcessor
 
 device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
 
-video = load_video("video.mp4")
+video, metadata = load_video("video.mp4")
 processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device=device)
 processor = torch.compile(processor)
-processed_video = processor(video, return_tensors="pt")
+processed_video = processor(video, video_metadata=metadata, return_tensors="pt")
 ```
 
 ## Video processor backends
@@ -114,7 +116,7 @@ device = torch.accelerator.current_accelerator().type if torch.accelerator.is_av
 
 processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device=device)
 processed_video_inputs = processor(videos=["video_path.mp4"], return_metadata=True, do_sample_frames=True, return_tensors="pt")
-video_metadata = processed_video_inputs["video_metadata"]
+video_metadata = processed_video_inputs["video_metadata"][0]
 
 # See how many frames the original video had and what was the original FPS
 print(video_metadata.total_num_frames, video_metadata.fps)
@@ -138,7 +140,7 @@ video_metadata = VideoMetadata(
 )
 processed_video_inputs = processor(videos=[decoded_video], video_metadata=video_metadata, do_sample_frames=True, num_frames=10, return_tensors="pt")
 print(processed_video_inputs.pixel_values_videos.shape)
-[10, 3, 384, 384]
+# torch.Size([1, 10, 3, 384, 384])
 ```
 
 ## VideoProcessorMixin
