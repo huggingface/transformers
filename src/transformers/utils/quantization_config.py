@@ -1255,7 +1255,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
     @property
     def has_fp8_modules(self):
-        """Whether any config group quantizes weights to FP8 (float, 8 bits). Quantization
+        """Whether any config group uses FP8 weights with tensor/channel scales supported by the row-wise kernel.
+        Group/block strategies (including MXFP8) are excluded. Quantization
         may only cover part of the model: each group scopes its scheme with `targets`, and
         mixed configs (e.g. Kimi: FP8 attention + INT4 experts) combine FP8 with other
         schemes."""
@@ -1264,7 +1265,12 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             return False
         for group in ct_qconfig.config_groups.values():
             weights = group.weights
-            if weights is not None and weights.type == "float" and weights.num_bits == 8:
+            if (
+                weights is not None
+                and weights.type == "float"
+                and weights.num_bits == 8
+                and weights.strategy in ("channel", "tensor")
+            ):
                 return True
         return False
 

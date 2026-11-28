@@ -30,9 +30,14 @@ logger = logging.get_logger(__name__)
 
 
 def _is_fp8_scheme(scheme) -> bool:
-    """Whether a compressed-tensors quantization scheme quantizes weights to FP8."""
+    """Whether a scheme uses FP8 weights with tensor/channel scales supported by the row-wise kernel."""
     weights = scheme.weights
-    return weights is not None and weights.type == "float" and weights.num_bits == 8
+    return (
+        weights is not None
+        and weights.type == "float"
+        and weights.num_bits == 8
+        and weights.strategy in ("channel", "tensor")
+    )
 
 
 class CompressedTensorsHfQuantizer(HfQuantizer):
