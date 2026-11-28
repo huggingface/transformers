@@ -21,7 +21,7 @@ from pathlib import Path
 import torch
 
 from ..configuration_utils import PreTrainedConfig
-from ..utils import cached_file
+from ..utils import cached_file, find_adapter_config_file
 from .configuration_utils import DecisionConfig
 from .template_utils import Question
 
@@ -47,11 +47,15 @@ class DecisionMixin:
         """
         Also loads the checkpoints that ship a decision head next to their weights, in their own format: the config of
         the checkpoint is the `text_config` of the decision model, and the config files of its head
-        (`config_class.extra_config_files`) give the rest of its config, in `__post_init__`.
+        (`config_class.extra_config_files`) give the rest of its config, in `__post_init__`. Raises a `ValueError`
+        for a repo with neither, like the one of a language model, which the decision pipeline then loads as is.
         """
         if not isinstance(config, cls.config_class):  # none, or the config of the model the head ships next to
             head_config, decision_config = cls.checkpoint_config(pretrained_model_name_or_path, **kwargs)
-            if head_config is None and config is not None:
+            # Without head files, only a repo saved by this decision model loads as one
+            if head_config is None and (
+                config is not None or not cls._is_saved(pretrained_model_name_or_path, **kwargs)
+            ):
                 raise ValueError(f"{pretrained_model_name_or_path} has no {cls.__name__} head next to its weights.")
             config = head_config or config
         model = super().from_pretrained(pretrained_model_name_or_path, *args, config=config, **kwargs)
@@ -59,6 +63,17 @@ class DecisionMixin:
             decision_config = DecisionConfig.from_pretrained(pretrained_model_name_or_path, **_hub_kwargs(kwargs))
         model.decision_config = decision_config
         return model
+
+    @classmethod
+    def _is_saved(cls, pretrained_model_name_or_path, **kwargs) -> bool:
+        """Whether the repo, or the model of the adapter in it, was saved by this decision model."""
+        hub_kwargs = {**_hub_kwargs(kwargs), "subfolder": kwargs.get("subfolder", "")}
+        if (adapter := find_adapter_config_file(pretrained_model_name_or_path, **hub_kwargs)) is not None:
+            adapter_config = json.loads(Path(adapter).read_text(encoding="utf-8"))
+            pretrained_model_name_or_path = adapter_config["base_model_name_or_path"]
+            hub_kwargs["subfolder"] = ""
+        config_dict, _ = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **hub_kwargs)
+        return config_dict.get("model_type") == cls.config_class.model_type
 
     @classmethod
     def checkpoint_config(
