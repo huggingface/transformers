@@ -76,6 +76,19 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertDictEqual(before_vocab, reloaded.get_vocab())
 
+    def test_tokenizer_preserves_word_delimiters_around_unk(self):
+        vocab = {"<pad>": 0, "|": 1, "<s>": 2, "</s>": 3, "<unk>": 4, "a": 5, "b": 6, "c": 7}
+        vocab_file = os.path.join(self.tmpdirname, "vocab_unk.json")
+        with open(vocab_file, "w", encoding="utf-8") as f:
+            json.dump(vocab, f)
+
+        tokenizer = self.tokenizer_class(vocab_file)
+        input_ids = tokenizer("ab <unk> cab").input_ids
+
+        self.assertEqual(input_ids, [5, 6, 1, 4, 1, 7, 5, 6])
+        self.assertEqual(tokenizer.convert_ids_to_tokens(input_ids), ["a", "b", "|", "<unk>", "|", "c", "a", "b"])
+        self.assertEqual(tokenizer.decode(input_ids), "ab <unk> cab")
+
     def test_tokenizer_add_token_chars(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")
 
