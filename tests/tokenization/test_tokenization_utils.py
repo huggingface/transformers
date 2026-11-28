@@ -378,6 +378,35 @@ class TokenizerUtilsTest(unittest.TestCase):
                 tokenizer = BertTokenizer.from_pretrained(repo)
                 self.assertIn("<deprecated>", tokenizer.all_special_tokens)
 
+    def test_legacy_special_tokens_map_with_additional_special_tokens_dicts(self):
+        # Older checkpoints (e.g. Salesforce/codet5-base) only have a `special_tokens_map.json` whose
+        # `additional_special_tokens` entries are plain dicts without `"__type": "AddedToken"`.
+        with tempfile.TemporaryDirectory() as repo:
+            with open(os.path.join(repo, "vocab.txt"), "w", encoding="utf-8") as f:
+                f.write("\n".join(["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "hello"]))
+            with open(os.path.join(repo, "tokenizer_config.json"), "w", encoding="utf-8") as f:
+                json.dump({"tokenizer_class": "BertTokenizer"}, f)
+            extra_tokens = [
+                {
+                    "content": f"<extra_id_{i}>",
+                    "single_word": False,
+                    "lstrip": True,
+                    "rstrip": False,
+                    "normalized": True,
+                }
+                for i in range(2)
+            ]
+            with open(os.path.join(repo, "special_tokens_map.json"), "w", encoding="utf-8") as f:
+                json.dump({"unk_token": "[UNK]", "additional_special_tokens": extra_tokens}, f)
+
+            for use_fast in [True, False]:
+                with self.subTest(use_fast=use_fast):
+                    tokenizer = AutoTokenizer.from_pretrained(repo, use_fast=use_fast)
+                    self.assertIn("<extra_id_0>", tokenizer.all_special_tokens)
+                    self.assertIn("<extra_id_1>", tokenizer.all_special_tokens)
+                    self.assertEqual(tokenizer.convert_tokens_to_ids(["<extra_id_0>", "<extra_id_1>"]), [6, 7])
+                    self.assertEqual(tokenizer.encode("hello <extra_id_1>", add_special_tokens=False), [5, 7])
+
     def test_len_tokenizer(self):
         for tokenizer_class in [BertTokenizer, BertTokenizer]:
             with self.subTest(f"{tokenizer_class}"):
