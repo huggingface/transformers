@@ -526,13 +526,21 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             return input_ids, None
 
         input_ids = input_ids.to(self.assistant_model.device)
-        num_extra_tokens_to_remove = 0
+        # The Cache holds all the previous assistant ids but the last one (copied: they can be edited in place below)
+        cached_ids = self.prev_assistant_ids[:, :-1].clone() if self.prev_assistant_ids is not None else None
 
-        assistant_input_ids, num_extra_tokens_to_remove = self._prepare_assistant_input_ids(input_ids)
+        assistant_input_ids, _ = self._prepare_assistant_input_ids(input_ids)
         self.prev_assistant_ids = assistant_input_ids
 
         min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - assistant_input_ids.shape[-1]), 0)
 
+        # The new ids are re-encoded from the target ids, so they can differ from the cached ones before the rejected
+        # candidates: only their common start stays in the Cache, and the last new id is always processed
+        num_extra_tokens_to_remove = 0
+        if cached_ids is not None:
+            length = min(cached_ids.shape[-1], assistant_input_ids.shape[-1] - 1)
+            is_same = cached_ids[0, :length] == assistant_input_ids[0, :length]
+            num_extra_tokens_to_remove = assistant_input_ids.shape[-1] - 1 - int(is_same.long().cumprod(-1).sum())
         self._update_past_and_masks(assistant_input_ids, num_extra_tokens_to_remove)
         generation_args = self._prepare_generation_args(assistant_input_ids, min_new_tokens, max_new_tokens)
         self.assistant_kwargs.pop("attention_mask", None)
@@ -546,10 +554,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.assistant_kwargs["cache"] = assistant_output.cache
         self.prev_assistant_ids = assistant_output.sequences
 
-        # Keep track of the last drafted length to rollback the Cache
-        self._last_ids_length = (
-            input_ids.shape[-1] if self.prev_target_ids_len >= new_target_ids.shape[1] else new_target_ids.shape[-1]
-        )
+        # Keep track of the last drafted length to rollback the Cache, in assistant tokens like the Cache itself
+        self._last_ids_length = assistant_output.sequences.shape[-1]
 
         if self.prev_target_ids_len >= new_target_ids.shape[1]:
             return input_ids, None
@@ -953,7 +959,8 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         if max_new_tokens == 0:
             return input_ids, None
 
-        self._update_past_and_masks(assistant_input_ids)
+        # The new target token can be several assistant tokens: all of them but one are extra tokens to remove
+        self._update_past_and_masks(assistant_input_ids, max(num_added_tokens, 1) - 1)
         generation_args = self._prepare_generation_args(assistant_input_ids, min_new_tokens, max_new_tokens)
 
         # Ensure scores are returned
@@ -972,12 +979,14 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         self._target_seq_len_with_candidates = target_candidate_ids.shape[-1]
         target_candidate_logits = self._atm_translator.get_target_logits(assistant_candidate_logits)
 
-        # Keep track of the last drafted length to rollback the Cache
-        self._last_ids_length = target_candidate_ids.shape[-1]
+        # Keep track of the last drafted length to rollback the Cache, in assistant tokens like the Cache itself
+        self._last_ids_length = self._prev_assistant_ids.shape[-1]
 
         return target_candidate_ids, target_candidate_logits
 
-    def _update_past_and_masks(self, assistant_input_ids: torch.LongTensor) -> bool:
+    def _update_past_and_masks(
+        self, assistant_input_ids: torch.LongTensor, num_extra_tokens_to_remove: int = 0
+    ) -> bool:
         if self._prev_assistant_ids is None:
             # Prepare attention mask for the first generation.
             # For subsequent generations, the attention mask is updated in super()_update_past_and_masks.
@@ -987,7 +996,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             self.assistant_kwargs = _prepare_position_ids(
                 self.assistant_kwargs, assistant_input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
-        return super()._update_past_and_masks(assistant_input_ids)
+        return super()._update_past_and_masks(assistant_input_ids, num_extra_tokens_to_remove)
 
     def _prepare_assistant_input_ids(self, target_input_ids: torch.LongTensor) -> torch.LongTensor:
         """

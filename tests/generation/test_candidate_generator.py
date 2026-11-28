@@ -342,3 +342,45 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
 
         # Assert that the outputs match
         cls.assertEqual(usd_text, vanilla_text)
+
+    def test_assistant_cache_rollback_with_different_tokenizers(self):
+        """
+        Test that, with different tokenizers (UAD with greedy decoding, USD with sampling), the assistant's cache only keeps
+        the start of the new assistant input before each draft. Its length is counted in assistant tokens: counted in target
+        tokens, it can keep rejected tokens, or as many tokens as the input, which then fails.
+        """
+        target = AutoModelForCausalLM.from_pretrained(self.target_name).to(torch_device)
+        inputs = self.target_tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(torch_device)
+        expected = target.generate(**inputs, max_new_tokens=30, do_sample=False)
+
+        for generation_kwargs in ({"do_sample": False}, {"do_sample": True, "top_k": 1}):
+            with self.subTest(**generation_kwargs):
+                # USD prunes the assistant's LM head in place, and keeps its translator per pair of tokenizers
+                assistant_model = AutoModelForCausalLM.from_pretrained(self.assistant_name).to(torch_device)
+                assistant_tokenizer = AutoTokenizer.from_pretrained(self.assistant_name)
+                assistant_generate = assistant_model.generate
+                drafts = []
+
+                def generate(*args, **kwargs):
+                    cache, input_ids = kwargs.get("cache"), kwargs["input_ids"]
+                    if cache is not None:
+                        # The cache holds all the ids of the previous draft but the last one
+                        cached_ids = drafts[-1][0, :-1]
+                        length = min(cached_ids.shape[-1], input_ids.shape[-1] - 1)
+                        num_common = int((cached_ids[:length] == input_ids[0, :length]).long().cumprod(-1).sum())
+                        self.assertLessEqual(cache.get_seq_length(), num_common)
+                    output = assistant_generate(*args, **kwargs)
+                    drafts.append(output.sequences)
+                    return output
+
+                assistant_model.generate = generate
+                output = target.generate(
+                    **inputs,
+                    max_new_tokens=30,
+                    assistant_model=assistant_model,
+                    tokenizer=self.target_tokenizer,
+                    assistant_tokenizer=assistant_tokenizer,
+                    **generation_kwargs,
+                )
+                self.assertGreater(len(drafts), 1)
+                self.assertTrue(torch.equal(output, expected))
