@@ -42,7 +42,7 @@ class Seq2SeqTrainingArguments(TrainingArguments):
         generation_num_beams (`int`, *optional*):
             The `num_beams` to use on each evaluation loop when `predict_with_generate=True`. Will default to the
             `num_beams` value of the model configuration.
-        generation_config (`str` or `Path` or [`~generation.GenerationConfig`], *optional*):
+        generation_config (`str` or `Path` or `dict` or [`~generation.GenerationConfig`], *optional*):
             Allows to load a [`~generation.GenerationConfig`] from the `from_pretrained` method. This can be either:
 
             - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
@@ -50,6 +50,7 @@ class Seq2SeqTrainingArguments(TrainingArguments):
             - a path to a *directory* containing a configuration file saved using the
               [`~GenerationConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
             - a [`~generation.GenerationConfig`] object.
+            - a `dict` of generation parameters, e.g. sampled by a hyperparameter search backend.
     """  # fmt: skip  # Prevent Ruff from altering the indentation
 
     sortish_sampler: bool = field(default=False, metadata={"help": "Whether to use SortishSampler or not."})
