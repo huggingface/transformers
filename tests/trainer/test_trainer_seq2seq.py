@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+import tempfile
+
 from transformers import (
     AutoModelForSeq2SeqLM,
     BertConfig,
@@ -22,6 +24,8 @@ from transformers import (
     GenerationConfig,
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
+    T5Config,
+    T5ForConditionalGeneration,
     T5Tokenizer,
 )
 from transformers.testing_utils import (
@@ -226,3 +230,54 @@ class Seq2seqTrainerTester(TestCasePlus):
                 compute_metrics=lambda x: {"samples": x[0].shape[0]},
             )
         self.assertIn("Fix these issues to train your model", str(exc.exception))
+
+
+@require_torch
+class Seq2SeqTrainerOptimizerClsAndKwargsTest(TestCasePlus):
+    def test_optimizer_cls_and_kwargs_forwarded(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/50383
+        # Seq2SeqTrainer must accept and forward optimizer_cls_and_kwargs like Trainer.
+        config = T5Config(
+            vocab_size=128,
+            d_model=32,
+            d_ff=64,
+            d_kv=8,
+            num_layers=1,
+            num_decoder_layers=1,
+            num_heads=4,
+            decoder_start_token_id=0,
+            eos_token_id=1,
+            pad_token_id=0,
+        )
+        model = T5ForConditionalGeneration(config)
+
+        class TinySeq2SeqDataset(torch.utils.data.Dataset):
+            def __len__(self):
+                return 4
+
+            def __getitem__(self, idx):
+                return {
+                    "input_ids": torch.randint(2, 100, (8,)),
+                    "attention_mask": torch.ones(8, dtype=torch.long),
+                    "labels": torch.randint(2, 100, (8,)),
+                }
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = Seq2SeqTrainingArguments(
+                output_dir=tmp_dir,
+                per_device_train_batch_size=2,
+                max_steps=1,
+                report_to=[],
+            )
+            trainer = Seq2SeqTrainer(
+                model=model,
+                args=args,
+                train_dataset=TinySeq2SeqDataset(),
+                optimizer_cls_and_kwargs=(torch.optim.SGD, {"lr": 0.01, "momentum": 0.9}),
+            )
+            self.assertEqual(trainer.optimizer_cls_and_kwargs[0], torch.optim.SGD)
+            self.assertEqual(trainer.optimizer_cls_and_kwargs[1]["momentum"], 0.9)
+            trainer.create_optimizer()
+            self.assertIsInstance(trainer.optimizer, torch.optim.SGD)
+            self.assertEqual(trainer.optimizer.param_groups[0]["lr"], 0.01)
+            self.assertEqual(trainer.optimizer.param_groups[0]["momentum"], 0.9)
