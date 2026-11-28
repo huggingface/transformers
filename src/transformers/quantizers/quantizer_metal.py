@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING, Any
 
-from ..utils import is_kernels_available, is_torch_available, logging
+from ..utils import is_kernels_available, is_torch_available, is_triton_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
@@ -44,6 +44,8 @@ class MetalHfQuantizer(HfQuantizer):
         if self.quantization_config.dequantize:
             return
 
+        if torch.cuda.is_available() and is_triton_available():
+            return  # experts run on the Triton counterpart of `gather_qmm` (`integrations/triton_affine_moe.py`)
         if not torch.backends.mps.is_available():
             if self.pre_quantized:
                 logger.warning_once(
@@ -77,9 +79,11 @@ class MetalHfQuantizer(HfQuantizer):
         return device_map
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        from ..integrations.metal_quantization import MetalLinear
+        from ..integrations.metal_quantization import MetalExperts, MetalLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
+        if isinstance(module, MetalExperts):
+            return not self.pre_quantized and tensor_name in MetalExperts.PROJECTIONS
         if isinstance(module, MetalLinear):
             if self.pre_quantized or tensor_name != "weight":
                 return False
@@ -87,20 +91,41 @@ class MetalHfQuantizer(HfQuantizer):
         return False
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        from ..integrations.metal_quantization import replace_with_metal_linear
-
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
-        model = replace_with_metal_linear(
-            model,
-            modules_to_not_convert=self.modules_to_not_convert,
-            quantization_config=self.quantization_config,
-            pre_quantized=self.pre_quantized,
+    def quantized_module(self, name, module):
+        from ..integrations.metal_quantization import MetalExperts, MetalLinear
+
+        if self.quantization_config.dequantize:
+            return None
+        if all(
+            getattr(module, p, None) is not None and getattr(module, p).dim() == 3 for p in MetalExperts.PROJECTIONS
+        ):
+            return MetalExperts(
+                module,
+                bits=self.quantization_config.bits,
+                group_size=self.quantization_config.group_size,
+                **({} if self.pre_quantized else {"dtype": getattr(module, "gate_up_proj").dtype}),
+            )
+        if not isinstance(module, torch.nn.Linear):
+            return None
+        return MetalLinear(
+            in_features=module.in_features,
+            out_features=module.out_features,
+            bias=module.bias is not None,
+            bits=self.quantization_config.bits,
+            group_size=self.quantization_config.group_size,
+            **({} if self.pre_quantized else {"dtype": None}),
         )
 
     def is_serializable(self):
+        return True
+
+    @property
+    def is_compileable(self) -> bool:
+        # The Metal kernels' ops have fake implementations (`_register_fake_kernels`): compile traces through them
         return True
 
     @property

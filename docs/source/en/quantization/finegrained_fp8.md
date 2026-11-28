@@ -61,9 +61,8 @@ These [`FineGrainedFP8Config`] parameters change how the weights and activations
 | Parameter | Default | Effect |
 |---|---|---|
 | `weight_block_size` | `(128, 128)` | Size of the weight block that shares one scale. Set it to `None` for one scale per weight tensor. |
-| `activation_scheme` | `"dynamic"` | `"dynamic"` computes activation scales at runtime. `"static"` uses one stored activation scale per layer, read from a pre-quantized checkpoint. |
+| `activation_scheme` | `"dynamic"` | `"dynamic"` computes activation scales at runtime. `"static"` uses one stored activation scale per layer, read from a pre-quantized checkpoint. `"none"` keeps activations unquantized (weight-only FP8): the weights are dequantized to the activations' dtype in forward. |
 | `scale_fmt` | `"float"` | Storage format of the weight scales. `"float"` stores float32 scales. `"ue8m0"` stores 1-byte power-of-two scales (`torch.float8_e8m0fnu`), as in DeepSeek-V4 checkpoints, and needs PyTorch 2.7 or later. |
-| `expert_dtype` | `"fp8"` | Format of the mixture-of-experts weights. `"fp4"` loads the FP4-packed experts in DeepSeek-V4 checkpoints. |
 | `modules_to_convert` | `None` | Embedding tables to load in FP8 from a pre-quantized checkpoint, matched by module name suffix. |
 
 ## Load a pre-quantized FP8 checkpoint
@@ -77,6 +76,18 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-8B-FP8", device_map="cu
 ```
 
 Fine-grained FP8 also loads MXFP8 checkpoints, whose config sets `quant_method="mxfp8"`. MXFP8 stores FP8 weights with one power-of-two scale, saved as a byte, per block of 32 weights.
+
+Checkpoints that name their scales differently load too: DeepSeek-V4's `scale`, Mistral Large 4's `qscale_weight`, and
+per-tensor FP8's `weight_scale` / `input_scale`.
+
+Checkpoints that mix FP8 with other methods per layer load as a [quantization plan](./overview#quantization-plans),
+with fine-grained FP8 for their FP8 layers:
+
+- [DeepSeek-V4](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash) is fine-grained FP8 (ue8m0 scales) except for its
+  routed experts, saved as MXFP4 (`expert_dtype: "fp4"`), which load with [MXFP4](./mxfp4).
+- ModelOpt checkpoints with `quant_algo: "MIXED_PRECISION"`, e.g. [nvidia/Qwen3.6-35B-A3B-NVFP4](https://huggingface.co/nvidia/Qwen3.6-35B-A3B-NVFP4),
+  list a `quant_algo` per layer: `FP8` (per-tensor, static activations) and `FP8_PB_WO` (`(128, 128)` blocks,
+  weight-only) layers load with fine-grained FP8, `NVFP4` ones with [NVFP4](./nvfp4).
 
 ## Use the DeepGEMM fast path
 
@@ -95,7 +106,6 @@ For mixture-of-experts layers, DeepGEMM is opt-in. Pass `experts_implementation=
 - Quantizing while loading needs a CUDA GPU or an XPU. Without one, loading raises a `RuntimeError`. A pre-quantized checkpoint loads without an accelerator, but Transformers dequantizes it to bf16 and logs a warning.
 - On CUDA, FP8 compute needs compute capability 8.9 or higher, like an RTX 4090 or H100. On an older GPU, Transformers dequantizes the model to bf16 and logs a warning.
 - Quantizing while loading can't offload to the CPU or disk. A `device_map` that includes `"cpu"` or `"disk"` alongside other devices raises a `ValueError`. A pre-quantized checkpoint can offload.
-- DeepGEMM is turned off when one process spreads the model across several CUDA devices, and FP8 layers use the Triton kernel instead. Selecting `experts_implementation="deepgemm"` in that setup raises a `RuntimeError`. Run tensor or expert parallelism, with one device per process, to keep DeepGEMM.
 - On Blackwell, the `"deepgemm"` experts backend raises a `NotImplementedError` for float32 scales. Use a `scale_fmt="ue8m0"` checkpoint, or the `"grouped_mm"` or `"batched_mm"` experts backends.
 - The `"grouped_mm"` and `"batched_mm"` experts backends don't support `activation_scheme="static"` and raise a `NotImplementedError`.
 - `scale_fmt="ue8m0"` needs PyTorch 2.7 or later. Older versions raise a `RuntimeError`.

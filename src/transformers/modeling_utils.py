@@ -57,6 +57,7 @@ from .core_model_loading import (
 from .distributed import DistributedConfig
 from .distributed.checkpoint import _get_resolved_distributed_checkpoint_files, get_distributed_checkpoint_dir
 from .distributed.mixin import DistributedMixin
+from .distributed.offload import apply_experts_offload, split_streamed_modules
 from .distributed.sharding_utils import _dtensor_from_local_like, _tied_params_are_equal
 from .distributed.tensor_parallel import verify_tp_plan
 from .distributed.utils import is_local_dist_rank_0
@@ -122,7 +123,13 @@ from .utils import (
     resolve_revision,
 )
 from .utils.generic import GeneralInterface, is_flash_attention_requested
-from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files, hf_api
+from .utils.hub import (
+    DownloadKwargs,
+    convert_file_size_to_int,
+    create_and_tag_model_card,
+    get_checkpoint_shard_files,
+    hf_api,
+)
 from .utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
@@ -4081,7 +4088,9 @@ class PreTrainedModel(
                 Whether or not to offload the buffers with the model parameters.
             quantization_config (`Union[QuantizationConfigMixin,Dict]`, *optional*):
                 A dictionary of configuration parameters or a QuantizationConfigMixin object for quantization (e.g
-                bitsandbytes, gptq).
+                bitsandbytes, gptq). A plan mapping glob patterns to configs (e.g. `{"self_attn": FineGrainedFP8Config(),
+                "mlp": BitsAndBytesConfig(load_in_4bit=True)}`) quantizes the modules matching each pattern (matched like
+                the dtype plan's) with its config; the other modules stay unquantized.
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
@@ -4270,6 +4279,7 @@ class PreTrainedModel(
                 cache_dir=cache_dir,
             )
             download_kwargs["revision"] = revision
+        device_map, offloaded_experts = split_streamed_modules(device_map)
         device_map = check_and_set_device_map(device_map)  # warn, error and fix the device map
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
@@ -4354,7 +4364,7 @@ class PreTrainedModel(
 
         if gguf_file:
             # Read before the dtype is settled: a GGUF's own float type is what `dtype="auto"` resolves to.
-            hf_quantizer.read_header(checkpoint_files[0])
+            hf_quantizer.quantizer.read_header(checkpoint_files[0])
 
         # Find the correct dtype based on current state
         config, dtype = _get_dtype(
@@ -4400,7 +4410,7 @@ class PreTrainedModel(
                 )
 
         if gguf_file:
-            state_dict = hf_quantizer.get_state_dict(checkpoint_files[0], model)
+            state_dict = hf_quantizer.quantizer.get_state_dict(checkpoint_files[0], model)
 
         # Create the dtype_plan to potentially use the `keep_in_fp32` flags (this needs to be called on the already
         # instantiated model, as the flags can be modified by instances sometimes)
@@ -4411,6 +4421,14 @@ class PreTrainedModel(
 
         if distributed_config is not None:
             model = cls.maybe_distribute_model(model, distributed_config, mesh_manager)
+
+        if offloaded_experts:
+            device = torch.device(next(iter(device_map.values())))
+            memory = max_memory or {}
+            budget = next((memory[k] for k in (str(device), device.type, device.index or 0) if k in memory), None)
+            if budget is None:
+                raise ValueError('Streamed experts need a device budget, e.g. `max_memory={"mps": "20GiB"}`')
+            apply_experts_offload(model, offloaded_experts, device, convert_file_size_to_int(budget))
 
         # Prepare the full device map
         if device_map is not None:
@@ -4495,7 +4513,9 @@ class PreTrainedModel(
         """Perform the actual loading of some checkpoints into a `model`, by reading them from disk and dispatching them accordingly."""
         hf_quantizer = load_config.hf_quantizer
         is_quantized = load_config.is_quantized
-        is_hqq_or_quark = hf_quantizer is not None and hf_quantizer.quantization_config.quant_method in {
+        is_hqq_or_quark = hf_quantizer is not None and getattr(
+            hf_quantizer.quantization_config, "quant_method", None
+        ) in {
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
         }
@@ -4522,6 +4542,8 @@ class PreTrainedModel(
         # Warmup cuda to load the weights much faster on devices
         if load_config.device_map is not None and not is_hqq_or_quark:
             expanded_device_map = expand_device_map(load_config.device_map, expected_keys)
+            if (experts_offload := getattr(model, "_experts_offload", None)) is not None:
+                expanded_device_map = {k: v for k, v in expanded_device_map.items() if not experts_offload.owns(k)}
             caching_allocator_warmup(model, expanded_device_map, load_config.hf_quantizer)
 
         error_msgs = []
@@ -4557,6 +4579,7 @@ class PreTrainedModel(
                 merged_state_dict = state_dict
             elif checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors") and state_dict is None:
                 merged_state_dict = {}
+                key_files = {}  # checkpoint key -> file, for streamed reads
                 for file in checkpoint_files:
                     if load_config.disable_mmap or _is_on_hf_mount(file):
                         with open(file, "rb") as _fh:
@@ -4579,6 +4602,9 @@ class PreTrainedModel(
                     all_pointer.add(file_pointer)
                     for k in file_pointer.keys():
                         merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
+                        key_files[k] = file
+            if (experts_offload := getattr(model, "_experts_offload", None)) is not None:
+                experts_offload.key_files = key_files  # streamed reads may use safetensors' prefetch loader
             # Checkpoints are .bin
             elif checkpoint_files is not None:
                 merged_state_dict = {}
