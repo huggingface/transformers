@@ -14,12 +14,16 @@
 
 import threading
 import time
+import types
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import pluggy
+from _pytest.config import PytestPluginManager
 from huggingface_hub.utils import httpx
 
 from transformers.utils.network_logging import (
+    NetworkDebugPlugin,
     _clear_network_debug_report,
     _disable_network_debug_report,
     _enable_network_debug_report,
@@ -80,3 +84,35 @@ class NetworkLoggingTester(unittest.TestCase):
         self.assertIn("Network debug report", summary)
         self.assertIn("Slowest requests:", summary)
         self.assertIn("/slow", summary)
+
+    def test_network_debug_plugin_registers_without_xdist(self):
+        plugin_manager = PytestPluginManager()
+        plugin_manager.register(NetworkDebugPlugin(), "network_debug")
+        # Should not raise pluggy.PluginValidationError when pytest-xdist is not loaded
+        plugin_manager.check_pending()
+
+    def test_network_debug_plugin_configure_node_propagates_shared_dir(self):
+        plugin = NetworkDebugPlugin()
+        node = types.SimpleNamespace(
+            config=types.SimpleNamespace(_network_debug_shared_dir="/tmp/network_debug_shared"),
+            workerinput={},
+        )
+        plugin.pytest_configure_node(node)
+        self.assertEqual(node.workerinput["network_debug_shared_dir"], "/tmp/network_debug_shared")
+
+        # Also verify hook registration works when a plugin provides the xdist hookspec
+        class _DummyXdistHookSpec:
+            @pluggy.HookspecMarker("pytest")
+            def pytest_configure_node(self, node):
+                pass
+
+        plugin_manager = PytestPluginManager()
+        plugin_manager.add_hookspecs(_DummyXdistHookSpec)
+        plugin_manager.register(plugin, "network_debug")
+        plugin_manager.check_pending()
+        node2 = types.SimpleNamespace(
+            config=types.SimpleNamespace(_network_debug_shared_dir="/tmp/network_debug_shared_2"),
+            workerinput={},
+        )
+        plugin_manager.hook.pytest_configure_node(node=node2)
+        self.assertEqual(node2.workerinput["network_debug_shared_dir"], "/tmp/network_debug_shared_2")
