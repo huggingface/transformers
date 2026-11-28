@@ -2442,6 +2442,8 @@ def _build_checkpoint_conversion_mapping():
 
     mapping["MtpModel"] = [
         PrefixChange(prefix_to_remove="model"),
+        # Multimodal checkpoint layout: the text model (and its MTP layers) is nested under `language_model.`
+        PrefixChange(prefix_to_remove="language_model"),
         PrefixChange(prefix_to_remove="mtp"),
         WeightRenaming(source_patterns=".shared_head.norm.", target_patterns=".post_norm."),
         WeightRenaming(source_patterns=".mtp_block.enorm.", target_patterns=".enorm."),

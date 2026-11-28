@@ -562,7 +562,7 @@ class MtpModel(PreTrainedModel):
             input_ids = torch.cat([input_ids[:, 1:], next_mtp_token], dim=-1)
             if attention_mask is not None:
                 attention_mask = torch.cat([attention_mask[:, 1:], attention_mask.new_ones(batch_size, 1)], dim=-1)  # type: ignore
-            position_ids = torch.cat([position_ids[:, 1:], position_ids[:, -1:] + 1], dim=-1)
+            position_ids = torch.cat([position_ids[..., 1:], position_ids[..., -1:] + 1], dim=-1)
 
             # Need to cat ful_ids as well for the processors
             if full_input_ids is not None:
@@ -593,20 +593,33 @@ class MtpModel(PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
 
+        # M-RoPE models pack positions as [1 + num_rope_axes, batch, seq]: `position_ids[0]` holds the text positions
+        # used for the masks and layers, `position_ids[1:]` the rope positions. The number of rope axes is not stored
+        # uniformly across models, so probe the usual locations in order and default to 3 (Glm4v family)
+        mrope_section = getattr(self.rotary_emb, "mrope_section", None)
+        if not mrope_section:
+            mrope_section = (getattr(self.config, "rope_parameters", None) or {}).get("mrope_section")
+        num_rope_axes = len(mrope_section) if mrope_section else 3
+
+        if position_ids is not None and position_ids.ndim == 3 and position_ids.shape[0] == num_rope_axes + 1:
+            text_position_ids, rope_position_ids = position_ids[0], position_ids[1:]
+        else:
+            text_position_ids = rope_position_ids = position_ids
+
         # In full generality, we may need to recompute masks for every layer due to the position offset of each layer
-        masks = self.create_masks_for_mtp_layer(layer_idx, inputs_embeds, mtp_cache, position_ids)
+        masks = self.create_masks_for_mtp_layer(layer_idx, inputs_embeds, mtp_cache, text_position_ids)
 
         position_embeddings = None
         if self.rotary_emb is not None:
             rope_kwargs = {}
             if self.has_per_layer_rope:
                 rope_kwargs["layer_type"] = self.config.layer_types[layer_idx]
-            position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids, **rope_kwargs)
+            position_embeddings = self.rotary_emb(inputs_embeds, position_ids=rope_position_ids, **rope_kwargs)
         last_hidden_states = self.layers[layer_idx](
             inputs_embeds,
             last_hidden_states,
             position_embeddings=position_embeddings,
-            position_ids=position_ids,
+            position_ids=text_position_ids,
             cache=mtp_cache,
             **masks,
             **kwargs,

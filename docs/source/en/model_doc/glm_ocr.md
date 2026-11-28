@@ -151,6 +151,14 @@ model = GlmOcrForConditionalGeneration.from_pretrained(
 )
 ```
 
+### Speculative decoding with multi-token prediction
+
+The GLM-OCR checkpoint ships a multi-token prediction (MTP) layer, which [`~GenerationMixin.generate`] can use as a draft model for speculative decoding.
+
+```python
+generated_ids = model.generate(**inputs, max_new_tokens=512, use_mtp=True)
+```
+
 ## GlmOcrConfig
 
 [[autodoc]] GlmOcrConfig

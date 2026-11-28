@@ -66,6 +66,10 @@ class GlmOcrVisionConfig(Glm4vVisionConfig):
 @strict
 class GlmOcrTextConfig(Glm4vTextConfig):
     r"""
+    num_mtp_layers (`int`, *optional*):
+        Number of multi-token prediction (MTP) layers stored after the base model in the checkpoint, used for
+        speculative decoding with `generate(..., use_mtp=True)`. The released GLM-OCR checkpoint has one.
+
     Example:
 
     ```python
@@ -81,6 +85,8 @@ class GlmOcrTextConfig(Glm4vTextConfig):
     >>> configuration = model.config
     ```"""
 
+    attribute_map = {"num_mtp_layers": "num_nextn_predict_layers"}
+
     vocab_size: int = 59392
     hidden_size: int = 1024
     intermediate_size: int = 4096
@@ -88,6 +94,7 @@ class GlmOcrTextConfig(Glm4vTextConfig):
     num_attention_heads: int = 16
     num_key_value_heads: int = 8
     max_position_embeddings: int = 131072
+    num_mtp_layers: int | None = None
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
