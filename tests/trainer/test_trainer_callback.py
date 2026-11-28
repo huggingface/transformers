@@ -873,6 +873,41 @@ class TrackioCallbackTest(unittest.TestCase):
             ],
         )
 
+    def test_private_run_is_not_frozen_to_a_static_space(self):
+        # Static Trackio Spaces serve their data publicly, and trackio refuses `private=True` for them
+        fake_trackio = Mock()
+        fake_trackio.__version__ = "0.45.1"
+        fake_trackio.context_vars.current_space_id.get.return_value = "user/private-trackio-space"
+        callback = self._create_callback(fake_trackio)
+        args = self._create_args()
+        args.trackio_static_space_id = None
+        args.hub_private_repo = True
+        state = self._create_state()
+        model = self._create_model()
+
+        callback.setup(args, state, model)
+        with patch("transformers.integrations.integration_utils.logger") as fake_logger:
+            callback.on_train_end(args, state, Mock(), model=model)
+
+        fake_trackio.freeze.assert_not_called()
+        fake_logger.warning.assert_not_called()
+
+    def test_private_run_is_not_synced_to_a_static_space_on_push(self):
+        fake_trackio = Mock()
+        fake_trackio.context_vars.current_space_id.get.return_value = None
+        fake_trackio.context_vars.current_project.get.return_value = "test-project"
+        callback = self._create_callback(fake_trackio)
+        args = self._create_args()
+        args.trackio_static_space_id = None
+        args.hub_private_repo = True
+        state = self._create_state()
+        model = self._create_model()
+
+        callback.setup(args, state, model)
+        callback.on_push_begin(args, state, Mock(), model=model)
+
+        fake_trackio.sync.assert_not_called()
+
 
 class KubeflowCallbackTest(unittest.TestCase):
     """Tests for KubeflowCallback functionality."""
