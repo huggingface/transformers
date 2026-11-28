@@ -33,6 +33,7 @@ Read these on demand, when the diff touches the relevant area. Do not read all o
 | docstrings, `@auto_docstring` | `/docs/source/en/auto_docstring.md` |
 | tests, fixtures, `@slow` markers | `/docs/source/en/testing.md` |
 | CI checks, `/utils/check_*.py` | `/docs/source/en/pr_checks.md` |
+| `.github/workflows/*`, `.github/actions/*` | `/.ai/review-rules-workflows.md` — always, before commenting — and every workflow the changed one `uses:` or is called by |
 | processors, image/video/audio inputs | `/docs/source/en/multimodal_processing.md`, `/docs/source/en/image_processors.md` |
 | chat templates | `/docs/source/en/chat_templating.md` |
 | weight conversion scripts | `/docs/source/en/weightconverter.md` |
