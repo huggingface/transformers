@@ -27,7 +27,7 @@ from transformers.utils import is_torch_available, is_torch_tensor
 if TYPE_CHECKING:
     from transformers import PreTrainedConfig
     from transformers.cache_utils import Cache
-    from transformers.integrations.heterogeneity.configuration_utils import _GenericModelingState
+    from transformers.integrations.heterogeneity.configuration_utils import _GenericModelingContext
 
 
 class AttentionMasksByLayerIdx(dict[int, Any]):
@@ -109,18 +109,20 @@ def _get_cache_geometry(*, cache: Any, query_length: Any, layer_idx: int) -> tup
 
 
 def layer_consumes_attention_masks(
-    *, generic_modeling_state: _GenericModelingState, layer_idx: int, cache: Cache | None
+    *, generic_modeling_context: _GenericModelingContext, layer_idx: int, cache: Cache | None
 ) -> bool:
     """Returns whether a member that uses the attention masks is left in layer `layer_idx` after its skips.
 
     Raises:
         `ValueError`: If such a member is left and `cache` is set, but the layer has no key/value cache.
     """
-    if layer_idx in generic_modeling_state.unconsumed_attention_mask_layers:
+    if layer_idx in generic_modeling_context.unconsumed_attention_mask_layers:
         # The skips replaced every attention mask consumer of this layer, so nothing left in the layer needs a mask
         return False
 
-    if cache is not None and KEY_VALUE_CACHE in (generic_modeling_state.per_layer_unwritten_caches.get(layer_idx, ())):
+    if cache is not None and KEY_VALUE_CACHE in (
+        generic_modeling_context.per_layer_unwritten_caches.get(layer_idx, ())
+    ):
         # An attention mask consumer remains in this layer. However, with a cache, the mask factories take the size
         # of each layer's mask from its key/value cache, and this layer has no key/value cache.
         raise ValueError(
@@ -147,11 +149,11 @@ def _create_per_layer_attention_masks(
     reuse_keys_and_layer_indices: list[tuple[tuple[Any, ...], int]] = []
     cache = kwargs.get("cache")
     heterogeneity_spec = config._heterogeneity_spec
-    generic_modeling_state = heterogeneity_spec.generic_modeling_state
+    generic_modeling_context = heterogeneity_spec.generic_modeling_context
 
     for layer_idx in _get_mask_layer_indices(config, create_mask_fn):
         if not layer_consumes_attention_masks(
-            generic_modeling_state=generic_modeling_state, layer_idx=layer_idx, cache=cache
+            generic_modeling_context=generic_modeling_context, layer_idx=layer_idx, cache=cache
         ):
             attention_masks[layer_idx] = None
             continue
@@ -196,7 +198,7 @@ def support_per_layer_mask_creation(attribute_name: str | None = None) -> Callab
             config = mask_kwargs["config"]
             layer_idx = mask_kwargs.get("layer_idx")
 
-            if config.generic_heterogeneous_modeling_applied and layer_idx is None:
+            if config.used_for_generic_heterogeneous_modeling and layer_idx is None:
                 attention_mask = mask_kwargs.get("attention_mask")
                 if isinstance(attention_mask, AttentionMasksByLayerIdx):
                     return attention_mask

@@ -15,20 +15,14 @@
 
 from __future__ import annotations
 
-import contextvars
 import inspect
 import threading
-from collections.abc import Callable
-from dataclasses import dataclass
 from functools import partial, wraps
 from typing import TYPE_CHECKING, Any
 
 from transformers.integrations.heterogeneity.cache_utils import validate_no_unwritten_caches
-from transformers.integrations.heterogeneity.configuration_utils import _GenericModelingState
-from transformers.integrations.heterogeneity.heterogeneous_modeling_spec import (
-    HeterogeneousModelingSpec,
-    get_heterogeneous_modeling_specs,
-)
+from transformers.integrations.heterogeneity.configuration_utils import _GenericModelingContext
+from transformers.integrations.heterogeneity.heterogeneous_modeling_spec import get_heterogeneous_modeling_specs
 from transformers.integrations.heterogeneity.layer_idx_resolvers import LayerIdxResolver
 from transformers.integrations.heterogeneity.masking_utils import AttentionMasksByLayerIdx
 from transformers.integrations.heterogeneity.skip_utils import apply_skips, validate_skip_descriptors
@@ -40,22 +34,6 @@ if TYPE_CHECKING:
     from transformers import PreTrainedConfig, PreTrainedModel
 
 
-@dataclass(frozen=True)
-class _LayerInitContext:
-    model: PreTrainedModel
-    heterogeneous_modeling_specs: dict[type[nn.Module], HeterogeneousModelingSpec]
-
-    # Shared by the contexts of models built from the same config:
-    generic_modeling_state: _GenericModelingState
-    built_layer_indices: set[int]
-
-
-_layer_init_contexts: contextvars.ContextVar[tuple[_LayerInitContext, ...]] = contextvars.ContextVar(
-    "_layer_init_contexts", default=()
-)
-_initializing_models: contextvars.ContextVar[tuple[PreTrainedModel, ...]] = contextvars.ContextVar(
-    "_initializing_models", default=()
-)
 _layer_patching_lock = threading.Lock()
 
 
@@ -139,11 +117,11 @@ def _validate_layer_idx(layer_idx: Any, *, resolver: LayerIdxResolver, num_layer
 def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
     """Patch ``layer_cls.__init__`` to resolve each layer's index and pass its matching per-layer config to the
     original init function."""
-    if getattr(layer_cls.__init__, "_heterogeneity_layer_cls", None) is layer_cls:
+    if getattr(layer_cls.__init__, "_heterogeneity_patched_layer_cls", None) is layer_cls:
         return
 
     with _layer_patching_lock:
-        if getattr(layer_cls.__init__, "_heterogeneity_layer_cls", None) is layer_cls:
+        if getattr(layer_cls.__init__, "_heterogeneity_patched_layer_cls", None) is layer_cls:
             return
 
         orig_layer_init = layer_cls.__init__
@@ -151,35 +129,25 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
 
         @wraps(orig_layer_init)
         def _patched_layer_init(self, *args, **kwargs):
-            layer_init_contexts = _layer_init_contexts.get()
-            if not layer_init_contexts:
-                # No model is being built with generic heterogeneous modeling
-                return orig_layer_init(self, *args, **kwargs)
-
             try:
                 bound_arguments = orig_layer_init_signature.bind(self, *args, **kwargs)
             except TypeError:
                 # The arguments don't fit `__init__`, so the original `__init__` raises its own error
                 return orig_layer_init(self, *args, **kwargs)
             config = bound_arguments.arguments.get("config")
-            context = next(
-                (
-                    context
-                    for context in reversed(layer_init_contexts)
-                    if layer_cls in context.heterogeneous_modeling_specs and context.model.config is config
-                ),
-                None,
-            )
-            if context is None:
+
+            heterogeneous_modeling_spec = None
+            if getattr(config, "used_for_generic_heterogeneous_modeling", False):
+                generic_modeling_context = config._heterogeneity_spec.generic_modeling_context
+                heterogeneous_modeling_spec = generic_modeling_context.heterogeneous_modeling_specs.get(layer_cls)
+            if heterogeneous_modeling_spec is None:
                 return orig_layer_init(self, *args, **kwargs)
-            heterogeneous_modeling_spec = context.heterogeneous_modeling_specs[layer_cls]
 
             # --- Resolve layer index ---
             layer_idx = heterogeneous_modeling_spec.layer_idx_resolver.resolve(
                 layer_init=orig_layer_init,
                 args=(self, *args),
                 kwargs=kwargs,
-                model=context.model,
             )
             _validate_layer_idx(
                 layer_idx,
@@ -199,19 +167,17 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
                     layer_idx=layer_idx,
                     skip_types=layer_config.skip,
                     heterogeneous_modeling_spec=heterogeneous_modeling_spec,
-                    generic_modeling_state=context.generic_modeling_state,
+                    generic_modeling_context=generic_modeling_context,
                 )
 
             # --- Register forward pre-hooks ---
             _register_layer_attention_mask_selection_hook(layer=self, config=config, layer_idx=layer_idx)
-            if unwritten_caches := context.generic_modeling_state.per_layer_unwritten_caches.get(layer_idx):
+            if unwritten_caches := generic_modeling_context.per_layer_unwritten_caches.get(layer_idx):
                 _register_layer_cache_validation_hook(
                     layer=self, layer_idx=layer_idx, unwritten_caches=unwritten_caches
                 )
 
-            context.built_layer_indices.add(layer_idx)
-
-        _patched_layer_init._heterogeneity_layer_cls = layer_cls
+        _patched_layer_init._heterogeneity_patched_layer_cls = layer_cls
         layer_cls.__init__ = _patched_layer_init
 
 
@@ -219,7 +185,7 @@ def apply_generic_heterogeneous_modeling_if_applicable(model: PreTrainedModel) -
     """Apply heterogeneous per-layer modeling during model initialization.
 
     This function resolves the model's ``HeterogeneousModelingSpec``s, validates its
-    configured skips, and registers the layer-initialization context. The patched layer classes use this context to
+    configured skips, and sets the specs on the model's config. The patched layer classes read them from the config to
     initialize each layer with its resolved config, apply skip replacements, and
     select layer-specific attention masks.
 
@@ -236,109 +202,14 @@ def apply_generic_heterogeneous_modeling_if_applicable(model: PreTrainedModel) -
     per_layer_skip_types = [layer_config.skip for layer_config in model.config.per_layer_config]
     validate_skip_descriptors(per_layer_skip_types, heterogeneous_modeling_specs)
 
-    layer_init_contexts = _layer_init_contexts.get()
-    same_config_context = next(
-        (context for context in layer_init_contexts if context.model.config is model.config),
-        None,
+    # The patched layer `__init__` gets only the config, so it reads the specs there, and records there what the skips
+    # of each layer removed. A model and its inner model, such as `LlamaForCausalLM` and `LlamaModel`, get the same
+    # config, so they share one context.
+    heterogeneity_spec = model.config._heterogeneity_spec
+    if heterogeneity_spec.generic_modeling_context is None:
+        heterogeneity_spec.generic_modeling_context = _GenericModelingContext()
+    heterogeneity_spec.generic_modeling_context.heterogeneous_modeling_specs.update(
+        {spec.layer_cls: spec for spec in heterogeneous_modeling_specs}
     )
-    context = _LayerInitContext(
-        model=model,
-        heterogeneous_modeling_specs={spec.layer_cls: spec for spec in heterogeneous_modeling_specs},
-        generic_modeling_state=(
-            same_config_context.generic_modeling_state if same_config_context else _GenericModelingState()
-        ),
-        built_layer_indices=same_config_context.built_layer_indices if same_config_context else set(),
-    )
-    _layer_init_contexts.set((*layer_init_contexts, context))
     for heterogeneous_modeling_spec in heterogeneous_modeling_specs:
         _patch_layer_init(heterogeneous_modeling_spec.layer_cls)
-
-
-def _validate_all_layers_built(context: _LayerInitContext) -> None:
-    missing_layer_indices = sorted(set(range(context.model.config.num_hidden_layers)) - context.built_layer_indices)
-    if missing_layer_indices:
-        layer_cls_names = " or ".join(f"`{layer_cls.__name__}`" for layer_cls in context.heterogeneous_modeling_specs)
-        raise ValueError(
-            f"The heterogeneous modeling specs of {type(context.model).__name__} target {layer_cls_names}, but no "
-            f"such layer was constructed with the model's config for layers {missing_layer_indices}. Check that the "
-            "model has a spec for every layer class it constructs, and that the layers receive the model's config "
-            "object itself, not a copy."
-        )
-
-
-def _validate_matches_existing_modeling_state(context: _LayerInitContext) -> None:
-    """Raise if the config already has a generic modeling state from another model, and that state differs from the
-    state of this model.
-
-    The functions that create masks and caches read the state from the config, not from the model, so all models built
-    with the config must have the same state."""
-    existing_state = context.model.config._heterogeneity_spec.generic_modeling_state
-    # Layer configs belong to the config, so the two states can only differ in the layers where skips removed all
-    # attention mask consumers, or all writers of a cache
-    if existing_state is not None and context.generic_modeling_state != existing_state:
-        raise ValueError(
-            f"The config of {type(context.model).__name__} was already used to build a model with generic "
-            "heterogeneous modeling, and the two models differ in which layers are left without attention mask "
-            "consumers or cache writers. Models that share a config must agree on these, because masks and caches are "
-            "built from the config. Use a separate config, for example `type(config).from_dict(config.to_dict())`."
-        )
-
-
-def support_generic_heterogeneous_modeling(orig_init: Callable[..., None]) -> Callable[..., None]:
-    """Create the model-initialization scope required by ``apply_generic_heterogeneous_modeling_if_applicable``.
-
-    That function runs inside ``PreTrainedModel.__init__`` and registers temporary state that is used later, when the
-    model subclass creates its layers. This wrapper keeps that state available across the model's
-    ``super().__init__()`` chain and restores the previous state when initialization finishes. Generic heterogeneous
-    modeling is marked as applied only after the root model's construction succeeds. If generic heterogeneous modeling
-    is not applied, the wrapper does not change model initialization.
-
-    The wrapper is applied to ``PreTrainedModel.__init__``, and ``__init_subclass__`` applies it to the ``__init__`` of
-    each subclass that doesn't inherit a wrapped one, because any subclass, including a user's, can be the root model.
-    No other hook runs when the root model's ``__init__`` returns or raises. ``post_init`` doesn't work for this: it
-    also runs at the end of each nested model's ``__init__``, such as ``LlamaModel`` inside ``LlamaForCausalLM``, and
-    it doesn't run at all when ``__init__`` fails.
-    """
-    if getattr(orig_init, "_scoped_for_heterogeneous_modeling", False):
-        return orig_init
-
-    @wraps(orig_init)
-    def _scoped_init(self, *args, **kwargs):
-        initializing_models = _initializing_models.get()
-        # The model's `super().__init__()` chain calls the wrapper of each class in its MRO. Only the first call sets
-        # up the scope and restores it afterwards.
-        if any(model is self for model in initializing_models):
-            return orig_init(self, *args, **kwargs)
-
-        # Mark this model as initializing
-        initializing_models_token = _initializing_models.set((*initializing_models, self))
-        # Setting the current value gives us a token to restore it after initialization.
-        layer_init_contexts_token = _layer_init_contexts.set(_layer_init_contexts.get())
-        try:
-            result = orig_init(self, *args, **kwargs)
-        except BaseException:
-            # Initialization failed, so discard the layer init contexts registered during it
-            _layer_init_contexts.reset(layer_init_contexts_token)
-            raise
-        finally:
-            _initializing_models.reset(initializing_models_token)
-
-        if initializing_models:
-            # Models containing this one are still initializing
-            return result
-        try:
-            layer_init_contexts = _layer_init_contexts.get()
-            # Validate all contexts before setting any state on a config, so that no config changes if a validation
-            # fails
-            for context in layer_init_contexts:
-                _validate_all_layers_built(context)
-                _validate_matches_existing_modeling_state(context)
-            # The root model is initialized, so set the state collected for each model on the config of that model
-            for context in layer_init_contexts:
-                context.model.config._heterogeneity_spec.generic_modeling_state = context.generic_modeling_state
-        finally:
-            _layer_init_contexts.reset(layer_init_contexts_token)
-        return result
-
-    _scoped_init._scoped_for_heterogeneous_modeling = True
-    return _scoped_init

@@ -17,13 +17,11 @@ from .configuration_utils import AmbiguousGlobalPerLayerAttributeError, Heteroge
 from .heterogeneous_modeling_spec import (
     HeterogeneousModelingSpec,
     SkipDescriptor,
+    SkipSupport,
     get_heterogeneous_modeling_specs,
 )
 from .layer_idx_resolvers import LayerIdxFromArgument, LayerIdxFromModelInitStack, LayerIdxResolver
-from .modeling_utils import (
-    apply_generic_heterogeneous_modeling_if_applicable,
-    support_generic_heterogeneous_modeling,
-)
+from .modeling_utils import apply_generic_heterogeneous_modeling_if_applicable
 from .skip_utils import ReturnEntry, get_skip_replacement_factory
 
 
@@ -36,6 +34,7 @@ __all__ = [
     "LayerIdxResolver",
     "ReturnEntry",
     "SkipDescriptor",
+    "SkipSupport",
     "apply_generic_heterogeneous_modeling_if_applicable",
     "get_heterogeneous_modeling_specs",
     "get_skip_replacement_factory",

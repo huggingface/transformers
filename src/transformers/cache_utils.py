@@ -1982,7 +1982,7 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
     layer_types = ["dummy" if layer_type in ("moe", "mlp") else layer_type for layer_type in layer_types]
 
     # Support generic heterogeneous modeling, in which skips can leave some of a layer's caches without writers
-    if config.generic_heterogeneous_modeling_applied:
+    if config.used_for_generic_heterogeneous_modeling:
         layer_types = get_generic_heterogeneous_modeling_cache_layer_types(config, layer_types)
 
     # Prepare additional kwargs that may be needed to __init__ each cache layer

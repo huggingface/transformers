@@ -15,19 +15,13 @@
 
 import unittest
 
-from parameterized import parameterized
-
 from transformers.testing_utils import is_torch_available, require_torch
 
 
 if is_torch_available():
     import torch
 
-    from transformers.integrations.heterogeneity import (
-        HeterogeneousModelingSpec,
-        LayerIdxFromArgument,
-        get_heterogeneous_modeling_specs,
-    )
+    from transformers.integrations.heterogeneity import SkipSupport, get_heterogeneous_modeling_specs
 
 
 @require_torch
@@ -54,22 +48,10 @@ class TestHeterogeneousModelingSpec(unittest.TestCase):
 
         self.assertEqual(get_heterogeneous_modeling_specs(OptedOutModel(RegisteredConfig())), ())
 
-    @parameterized.expand(
-        [
-            ("missing_attention_mask_consumers", {"cache_writers": {"self_attn": ["key_value"]}}, "must also set"),
-            ("missing_cache_writers", {"attention_mask_consumers": ["self_attn"]}, "must also set"),
-            (
-                "unknown_cache",
-                {"attention_mask_consumers": ["self_attn"], "cache_writers": {"self_attn": ["kv"]}},
-                r"unknown caches \['kv'\]",
-            ),
-        ]
-    )
-    def test_spec_with_skips_requires_valid_mask_consumers_and_cache_writers(self, _, declarations, message):
-        with self.assertRaisesRegex(ValueError, message):
-            HeterogeneousModelingSpec(
-                layer_cls=torch.nn.Module,
-                layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
+    def test_skip_support_rejects_unknown_caches(self):
+        with self.assertRaisesRegex(ValueError, r"unknown caches \['unknown_cache'\]"):
+            SkipSupport(
                 skip_descriptors={"attention": {"self_attn": torch.nn.Identity}},
-                **declarations,
+                attention_mask_consumers=["self_attn"],
+                cache_writers={"self_attn": ["unknown_cache"]},
             )

@@ -27,7 +27,7 @@ from transformers.utils import is_torch_available
 if TYPE_CHECKING:
     from torch import nn
 
-    from transformers.integrations.heterogeneity.configuration_utils import _GenericModelingState
+    from transformers.integrations.heterogeneity.configuration_utils import _GenericModelingContext
     from transformers.integrations.heterogeneity.heterogeneous_modeling_spec import (
         HeterogeneousModelingSpec,
         MemberKey,
@@ -127,23 +127,31 @@ if is_torch_available():
         def __init__(
             self,
             *,
-            source_class: type[nn.Module],
-            return_entries: tuple[_ResolvedReturnEntry | None, ...] | None = None,
+            return_entries: tuple[ReturnEntry | None, ...] | None = None,
             return_tuple: bool = False,
         ):
             super().__init__()
-            self.source_class = source_class
-            self._return_entries = return_entries
+            self.source_class = None
+            self._unresolved_return_entries = return_entries
             self._return_tuple = return_tuple
 
             # Some layers read a member's weight even when the member is skipped. This empty buffer gives them one,
             # without adding memory, changing outputs, or being saved.
             self.register_buffer("weight", torch.empty(0), persistent=False)
 
+        def set_source_class(self, source_class: type[nn.Module]) -> None:
+            self.source_class = source_class
+            self._return_entries = _resolve_return_entries(source_class, self._unresolved_return_entries)
+
         def extra_repr(self) -> str:
-            return f"source_class={self.source_class.__name__}"
+            return f"source_class={self.source_class.__name__ if self.source_class is not None else None}"
 
         def forward(self, *args, **kwargs):
+            if self.source_class is None:
+                raise RuntimeError(
+                    "To use this skip replacement, you must first call `set_source_class` with the class that it "
+                    "replaces."
+                )
             if self._return_entries is None:
                 return None
 
@@ -173,17 +181,14 @@ if is_torch_available():
 
 
 def get_skip_replacement_factory(
-    cls: type[nn.Module],
     to_return: ReturnEntry | list[ReturnEntry | None] | None,
 ) -> Callable[[], nn.Module]:
-    """Returns a factory that builds skip replacements for members of class `cls`.
+    """Returns a factory that builds skip replacements for the members that a skip descriptor maps to it.
 
     A skip replacement is a no-op module with no parameters, so checkpoints of models with skips don't store weights
     for skipped members.
 
     Args:
-        cls (`type[nn.Module]`):
-            The class of the members to replace.
         to_return (`ReturnEntry`, `list[ReturnEntry | None]` or `None`):
             What the `forward` of the skip replacement returns:
 
@@ -198,10 +203,8 @@ def get_skip_replacement_factory(
 
     Returns:
         `Callable[[], nn.Module]`: A factory that builds a new skip replacement each time it is called. Use it as a
-        value in a skip descriptor of a `HeterogeneousModelingSpec`.
-
-    Raises:
-        `ValueError`: If a `ReturnEntry` names a variadic argument, or an argument that `cls.forward` doesn't have.
+        value in a skip descriptor of a `HeterogeneousModelingSpec`. To use a skip replacement on its own, first call
+        its `set_source_class` with the class of the member that it replaces.
     """
     if to_return is None:
         return_entries = None
@@ -213,12 +216,7 @@ def get_skip_replacement_factory(
         return_entries = tuple(to_return)
         return_tuple = True
 
-    return partial(
-        _NoOpReplacement,
-        source_class=cls,
-        return_entries=_resolve_return_entries(cls, return_entries),
-        return_tuple=return_tuple,
-    )
+    return partial(_NoOpReplacement, return_entries=return_entries, return_tuple=return_tuple)
 
 
 def _get_member_path(member_key: MemberKey) -> str:
@@ -268,30 +266,33 @@ def validate_skip_descriptors(
     described_skip_types = {
         skip_type
         for heterogeneous_modeling_spec in heterogeneous_modeling_specs
-        for skip_type in heterogeneous_modeling_spec.skip_descriptors
+        if heterogeneous_modeling_spec.skip_support is not None
+        for skip_type in heterogeneous_modeling_spec.skip_support.skip_descriptors
     }
     missing_descriptors = skip_types - described_skip_types
     if missing_descriptors:
         raise ValueError(f"Skip descriptors are missing for the following skip types: {missing_descriptors}")
 
 
-def _apply_skip_descriptor(
+def _get_replacement_factories(
     *,
     layer: nn.Module,
     skip_type: str,
     skip_descriptor: SkipDescriptor,
     layer_idx: int,
-) -> None:
-    """Replace the layer's members with the replacements of the matching keys in `skip_descriptor`."""
+) -> dict[str, Callable[[], nn.Module]]:
+    """Return the replacement factories of the matching keys in `skip_descriptor`, by member path."""
     error_prefix = f"Layer {layer_idx} skips '{skip_type}'"
     matching_member_keys = _get_matching_member_keys(layer, skip_descriptor, error_prefix=error_prefix)
-    matched_member_paths = {_get_member_path(member_key) for member_key in matching_member_keys}
+    replacement_factories = {
+        _get_member_path(member_key): skip_descriptor[member_key] for member_key in matching_member_keys
+    }
 
     # Before replacing anything, check that every member path in the descriptor has a matching key. Otherwise the skip
     # would only partly apply, and the layer would silently compute an unintended output.
     for member_key in skip_descriptor:
         member_path = _get_member_path(member_key)
-        if member_path in matched_member_paths:
+        if member_path in replacement_factories:
             continue
         try:
             member = layer.get_submodule(member_path)
@@ -304,12 +305,36 @@ def _apply_skip_descriptor(
             f"{type(member).__name__}. Add a class-specific or generic replacement."
         )
 
-    for member_key in matching_member_keys:
-        member_path = _get_member_path(member_key)
-        original = layer.get_submodule(member_path)
-        replacement_factory = skip_descriptor[member_key]
+    return replacement_factories
+
+
+def _apply_skip_descriptors(*, layer: nn.Module, layer_idx: int, skip_descriptors: dict[str, SkipDescriptor]) -> None:
+    """Replace the layer's members with the replacements of the matching keys in `skip_descriptors`."""
+    # The skip types of a layer can share a member, so each member is replaced once, after all of them are matched
+    member_path_to_replacement = {}
+    for skip_type, skip_descriptor in skip_descriptors.items():
+        replacement_factories = _get_replacement_factories(
+            layer=layer, skip_type=skip_type, skip_descriptor=skip_descriptor, layer_idx=layer_idx
+        )
+        for member_path, replacement_factory in replacement_factories.items():
+            if member_path not in member_path_to_replacement:
+                member_path_to_replacement[member_path] = (skip_type, replacement_factory)
+                continue
+
+            first_skip_type, first_replacement_factory = member_path_to_replacement[member_path]
+            if replacement_factory is not first_replacement_factory:
+                raise ValueError(
+                    f"Layer {layer_idx} skips '{first_skip_type}' and '{skip_type}', but they map the same member "
+                    f"('{member_path}') to different replacement factories, so the replacement is ambiguous. Skip "
+                    "types that replace the same member of a layer must use the same factory object."
+                )
+
+    for member_path, (_, replacement_factory) in member_path_to_replacement.items():
+        skipped_class = type(layer.get_submodule(member_path))
         replacement = replacement_factory()
-        replacement._heterogeneity_skipped_class = type(original)
+        replacement._heterogeneity_skipped_class = skipped_class
+        if isinstance(replacement, _NoOpReplacement):
+            replacement.set_source_class(skipped_class)
         layer.set_submodule(member_path, replacement)
 
 
@@ -319,16 +344,21 @@ def apply_skips(
     layer_idx: int,
     skip_types: list[str],
     heterogeneous_modeling_spec: HeterogeneousModelingSpec,
-    generic_modeling_state: _GenericModelingState,
+    generic_modeling_context: _GenericModelingContext,
 ) -> None:
-    """Apply the layer's skips, and record in `generic_modeling_state` whether the skips removed all attention mask
+    """Apply the layer's skips, and record in `generic_modeling_context` whether the skips removed all attention mask
     consumers of the layer, and which caches of the layer no longer have a writer."""
+    skip_support = heterogeneous_modeling_spec.skip_support
+    described_skip_types = skip_support.skip_descriptors.keys() if skip_support is not None else set()
     # A model with several layer classes has a spec for each, and a skip type can be described in only some of them
-    if undescribed_skip_types := set(skip_types) - heterogeneous_modeling_spec.skip_descriptors.keys():
+    if undescribed_skip_types := set(skip_types) - described_skip_types:
         raise ValueError(
             f"Layer {layer_idx} skips {sorted(undescribed_skip_types)}, but the heterogeneous modeling spec for its "
             f"class, `{heterogeneous_modeling_spec.layer_cls.__name__}`, has no skip descriptors for them."
         )
+    # Without skip support every skip type is undescribed, so here the layer has no skips
+    if skip_support is None:
+        return
 
     # Unlike skip descriptors, `attention_mask_consumers` and `cache_writers` can use a (path, class) key for a member
     # that only some layers build
@@ -340,32 +370,30 @@ def apply_skips(
         layer.get_submodule(_get_member_path(member_key))
         for member_key in _get_matching_member_keys(
             layer,
-            heterogeneous_modeling_spec.attention_mask_consumers,
+            skip_support.attention_mask_consumers,
             error_prefix=f"The spec's `attention_mask_consumers` lists a member of layer {layer_idx}",
             missing_member_hint=missing_member_hint,
         )
     ]
     cache_writers = {
-        layer.get_submodule(_get_member_path(member_key)): heterogeneous_modeling_spec.cache_writers[member_key]
+        layer.get_submodule(_get_member_path(member_key)): skip_support.cache_writers[member_key]
         for member_key in _get_matching_member_keys(
             layer,
-            heterogeneous_modeling_spec.cache_writers,
+            skip_support.cache_writers,
             error_prefix=f"The spec's `cache_writers` lists a member of layer {layer_idx}",
             missing_member_hint=missing_member_hint,
         )
     }
 
-    for skip_type in skip_types:
-        _apply_skip_descriptor(
-            layer=layer,
-            skip_type=skip_type,
-            skip_descriptor=heterogeneous_modeling_spec.skip_descriptors[skip_type],
-            layer_idx=layer_idx,
-        )
+    _apply_skip_descriptors(
+        layer=layer,
+        layer_idx=layer_idx,
+        skip_descriptors={skip_type: skip_support.skip_descriptors[skip_type] for skip_type in skip_types},
+    )
 
     remaining_modules = set(layer.modules())
     if attention_mask_consumers and remaining_modules.isdisjoint(attention_mask_consumers):
-        generic_modeling_state.unconsumed_attention_mask_layers.add(layer_idx)
+        generic_modeling_context.unconsumed_attention_mask_layers.add(layer_idx)
 
     declared_caches = set()
     written_caches = set()
@@ -374,4 +402,4 @@ def apply_skips(
         if writer in remaining_modules:
             written_caches |= caches
     if unwritten_caches := declared_caches - written_caches:
-        generic_modeling_state.per_layer_unwritten_caches[layer_idx] = unwritten_caches
+        generic_modeling_context.per_layer_unwritten_caches[layer_idx] = unwritten_caches

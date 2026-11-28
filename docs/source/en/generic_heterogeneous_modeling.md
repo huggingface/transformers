@@ -80,9 +80,10 @@ spec = HeterogeneousModelingSpec(
   a loop variable, in the code that builds the layers, use `LayerIdxFromModelInitStack`. If neither works, create a
   subclass of `LayerIdxResolver`.
 
-A spec without skip descriptors is enough as long as no layer has a skip. Supporting `skip` additionally
-requires a skip descriptor for each skip type, defining its effect on the layer, and declarations of the layer members
-that consume the attention mask or write to the cache (see [Attention masks and caches](#attention-masks-and-caches)).
+A spec without `skip_support` is enough as long as no layer has a skip. Supporting `skip` additionally requires a
+`SkipSupport`, which holds a skip descriptor for each skip type, defining its effect on the layer, and declarations of
+the layer members that consume the attention mask or write to the cache (see
+[Attention masks and caches](#attention-masks-and-caches)).
 
 A model that builds its layers from several classes, like Jamba's attention and Mamba layers, needs a spec for each
 class, given as a tuple of specs. Each layer uses the spec of its own class, so a skip type set on a layer needs a skip
@@ -90,7 +91,8 @@ descriptor in that class's spec.
 
 ## Skip descriptors
 
-The strings accepted in a configuration's per-layer `skip` lists are the keys of the spec's `skip_descriptors`.
+The strings accepted in a configuration's per-layer `skip` lists are the keys of `skip_descriptors` in the spec's
+`skip_support`.
 Each value is a dictionary mapping layer members, which are submodules of the layer, to factories that create
 their no-op replacements:
 
@@ -101,9 +103,10 @@ from transformers.integrations.heterogeneity import (
     HeterogeneousModelingSpec,
     LayerIdxFromArgument,
     ReturnEntry,
+    SkipSupport,
     get_skip_replacement_factory,
 )
-from transformers.models.llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaMLP, LlamaRMSNorm
+from transformers.models.llama.modeling_llama import LlamaDecoderLayer
 
 
 def identity(hidden_states):
@@ -113,26 +116,26 @@ def identity(hidden_states):
 spec = HeterogeneousModelingSpec(
     layer_cls=LlamaDecoderLayer,
     layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
-    skip_descriptors={
-        "attention": {
-            "input_layernorm": get_skip_replacement_factory(
-                LlamaRMSNorm, ReturnEntry(arg_name="hidden_states", transform=identity)
-            ),
-            "self_attn": get_skip_replacement_factory(
-                LlamaAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
-            ),
+    skip_support=SkipSupport(
+        skip_descriptors={
+            "attention": {
+                "input_layernorm": get_skip_replacement_factory(
+                    ReturnEntry(arg_name="hidden_states", transform=identity)
+                ),
+                "self_attn": get_skip_replacement_factory(
+                    [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
+                ),
+            },
+            "mlp": {
+                "post_attention_layernorm": get_skip_replacement_factory(
+                    ReturnEntry(arg_name="hidden_states", transform=identity)
+                ),
+                "mlp": get_skip_replacement_factory(ReturnEntry(arg_name="x", transform=torch.zeros_like)),
+            },
         },
-        "mlp": {
-            "post_attention_layernorm": get_skip_replacement_factory(
-                LlamaRMSNorm, ReturnEntry(arg_name="hidden_states", transform=identity)
-            ),
-            "mlp": get_skip_replacement_factory(
-                LlamaMLP, ReturnEntry(arg_name="x", transform=torch.zeros_like)
-            ),
-        },
-    },
-    attention_mask_consumers=["self_attn"],
-    cache_writers={"self_attn": ["key_value"]},
+        attention_mask_consumers=["self_attn"],
+        cache_writers={"self_attn": ["key_value"]},
+    ),
 )
 ```
 
@@ -143,8 +146,8 @@ The replaced members must make the layer's forward collapse to a no-op for that 
 itself. In a pre-norm residual layer, skipping attention means the norm passes the hidden states through unchanged and
 the attention contributes zeros, so `residual + 0` leaves the residual stream untouched.
 
-`get_skip_replacement_factory` builds a factory for such a no-op module from the original class and a description of what
-its forward should return:
+`get_skip_replacement_factory` builds a factory for such a no-op module from a description of what its forward should
+return:
 
 - `None` returns nothing (for members whose output is ignored).
 - A `ReturnEntry` returns one of the forward's arguments, transformed. `ReturnEntry(arg_name="hidden_states",
@@ -163,28 +166,24 @@ spec:
 ```py
 skip_descriptors = {
     "mixer": {
-        "norm": get_skip_replacement_factory(
-            NemotronHRMSNorm, ReturnEntry(arg_name="hidden_states", transform=identity)
-        ),
+        "norm": get_skip_replacement_factory(ReturnEntry(arg_name="hidden_states", transform=identity)),
         ("mixer", NemotronHAttention): get_skip_replacement_factory(
-            NemotronHAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
+            [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
         ),
         ("mixer", NemotronHMoE): get_skip_replacement_factory(
-            NemotronHMoE, ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
+            ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
         ),
         ("mixer", NemotronHMamba2Mixer): get_skip_replacement_factory(
-            NemotronHMamba2Mixer, ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
+            ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
         ),
-        ("mixer", NemotronHMLP): get_skip_replacement_factory(
-            NemotronHMLP, ReturnEntry(arg_name="x", transform=torch.zeros_like)
-        ),
+        ("mixer", NemotronHMLP): get_skip_replacement_factory(ReturnEntry(arg_name="x", transform=torch.zeros_like)),
     },
 }
 ```
 
 ### Attention masks and caches
 
-When a spec has skip descriptors, it must also declare:
+Next to the skip descriptors, a `SkipSupport` declares:
 
 - `attention_mask_consumers`: every layer member that applies the attention mask, including members that no skip
   descriptor replaces. For example, `["self_attn"]`, or `[]` if there are none.

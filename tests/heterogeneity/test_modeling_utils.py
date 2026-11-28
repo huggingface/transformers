@@ -64,6 +64,7 @@ if is_torch_available():
         HeterogeneousModelingSpec,
         LayerIdxFromArgument,
         ReturnEntry,
+        SkipSupport,
         get_skip_replacement_factory,
     )
     from transformers.integrations.heterogeneity.masking_utils import AttentionMasksByLayerIdx
@@ -73,21 +74,16 @@ if is_torch_available():
         BambaDecoderLayer,
         BambaMixer,
         BambaPreTrainedModel,
-        BambaRMSNorm,
     )
     from transformers.models.falcon_h1.modeling_falcon_h1 import (
-        FalconH1Attention,
         FalconH1DecoderLayer,
         FalconH1PreTrainedModel,
     )
     from transformers.models.jamba.modeling_jamba import (
-        JambaAttention,
         JambaAttentionDecoderLayer,
         JambaMambaDecoderLayer,
-        JambaMambaMixer,
         JambaMLP,
         JambaPreTrainedModel,
-        JambaRMSNorm,
         JambaSparseMoeBlock,
     )
     from transformers.models.llama.modeling_llama import LlamaRMSNorm
@@ -117,9 +113,11 @@ if is_torch_available():
         return HeterogeneousModelingSpec(
             layer_cls=layer_cls,
             layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
-            skip_descriptors={"attention": {"self_attn": attention_replacement_cls}},
-            attention_mask_consumers=[],
-            cache_writers={},
+            skip_support=SkipSupport(
+                skip_descriptors={"attention": {"self_attn": attention_replacement_cls}},
+                attention_mask_consumers=[],
+                cache_writers={},
+            ),
         )
 
     def _toy_config(intermediate_size, skip_attention=False):
@@ -185,45 +183,49 @@ if is_torch_available():
     def _jamba_modeling_specs():
         """Jamba builds its attention and Mamba layers from different classes, so it has a spec for each."""
         passthrough_norm = get_skip_replacement_factory(
-            JambaRMSNorm, ReturnEntry(arg_name="hidden_states", transform=lambda hidden_states: hidden_states)
+            ReturnEntry(arg_name="hidden_states", transform=lambda hidden_states: hidden_states)
         )
         mlp_skip_descriptor = {
             "pre_ff_layernorm": passthrough_norm,
             ("feed_forward", JambaMLP): get_skip_replacement_factory(
-                JambaMLP, ReturnEntry(arg_name="x", transform=torch.zeros_like)
+                ReturnEntry(arg_name="x", transform=torch.zeros_like)
             ),
             ("feed_forward", JambaSparseMoeBlock): get_skip_replacement_factory(
-                JambaSparseMoeBlock, ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
+                ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
             ),
         }
         attention_layer_spec = HeterogeneousModelingSpec(
             layer_cls=JambaAttentionDecoderLayer,
             layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
-            skip_descriptors={
-                "mixer": {
-                    "input_layernorm": passthrough_norm,
-                    "self_attn": get_skip_replacement_factory(
-                        JambaAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
-                    ),
+            skip_support=SkipSupport(
+                skip_descriptors={
+                    "mixer": {
+                        "input_layernorm": passthrough_norm,
+                        "self_attn": get_skip_replacement_factory(
+                            [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
+                        ),
+                    },
+                    "mlp": mlp_skip_descriptor,
                 },
-                "mlp": mlp_skip_descriptor,
-            },
-            attention_mask_consumers=["self_attn"],
-            cache_writers={"self_attn": ["key_value"]},
+                attention_mask_consumers=["self_attn"],
+                cache_writers={"self_attn": ["key_value"]},
+            ),
         )
         mamba_layer_spec = HeterogeneousModelingSpec(
             layer_cls=JambaMambaDecoderLayer,
             layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
-            skip_descriptors={
-                "mixer": {
-                    "input_layernorm": passthrough_norm,
-                    "mamba": get_skip_replacement_factory(
-                        JambaMambaMixer, ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
-                    ),
+            skip_support=SkipSupport(
+                skip_descriptors={
+                    "mixer": {
+                        "input_layernorm": passthrough_norm,
+                        "mamba": get_skip_replacement_factory(
+                            ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
+                        ),
+                    },
                 },
-            },
-            attention_mask_consumers=["mamba"],
-            cache_writers={"mamba": ["linear_attention"]},
+                attention_mask_consumers=["mamba"],
+                cache_writers={"mamba": ["linear_attention"]},
+            ),
         )
         return attention_layer_spec, mamba_layer_spec
 
@@ -248,27 +250,32 @@ if is_torch_available():
         """Bamba builds `self_attn` in attention layers and `mamba` in Mamba layers, from one layer class, so its spec
         has a skip type for each, and its declarations list both with their classes."""
         passthrough_norm = get_skip_replacement_factory(
-            BambaRMSNorm, ReturnEntry(arg_name="hidden_states", transform=lambda hidden_states: hidden_states)
+            ReturnEntry(arg_name="hidden_states", transform=lambda hidden_states: hidden_states)
         )
         return HeterogeneousModelingSpec(
             layer_cls=BambaDecoderLayer,
             layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
-            skip_descriptors={
-                "attention": {
-                    "input_layernorm": passthrough_norm,
-                    "self_attn": get_skip_replacement_factory(
-                        BambaAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
-                    ),
+            skip_support=SkipSupport(
+                skip_descriptors={
+                    "attention": {
+                        "input_layernorm": passthrough_norm,
+                        "self_attn": get_skip_replacement_factory(
+                            [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
+                        ),
+                    },
+                    "mamba": {
+                        "input_layernorm": passthrough_norm,
+                        "mamba": get_skip_replacement_factory(
+                            ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
+                        ),
+                    },
                 },
-                "mamba": {
-                    "input_layernorm": passthrough_norm,
-                    "mamba": get_skip_replacement_factory(
-                        BambaMixer, ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
-                    ),
+                attention_mask_consumers=[("self_attn", BambaAttention), ("mamba", BambaMixer)],
+                cache_writers={
+                    ("self_attn", BambaAttention): ["key_value"],
+                    ("mamba", BambaMixer): ["linear_attention"],
                 },
-            },
-            attention_mask_consumers=[("self_attn", BambaAttention), ("mamba", BambaMixer)],
-            cache_writers={("self_attn", BambaAttention): ["key_value"], ("mamba", BambaMixer): ["linear_attention"]},
+            ),
         )
 
     def _tiny_bamba_config(per_layer_config):
@@ -317,18 +324,6 @@ class TestHeterogeneousModeling(unittest.TestCase):
         for first_layer, second_layer in zip(first_model.model.layers, second_model.model.layers):
             self.assertIs(second_layer.self_attn.config, first_layer.self_attn.config)
 
-    def test_models_sharing_a_config_must_agree_on_skipped_mask_consumers_and_cache_writers(self):
-        config = tiny_llama_config(per_layer_config={1: {"skip": ["attention"]}})
-        build_model(config, LlamaForCausalLM)
-        fixture = MODEL_FIXTURES["llama"]
-        spec = dataclasses.replace(fixture.spec_factory(), attention_mask_consumers=[], cache_writers={})
-
-        with patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", spec, create=True):
-            with self.assertRaisesRegex(
-                ValueError, "differ in which layers are left without attention mask consumers"
-            ):
-                build_model(config, LlamaForCausalLM)
-
     def test_towers_built_from_one_sub_config_share_its_layer_configs(self):
         text_config = tiny_llama_config(per_layer_config={1: {"intermediate_size": 64}})
 
@@ -342,12 +337,6 @@ class TestHeterogeneousModeling(unittest.TestCase):
         config = tiny_llama_config(per_layer_config={1: {"skip": ["attn"]}})
         with self.assertRaisesRegex(ValueError, "Skip descriptors are missing.*'attn'"):
             build_model(config, LlamaForCausalLM)
-
-    def test_error_when_spec_layer_cls_is_not_constructed_for_every_layer(self):
-        """If some layers are not built from the spec's layer class, their overrides would be ignored."""
-        config = tiny_llama_config(per_layer_config={1: {"intermediate_size": 64}})
-        with self.assertRaisesRegex(ValueError, r"for layers \[1, 3\]"):
-            _MaskSelectingToyModel(config, layer_indices=[0, 2])
 
     @parameterized.expand(
         [
@@ -364,7 +353,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
         }
         spec = _toy_modeling_spec(_ToyDecoderLayer, _ToyNoOpAttention)
         # The key with the member's own class is the most specific, so it wins wherever it's listed
-        spec.skip_descriptors["attention"] = {
+        spec.skip_support.skip_descriptors["attention"] = {
             member_keys[name]: _SelectedNoOpAttention if name == "member_class" else _ToyNoOpAttention
             for name in key_names
         }
@@ -377,7 +366,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
         config = tiny_llama_config(per_layer_config={3: {"skip": ["attention"]}})
         fixture = MODEL_FIXTURES["llama"]
         spec = fixture.spec_factory()
-        spec.skip_descriptors["attention"] = {
+        spec.skip_support.skip_descriptors["attention"] = {
             ("self_attn", torch.nn.Linear): torch.nn.Identity,
             ("self_attn", torch.nn.Conv1d): torch.nn.Identity,
         }
@@ -392,6 +381,25 @@ class TestHeterogeneousModeling(unittest.TestCase):
         # The build failed partway through its layers, and what it left behind must not affect the next build
         model = build_model(tiny_llama_config(per_layer_config={1: {"intermediate_size": 64}}), LlamaForCausalLM)
         self.assertEqual(model.model.layers[1].mlp.gate_proj.out_features, 64)
+
+    def test_skip_types_replacing_the_same_member_must_use_the_same_factory(self):
+        config = tiny_llama_config(per_layer_config={3: {"skip": ["attention", "layer"]}})
+        fixture = MODEL_FIXTURES["llama"]
+        spec = fixture.spec_factory()
+        skip_descriptors = spec.skip_support.skip_descriptors
+        skip_descriptors["layer"] = {**skip_descriptors["attention"], **skip_descriptors["mlp"]}
+
+        with patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", spec, create=True):
+            model = build_model(config, LlamaForCausalLM)
+
+            # The member is replaced once, so the skipped class is the attention class
+            self.assertIs(model.model.layers[3].self_attn.source_class, type(model.model.layers[0].self_attn))
+
+            skip_descriptors["layer"]["self_attn"] = get_skip_replacement_factory(None)
+            with self.assertRaisesRegex(
+                ValueError, r"Layer 3 skips 'attention' and 'layer'.*member \('self_attn'\) to different replacement"
+            ):
+                build_model(config, LlamaForCausalLM)
 
     @parameterized.expand([("no_main_skips", []), ("main_layers_skipped", ["attention", "mlp"])])
     def test_mtp_model_applies_per_layer_config_and_skips(self, _, main_skips):
@@ -409,7 +417,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
         mtp_model = MtpModel(main_model, num_mtp_layers=2)
 
         self.assertTrue(mtp_model.config.is_heterogeneous)
-        self.assertTrue(mtp_model.config.generic_heterogeneous_modeling_applied)
+        self.assertTrue(mtp_model.config.used_for_generic_heterogeneous_modeling)
         self.assertEqual(mtp_model.layers[0].mtp_block.mlp.gate_proj.out_features, 64)
         self.assertEqual(mtp_model.layers[1].mtp_block.mlp.gate_proj.out_features, 96)
         self.assertEqual(mtp_model.layers[0].enorm.variance_epsilon, 1e-5)
@@ -456,7 +464,7 @@ class TestHeterogeneousModeling(unittest.TestCase):
         }
         config._attn_implementation = "eager"
         main_model = build_model(config, GptOssForCausalLM)
-        self.assertFalse(main_model.config.generic_heterogeneous_modeling_applied)
+        self.assertFalse(main_model.config.used_for_generic_heterogeneous_modeling)
         mtp_model = MtpModel(main_model, num_mtp_layers=2)
 
         inputs_embeds = torch.randn(1, 4, config.hidden_size)
@@ -617,7 +625,9 @@ class TestHeterogeneousCache(unittest.TestCase):
         config = tiny_llama_config(per_layer_config={0: {"skip": ["attention"]}})
         # With this spec, the attention skip leaves an attention mask consumer in the layer, but no cache writer
         fixture = MODEL_FIXTURES["llama"]
-        spec = dataclasses.replace(fixture.spec_factory(), attention_mask_consumers=["self_attn", "mlp"])
+        spec = fixture.spec_factory()
+        skip_support = dataclasses.replace(spec.skip_support, attention_mask_consumers=["self_attn", "mlp"])
+        spec = dataclasses.replace(spec, skip_support=skip_support)
         with patch.object(fixture.pretrained_cls, "_heterogeneous_modeling_spec", spec, create=True):
             model = build_model(config, LlamaForCausalLM)
         input_ids = dummy_input_ids()
@@ -681,7 +691,7 @@ class TestHeterogeneousCache(unittest.TestCase):
 
     def test_skip_type_with_a_member_the_layer_doesnt_build_raises(self):
         spec = _bamba_modeling_spec()
-        attention_descriptor = spec.skip_descriptors["attention"]
+        attention_descriptor = spec.skip_support.skip_descriptors["attention"]
         attention_descriptor[("self_attn", BambaAttention)] = attention_descriptor.pop("self_attn")
         # Unlike the declarations, a skip descriptor needs its members even with a class key. Layer 0 is a Mamba
         # layer, so it has no `self_attn`, and the skip would replace only its norm.
@@ -692,7 +702,9 @@ class TestHeterogeneousCache(unittest.TestCase):
                 build_model(config, BambaForCausalLM)
 
     def test_declaration_key_without_a_class_must_exist_in_the_layer(self):
-        spec = dataclasses.replace(_bamba_modeling_spec(), attention_mask_consumers=["self_attn"])
+        spec = _bamba_modeling_spec()
+        skip_support = dataclasses.replace(spec.skip_support, attention_mask_consumers=["self_attn"])
+        spec = dataclasses.replace(spec, skip_support=skip_support)
         # Layer 0 is a Mamba layer, so it has no `self_attn`
         config = _tiny_bamba_config({0: {"skip": ["mamba"]}})
 
@@ -706,15 +718,17 @@ class TestHeterogeneousCache(unittest.TestCase):
         spec = HeterogeneousModelingSpec(
             layer_cls=FalconH1DecoderLayer,
             layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
-            skip_descriptors={
-                "attention": {
-                    "self_attn": get_skip_replacement_factory(
-                        FalconH1Attention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
-                    )
-                }
-            },
-            attention_mask_consumers=["self_attn"],
-            cache_writers={"self_attn": ["key_value"], "mamba": ["linear_attention"]},
+            skip_support=SkipSupport(
+                skip_descriptors={
+                    "attention": {
+                        "self_attn": get_skip_replacement_factory(
+                            [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
+                        )
+                    }
+                },
+                attention_mask_consumers=["self_attn"],
+                cache_writers={"self_attn": ["key_value"], "mamba": ["linear_attention"]},
+            ),
         )
         config = FalconH1Config(
             vocab_size=99,

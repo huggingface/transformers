@@ -37,6 +37,7 @@ if is_torch_available():
         HeterogeneousModelingSpec,
         LayerIdxFromArgument,
         ReturnEntry,
+        SkipSupport,
         get_skip_replacement_factory,
     )
     from transformers.integrations.heterogeneity.masking_utils import AttentionMasksByLayerIdx
@@ -47,7 +48,7 @@ if is_torch_available():
         create_chunked_causal_mask,
         create_sliding_window_causal_mask,
     )
-    from transformers.models.modernbert.modeling_modernbert import ModernBertAttention, ModernBertEncoderLayer
+    from transformers.models.modernbert.modeling_modernbert import ModernBertEncoderLayer
 
 
 @require_torch
@@ -216,15 +217,17 @@ class TestHeterogeneousMasking(unittest.TestCase):
         spec = HeterogeneousModelingSpec(
             layer_cls=ModernBertEncoderLayer,
             layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
-            skip_descriptors={
-                "attention": {
-                    "attn": get_skip_replacement_factory(
-                        ModernBertAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
-                    )
-                }
-            },
-            attention_mask_consumers=["attn"],
-            cache_writers={},
+            skip_support=SkipSupport(
+                skip_descriptors={
+                    "attention": {
+                        "attn": get_skip_replacement_factory(
+                            [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
+                        )
+                    }
+                },
+                attention_mask_consumers=["attn"],
+                cache_writers={},
+            ),
         )
         config = ModernBertConfig(
             hidden_size=64,

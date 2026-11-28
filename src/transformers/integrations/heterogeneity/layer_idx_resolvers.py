@@ -19,11 +19,7 @@ import inspect
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from types import FunctionType
-from typing import TYPE_CHECKING, Any
-
-
-if TYPE_CHECKING:
-    from transformers.modeling_utils import PreTrainedModel
+from typing import Any
 
 
 class LayerIdxResolver(ABC):
@@ -35,14 +31,7 @@ class LayerIdxResolver(ABC):
     """
 
     @abstractmethod
-    def resolve(
-        self,
-        *,
-        layer_init: FunctionType,
-        args: tuple[Any, ...],
-        kwargs: dict[str, Any],
-        model: PreTrainedModel,
-    ) -> Any:
+    def resolve(self, *, layer_init: FunctionType, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
         """Returns the index of the layer that is being built.
 
         Args:
@@ -52,9 +41,6 @@ class LayerIdxResolver(ABC):
                 The positional arguments of the `__init__` call. The first is always the layer (`self`).
             kwargs (`dict[str, Any]`):
                 The keyword arguments of the `__init__` call.
-            model ([`PreTrainedModel`]):
-                The model that builds the layer in its `__init__`. Its config is the config object that was passed to
-                the layer's `__init__`.
 
         Returns:
             `int`: The layer index, from `0` to `config.num_hidden_layers - 1`. Other values raise an error.
@@ -75,14 +61,7 @@ class LayerIdxFromArgument(LayerIdxResolver):
 
     variable_name: str
 
-    def resolve(
-        self,
-        *,
-        layer_init: FunctionType,
-        args: tuple[Any, ...],
-        kwargs: dict[str, Any],
-        model: PreTrainedModel,
-    ) -> Any:
+    def resolve(self, *, layer_init: FunctionType, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
         signature = inspect.signature(layer_init)
         try:
             bound_arguments = signature.bind(*args, **kwargs)
@@ -98,8 +77,7 @@ class LayerIdxFromArgument(LayerIdxResolver):
             else:
                 reason = f"`{self.variable_name}` is not an argument of `{layer_init.__qualname__}`"
             raise RuntimeError(
-                f"`LayerIdxFromArgument({self.variable_name!r})` could not determine the layer index for "
-                f"heterogeneous model initialization of `{model.__class__.__name__}` because {reason}."
+                f"`LayerIdxFromArgument({self.variable_name!r})` could not determine the layer index because {reason}."
             )
         return bound_arguments.arguments[self.variable_name]
 
@@ -111,7 +89,7 @@ class LayerIdxFromModelInitStack(LayerIdxResolver):
     Use it when the layer's `__init__` doesn't take the index as an argument, for example when the index is a loop
     variable in the model's `__init__`. The resolver searches the functions that called the layer's `__init__`, from
     the direct caller outward, and returns the first value that it finds. The search stops at the first `__init__` of
-    the model.
+    a model.
 
     Args:
         variable_name (`str`):
@@ -120,17 +98,14 @@ class LayerIdxFromModelInitStack(LayerIdxResolver):
 
     variable_name: str
 
-    def resolve(
-        self,
-        *,
-        layer_init: FunctionType,
-        args: tuple[Any, ...],
-        kwargs: dict[str, Any],
-        model: PreTrainedModel,
-    ) -> Any:
+    def resolve(self, *, layer_init: FunctionType, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
+        # Imported here because the core `modeling_utils` module imports this package
+        from transformers.modeling_utils import PreTrainedModel
+
+        searched_up_to = "the outermost caller"
         frame = inspect.currentframe()
         if frame is None or frame.f_back is None:
-            raise RuntimeError(self._missing_variable_error(model))
+            raise RuntimeError(self._missing_variable_error(searched_up_to))
 
         # Skip the frames of this resolver and of the patched layer `__init__`, so that their local variables can't
         # hide variables with the same name in the model's code.
@@ -139,14 +114,16 @@ class LayerIdxFromModelInitStack(LayerIdxResolver):
         while frame is not None:
             if self.variable_name in frame.f_locals:
                 return frame.f_locals[self.variable_name]
-            if frame.f_code.co_name == "__init__" and frame.f_locals.get("self") is model:
+            model = frame.f_locals.get("self")
+            if frame.f_code.co_name == "__init__" and isinstance(model, PreTrainedModel):
+                searched_up_to = f"`{type(model).__name__}.__init__`"
                 break
             frame = frame.f_back
 
-        raise RuntimeError(self._missing_variable_error(model))
+        raise RuntimeError(self._missing_variable_error(searched_up_to))
 
-    def _missing_variable_error(self, model: PreTrainedModel) -> str:
+    def _missing_variable_error(self, searched_up_to: str) -> str:
         return (
             f"`LayerIdxFromModelInitStack({self.variable_name!r})` could not find `{self.variable_name}` in the model "
-            f"initialization stack up to and including `{model.__class__.__name__}.__init__`."
+            f"initialization stack up to and including {searched_up_to}."
         )

@@ -116,7 +116,7 @@ def get_generic_heterogeneous_modeling_cache_layer_types(
     Returns:
         The layer types to build the cache layers with.
     """
-    per_layer_unwritten_caches = config._heterogeneity_spec.generic_modeling_state.per_layer_unwritten_caches
+    per_layer_unwritten_caches = config._heterogeneity_spec.generic_modeling_context.per_layer_unwritten_caches
     return [
         _get_layer_type_without_caches(layer_idx, layer_type, per_layer_unwritten_caches.get(layer_idx, set()))
         for layer_idx, layer_type in enumerate(layer_types)

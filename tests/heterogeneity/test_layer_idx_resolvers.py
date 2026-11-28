@@ -16,6 +16,7 @@
 import unittest
 
 from transformers.integrations.heterogeneity import LayerIdxFromArgument, LayerIdxFromModelInitStack
+from transformers.testing_utils import require_torch
 
 
 def _argument_layer_init(self, config, layer_idx):
@@ -26,12 +27,9 @@ _MODEL_INIT_STACK_RESOLVER = LayerIdxFromModelInitStack("layer_idx")
 
 
 class _ModelInitStackResolvingLayer:
-    def __init__(self, model):
+    def __init__(self):
         self.resolved_layer_idx = _MODEL_INIT_STACK_RESOLVER.resolve(
-            layer_init=_ModelInitStackResolvingLayer.__init__,
-            args=(self, model),
-            kwargs={},
-            model=model,
+            layer_init=_ModelInitStackResolvingLayer.__init__, args=(self,), kwargs={}
         )
 
 
@@ -40,24 +38,30 @@ class TestLayerIdxResolvers(unittest.TestCase):
         resolver = LayerIdxFromArgument("idx")
 
         with self.assertRaisesRegex(RuntimeError, "`idx` is not an argument of `_argument_layer_init`"):
-            resolver.resolve(layer_init=_argument_layer_init, args=(object(), object(), 2), kwargs={}, model=object())
+            resolver.resolve(layer_init=_argument_layer_init, args=(object(), object(), 2), kwargs={})
 
     def test_model_init_stack_resolver_resolves_list_comprehension_layer_idx(self):
         class Model:
             def __init__(self):
-                self.layers = [_ModelInitStackResolvingLayer(self) for layer_idx in range(3)]
+                self.layers = [_ModelInitStackResolvingLayer() for layer_idx in range(3)]
 
         model = Model()
 
         self.assertEqual([layer.resolved_layer_idx for layer in model.layers], [0, 1, 2])
 
+    @require_torch
     def test_model_init_stack_resolver_does_not_search_beyond_model_init(self):
-        class Model:
+        from transformers import PreTrainedConfig, PreTrainedModel
+
+        class Model(PreTrainedModel):
+            config_class = PreTrainedConfig
+
             def __init__(self):
-                self.layer = _ModelInitStackResolvingLayer(self)
+                super().__init__(PreTrainedConfig())
+                self.layer = _ModelInitStackResolvingLayer()
 
         def initialize_model_with_outer_layer_idx(layer_idx):
             return Model()
 
-        with self.assertRaisesRegex(RuntimeError, "model initialization stack up to and including"):
+        with self.assertRaisesRegex(RuntimeError, "model initialization stack up to and including `Model.__init__`"):
             initialize_model_with_outer_layer_idx(2)

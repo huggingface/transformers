@@ -54,19 +54,8 @@ def _validate_caches(member_key: MemberKey, caches: Iterable[str]) -> frozenset[
 
 
 @dataclass(frozen=True)
-class HeterogeneousModelingSpec:
-    """Describes how generic heterogeneous modeling builds the layers of one layer class.
-
-    Generic heterogeneous modeling is used when a model has a spec and its config is heterogeneous. It patches
-    `layer_cls.__init__`, so that:
-
-    - each layer is built from its own config, `config.per_layer_config[layer_idx]`.
-    - each skip type in the `skip` list of the layer's config replaces the members that its skip descriptor lists with
-      skip replacements, which are no-op modules.
-
-    A model sets its specs in its `_heterogeneous_modeling_spec` class attribute, while built-in models can instead be
-    listed in `MODEL_TYPE_TO_SPEC_FACTORY` (see `get_heterogeneous_modeling_specs`). For a walkthrough, see the generic
-    heterogeneous modeling guide, `docs/source/en/generic_heterogeneous_modeling.md`.
+class SkipSupport:
+    """Describes how the layers of one layer class apply the skip types in the `skip` list of their config.
 
     Skip descriptors, `attention_mask_consumers` and `cache_writers` use member keys to name the members of a layer,
     which are its submodules. A member key has one of two forms:
@@ -81,36 +70,26 @@ class HeterogeneousModelingSpec:
     used before a key with its base class.
 
     Args:
-        layer_cls (`type[nn.Module]`):
-            The layer class to patch, usually the model's decoder layer. The model must pass its own config object, not
-            a copy, as the `config` argument of `layer_cls.__init__`, where the patched `__init__` replaces it with the
-            layer's config. Only layers that receive this object are patched, and building the model raises an error if
-            any layer isn't. `layer_cls.forward` must also take each attention mask as a separate argument, because a
-            hook that runs before the `forward` of each layer finds the masks of all layers in its arguments, and
-            replaces them with the masks built for that layer.
-        layer_idx_resolver (`LayerIdxResolver`):
-            Finds the index of each layer while the layer's `__init__` runs. Most models use `LayerIdxFromArgument`.
-        skip_descriptors (`dict[str, dict[str | tuple[str, type], Callable[[], nn.Module]]]`, *optional*):
-            Maps each skip type that layers of class `layer_cls` can list in their `skip` list to its skip descriptor.
-            A skip descriptor maps member keys to factories that build skip replacements for those members, usually
-            created with `get_skip_replacement_factory`.
+        skip_descriptors (`dict[str, dict[str | tuple[str, type], Callable[[], nn.Module]]]`):
+            Maps each skip type that the layers can list in their `skip` list to its skip descriptor. A skip descriptor
+            maps member keys to factories that build skip replacements for those members, usually created with
+            `get_skip_replacement_factory`.
 
             When a layer's `skip` list contains the skip type, every path in the skip descriptor, including the paths
             in `(path, class)` keys, must point to a member of the layer, and at least one key with that path must
             match that member.
-        attention_mask_consumers (`Iterable[str | tuple[str, type]]`, *optional*):
+        attention_mask_consumers (`Iterable[str | tuple[str, type]]`):
             The member keys of all members that use the attention mask. Include members that are never skipped, since
             otherwise a layer can lose its attention mask while one of its members still uses it, and use a
-            `(path, class)` key for a member that exists in only some layers. Required if `skip_descriptors` is not
-            empty; use `[]` when there are none.
+            `(path, class)` key for a member that exists in only some layers. Use `[]` when there are none.
 
             If a layer has attention mask consumers and its skips replace all of them, no attention mask is built for
             the layer.
-        cache_writers (`dict[str | tuple[str, type], Iterable[str]]`, *optional*):
+        cache_writers (`dict[str | tuple[str, type], Iterable[str]]`):
             Maps the member key of each member that writes to a cache to the caches that it writes. Include members
             that are never skipped, since otherwise a layer can lose a cache that one of its members still writes, and
-            use a `(path, class)` key for a member that exists in only some layers. Required if `skip_descriptors` is
-            not empty; use `{}` when there are none. The valid caches are:
+            use a `(path, class)` key for a member that exists in only some layers. Use `{}` when there are none. The
+            valid caches are:
 
             - `"key_value"`, for members that call `Cache.update`.
             - `"linear_attention"`, for members that call `update_conv_state` or `update_recurrent_state`.
@@ -118,35 +97,58 @@ class HeterogeneousModelingSpec:
             For example, `{"self_attn": ["key_value"]}`.
     """
 
-    layer_cls: type[nn.Module]
-    layer_idx_resolver: LayerIdxResolver
-    skip_descriptors: dict[str, SkipDescriptor] | None = None
-    attention_mask_consumers: Iterable[MemberKey] | None = None
-    cache_writers: dict[MemberKey, Iterable[str]] | None = None
+    skip_descriptors: dict[str, SkipDescriptor]
+    attention_mask_consumers: Iterable[MemberKey]
+    cache_writers: dict[MemberKey, Iterable[str]]
 
     def __post_init__(self):
-        object.__setattr__(self, "skip_descriptors", self.skip_descriptors or {})
-        if self.skip_descriptors and (self.attention_mask_consumers is None or self.cache_writers is None):
-            raise ValueError(
-                "A spec with skip descriptors must also set `attention_mask_consumers` (`[]` if there are none) and "
-                "`cache_writers` (`{}` if there are none)."
-            )
-
         if isinstance(self.attention_mask_consumers, str):
             raise TypeError(
                 "`attention_mask_consumers` must be an iterable of members, such as "
                 f"`[{self.attention_mask_consumers!r}]`, not a string."
             )
-        object.__setattr__(self, "attention_mask_consumers", frozenset(self.attention_mask_consumers or ()))
+        object.__setattr__(self, "attention_mask_consumers", frozenset(self.attention_mask_consumers))
 
         object.__setattr__(
             self,
             "cache_writers",
-            {
-                member_key: _validate_caches(member_key, caches)
-                for member_key, caches in (self.cache_writers or {}).items()
-            },
+            {member_key: _validate_caches(member_key, caches) for member_key, caches in self.cache_writers.items()},
         )
+
+
+@dataclass(frozen=True)
+class HeterogeneousModelingSpec:
+    """Describes how generic heterogeneous modeling builds the layers of one layer class.
+
+    Generic heterogeneous modeling is used when a model has a spec and its config is heterogeneous. It patches
+    `layer_cls.__init__`, so that:
+
+    - each layer is built from its own config, `config.per_layer_config[layer_idx]`.
+    - each skip type in the `skip` list of the layer's config replaces the members that its skip descriptor lists with
+      skip replacements, which are no-op modules.
+
+    A model sets its specs in its `_heterogeneous_modeling_spec` class attribute, while built-in models can instead be
+    listed in `MODEL_TYPE_TO_SPEC_FACTORY` (see `get_heterogeneous_modeling_specs`). For a walkthrough, see the generic
+    heterogeneous modeling guide, `docs/source/en/generic_heterogeneous_modeling.md`.
+
+    Args:
+        layer_cls (`type[nn.Module]`):
+            The layer class to patch, usually the model's decoder layer. The model must pass its own config object, not
+            a copy, as the `config` argument of `layer_cls.__init__`, where the patched `__init__` replaces it with the
+            layer's config. `layer_cls.forward` must also take each attention mask as a separate argument, because a
+            hook that runs before the `forward` of each layer finds the masks of all layers in its arguments, and
+            replaces them with the masks built for that layer.
+        layer_idx_resolver (`LayerIdxResolver`):
+            Finds the index of each layer while the layer's `__init__` runs. Most models use `LayerIdxFromArgument`.
+        skip_support (`SkipSupport`, *optional*):
+            The skip descriptors of the skip types that layers of class `layer_cls` can list in their `skip` list, and
+            the members of these layers that use the attention mask or write to a cache. Without it, these layers
+            can't have skips.
+    """
+
+    layer_cls: type[nn.Module]
+    layer_idx_resolver: LayerIdxResolver
+    skip_support: SkipSupport | None = None
 
 
 def _nest_member_key(member_key: MemberKey, parent_path: str) -> MemberKey:
@@ -168,18 +170,23 @@ def get_wrapper_layer_spec(
     The returned spec is a copy of `spec` with every member path nested under `wrapped_layer_path`. For example, with
     `wrapped_layer_path="mtp_block"`, `"self_attn"` becomes `"mtp_block.self_attn"`.
     """
+    skip_support = spec.skip_support
+    if skip_support is not None:
+        skip_support = SkipSupport(
+            skip_descriptors={
+                skip_type: {_nest_member_key(key, wrapped_layer_path): factory for key, factory in descriptor.items()}
+                for skip_type, descriptor in skip_support.skip_descriptors.items()
+            },
+            attention_mask_consumers=[
+                _nest_member_key(key, wrapped_layer_path) for key in skip_support.attention_mask_consumers
+            ],
+            cache_writers={
+                _nest_member_key(key, wrapped_layer_path): caches for key, caches in skip_support.cache_writers.items()
+            },
+        )
+
     return dataclasses.replace(
-        spec,
-        layer_cls=wrapper_cls,
-        layer_idx_resolver=layer_idx_resolver,
-        skip_descriptors={
-            skip_type: {_nest_member_key(key, wrapped_layer_path): factory for key, factory in descriptor.items()}
-            for skip_type, descriptor in spec.skip_descriptors.items()
-        },
-        attention_mask_consumers=[_nest_member_key(key, wrapped_layer_path) for key in spec.attention_mask_consumers],
-        cache_writers={
-            _nest_member_key(key, wrapped_layer_path): caches for key, caches in spec.cache_writers.items()
-        },
+        spec, layer_cls=wrapper_cls, layer_idx_resolver=layer_idx_resolver, skip_support=skip_support
     )
 
 

@@ -222,7 +222,7 @@ class TestSupportedHeterogeneousModels(unittest.TestCase):
         replacement_types = tuple(
             type(replacement_factory())
             for modeling_spec in modeling_specs
-            for skip_descriptor in modeling_spec.skip_descriptors.values()
+            for skip_descriptor in modeling_spec.skip_support.skip_descriptors.values()
             for replacement_factory in skip_descriptor.values()
         )
         ref_layer_cls = MODEL_FIXTURES[case.model_key].ref_layer_cls

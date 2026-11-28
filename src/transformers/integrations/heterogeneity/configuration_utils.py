@@ -25,6 +25,7 @@ from transformers.utils import logging
 
 if TYPE_CHECKING:
     from transformers import PreTrainedConfig
+    from transformers.integrations.heterogeneity.heterogeneous_modeling_spec import HeterogeneousModelingSpec
 
 
 logger = logging.get_logger(__name__)
@@ -56,11 +57,16 @@ class AmbiguousGlobalPerLayerAttributeError(RuntimeError):
 
 
 @dataclass
-class _GenericModelingState:
-    """Records the layers in which skips removed every attention mask consumer, and the caches in each layer that no
-    longer have a writer. Generic heterogeneous modeling sets this state on the config when it builds a model, because
-    the functions that create masks and caches get only the config."""
+class _GenericModelingContext:
+    """Holds the heterogeneous modeling specs of the model that is built from the config. Also records the layers in
+    which skips removed every attention mask consumer, and the caches in each layer that no longer have a writer.
+    Generic heterogeneous modeling sets this context on the config when it builds a model, because the patched layer
+    `__init__` and the functions that create masks and caches get only the config."""
 
+    # By layer class. Not compared, since the specs come from the model classes, not from the config.
+    heterogeneous_modeling_specs: dict[type, HeterogeneousModelingSpec] = field(
+        default_factory=dict, compare=False, repr=False
+    )
     unconsumed_attention_mask_layers: set[int] = field(default_factory=set)
     per_layer_unwritten_caches: dict[int, set[str]] = field(default_factory=dict)
 
@@ -74,8 +80,8 @@ class _HeterogeneitySpec:
     # Layer configs, created on first access to `per_layer_config` and reused after.
     # Not compared, since creating them doesn't change the config.
     layer_configs: dict[int, PreTrainedConfig] = field(default_factory=dict, compare=False, repr=False)
-    # Set by generic heterogeneous modeling after it builds a model
-    generic_modeling_state: _GenericModelingState | None = None
+    # Set by generic heterogeneous modeling when it builds a model
+    generic_modeling_context: _GenericModelingContext | None = None
 
 
 def _normalize_layer_overrides(layer_overrides: dict[str, Any], attribute_map: dict[str, str]) -> dict[str, Any]:
@@ -436,9 +442,9 @@ class HeterogeneousConfigMixin:
         return hasattr(self, "_heterogeneity_spec")
 
     @property
-    def generic_heterogeneous_modeling_applied(self) -> bool:
-        """Whether generic heterogeneous modeling has been applied successfully during model initialization."""
-        return self.is_heterogeneous and self._heterogeneity_spec.generic_modeling_state is not None
+    def used_for_generic_heterogeneous_modeling(self) -> bool:
+        """Whether a model uses this config for generic heterogeneous modeling."""
+        return self.is_heterogeneous and self._heterogeneity_spec.generic_modeling_context is not None
 
     @property
     def per_layer_config(self) -> Sequence[PreTrainedConfig]:

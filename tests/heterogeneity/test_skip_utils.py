@@ -23,32 +23,36 @@ if is_torch_available():
 
     from transformers.integrations.heterogeneity import ReturnEntry, get_skip_replacement_factory
 
+    def _build_skip_replacement(to_return):
+        skip_replacement = get_skip_replacement_factory(to_return)()
+        # A layer sets the class of the member that it replaces
+        skip_replacement.set_source_class(torch.nn.Linear)
+        return skip_replacement
+
 
 @require_torch
 class TestSkipReplacement(unittest.TestCase):
     def test_get_skip_replacement_factory_returns_none(self):
-        replacement_factory = get_skip_replacement_factory(torch.nn.Linear, None)
-        module = replacement_factory()
+        module = _build_skip_replacement(None)
 
-        self.assertIs(module.source_class, torch.nn.Linear)
         self.assertIsNone(module(torch.randn(2, 4)))
 
+    def test_skip_replacement_without_source_class_raises(self):
+        module = get_skip_replacement_factory(ReturnEntry(arg_name="input", transform=lambda x: x))()
+
+        self.assertIn("source_class=None", repr(module))
+        with self.assertRaisesRegex(RuntimeError, "you must first call `set_source_class`"):
+            module(torch.randn(2, 4))
+
     def test_get_skip_replacement_factory_transforms_configured_argument(self):
-        replacement_factory = get_skip_replacement_factory(
-            torch.nn.Linear, ReturnEntry(arg_name="input", transform=lambda x: x * 2)
-        )
-        module = replacement_factory()
+        module = _build_skip_replacement(ReturnEntry(arg_name="input", transform=lambda x: x * 2))
         inputs = torch.randn(2, 4, 64)
 
         torch.testing.assert_close(module(inputs), inputs * 2)
         torch.testing.assert_close(module(input=inputs), inputs * 2)
 
     def test_get_skip_replacement_factory_returns_tuple_with_placeholder(self):
-        replacement_factory = get_skip_replacement_factory(
-            torch.nn.Linear,
-            [ReturnEntry(arg_name="input", transform=lambda x: x * 2), None],
-        )
-        module = replacement_factory()
+        module = _build_skip_replacement([ReturnEntry(arg_name="input", transform=lambda x: x * 2), None])
         inputs = torch.randn(2, 4, 64)
 
         transformed_inputs, placeholder = module(inputs)
@@ -58,23 +62,19 @@ class TestSkipReplacement(unittest.TestCase):
 
     def test_get_skip_replacement_factory_raises_for_unknown_return_argument(self):
         with self.assertRaisesRegex(ValueError, "return entry arg names.*missing"):
-            get_skip_replacement_factory(torch.nn.Linear, ReturnEntry(arg_name="missing", transform=lambda x: x))
+            _build_skip_replacement(ReturnEntry(arg_name="missing", transform=lambda x: x))
 
     def test_get_skip_replacement_factory_raises_for_missing_return_argument(self):
-        replacement_factory = get_skip_replacement_factory(
-            torch.nn.Linear, ReturnEntry(arg_name="input", transform=lambda x: x)
-        )
+        module = _build_skip_replacement(ReturnEntry(arg_name="input", transform=lambda x: x))
 
         with self.assertRaisesRegex(TypeError, "Linear.*required argument 'input'"):
-            replacement_factory()()
+            module()
 
     def test_get_skip_replacement_factory_adds_context_to_transform_error(self):
         def fail_transform(_):
             raise RuntimeError("transform failed")
 
-        replacement_factory = get_skip_replacement_factory(
-            torch.nn.Linear, ReturnEntry(arg_name="input", transform=fail_transform)
-        )
+        module = _build_skip_replacement(ReturnEntry(arg_name="input", transform=fail_transform))
 
         with self.assertRaisesRegex(RuntimeError, "failed to apply transform.*argument 'input'.*transform failed"):
-            replacement_factory()(torch.randn(2, 4))
+            module(torch.randn(2, 4))

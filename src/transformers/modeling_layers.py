@@ -491,9 +491,9 @@ class MtpModel(PreTrainedModel):
         """
         # Support generic heterogeneous modeling: a layer left without attention mask consumers gets `None` for each mask
         layer_consumes_masks = (
-            not self.config.generic_heterogeneous_modeling_applied
+            not self.config.used_for_generic_heterogeneous_modeling
             or layer_consumes_attention_masks(
-                generic_modeling_state=self.config._heterogeneity_spec.generic_modeling_state,
+                generic_modeling_context=self.config._heterogeneity_spec.generic_modeling_context,
                 layer_idx=layer_idx,
                 cache=mtp_cache,
             )
