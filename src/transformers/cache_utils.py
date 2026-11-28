@@ -732,6 +732,10 @@ class StaticIndexedLayer(StaticLayer):
         Remove `tokens_to_remove` tokens from the current cache layer.
         """
         super().crop(tokens_to_remove)
+        if tokens_to_remove == 0:
+            return
+        if self.indexer_position_ids is not None:
+            self.indexer_position_ids = self.indexer_position_ids[..., : -abs(tokens_to_remove)]
         if self.is_indexer_initialized:
             self.indexer_cumulative_length.sub_(abs(tokens_to_remove))
 

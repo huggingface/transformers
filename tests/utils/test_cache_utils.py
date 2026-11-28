@@ -92,6 +92,7 @@ if is_torch_available():
         LinearAttentionAndStaticSlidingWindowAttentionLayer,
         LinearAttentionLayer,
         QuantoQuantizedLayer,
+        StaticIndexedLayer,
         StaticLayer,
         StaticSlidingWindowLayer,
     )
@@ -893,6 +894,34 @@ class CacheTest(unittest.TestCase):
                 # The indexer has to stay in step with the main states, else `topk` indices computed over it go out
                 # of bounds of the (shorter) key length downstream.
                 self.assertEqual(layer.update_indexer(indexer_keys).shape[1], 5)
+
+    def test_indexed_layers_crop_trims_indexer_position_ids(self):
+        """
+        Regression test: `StaticIndexedLayer.crop` must trim `indexer_position_ids` just like
+        `DynamicIndexedLayer.crop`, and `crop(0)` must be a no-op rather than slicing to `:-0` (empty).
+        """
+        keys = torch.rand(2, 4, 5, 16, device=torch_device)
+        indexer_keys = torch.rand(2, 5, 8, device=torch_device)
+        position_ids = torch.arange(5, device=torch_device).view(1, 1, 5).expand(1, 2, 5).clone()
+
+        for layer in (DynamicIndexedLayer(), StaticIndexedLayer(max_cache_len=10)):
+            layer.update(keys, keys.clone())
+            layer.update_indexer(indexer_keys)
+            layer.indexer_position_ids = position_ids.clone()
+
+            # crop(0) must leave indexer_position_ids untouched
+            layer.crop(0)
+            self.assertEqual(int(layer.get_seq_length()), 5)
+            self.assertEqual(layer.indexer_position_ids.shape, (1, 2, 5))
+            torch.testing.assert_close(layer.indexer_position_ids, position_ids)
+
+            # crop(-2) must trim indexer_position_ids along the sequence dimension
+            layer.crop(-2)
+            self.assertEqual(int(layer.get_seq_length()), 3)
+            self.assertEqual(layer.indexer_position_ids.shape, (1, 2, 3))
+            torch.testing.assert_close(layer.indexer_position_ids, position_ids[..., :3])
+            if isinstance(layer, StaticIndexedLayer):
+                self.assertEqual(int(layer.indexer_cumulative_length), 3)
 
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
