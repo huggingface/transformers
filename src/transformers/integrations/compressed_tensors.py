@@ -338,6 +338,111 @@ def replace_with_compressed_tensors_fp8_linear(model, targets=None, ignore=None,
     return replaced_names
 
 
+# Midpoints between consecutive E2M1 magnitudes, used for round-to-nearest.
+_E2M1_BOUNDARIES = (0.25, 0.75, 1.25, 1.75, 2.5, 3.5, 5.0)
+_MX_BLOCK_SIZE = 32
+
+
+def has_mxfp4_kernel() -> bool:
+    """Whether `torch.nn.functional.scaled_mm` can run a native MXFP4 x MXFP4 GEMM with unswizzled E8M0 block scales.
+    Only Intel XPU with native MXFP4 DPAS (Xe3P, GMD IP version >= 35) is supported."""
+    if not (torch.xpu.is_available() and is_torch_greater_or_equal("2.15", accept_dev=True)):
+        return False
+    ip_version = torch.xpu.get_device_capability().get("version", "0")
+    return int(ip_version.split(".")[0]) >= 35
+
+
+def quantize_mxfp4(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Dynamically quantize a 2D tensor to MXFP4 (OCP MX spec) in pure PyTorch.
+
+    Returns:
+        Tuple of (packed, scale): uint8 tensor of shape (M, K // 2) with two E2M1 values per
+        byte (low nibble first) and uint8 E8M0 exponents of shape (M, K // 32).
+    """
+    blocks = x.to(torch.float32).unflatten(-1, (-1, _MX_BLOCK_SIZE))
+    amax = blocks.abs().amax(dim=-1, keepdim=True)
+    # Shared exponent: floor(log2(amax)) - emax(E2M1)=2, clamped to the E8M0 range.
+    exponent = torch.floor(torch.log2(torch.where(amax > 0, amax, torch.ones_like(amax)))) - 2
+    exponent = exponent.clamp(-127, 127)
+    scaled = blocks / torch.exp2(exponent)
+    boundaries = torch.tensor(_E2M1_BOUNDARIES, dtype=torch.float32, device=x.device)
+    codes = torch.bucketize(scaled.abs().clamp(max=6.0), boundaries).to(torch.uint8)
+    codes = (codes | ((scaled < 0).to(torch.uint8) << 3)).flatten(-2)
+    packed = codes[..., 0::2] | (codes[..., 1::2] << 4)
+    scale = (exponent.squeeze(-1) + 127).to(torch.uint8)
+    return packed, scale
+
+
+class CompressedTensorsMXFP4Linear(nn.Module):
+    """Linear layer for compressed-tensors W4A4 MXFP4 (`mxfp4-pack-quantized`) models.
+
+    Keeps the checkpoint layout: `weight_packed` (uint8, two E2M1 values per byte, low nibble first) and
+    `weight_scale` (uint8 E8M0 exponents, one per block of 32 input features). Activations are dynamically
+    quantized to MXFP4 via `quantize_mxfp4` and the matmul runs through `torch.nn.functional.scaled_mm`
+    with 1x32 block scaling.
+    """
+
+    def __init__(self, in_features: int, out_features: int, has_bias: bool = False):
+        super().__init__()
+        if in_features % _MX_BLOCK_SIZE != 0:
+            raise ValueError(f"MXFP4 needs in_features divisible by {_MX_BLOCK_SIZE}, got {in_features}.")
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight_packed = nn.Parameter(
+            torch.empty(out_features, in_features // 2, dtype=torch.uint8), requires_grad=False
+        )
+        self.weight_scale = nn.Parameter(
+            torch.empty(out_features, in_features // _MX_BLOCK_SIZE, dtype=torch.uint8), requires_grad=False
+        )
+        self.weight_shape = nn.Parameter(torch.tensor([out_features, in_features]), requires_grad=False)
+        if has_bias:
+            self.bias = nn.Parameter(torch.empty(out_features))
+        else:
+            self.register_parameter("bias", None)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        output_shape = (*input.shape[:-1], -1)
+        x_packed, x_scale = quantize_mxfp4(input.reshape(-1, input.shape[-1]))
+        output = torch.nn.functional.scaled_mm(
+            x_packed.view(torch.float4_e2m1fn_x2),
+            self.weight_packed.view(torch.float4_e2m1fn_x2).t(),
+            x_scale.view(torch.float8_e8m0fnu),
+            torch.nn.functional.ScalingType.BlockWise1x32,
+            self.weight_scale.view(torch.float8_e8m0fnu),
+            torch.nn.functional.ScalingType.BlockWise1x32,
+            output_dtype=input.dtype,
+        )
+        if self.bias is not None:
+            output = output + self.bias
+        return output.reshape(output_shape)
+
+
+def replace_with_compressed_tensors_mxfp4_linear(model, targets, ignore=None, modules_to_not_convert=None):
+    """Replace the nn.Linear modules matching `targets` (minus `ignore`) with `CompressedTensorsMXFP4Linear`."""
+    from compressed_tensors.utils.match import match_named_modules
+
+    from ..quantizers.quantizers_utils import should_convert_module
+
+    replaced_names = []
+    for module_name, module in list(match_named_modules(model, targets, ignore=ignore)):
+        if not isinstance(module, nn.Linear) or not should_convert_module(module_name, modules_to_not_convert):
+            continue
+        new_module = CompressedTensorsMXFP4Linear(
+            in_features=module.in_features,
+            out_features=module.out_features,
+            has_bias=module.bias is not None,
+        )
+        model.set_submodule(module_name, new_module)
+        replaced_names.append(module_name)
+
+    if not replaced_names:
+        logger.warning(
+            "You are loading your model using compressed-tensors MXFP4 but no linear modules were found. "
+            "Please double check your model architecture."
+        )
+    return replaced_names
+
+
 def _get_fp8_linear(model, full_layer_name):
     """Return the `CompressedTensorsFP8Linear` owning `full_layer_name` (a `weight_scale` key),
     or None if the key belongs to another kind of module (e.g. a non-FP8 group of a mixed config)."""

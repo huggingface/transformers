@@ -35,6 +35,11 @@ def _is_fp8_scheme(scheme) -> bool:
     return weights is not None and weights.type == "float" and weights.num_bits == 8
 
 
+def _is_mxfp4_scheme(scheme, default_format=None) -> bool:
+    """Whether a compressed-tensors scheme is W4A4 MXFP4 (the only MXFP4 variant with a matmul kernel)."""
+    return (scheme.format or default_format) == "mxfp4-pack-quantized" and scheme.input_activations is not None
+
+
 class CompressedTensorsHfQuantizer(HfQuantizer):
     """
     Quantizer for the compressed_tensors package. Loads and restores models to
@@ -43,6 +48,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     With `use_optimized_inference=True`, FP8 checkpoints are kept in FP8 and their matmuls run through
     row-wise FP8 kernels (`torch.nn.functional.scaled_mm`) via `CompressedTensorsFP8Linear`, when FP8 matmul
     hardware is available (CUDA SM89+, XPU, or MPS with torch >= 2.15). This is opt-in and inference only.
+    Likewise, W4A4 MXFP4 layers run through block-scaled MXFP4 `scaled_mm` via `CompressedTensorsMXFP4Linear`
+    on Intel XPU with native MXFP4 support (Xe3P+) and torch >= 2.15.
 
     Otherwise the model goes through the regular compressed-tensors route: `dequantize=True`
     dequantizes the weights at load time, while `dequantize=False` leaves them compressed and lets
@@ -74,7 +81,12 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         # `use_optimized_inference` has been resolved against the checkpoint by
         # `CompressedTensorsConfig.post_init`; what is left to check is whether the hardware can run
         # the kernels. When it cannot, the model goes through the regular compressed-tensors route.
-        self.use_fp8_kernel = self.quantization_config.use_optimized_inference
+        self.use_fp8_kernel = (
+            self.quantization_config.use_optimized_inference and self.quantization_config.has_fp8_modules
+        )
+        self.use_mxfp4_kernel = (
+            self.quantization_config.use_optimized_inference and self.quantization_config.has_mxfp4_modules
+        )
         # MPS has FP8 tensors and a `torch._scaled_mm_v2` kernel from torch 2.15 on.
         has_fp8_kernel = (
             torch.xpu.is_available()
@@ -87,6 +99,15 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 ">= 8.9 (e.g. 4090/H100), an Intel XPU, or Apple silicon (MPS) with torch >= 2.15, and none was found."
             )
             self.use_fp8_kernel = False
+
+        from ..integrations.compressed_tensors import has_mxfp4_kernel
+
+        if self.use_mxfp4_kernel and not has_mxfp4_kernel():
+            logger.warning_once(
+                "Ignoring `use_optimized_inference=True` for MXFP4 layers: the MXFP4 matmul kernel needs an Intel XPU "
+                "with native MXFP4 support (Xe3P+) and torch >= 2.15, and none was found."
+            )
+            self.use_mxfp4_kernel = False
 
     def _process_model_before_weight_loading(self, model, **kwargs):
         if self.quantization_config.dequantize:
@@ -111,6 +132,24 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 ignore=ct_config.ignore,
                 modules_to_not_convert=self.modules_to_not_convert,
             )
+        if self.use_mxfp4_kernel:
+            from ..integrations.compressed_tensors import replace_with_compressed_tensors_mxfp4_linear
+
+            mxfp4_groups = {
+                name: group
+                for name, group in ct_config.config_groups.items()
+                if _is_mxfp4_scheme(group, ct_config.format)
+            }
+            ct_config.config_groups = {
+                name: group for name, group in ct_config.config_groups.items() if name not in mxfp4_groups
+            }
+            self.modules_to_not_convert = self.get_modules_to_not_convert(model, None, model._keep_in_fp32_modules)
+            replace_with_compressed_tensors_mxfp4_linear(
+                model,
+                targets=[target for group in mxfp4_groups.values() for target in group.targets],
+                ignore=ct_config.ignore,
+                modules_to_not_convert=self.modules_to_not_convert,
+            )
 
         apply_quantization_config(model, ct_config, run_compressed=False)
         # Packed formats (e.g. int4 `weight_packed`) need the compressed module layout to
@@ -120,8 +159,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self):
-        # The FP8 kernel path is inference-only; load with `dequantize=True` to fine-tune.
-        return not self.use_fp8_kernel
+        # The FP8/MXFP4 kernel paths are inference-only; load with `dequantize=True` to fine-tune.
+        return not (self.use_fp8_kernel or self.use_mxfp4_kernel)
 
     @property
     def is_compileable(self) -> bool:
@@ -129,7 +168,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     def is_qat_trainable(self) -> bool:
         """Loaded Models can carry out quantization aware training"""
-        if self.use_fp8_kernel:
+        if self.use_fp8_kernel or self.use_mxfp4_kernel:
             return False
         # models need to be decompressed carry out qat
         return self.quantization_config.dequantize or not self.quantization_config.is_quantization_compressed

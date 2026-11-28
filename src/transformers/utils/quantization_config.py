@@ -1119,8 +1119,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             compressed-tensors decompresses them on the first forward pass.
         use_optimized_inference (`bool`, *optional*, defaults to `False`): when `True`, the layers whose scheme we
             have kernels for keep their quantized weights and run through those kernels (currently W8A8 FP8, on
-            CUDA SM89+, XPU, or MPS with torch >= 2.15). Inference only, and opt-in: without it the model goes
-            through the regular compressed-tensors route. Ignored when `dequantize=True`.
+            CUDA SM89+, XPU, or MPS with torch >= 2.15, and W4A4 MXFP4 on XPU Xe3P+ with torch >= 2.15). Inference only, and opt-in: without it the
+            model goes through the regular compressed-tensors route. Ignored when `dequantize=True`.
     """
 
     def __init__(
@@ -1182,9 +1182,9 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                     "kernels to run on. Setting `use_optimized_inference=False`."
                 )
                 self.use_optimized_inference = False
-            elif not self.has_fp8_modules:
+            elif not (self.has_fp8_modules or self.has_mxfp4_modules):
                 logger.info(
-                    "There are no kernels for this scheme. We only support fp8 for now for compressed tensors. "
+                    "There are no kernels for this scheme. We only support fp8 and mxfp4 for now for compressed tensors. "
                     "Setting `use_optimized_inference=False`."
                 )
                 self.use_optimized_inference = False
@@ -1265,6 +1265,17 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         for group in ct_qconfig.config_groups.values():
             weights = group.weights
             if weights is not None and weights.type == "float" and weights.num_bits == 8:
+                return True
+        return False
+
+    @property
+    def has_mxfp4_modules(self):
+        """Whether any config group is W4A4 MXFP4 (`mxfp4-pack-quantized` with quantized activations)."""
+        ct_qconfig = self.quantization_config
+        if ct_qconfig is None:
+            return False
+        for group in ct_qconfig.config_groups.values():
+            if (group.format or ct_qconfig.format) == "mxfp4-pack-quantized" and group.input_activations is not None:
                 return True
         return False
 
