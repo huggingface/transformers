@@ -521,20 +521,34 @@ class TensorParallelTesterMixin(ABC):
                 tmp_dir, model_class, atol, rtol
             )
 
+    @parameterized.expand(
+        [
+            (1, 1, None),  # every head replicated (MQA at the class's world size): gcd(1, n) == 1
+            (None, 2, 4),  # GQA, `num_key_value_heads > 1` and fewer KV heads than ranks: 2 ranks per KV head
+            (None, None, 4),  # the tester's own heads, `num_key_value_heads == num_attention_heads`
+        ]
+    )
     @is_tensor_parallel_test
-    def test_tp_unit_plan_forward_backward(self):
+    def test_tp_unit_plan_forward_backward(self, num_attention_heads, num_key_value_heads, world_size):
         """`unit_colwise`/`unit_rowwise` on the attention projections must match the unsharded model, outputs and
-        gradients, including when ranks replicate heads (fewer KV heads than ranks)."""
+        gradients, for every unit-mesh shape: heads split evenly across ranks, and heads replicated over several ranks
+        (`num_key_value_heads < world_size`)."""
         self._skip_if_not_supported()
+
+        world_size = self.tensor_parallel_size if world_size is None else world_size
+        if os.cpu_count() < world_size:
+            self.skipTest(f"the unit sharding test needs {world_size} CPUs, but only {os.cpu_count()} available")
 
         config = self._get_tp_config()
         text_config = config.get_text_config()
         head_dim = getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
-        if hasattr(text_config, "num_key_value_heads"):
-            text_config.num_key_value_heads = 1  # fewer KV heads than ranks: ranks replicate the head
-        # Replicate Q heads too so the rowwise output projection hits the 1/replicas scaling path.
-        if hasattr(text_config, "num_attention_heads"):
-            text_config.num_attention_heads = 1
+        # KV heads > 1 on their own: `num_key_value_heads == 1` only ever exercises the fully replicated mesh
+        # (`gcd(1, world_size) == 1`), so a rank's KV head is `rank // replicas` only when this is > 1.
+        if num_key_value_heads is not None and hasattr(text_config, "num_key_value_heads"):
+            text_config.num_key_value_heads = min(num_key_value_heads, text_config.num_attention_heads)
+        if num_attention_heads is not None and hasattr(text_config, "num_attention_heads"):
+            # Replicate Q heads too so the rowwise output projection hits the 1/replicas scaling path.
+            text_config.num_attention_heads = num_attention_heads
             # Keep the per-head width: models like Glm4v-MoE derive other config values (mrope) from it.
             text_config.head_dim = head_dim
         model_class = self._get_tp_model_class()
@@ -563,7 +577,7 @@ class TensorParallelTesterMixin(ABC):
             set_seed(42)
             model_class(config).save_pretrained(tmp_dir, save_original_format=True)
             for impl in (_test_tp_forward_impl, _test_tp_backward_impl):
-                run_distributed(world_size=self.tensor_parallel_size)(impl)(tmp_dir, model_class, atol, rtol, tp_plan)
+                run_distributed(world_size=world_size)(impl)(tmp_dir, model_class, atol, rtol, tp_plan)
 
     @is_tensor_parallel_test
     def test_tp_generation(self):
