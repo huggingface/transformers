@@ -64,15 +64,48 @@ print(f"{mem_params/2**30:.4f} GB")
 
 ## Loading modes
 
-A compressed-tensors checkpoint stores its weights compressed (fp8, or packed int4/int8). How they are executed is up to two [`CompressedTensorsConfig`] arguments.
+A compressed-tensors checkpoint stores its weights compressed. [`CompressedTensorsConfig`] provides the following loading modes.
 
 | Configuration | Weights after loading | Execution |
 |---------------|-----------------------|-----------|
 | default | kept in the compressed-tensors format: every serialized tensor (`weight_packed`, `weight_scale`, `weight_zero_point`, ...) loads as stored | compressed-tensors owns the layers and decompresses the model on the first forward pass |
 | `dequantize=True` | decompressed while loading into the model dtype (e.g. BF16) | a plain dense model with no `quantization_scheme` left, so w8a8 activations aren't quantized either; it can be fine-tuned or saved in that dtype |
 | `use_optimized_inference=True` | kept quantized | layers whose scheme has a kernel run through it, currently W8A8 fp8; inference only |
+| `weight_only=True` (NVFP4 only) | NVFP4 bytes and scales kept in torchao tensors | BF16 activations, with activation quantization explicitly disabled; inference only |
 
 With the default, [`~PreTrainedModel.save_pretrained`] writes the compressed tensors back unchanged, so a loaded model saves in the same compressed-tensors format.
+
+## NVFP4 weight-only loading
+
+Pass `weight_only=True` to reuse compressed-tensors `nvfp4-pack-quantized` checkpoints on supported devices without native NVFP4 GEMMs. Packed weights and block scales are preserved in torchao's `NVFP4Tensor` without requantization. Only NVFP4 is supported. Install `compressed-tensors>=0.15.0` and a compatible `torchao>=0.16.0` build exposing `torchao.prototype.mx_formats.nvfp4_tensor.NVFP4Tensor`.
+
+> [!WARNING]
+> This mode disables input activation quantization (W4A4 becomes W4A16), so outputs can differ from the original deployment. Torchao dequantizes each Linear weight on every forward call and performs BF16 Linear: this is not a fused FP4 GEMM and does not imply a speedup.
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, CompressedTensorsConfig
+
+model_id = "RedHatAI/Qwen3-14B-NVFP4"
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    quantization_config=CompressedTensorsConfig(weight_only=True),
+    dtype=torch.bfloat16,
+    device_map="xpu",  # Or a single CUDA device, e.g. "cuda:0".
+)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+inputs = tokenizer("The capital of France is", return_tensors="pt").to(model.device)
+outputs = model.generate(**inputs, max_new_tokens=8, do_sample=False)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
+
+All quantized groups must contain static, symmetric float4 `tensor_group` weights with group size 16 and absent or local-dynamic NVFP4 input quantization. Targets and ignore patterns select ordinary `torch.nn.Linear` modules; unquantized modules load normally. FP8 block scales are preserved, FP32 global weight scales are inverted for torchao, and optional input global scales are validated but unused.
+
+Memory planning accounts for packed weights and scales; temporary dequantization tensors and the KV cache require additional memory.
+
+Use `dtype=torch.bfloat16` and one device (`device_map="xpu"`, `"cuda:0"`, or `"cpu"`; omitted means CPU). Unsupported: automatic placement, CPU/disk offload, mixed quantized formats, tied quantized weights, KV-cache quantization, sparsity, transforms, training, QAT, compilation, and saving the loaded quantized model. Any model-level `WeightConverter` is rejected, even for unquantized modules; weight renamings remain supported.
+
+`weight_only` cannot be combined with `dequantize` or `use_optimized_inference` and is not saved in checkpoint metadata: set it on each load. Leave it unset for the default behavior, or use `dequantize=True` alone for a dense model that can be fine-tuned or saved.
 
 ## FP8 kernel acceleration
 
