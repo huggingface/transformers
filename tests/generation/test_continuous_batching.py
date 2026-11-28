@@ -1801,6 +1801,26 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     def test_streaming_and_non_streaming_requests_can_alternate(self) -> None:
         self._test_streaming_or_not_request(with_streaming=True, with_non_streaming=True)
 
+    def test_cancel_request_in_running_batch(self) -> None:
+        """Test that cancelling a request which is in the running batch does not break that batch's update. The loop
+        is stepped by hand, so that the cancellation lands between two batches."""
+        tokenizer, model = get_tokenizer_and_model("Qwen/Qwen2.5-0.5B-Instruct", "sdpa", torch_device)
+        cb_config = ContinuousBatchingConfig(use_async_batching=True, max_memory_percent=0.2)
+        manager = model.init_continuous_batching(continuous_batching_config=cb_config)
+        batch_processor = manager._create_batch_processor()
+        manager.batch_processor = batch_processor
+        manager.current_batch = 0
+
+        # Longer than one cache page, so that the request completes blocks
+        input_ids = tokenizer("The sailor walked along the harbour and counted the boats. " * 80)["input_ids"]
+        request_id = manager.add_request(input_ids, max_new_tokens=10)
+        manager._generation_loop_body(batch_processor, bootstrapping=True)  # the request is in the running batch
+        manager.cancel_request(request_id)
+        manager.add_request(input_ids[8:], max_new_tokens=10)
+        manager._generation_loop_body(batch_processor, bootstrapping=False)  # next batch, then the first one's update
+
+        self.assertNotIn(request_id, batch_processor.scheduler.active_requests)
+
     def test_register_result_handler(self) -> None:
         """Test that register_result_handler receives streaming outputs through the OutputRouter."""
         import asyncio
