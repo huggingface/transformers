@@ -751,6 +751,25 @@ def _test_hsdp_grad_accumulation_vs_single_device_impl(rank, config_class, confi
 # =============================================================================
 
 
+def _test_fsdp2_load_with_empty_shards_impl(rank, config_class, config_dict):
+    """A single expert sharded over every rank leaves the other ranks an empty local shard, which has to load."""
+    init_test_logger()
+
+    config = config_class.from_dict(config_dict)
+    config.num_experts = 1
+    config.num_experts_per_tok = 1
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        reference = AutoModelForCausalLM.from_pretrained(init_dir).state_dict()
+        model = AutoModelForCausalLM.from_pretrained(
+            init_dir, distributed_config=DistributedConfig(fsdp_size=dist.get_world_size())
+        )
+        state_dict = gather_full_state_dict(model)
+
+    if rank == 0:
+        for key, value in reference.items():
+            torch.testing.assert_close(state_dict[key], value, rtol=0, atol=0, msg=f"Weight mismatch for {key}")
+
+
 class FSDPTesterMixin(ABC):
     fsdp_nproc_per_node: int = 2
     # TODO(3outeille): do we put the CONSTANTS in the mixin class ?
@@ -887,6 +906,13 @@ class FSDPTesterMixin(ABC):
     @is_fsdp_test
     def test_fsdp2_save_load(self):
         self._run_fsdp2_distributed_test("test_fsdp2_save_load", _test_fsdp2_save_load_impl)
+
+    @require_torch_greater_or_equal("2.7")
+    @is_fsdp_test
+    def test_fsdp2_load_with_empty_shards(self):
+        if getattr(self.model_tester.get_config(), "num_experts", None) is None:
+            self.skipTest("Model has no experts")
+        self._run_fsdp2_distributed_test("test_fsdp2_load_with_empty_shards", _test_fsdp2_load_with_empty_shards_impl)
 
     @require_torch_greater_or_equal("2.7")
     @is_fsdp_test
