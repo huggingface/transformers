@@ -593,8 +593,15 @@ class MtpModel(PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
 
-        # Multimodal models with M-RoPE pass 4 rows of positions: text positions, then temporal, height and width
-        if position_ids is not None and position_ids.ndim == 3 and position_ids.shape[0] == 4:
+        # M-RoPE models pack positions as [1 + num_rope_axes, batch, seq]: `position_ids[0]` holds the text positions
+        # used for the masks and layers, `position_ids[1:]` the rope positions. The number of rope axes is not stored
+        # uniformly across models, so probe the usual locations in order and default to 3 (Glm4v family)
+        mrope_section = getattr(self.rotary_emb, "mrope_section", None)
+        if not mrope_section:
+            mrope_section = (getattr(self.config, "rope_parameters", None) or {}).get("mrope_section")
+        num_rope_axes = len(mrope_section) if mrope_section else 3
+
+        if position_ids is not None and position_ids.ndim == 3 and position_ids.shape[0] == num_rope_axes + 1:
             text_position_ids, rope_position_ids = position_ids[0], position_ids[1:]
         else:
             text_position_ids = rope_position_ids = position_ids
