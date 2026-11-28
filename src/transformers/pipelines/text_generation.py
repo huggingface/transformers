@@ -393,6 +393,9 @@ class TextGenerationPipeline(Pipeline):
                 if length in generation_params and new_tokens not in generation_params:
                     generate_kwargs[length] = generation_params[length] + prefix_length
 
+        # The pipeline holds a tokenizer; forward it so `generate` can use it (e.g. for `stop_strings`).
+        generate_kwargs.setdefault("tokenizer", self.tokenizer)
+
         output = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
 
         if isinstance(output, ModelOutput):
