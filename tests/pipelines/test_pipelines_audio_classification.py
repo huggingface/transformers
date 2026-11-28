@@ -141,6 +141,25 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         self.assertIn(nested_simplify(output, decimals=4), [EXPECTED_OUTPUT, EXPECTED_OUTPUT_PT_2])
 
     @require_torch
+    def test_tensor_dictionary_inputs(self):
+        from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForSequenceClassification
+
+        from ..models.wav2vec2.test_modeling_wav2vec2 import Wav2Vec2ModelTester
+
+        model = Wav2Vec2ForSequenceClassification(Wav2Vec2ModelTester(self).get_config()).eval()
+        classifier = AudioClassificationPipeline(model=model, feature_extractor=Wav2Vec2FeatureExtractor())
+        audio = torch.linspace(-1.0, 1.0, 1024)
+        expected = classifier(audio.numpy())
+        self.assertEqual(classifier(audio), expected)
+
+        for key in ("array", "raw"):
+            with self.subTest(key=key):
+                inputs = {key: audio, "sampling_rate": classifier.feature_extractor.sampling_rate}
+                self.assertEqual(classifier(inputs), expected)
+                self.assertIs(inputs[key], audio)
+                self.assertEqual(inputs["sampling_rate"], classifier.feature_extractor.sampling_rate)
+
+    @require_torch
     def test_small_model_pt_fp16(self):
         model = "anton-l/wav2vec2-random-tiny-classifier"
 
