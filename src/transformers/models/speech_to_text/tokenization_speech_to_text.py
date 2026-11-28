@@ -177,6 +177,8 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         self.prefix_tokens = [lang_code_id]
 
     def _tokenize(self, text: str) -> list[str]:
+        if self.do_lower_case:
+            text = text.lower()
         return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token):
