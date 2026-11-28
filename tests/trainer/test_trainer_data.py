@@ -409,6 +409,41 @@ class TrainerSamplerTest(unittest.TestCase):
         self.assertEqual(sorted(order_1), list(range(len(eval_dataset))))
         self.assertEqual(order_1, order_2)
 
+    def test_predict_keeps_dataset_order_with_group_by_length(self):
+        # Sequences of different lengths, padded with -100 so that `label_ids` identifies each example
+        sequences = [list(range(i, i + length)) for i, length in enumerate([3, 12, 5, 9, 1, 11, 7, 2, 10, 4])]
+        dataset = [{"input_ids": sequence, "labels": sequence} for sequence in sequences]
+
+        def collate_fn(features):
+            max_length = max(len(feature["input_ids"]) for feature in features)
+            input_ids = [feature["input_ids"] + [0] * (max_length - len(feature["input_ids"])) for feature in features]
+            labels = [feature["labels"] + [-100] * (max_length - len(feature["labels"])) for feature in features]
+            return {"input_ids": torch.tensor(input_ids), "labels": torch.tensor(labels)}
+
+        config = GPT2Config(
+            vocab_size=32, n_positions=16, n_embd=16, n_layer=1, n_head=2, bos_token_id=0, eos_token_id=0
+        )
+        model = GPT2LMHeadModel(config)
+        outputs = {}
+        for strategy in ["random", "group_by_length"]:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                args = TrainingArguments(
+                    tmp_dir, train_sampling_strategy=strategy, per_device_eval_batch_size=4, report_to="none"
+                )
+                trainer = Trainer(model=model, args=args, data_collator=collate_fn)
+                if strategy == "group_by_length":
+                    # The eval sampler doesn't follow the dataset order
+                    self.assertNotEqual(list(trainer._get_eval_sampler(dataset)), list(range(len(dataset))))
+                outputs[strategy] = trainer.predict(dataset)
+
+        for output in outputs.values():
+            for sequence, label_ids in zip(sequences, output.label_ids):
+                self.assertEqual(label_ids[label_ids != -100].tolist(), sequence)
+        for sequence, expected, logits in zip(
+            sequences, outputs["random"].predictions[0], outputs["group_by_length"].predictions[0]
+        ):
+            np.testing.assert_allclose(logits[: len(sequence)], expected[: len(sequence)], atol=1e-5)
+
     def test_distributed_length_grouped(self):
         # Get some inputs of random lengths
         lengths = torch.randint(0, 25, (100,)).tolist()
