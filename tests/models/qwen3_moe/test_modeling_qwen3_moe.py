@@ -100,6 +100,15 @@ class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
         # This is to mimic torch.testing.assert_not_close
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
+    def test_reentrant_gradient_checkpointing_with_router_logits_raises(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Qwen3MoeForCausalLM(config)
+        model.train()
+        model.activation_checkpointing_enable(activation_checkpointing_kwargs={"use_reentrant": True})
+
+        with self.assertRaisesRegex(ValueError, "Reentrant gradient checkpointing is incompatible"):
+            model(input_ids=torch.ones(2, 16, dtype=torch.long), output_router_logits=True)
+
 
 # Run on runners with larger accelerators (for example A10 instead of T4) with a lot of CPU RAM (e.g. g5-12xlarge)
 @require_torch_multi_accelerator
