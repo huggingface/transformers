@@ -442,3 +442,38 @@ class TestTrainingArguments(unittest.TestCase):
                 args_dict = args.to_dict()
                 self.assertIn("dtype", args_dict)
                 self.assertEqual(args_dict["dtype"], dtype)
+
+    def test_fsdp_config_ignored_modules(self):
+        """Test that ignored_modules in fsdp_config is propagated to accelerate FSDP plugin args."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # When ignored_modules is specified as string
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                fsdp=True,
+                fsdp_config={"ignored_modules": "lm_head"},
+                report_to=None,
+            )
+            self.assertEqual(args.fsdp_plugin_args.get("ignored_modules"), "lm_head")
+
+            # When ignored_modules is specified as an iterable of nn.Module
+            dummy_module = torch.nn.Linear(10, 10)
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                fsdp=True,
+                fsdp_config={"ignored_modules": [dummy_module]},
+                report_to=None,
+            )
+            self.assertEqual(args.fsdp_plugin_args.get("ignored_modules"), [dummy_module])
+
+            # When ignored_modules is passed in JSON string format
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                fsdp=True,
+                fsdp_config='{"ignored_modules": "lm_head"}',
+                report_to=None,
+            )
+            self.assertEqual(args.fsdp_plugin_args.get("ignored_modules"), "lm_head")
+
+            # When ignored_modules is omitted
+            args = TrainingArguments(output_dir=tmp_dir, fsdp=True, report_to=None)
+            self.assertNotIn("ignored_modules", args.fsdp_plugin_args)
