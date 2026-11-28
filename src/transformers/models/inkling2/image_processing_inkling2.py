@@ -92,8 +92,13 @@ class Inkling2ImageProcessor(TorchvisionBackend):
             image = image.reshape(channels, rows, size.height, columns, size.width).permute(1, 3, 2, 4, 0)
             patches.append(image.flatten(0, 1))
             image_grid_thw.append([1, rows, columns])
+        # With both transforms disabled, aligned patches may still share the input tensor's storage.
+        if len(patches) == 1 and (do_rescale or do_normalize):
+            pixel_values = patches[0].contiguous()
+        else:
+            pixel_values = torch.cat(patches)
         return BatchFeature(
-            data={"pixel_values": torch.cat(patches), "image_grid_thw": torch.tensor(image_grid_thw)},
+            data={"pixel_values": pixel_values, "image_grid_thw": torch.tensor(image_grid_thw)},
             tensor_type=return_tensors,
         )
 
