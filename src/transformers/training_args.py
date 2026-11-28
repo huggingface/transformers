@@ -693,6 +693,20 @@ class TrainingArguments:
                     Set to `True` to reduce memory by recomputing activations during the backward pass. When using
                     FSDP, prefer this over the `activation_checkpointing` training argument, which introduces a
                     redundant all-gather in the backward pass.
+                - activation_checkpointing_offload (`bool`, *optional*, defaults to `False`):
+                    Set to `True` to move the layer inputs saved by FSDP's activation checkpointing to pinned CPU
+                    memory until the backward pass. Requires `activation_checkpointing=True`, FSDP2 and
+                    `accelerate>=1.15.0`.
+                - mixed_precision_policy (`str` or `dict`, *optional*):
+                    Dtypes FSDP uses for the forward/backward computation (the unsharded parameters) and for gradient
+                    reduction. Either one dtype used for both (`"bf16"`, `"fp16"` or `"fp32"`), or a dict with
+                    `param_dtype`, `reduce_dtype` and `output_dtype` (`buffer_dtype` instead of `output_dtype` for
+                    FSDP1), e.g. `{"param_dtype": "bf16", "reduce_dtype": "fp32", "output_dtype": "bf16"}`. When
+                    unset, both follow the `bf16` / `fp16` training arguments.
+                - ignored_modules (`str`, *optional*):
+                    Regex matched against module names (full match). The parameters of matching modules are ignored
+                    by FSDP: they are not sharded and their gradients are not reduced across processes. With FSDP2
+                    this requires `accelerate>=1.11.0` and `torch>=2.7`.
                 - cpu_ram_efficient_loading (`bool`, *optional*, defaults to `False`):
                     Set to `True` to load the pretrained checkpoint on the first process only. Other processes start
                     with empty weights and receive the weights by broadcast.
@@ -2855,6 +2869,26 @@ class TrainingArguments:
             fsdp_plugin_args["activation_checkpointing"] = str_to_bool(
                 str(self.fsdp_config["activation_checkpointing"]).lower()
             )
+
+        if "activation_checkpointing_offload" in self.fsdp_config:
+            if not is_accelerate_available("1.15.0"):
+                raise ValueError("`fsdp_config['activation_checkpointing_offload']` requires `accelerate>=1.15.0`.")
+            fsdp_plugin_args["activation_checkpointing_offload"] = str_to_bool(
+                str(self.fsdp_config["activation_checkpointing_offload"]).lower()
+            )
+
+        # An empty pattern is skipped: it would match the root module and leave the whole model unsharded.
+        if self.fsdp_config.get("ignored_modules"):
+            fsdp_plugin_args["ignored_modules"] = self.fsdp_config["ignored_modules"]
+
+        mixed_precision_policy = self.fsdp_config.get("mixed_precision_policy")
+        if isinstance(mixed_precision_policy, dict):
+            # The plugin wants `torch.dtype` values, but a JSON config can only hold strings. Convert a copy so that
+            # `fsdp_config` stays JSON serializable.
+            dtypes = {"fp16": torch.float16, "bf16": torch.bfloat16, "fp32": torch.float32}
+            mixed_precision_policy = {k: dtypes.get(v, v) for k, v in mixed_precision_policy.items()}
+        if mixed_precision_policy is not None:
+            fsdp_plugin_args["mixed_precision_policy"] = mixed_precision_policy
 
         if fsdp_version == 2:
             fsdp_plugin_args["reshard_after_forward"] = str_to_bool(
