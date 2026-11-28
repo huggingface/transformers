@@ -17,7 +17,7 @@ import unittest
 
 import torch
 
-from transformers import is_torch_available
+from transformers import is_torch_available, set_seed
 from transformers.testing_utils import require_torch, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -110,10 +110,12 @@ class HYV4ModelTest(CausalLMModelTest, unittest.TestCase):
             )
 
     def test_interleaved_rotary(self):
+        """Regression test for the RoPE layout fixed in https://github.com/huggingface/transformers/pull/50589."""
         from transformers.models.hy_v4.modeling_hy_v4 import apply_rotary_pos_emb_interleave
 
-        q = torch.arange(24, dtype=torch.float32, device=torch_device).reshape(1, 2, 3, 4) / 10
-        k = torch.arange(12, dtype=torch.float32, device=torch_device).reshape(1, 1, 3, 4) / 10
+        set_seed(42)
+        q = torch.randn(1, 2, 3, 4, dtype=torch.float32, device=torch_device)
+        k = torch.randn(1, 1, 3, 4, dtype=torch.float32, device=torch_device)
         positions = torch.tensor([[0, 1, 7]], device=torch_device)
         angles = positions[..., None] * torch.tensor([1.0, 0.01], device=torch_device)
         emb = torch.cat((angles, angles), dim=-1)
