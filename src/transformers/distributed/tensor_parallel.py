@@ -490,14 +490,17 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
         # first forward pass. A dict tracks what's already hooked.
         is_already_hooked: dict[str, torch.nn.Parameter] = {}
 
-        def _all_reduce_grad(param):
-            dist.all_reduce(param.grad, group=mesh.get_group())
+        def _all_reduce_grad(grad):
+            # Reduce only this backward's contribution, not the previously accumulated gradient.
+            grad = grad.clone()
+            dist.all_reduce(grad, group=mesh.get_group())
+            return grad
 
         def tp_forward_pre_hook(module, args):
             if torch.is_grad_enabled():
                 for name, param in module.named_parameters(recurse=False):
                     if param.requires_grad and is_already_hooked.get(name) is not param:
-                        param.register_post_accumulate_grad_hook(_all_reduce_grad)
+                        param.register_hook(_all_reduce_grad)
                         is_already_hooked[name] = param
 
         # A forward pre-hook rather than a wrapper around `module.forward`: it stays in place when `forward` is
