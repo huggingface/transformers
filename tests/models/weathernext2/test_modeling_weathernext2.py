@@ -1,0 +1,507 @@
+# Copyright 2026 Google DeepMind and HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import unittest
+
+import numpy as np
+from parameterized import parameterized
+
+from transformers import WeatherNext2Config, WeatherNext2FeatureExtractor, is_torch_available
+from transformers.testing_utils import (
+    Expectations,
+    is_torch_bf16_available_on_device,
+    is_torch_fp16_available_on_device,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
+
+from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin, with_grad
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+    floats_tensor,
+    sdpa_kernel,
+)
+
+
+if is_torch_available():
+    import torch
+
+    from transformers import WeatherNext2ForWeatherForecasting, WeatherNext2GenerationConfig, WeatherNext2Model
+    from transformers.loss.loss_weathernext2 import WeatherNext2ForWeatherForecastingLoss
+
+
+class WeatherNext2ModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=2,
+        hidden_size=32,
+        intermediate_size=64,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        edge_hidden_size=4,
+        noise_channels=4,
+        mesh_splits=2,
+        attention_k_hop=2,
+        attention_bandwidth=43,
+        num_grid_to_mesh_edges=576,
+        grid_latitudes=13,
+        grid_longitudes=24,
+        pressure_levels=(500, 850),
+        is_training=True,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.edge_hidden_size = edge_hidden_size
+        self.noise_channels = noise_channels
+        self.mesh_splits = mesh_splits
+        self.attention_k_hop = attention_k_hop
+        self.attention_bandwidth = attention_bandwidth
+        self.num_grid_to_mesh_edges = num_grid_to_mesh_edges
+        self.grid_latitudes = grid_latitudes
+        self.grid_longitudes = grid_longitudes
+        self.pressure_levels = pressure_levels
+        self.is_training = is_training
+
+    def get_config(self):
+        return WeatherNext2Config(
+            hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            graph_config={
+                "hidden_size": self.hidden_size,
+                "edge_hidden_size": self.edge_hidden_size,
+                "noise_channels": self.noise_channels,
+                "aggregate_normalization": None,
+            },
+            noise_channels=self.noise_channels,
+            mesh_splits=self.mesh_splits,
+            attention_k_hop=self.attention_k_hop,
+            attention_bandwidth=self.attention_bandwidth,
+            num_grid_to_mesh_edges=self.num_grid_to_mesh_edges,
+            grid_latitudes=self.grid_latitudes,
+            grid_longitudes=self.grid_longitudes,
+            pressure_levels=self.pressure_levels,
+            loss_weights={},
+        )
+
+    def prepare_config_and_inputs(self):
+        config = self.get_config()
+        grid_features = floats_tensor(
+            [self.batch_size, config.num_grid_input_channels - 3, self.grid_latitudes, self.grid_longitudes]
+        )
+        global_features = floats_tensor([self.batch_size, config.num_mesh_input_channels - 3])
+        noise = floats_tensor([self.batch_size, self.noise_channels])
+        return config, grid_features, global_features, noise
+
+    def create_and_check_model(self, config, grid_features, global_features, noise):
+        model = WeatherNext2Model(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            grid_features=grid_features,
+            global_features=global_features,
+            noise=noise,
+            attention_mask=self.prepare_attention_mask(config),
+        )
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, config.num_grid_points, self.hidden_size)
+        )
+        self.parent.assertEqual(
+            result.mesh_hidden_state.shape, (self.batch_size, config.num_mesh_nodes, self.hidden_size)
+        )
+
+    def get_feature_extractor(self):
+        config = self.get_config()
+        variables = set(config.input_variables) | set(config.target_variables)
+        return WeatherNext2FeatureExtractor(
+            input_variables=config.input_variables,
+            target_variables=config.target_variables,
+            forcing_variables=config.forcing_variables,
+            atmospheric_variables=config.atmospheric_variables,
+            static_variables=config.static_variables,
+            global_variables=config.global_variables,
+            pressure_levels=config.pressure_levels,
+            mean_by_level={name: [0.0] * config.num_levels(name) for name in variables},
+            stddev_by_level={name: [1.0] * config.num_levels(name) for name in variables},
+            diffs_stddev_by_level={name: [1.0] * config.num_levels(name) for name in variables},
+            num_input_timesteps=config.num_input_timesteps,
+            time_step_hours=config.time_step_hours,
+            grid_latitudes=config.grid_latitudes,
+            grid_longitudes=config.grid_longitudes,
+            noise_channels=config.noise_channels,
+            attention_mask=self.prepare_attention_mask(config),
+        )
+
+    def prepare_state(self, extractor, batch_size, seed=0):
+        generator = np.random.default_rng(seed)
+        frames = extractor.num_input_timesteps
+        latitudes, longitudes = extractor.grid_latitudes, extractor.grid_longitudes
+        state = {}
+        for name in extractor.input_variables:
+            if name in extractor.static_variables:
+                shape = (latitudes, longitudes)
+            elif name in extractor.global_variables:
+                shape = (batch_size, frames)
+            elif name in extractor.forcing_variables:
+                shape = (batch_size, frames, longitudes)
+            elif name in extractor.atmospheric_variables:
+                shape = (batch_size, frames, len(extractor.pressure_levels), latitudes, longitudes)
+            else:
+                shape = (batch_size, frames, latitudes, longitudes)
+            state[name] = generator.standard_normal(shape).astype(np.float32)
+        return state
+
+    def prepare_attention_mask(self, config):
+        block_size = min(config.attention_bandwidth, config.num_mesh_nodes)
+        num_blocks = -(-config.num_mesh_nodes // block_size)
+        attention_mask = torch.zeros(num_blocks, 1, block_size, 3 * block_size, dtype=torch.bool, device=torch_device)
+        attention_mask[..., block_size : 2 * block_size] = True
+        return attention_mask
+
+    def prepare_config_and_inputs_for_common(self):
+        config, grid_features, global_features, noise = self.prepare_config_and_inputs()
+        return config, {
+            "grid_features": grid_features,
+            "global_features": global_features,
+            "noise": noise,
+            "attention_mask": self.prepare_attention_mask(config),
+        }
+
+
+@require_torch
+class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (WeatherNext2Model, WeatherNext2ForWeatherForecasting) if is_torch_available() else ()
+    # Weather forecasts use a custom generation API rather than token-based generation.
+    all_generative_model_classes = ()
+    additional_model_inputs = ["global_features", "noise", "attention_mask"]
+
+    test_resize_embeddings = False
+    # The final mesh-only update is not consumed by the forecasting head.
+    test_all_params_have_gradient = False
+
+    def setUp(self):
+        self.model_tester = WeatherNext2ModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=WeatherNext2Config, has_text_modality=False)
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        """CRPS labels group at least two ensemble members per initial condition."""
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        if return_labels and model_class == WeatherNext2ForWeatherForecasting:
+            config = self.model_tester.get_config()
+            batch_size = inputs_dict["grid_features"].shape[0]
+            inputs_dict["labels"] = torch.zeros(
+                [batch_size // 2, 2, config.num_output_channels, *inputs_dict["grid_features"].shape[-2:]],
+                device=torch_device,
+            )
+        return inputs_dict
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    @with_grad
+    def test_loss_gradient_accumulation(self):
+        self.model_tester.batch_size = 6
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        labels = self._prepare_for_class(inputs, WeatherNext2ForWeatherForecasting, return_labels=True)["labels"]
+        prediction = floats_tensor([labels.shape[0] * labels.shape[1], *labels.shape[2:]]).requires_grad_()
+        loss = WeatherNext2ForWeatherForecastingLoss(prediction, labels, config)
+        expected_gradient = torch.autograd.grad(loss, prediction)[0]
+
+        num_items = labels.ne(-100).sum()
+        first = WeatherNext2ForWeatherForecastingLoss(prediction[:2], labels[:1], config, num_items_in_batch=num_items)
+        second = WeatherNext2ForWeatherForecastingLoss(
+            prediction[2:], labels[1:], config, num_items_in_batch=num_items
+        )
+        accumulated = first + second
+        actual_gradient = torch.autograd.grad(accumulated, prediction)[0]
+
+        torch.testing.assert_close(accumulated, loss)
+        torch.testing.assert_close(actual_gradient, expected_gradient)
+
+    @require_torch_accelerator
+    @slow
+    def test_sdpa_can_compile_dynamic(self):
+        """Compile floating-point weather inputs instead of token IDs."""
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs = {
+            key: value.to(torch.bfloat16) if value.is_floating_point() else value for key, value in inputs.items()
+        }
+        for model_class in self.all_model_classes:
+            model = model_class._from_config(config, attn_implementation="sdpa").to(torch_device, dtype=torch.bfloat16)
+            model = torch.compile(model.eval(), dynamic=True)
+            with torch.no_grad():
+                model(**inputs)
+
+    def test_generate_matches_manual_rollout(self):
+        """Splitting the ensemble into batches must not change the noise stream or the clock."""
+        config = self.model_tester.get_config()
+        model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
+        extractor = self.model_tester.get_feature_extractor()
+        state = self.model_tester.prepare_state(extractor, batch_size=2)
+        valid_time = torch.full((2,), 1_728_280_800)  # 2024-10-07T06:00:00Z
+
+        generated = model.generate(
+            state=state,
+            feature_extractor=extractor,
+            seconds_since_epoch=valid_time,
+            generation_config=WeatherNext2GenerationConfig(num_steps=3),
+            num_steps=2,
+            batch_size=1,
+            generator=torch.Generator().manual_seed(0),
+        )
+
+        manual_state, manual_time, generator = state, valid_time, torch.Generator().manual_seed(0)
+        for step in range(2):
+            inputs = extractor(manual_state, seconds_since_epoch=manual_time, generator=generator).to(torch_device)
+            with torch.no_grad():
+                prediction = model(**inputs).prediction
+            forecast = extractor.postprocess_forecasts(prediction, manual_state)
+            for name in extractor.target_variables:
+                torch.testing.assert_close(generated.forecasts[step][name], forecast[name])
+
+            manual_state = extractor.advance_state(manual_state, forecast, manual_time)
+            manual_time = manual_time + extractor.time_step_hours * 3600
+
+        self.assertEqual(len(generated.forecasts), 2)
+        torch.testing.assert_close(generated.valid_time, manual_time)
+        for name in extractor.input_variables:
+            torch.testing.assert_close(generated.state[name], manual_state[name], rtol=1e-5, atol=1e-5)
+
+    @parameterized.expand([(None,), (1,)])
+    def test_generate_num_members(self, batch_size):
+        """Each ensemble row must match a single-member forecast with the same noise."""
+        config = self.model_tester.get_config()
+        model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
+        extractor = self.model_tester.get_feature_extractor()
+        state = self.model_tester.prepare_state(extractor, batch_size=2)
+        valid_time = torch.full((2,), 1_728_280_800)
+        members = 3
+        model.generation_config.num_members = members
+        noise = torch.randn(1, 2 * members, model.config.noise_channels, device=torch_device)
+        name = "2m_temperature"
+
+        forecast = model.generate(
+            state=state,
+            feature_extractor=extractor,
+            seconds_since_epoch=valid_time,
+            noise=noise,
+            batch_size=batch_size,
+        ).forecasts[0][name]
+        self.assertEqual(forecast.shape[0], 2 * members)
+
+        for condition in range(2):
+            alone = {}
+            for key, value in state.items():
+                alone[key] = value if key in extractor.static_variables else value[condition : condition + 1]
+
+            for member in range(members):
+                row = condition * members + member
+                expected = model.generate(
+                    state=alone,
+                    feature_extractor=extractor,
+                    seconds_since_epoch=valid_time[condition : condition + 1],
+                    num_members=1,
+                    noise=noise[:, row : row + 1],
+                ).forecasts[0][name][0]
+                torch.testing.assert_close(forecast[row], expected, rtol=1e-4, atol=1e-4)
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_attention_outputs(self):
+        """Shared attention-output checks with block-local mesh shapes."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class._from_config(config, attn_implementation="eager").to(torch_device).eval()
+            num_blocks, _, block_size, key_length = inputs_dict["attention_mask"].shape
+            expected = (
+                self.model_tester.batch_size * num_blocks,
+                self.model_tester.num_attention_heads,
+                block_size,
+                key_length,
+            )
+
+            # via the forward argument
+            with torch.no_grad():
+                outputs = model(**inputs_dict, output_attentions=True)
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(tuple(attentions[0].shape), expected)
+
+            # via the config
+            config.output_attentions = True
+            model = model_class._from_config(config, attn_implementation="eager").to(torch_device).eval()
+            with torch.no_grad():
+                outputs = model(**inputs_dict)
+            self.assertEqual(len(outputs.attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(tuple(outputs.attentions[0].shape), expected)
+            config.output_attentions = False
+
+            # and off by default
+            with torch.no_grad():
+                outputs = model_class._from_config(config).to(torch_device).eval()(**inputs_dict)
+            self.assertIsNone(outputs.attentions)
+
+    def test_hidden_states_output(self):
+        """Shared hidden-state checks with blocked mesh-node shapes."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            num_blocks, _, block_size, _ = inputs_dict["attention_mask"].shape
+            expected = (self.model_tester.batch_size, num_blocks, block_size, self.model_tester.hidden_size)
+
+            # via the forward argument
+            with torch.no_grad():
+                outputs = model(**inputs_dict, output_hidden_states=True)
+            self.assertEqual(len(outputs.hidden_states), self.model_tester.num_hidden_layers + 1)
+            self.assertEqual(tuple(outputs.hidden_states[0].shape), expected)
+
+            # via the config
+            config.output_hidden_states = True
+            model = model_class(config).to(torch_device).eval()
+            with torch.no_grad():
+                outputs = model(**inputs_dict)
+            self.assertEqual(len(outputs.hidden_states), self.model_tester.num_hidden_layers + 1)
+            self.assertEqual(tuple(outputs.hidden_states[0].shape), expected)
+            config.output_hidden_states = False
+
+            # and off by default
+            with torch.no_grad():
+                outputs = model_class(config).to(torch_device).eval()(**inputs_dict)
+            self.assertIsNone(outputs.hidden_states)
+
+    @unittest.skip(reason="WeatherNext 2 has no token embeddings.")
+    def test_model_get_set_embeddings(self):
+        pass
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        """Banded geometry requires a mask, and weather inputs must follow the model's floating-point dtype."""
+        if not use_attention_mask or padding_side != "left":
+            self.skipTest("WeatherNext2 requires a geometry mask and has no left/right token padding.")
+
+        dtype = {"fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16}[dtype]
+        if dtype == torch.float16 and not is_torch_fp16_available_on_device(torch_device):
+            self.skipTest(f"float16 is not supported on {torch_device}")
+        if dtype == torch.bfloat16 and not is_torch_bf16_available_on_device(torch_device):
+            self.skipTest(f"bfloat16 is not supported on {torch_device}")
+
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class=model_class.__name__):
+                model = model_class(config).to(torch_device, dtype=dtype).eval()
+                prepared_inputs = self._prepare_for_class(inputs, model_class)
+                for key, value in prepared_inputs.items():
+                    if value.is_floating_point():
+                        prepared_inputs[key] = value.to(dtype)
+                with (
+                    torch.no_grad(),
+                    sdpa_kernel(enable_flash=enable_kernels, enable_math=True, enable_mem_efficient=enable_kernels),
+                ):
+                    model.set_attn_implementation("eager")
+                    eager_outputs = model(**prepared_inputs, output_attentions=output_attentions)
+                    model.set_attn_implementation("sdpa")
+                    sdpa_outputs = model(**prepared_inputs, output_attentions=output_attentions)
+                for key in eager_outputs:
+                    if key != "attentions":
+                        torch.testing.assert_close(sdpa_outputs[key], eager_outputs[key])
+
+    @unittest.skip(reason="SDPA flash attention cannot take the mesh-adjacency mask.")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+
+@require_torch
+@slow
+class WeatherNext2ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    checkpoint = "kashif/weathernext2-mini"
+
+    def _prepare_model_and_inputs(self, num_members=1):
+        model = WeatherNext2ForWeatherForecasting.from_pretrained(self.checkpoint).to(torch_device)
+        config = model.config
+
+        generator = torch.Generator().manual_seed(0)
+        attention_mask = WeatherNext2FeatureExtractor.from_pretrained(self.checkpoint).attention_mask.to(torch_device)
+        grid_features = torch.randn(
+            1, config.num_grid_input_channels - 3, config.grid_latitudes, config.grid_longitudes, generator=generator
+        ).repeat_interleave(num_members, dim=0)
+        global_features = torch.randn(1, config.num_mesh_input_channels - 3, generator=generator).repeat_interleave(
+            num_members, dim=0
+        )
+        noise = torch.randn(num_members, config.noise_channels, generator=generator)
+        return model, {
+            "grid_features": grid_features.to(torch_device),
+            "global_features": global_features.to(torch_device),
+            "noise": noise.to(torch_device),
+            "attention_mask": attention_mask,
+        }
+
+    def test_inference_expected_values(self):
+        """Mini forecast with seeded normalized inputs; tolerances allow FP32 reduction drift."""
+        model, inputs = self._prepare_model_and_inputs()
+        config = model.config
+
+        with torch.no_grad():
+            prediction = model(**inputs).prediction
+
+        self.assertEqual(
+            prediction.shape, (1, config.num_output_channels, config.grid_latitudes, config.grid_longitudes)
+        )
+        self.assertTrue(torch.isfinite(prediction).all())
+
+        expected_pole = Expectations({(None, None): [-0.0312, -5.3831, -3.9925, -7.2537, -4.8488]}).get_expectation()
+        expected_equator = Expectations(
+            {(None, None): [-5.7967, -4.5518, -2.5775, -2.2516, -4.0098]}
+        ).get_expectation()
+        expected_pole = torch.tensor(expected_pole, device=torch_device)
+        expected_equator = torch.tensor(expected_equator, device=torch_device)
+        torch.testing.assert_close(prediction[0, 0, 0, :5].float(), expected_pole, rtol=1e-3, atol=3e-3)
+        torch.testing.assert_close(
+            prediction[0, 0, config.grid_latitudes // 2, :5].float(), expected_equator, rtol=1e-3, atol=3e-3
+        )
+        expected_mean = Expectations({(None, None): 0.3225}).get_expectation()
+        self.assertAlmostEqual(prediction.float().mean().item(), expected_mean, delta=1e-3)
+
+    def test_loss(self):
+        """The trained mini checkpoint's ensemble CRPS matches the original FGN loss."""
+        model, inputs = self._prepare_model_and_inputs(num_members=2)
+        config = model.config
+        labels = torch.randn(
+            1,
+            1,
+            config.num_output_channels,
+            config.grid_latitudes,
+            config.grid_longitudes,
+            generator=torch.Generator().manual_seed(0),
+        ).repeat_interleave(2, dim=1)
+
+        with torch.no_grad():
+            loss = model(**inputs, labels=labels.to(torch_device)).loss
+        expected_loss = Expectations({(None, None): 50.90686798095703}).get_expectation()
+        torch.testing.assert_close(loss, loss.new_tensor(expected_loss))
