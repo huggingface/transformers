@@ -33,6 +33,7 @@ from ...utils import (
     logging,
 )
 from ...utils.hub import cached_file, resolve_revision
+from ...utils.import_utils import SENTENCEPIECE_IMPORT_ERROR
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -1027,6 +1028,10 @@ class AutoTokenizer:
             if tokenizer_class is None:
                 tokenizer_class = TokenizersBackend
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+        # The mapping holds None for tokenizers that need sentencepiece when it isn't installed
+        if TOKENIZER_MAPPING_NAMES.get(model_type, "") is None and not is_sentencepiece_available():
+            raise ImportError(SENTENCEPIECE_IMPORT_ERROR.format(f"The tokenizer for `{model_type}` models"))
 
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} to build an AutoTokenizer.\n"
