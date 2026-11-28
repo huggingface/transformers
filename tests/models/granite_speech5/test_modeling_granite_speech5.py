@@ -291,7 +291,9 @@ class GraniteSpeech5ForCTCIntegrationTest(unittest.TestCase):
     @classmethod
     def setUp(cls):
         cls.checkpoint_name = "ibm-granite/granite-speech-5.0-470m-turboctc"
-        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
+        # Pin to the revision the fixtures were generated with
+        cls.revision = "947f59af40db9791170a0628cf0f3f4812d720f1"
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name, revision=cls.revision)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -319,7 +321,7 @@ class GraniteSpeech5ForCTCIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(1)
-        model = GraniteSpeech5ForCTC.from_pretrained(self.checkpoint_name, device_map="auto")
+        model = GraniteSpeech5ForCTC.from_pretrained(self.checkpoint_name, revision=self.revision, device_map="auto")
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
@@ -337,7 +339,7 @@ class GraniteSpeech5ForCTCIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(4)
-        model = GraniteSpeech5ForCTC.from_pretrained(self.checkpoint_name, device_map="auto")
+        model = GraniteSpeech5ForCTC.from_pretrained(self.checkpoint_name, revision=self.revision, device_map="auto")
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
