@@ -58,6 +58,36 @@ class Inkling2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # the bottom row of patches is padded with -1 on the 0-255 scale
             torch.testing.assert_close(encoding.pixel_values[3, 10:], torch.full((30, 40, 3), -1.0 - 2.0 / 255))
 
+    def test_single_image_matches_batched_patch_layout(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            first = Image.fromarray(np.arange(40 * 80 * 3, dtype=np.uint8).reshape(40, 80, 3))
+            second = Image.new("RGB", (40, 80), "blue")
+            single = image_processing(first, return_tensors="pt")
+            batch = image_processing([first, second], return_tensors="pt")
+
+            self.assertEqual(single.image_grid_thw.tolist(), [[1, 1, 2]])
+            self.assertEqual(batch.image_grid_thw.tolist(), [[1, 1, 2], [1, 2, 1]])
+            self.assertTrue(single.pixel_values.is_contiguous())
+            torch.testing.assert_close(single.pixel_values, batch.pixel_values[:2], atol=0, rtol=0)
+
+    def test_unscaled_single_image_patches_do_not_share_input_storage(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            image = torch.full((1, 40, 40), 0.5)
+            encoding = image_processing(
+                image,
+                do_rescale=False,
+                do_normalize=False,
+                do_convert_rgb=False,
+                input_data_format="channels_first",
+                return_tensors="pt",
+            )
+
+            torch.testing.assert_close(encoding.pixel_values[0, :, :, 0], image[0], atol=0, rtol=0)
+            encoding.pixel_values.zero_()
+            torch.testing.assert_close(image, torch.full_like(image, 0.5), atol=0, rtol=0)
+
     def test_transparent_image_shows_checkerboard(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
