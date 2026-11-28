@@ -22,7 +22,40 @@ import pytest
 import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.testing_utils import require_all_flash_attn, require_torch_gpu, slow
+from transformers.testing_utils import require_all_flash_attn, require_torch_gpu, require_torch_npu, slow
+
+
+@require_torch_npu
+@pytest.mark.parametrize("packed", [False, True])
+@pytest.mark.parametrize("causal,mask_mode", [(False, 3), (True, 3), (True, 2)])
+def test_npu_local_attention_window(monkeypatch, packed, causal, mask_mode):
+    from transformers.integrations import npu_flash_attention as npu_fa
+
+    monkeypatch.setattr(npu_fa, "SPARSE_MODE", mask_mode)
+    q_lengths, k_lengths = ([4, 3], [9, 5]) if packed else ([4], [9])
+    generator = torch.Generator().manual_seed(17)
+    q, k, v = [
+        torch.randn(n, 2, 64, generator=generator).bfloat16() for n in (sum(q_lengths), sum(k_lengths), sum(k_lengths))
+    ]
+    expected = []
+    for qi, ki, vi in zip(q.split(q_lengths), k.split(k_lengths), v.split(k_lengths)):
+        # FlashAttention window bounds are inclusive. The legacy causal option aligns at the top left.
+        shift = 0 if causal and mask_mode == 2 else len(ki) - len(qi)
+        center = torch.arange(len(qi))[:, None] + shift
+        keys = torch.arange(len(ki))
+        visible = (keys >= center - 2) & (keys <= center + (0 if causal else 1))
+        scores = qi.transpose(0, 1).float() @ ki.transpose(0, 1).float().transpose(-1, -2) / 8
+        probs = scores.masked_fill(~visible, -float("inf")).softmax(-1)
+        expected.append((probs @ vi.transpose(0, 1).float()).transpose(0, 1))
+
+    q, k, v = [t.to("npu") for t in (q, k, v)]
+    if packed:
+        q_ends = torch.tensor([0, *q_lengths], device="npu", dtype=torch.int32).cumsum(0, dtype=torch.int32)
+        k_ends = torch.tensor([0, *k_lengths], device="npu", dtype=torch.int32).cumsum(0, dtype=torch.int32)
+        result = npu_fa.npu_flash_attn_varlen_func(q, k, v, q_ends, k_ends, causal=causal, window_size=(2, 1))
+    else:
+        result = npu_fa.npu_flash_attn_func(q[None], k[None], v[None], causal=causal, window_size=(2, 1))[0]
+    torch.testing.assert_close(result.cpu().float(), torch.cat(expected), atol=0.025, rtol=0.01)
 
 
 class FlashAttentionParityTest(unittest.TestCase):

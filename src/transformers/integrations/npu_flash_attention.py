@@ -12,6 +12,7 @@
 
 import math
 import os
+from itertools import pairwise
 
 import torch
 
@@ -48,6 +49,32 @@ def is_npu_fa2_top_left_aligned_causal_mask():
     return SPARSE_MODE == TOP_LEFT_ALIGNED_CAUSAL_MASK_MODE if is_torch_npu_available() else False
 
 
+def _npu_mask_kwargs(device, causal, window_size, q_ends, k_ends):
+    if window_size is None or window_size == (-1, -1):
+        return {"atten_mask": get_attn_mask_npu(device), "sparse_mode": SPARSE_MODE} if causal else {}
+
+    left, right = window_size
+    if causal:
+        right = 0
+        if SPARSE_MODE == TOP_LEFT_ALIGNED_CAUSAL_MASK_MODE and q_ends != k_ends:
+            # CANN band mode aligns unequal sequences at the bottom right.
+            max_q = max(end - start for start, end in pairwise((0, *q_ends)))
+            max_k = max(end - start for start, end in pairwise((0, *k_ends)))
+            q_idx = torch.arange(max_q, device=device)[:, None]
+            k_idx = torch.arange(max_k, device=device)
+            mask = k_idx > q_idx
+            if left >= 0:
+                mask |= k_idx < q_idx - left
+            return {"atten_mask": mask, "sparse_mode": 1}
+
+    return {
+        "atten_mask": get_attn_mask_npu(device),
+        "sparse_mode": 4,
+        "pre_tockens": left if left >= 0 else 2**31 - 1,
+        "next_tockens": right if right >= 0 else 2**31 - 1,
+    }
+
+
 def npu_flash_attn_func(
     q,
     k,
@@ -55,32 +82,22 @@ def npu_flash_attn_func(
     dropout_p=0.0,
     softmax_scale=None,
     causal=False,
+    window_size=(-1, -1),
     **kwargs,
 ):
-    keep_prob = 1.0 - dropout_p
-
     if softmax_scale is None:
         softmax_scale = 1.0 / math.sqrt(q.shape[-1])
 
-    if not causal:
-        head_num = q.shape[2]
-        output = npu_fusion_attention(q, k, v, head_num, "BSND", keep_prob=keep_prob, scale=softmax_scale)[0]
-    else:
-        attn_mask_npu = get_attn_mask_npu(q.device)
-        head_num = q.shape[2]
-        output = npu_fusion_attention(
-            q,
-            k,
-            v,
-            head_num,
-            "BSND",
-            keep_prob=keep_prob,
-            scale=softmax_scale,
-            atten_mask=attn_mask_npu,
-            sparse_mode=SPARSE_MODE,
-        )[0]
-
-    return output
+    return npu_fusion_attention(
+        q,
+        k,
+        v,
+        q.shape[2],
+        "BSND",
+        keep_prob=1.0 - dropout_p,
+        scale=softmax_scale,
+        **_npu_mask_kwargs(q.device, causal, window_size, (q.shape[1],), (k.shape[1],)),
+    )[0]
 
 
 def npu_flash_attn_varlen_func(
@@ -94,48 +111,26 @@ def npu_flash_attn_varlen_func(
     dropout_p=0.0,
     softmax_scale=None,
     causal=False,
+    window_size=(-1, -1),
     **kwargs,
 ):
-    keep_prob = 1.0 - dropout_p
-
     if softmax_scale is None:
         softmax_scale = 1.0 / math.sqrt(q.shape[-1])
 
-    if not causal:
-        head_num = q.shape[1]
-        output = npu_fusion_attention(
-            q,
-            k,
-            v,
-            head_num,
-            pse=None,
-            atten_mask=None,
-            scale=softmax_scale,
-            keep_prob=keep_prob,
-            input_layout="TND",
-            actual_seq_qlen=tuple(cu_seqlens_q[1:].cpu().numpy().tolist()),
-            actual_seq_kvlen=tuple(cu_seqlens_k[1:].cpu().numpy().tolist()),
-        )[0]
-    else:
-        attn_mask_npu = get_attn_mask_npu(q.device)
-        head_num = q.shape[1]
-        output = npu_fusion_attention(
-            q,
-            k,
-            v,
-            head_num,
-            pse=None,
-            padding_mask=None,
-            atten_mask=attn_mask_npu,
-            scale=softmax_scale,
-            keep_prob=keep_prob,
-            input_layout="TND",
-            actual_seq_qlen=tuple(cu_seqlens_q[1:].cpu().numpy().tolist()),
-            actual_seq_kvlen=tuple(cu_seqlens_k[1:].cpu().numpy().tolist()),
-            sparse_mode=SPARSE_MODE,
-        )[0]
-
-    return output
+    q_ends = tuple(cu_seqlens_q[1:].cpu().numpy().tolist())
+    k_ends = tuple(cu_seqlens_k[1:].cpu().numpy().tolist())
+    return npu_fusion_attention(
+        q,
+        k,
+        v,
+        q.shape[1],
+        input_layout="TND",
+        actual_seq_qlen=q_ends,
+        actual_seq_kvlen=k_ends,
+        keep_prob=1.0 - dropout_p,
+        scale=softmax_scale,
+        **_npu_mask_kwargs(q.device, causal, window_size, q_ends, k_ends),
+    )[0]
 
 
 # This function is not implemented but should never be called because block table is not used on NPU
