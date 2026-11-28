@@ -52,12 +52,22 @@ class Inkling2ImageProcessor(TorchvisionBackend):
         if do_convert_rgb and get_image_type(image) == ImageType.PIL:
             image = tvF.pil_to_tensor(image.convert("RGBA" if image.has_transparency_data else "RGB"))
             input_data_format = ChannelDimension.FIRST
+        if do_convert_rgb and not kwargs.get("do_rescale", self.do_rescale):
+            image = super().process_image(image, do_convert_rgb=False, input_data_format=input_data_format, **kwargs)
+            image = self.convert_to_rgb(
+                image, input_data_format=ChannelDimension.FIRST, normalized=image.is_floating_point()
+            ).contiguous()
+            return image.to(device) if device is not None else image
         return super().process_image(
             image, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device, **kwargs
         )
 
     def convert_to_rgb(
-        self, image: "torch.Tensor", input_data_format: str | ChannelDimension | None = None
+        self,
+        image: "torch.Tensor",
+        input_data_format: str | ChannelDimension | None = None,
+        *,
+        normalized: bool = False,
     ) -> "torch.Tensor":
         if image.shape[-3] != 4:
             return super().convert_to_rgb(image, input_data_format=input_data_format)
@@ -65,6 +75,10 @@ class Inkling2ImageProcessor(TorchvisionBackend):
         rows = torch.arange(height, device=image.device)[:, None] // 8
         columns = torch.arange(width, device=image.device)[None, :] // 8
         background = torch.where((rows + columns) % 2 == 0, 204, 153)
+        if normalized:
+            rgba = image.float()
+            alpha = rgba[3:4]
+            return rgba[:3] * alpha + (background / 255) * (1 - alpha)
         rgba = image.to(torch.int32)
         alpha = rgba[3:4]
         return ((rgba[:3] * alpha + background * (255 - alpha) + 127) // 255).to(torch.uint8)
@@ -87,7 +101,8 @@ class Inkling2ImageProcessor(TorchvisionBackend):
             rows, columns = math.ceil(height / size.height), math.ceil(width / size.width)
             # pad to the grid with -1 on the 0-255 scale, then cut it into one patch per image token
             pad_size = SizeDict(height=rows * size.height, width=columns * size.width)
-            image = self.pad([image.float()], pad_size=pad_size, fill_value=-1.0)[0]
+            fill_value = -1.0 / 255 if not do_rescale and image.is_floating_point() else -1.0
+            image = self.pad([image.float()], pad_size=pad_size, fill_value=fill_value)[0]
             image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
             image = image.reshape(channels, rows, size.height, columns, size.width).permute(1, 3, 2, 4, 0)
             patches.append(image.flatten(0, 1))
