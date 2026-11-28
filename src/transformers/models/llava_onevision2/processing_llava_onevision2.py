@@ -20,10 +20,12 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...utils import auto_docstring
+from ...utils.import_utils import requires
 from ...vision_utils import get_vision_position_ids
 
 
 @auto_docstring
+@requires(backends=("torch",))
 class LlavaOnevision2Processor(ProcessorMixin):
     skip_tensor_conversion = ["video_metadata"]
 

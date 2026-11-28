@@ -19,7 +19,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
@@ -157,7 +157,7 @@ class LlavaOnevision2VisionPatchMerger(nn.Module):
 
 
 class LlavaOnevision2PreTrainedModel(LlavaPreTrainedModel):
-    config_class = LlavaOnevision2Config
+    config: LlavaOnevision2Config
     _no_split_modules = ["LlavaOnevision2VisionBlock"]
     _can_compile_fullgraph = False
     _supports_flex_attn = False
@@ -175,7 +175,7 @@ class LlavaOnevision2PreTrainedModel(LlavaPreTrainedModel):
 
 @auto_docstring
 class LlavaOnevision2VisionModel(LlavaOnevision2PreTrainedModel):
-    config_class = LlavaOnevision2VisionConfig
+    config: LlavaOnevision2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_record_outputs = {"hidden_states": LlavaOnevision2VisionBlock}
@@ -241,7 +241,7 @@ class LlavaOnevision2VisionModel(LlavaOnevision2PreTrainedModel):
 
 @auto_docstring
 class LlavaOnevision2Model(LlavaModel):
-    config_class = LlavaOnevision2Config
+    config: LlavaOnevision2Config
 
     def __init__(self, config: LlavaOnevision2Config):
         PreTrainedModel.__init__(self, config)
@@ -324,7 +324,7 @@ class LlavaOnevision2Model(LlavaModel):
 
 @auto_docstring
 class LlavaOnevision2ForConditionalGeneration(LlavaForConditionalGeneration):
-    config_class = LlavaOnevision2Config
+    config: LlavaOnevision2Config
 
     @auto_docstring
     def get_image_features(
@@ -366,9 +366,7 @@ class LlavaOnevision2ForConditionalGeneration(LlavaForConditionalGeneration):
         patch_positions (`torch.LongTensor` of shape `(num_patches, 3)`, *optional*):
             Source coordinates for image, frame or codec patches.
         """
-        # Keep LLaVA's logits and loss logic, replacing only the base-model call.
-        super().forward(**kwargs)
-        outputs = self.model(  # noqa: F841
+        outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
@@ -379,6 +377,25 @@ class LlavaOnevision2ForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
+        )
+
+        hidden_states = outputs[0]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
+
+        return LlavaOnevision2CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            cache=outputs.cache,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
         )
 
 

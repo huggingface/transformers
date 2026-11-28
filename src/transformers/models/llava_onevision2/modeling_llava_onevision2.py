@@ -322,7 +322,6 @@ class LlavaOnevision2PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_flex_attn = False
     _supports_attention_backend = True
-    config_class = LlavaOnevision2Config
     _no_split_modules = ["LlavaOnevision2VisionBlock"]
 
     def _init_weights(self, module):
@@ -338,7 +337,7 @@ class LlavaOnevision2PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class LlavaOnevision2VisionModel(LlavaOnevision2PreTrainedModel):
-    config_class = LlavaOnevision2VisionConfig
+    config: LlavaOnevision2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_record_outputs = {"hidden_states": LlavaOnevision2VisionBlock}
@@ -404,7 +403,7 @@ class LlavaOnevision2VisionModel(LlavaOnevision2PreTrainedModel):
 
 @auto_docstring
 class LlavaOnevision2Model(LlavaOnevision2PreTrainedModel):
-    config_class = LlavaOnevision2Config
+    config: LlavaOnevision2Config
 
     def __init__(self, config: LlavaOnevision2Config):
         super().__init__(config)
@@ -513,7 +512,7 @@ class LlavaOnevision2Model(LlavaOnevision2PreTrainedModel):
 class LlavaOnevision2ForConditionalGeneration(LlavaOnevision2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
-    config_class = LlavaOnevision2Config
+    config: LlavaOnevision2Config
 
     def __init__(self, config: LlavaOnevision2Config):
         super().__init__(config)
@@ -564,7 +563,7 @@ class LlavaOnevision2ForConditionalGeneration(LlavaOnevision2PreTrainedModel, Ge
         patch_positions (`torch.LongTensor` of shape `(num_patches, 3)`, *optional*):
             Source coordinates for image, frame or codec patches.
         """
-        outputs = self.model(  # noqa: F841
+        outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,

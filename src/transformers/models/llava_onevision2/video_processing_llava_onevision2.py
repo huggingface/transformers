@@ -26,7 +26,7 @@ from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension, 
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import auto_docstring, is_av_available, is_decord_available
 from ...video_processing_utils import BaseVideoProcessor
-from ...video_utils import VideoMetadata, load_video
+from ...video_utils import VideoInput, VideoMetadata, load_video
 from ...vision_utils import get_vision_position_ids
 from .image_processing_pil_llava_onevision2 import LlavaOnevision2ImageProcessorPil, smart_resize
 
@@ -133,7 +133,8 @@ class LlavaOnevision2VideoProcessor(BaseVideoProcessor):
             sample_indices_fn=sample_indices_fn,
         )
 
-    def preprocess(self, videos, **kwargs: Unpack[LlavaOnevision2VideoProcessorKwargs]):
+    @auto_docstring
+    def preprocess(self, videos: VideoInput, **kwargs: Unpack[LlavaOnevision2VideoProcessorKwargs]) -> BatchFeature:
         for name in ("patch_size", "merge_size", "temporal_patch_size"):
             if name in kwargs and kwargs[name] != getattr(self, name):
                 raise ValueError(f"{name} must match the video processor configuration ({getattr(self, name)})")
