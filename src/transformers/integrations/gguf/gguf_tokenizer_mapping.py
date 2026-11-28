@@ -39,32 +39,10 @@ from ...models.qwen3_5.tokenization_qwen3_5 import PRETOKENIZE_REGEX as _QWEN35_
 from ...models.t5.tokenization_t5 import T5Tokenizer
 from ...tokenization_utils_base import generate_merges
 from ...utils import logging
+from .gguf_config_mapping import GGUF_TOKENIZER_MAPPING
 
 
 logger = logging.get_logger(__name__)
-
-
-GGUF_TOKENIZER_MAPPING = {
-    "tokenizer": {
-        "ggml.model": "tokenizer_type",
-        "ggml.pre": "pre_tokenizer_type",
-        "ggml.tokens": "tokens",
-        "ggml.scores": "scores",
-        "ggml.token_type": "token_type",
-        "ggml.merges": "merges",
-        "ggml.precompiled_charsmap": "precompiled_charsmap",
-        "ggml.bos_token_id": "bos_token_id",
-        "ggml.eos_token_id": "eos_token_id",
-        "ggml.unknown_token_id": "unk_token_id",
-        "ggml.padding_token_id": "pad_token_id",
-        "ggml.add_space_prefix": "add_prefix_space",
-    },
-    "tokenizer_config": {
-        "chat_template": "chat_template",
-        "ggml.add_bos_token": "add_bos_token",
-        "ggml.add_eos_token": "add_eos_token",
-    },
-}
 
 
 _SPECIAL_TOKENS = {

@@ -13,10 +13,10 @@
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
 
-from tokenizers import Tokenizer, decoders, pre_tokenizers
+from tokenizers import Tokenizer
 from tokenizers.models import BPE
 
-from ...tokenization_utils_tokenizers import AddedToken, TokenizersBackend
+from ...tokenization_utils_tokenizers import AddedToken, TokenizersBackend, with_components
 from ...utils import logging
 
 
@@ -106,18 +106,26 @@ class GPT2Tokenizer(TokenizersBackend):
         self.add_prefix_space = add_prefix_space
         self._vocab = vocab if vocab is not None else {}
         self._merges = merges or []
-        self._tokenizer = Tokenizer(
-            BPE(
-                vocab=self._vocab,
-                merges=self._merges,
-                dropout=None,
-                continuing_subword_prefix="",
-                end_of_word_suffix="",
-                fuse_unk=False,
-            )
+        byte_level = {
+            "type": "ByteLevel",
+            "add_prefix_space": add_prefix_space,
+            "trim_offsets": True,
+            "use_regex": True,
+        }
+        self._tokenizer = with_components(
+            Tokenizer(
+                BPE(
+                    vocab=self._vocab,
+                    merges=self._merges,
+                    dropout=None,
+                    continuing_subword_prefix="",
+                    end_of_word_suffix="",
+                    fuse_unk=False,
+                )
+            ),
+            pre_tokenizer=byte_level,
+            decoder={**byte_level, "add_prefix_space": True},
         )
-        self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
-        self._tokenizer.decoder = decoders.ByteLevel()
         super().__init__(
             errors=errors,
             unk_token=unk_token,
