@@ -240,7 +240,13 @@ def _pad_to_max_length(
 
 class WhisperGenerationMixin(GenerationMixin):
     def _extract_token_timestamps(
-        self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None, num_input_ids=None
+        self,
+        generate_outputs,
+        alignment_heads,
+        time_precision=0.02,
+        num_frames=None,
+        num_input_ids=None,
+        generation_config=None,
     ):
         """
         Calculates token-level timestamps using the encoder-decoder cross-attentions and dynamic time-warping (DTW) to
@@ -309,25 +315,12 @@ class WhisperGenerationMixin(GenerationMixin):
         )
 
         if num_frames is not None:
-            # two cases:
-            # 1. num_frames is the same for each sample -> compute the DTW matrix for each sample in parallel
-            # 2. num_frames is different, compute the DTW matrix for each sample sequentially
-
-            # we're using np.unique because num_frames can be int/list/tuple
+            # the cross-attentions of each sample are cropped to its number of frames before its DTW (see below)
             if isinstance(num_frames, int):
-                weights = weights[..., : num_frames // 2]
-
-            elif isinstance(num_frames, (list, tuple, np.ndarray)) and len(np.unique(num_frames)) == 1:
-                weights = weights[..., : num_frames[0] // 2]
-
-            elif isinstance(num_frames, (torch.Tensor)) and len(torch.unique(num_frames)) == 1:
-                weights = weights[..., : num_frames[0] // 2]
-
-            else:
-                # num_frames is of shape (batch_size,) whereas batch_size is truly batch_size*num_return_sequences
-                repeat_time = batch_size if isinstance(num_frames, int) else batch_size // len(num_frames)
-                num_frames = num_frames.cpu() if isinstance(num_frames, (torch.Tensor)) else num_frames
-                num_frames = np.repeat(num_frames, repeat_time)
+                num_frames = [num_frames]
+            num_frames = num_frames.cpu() if isinstance(num_frames, torch.Tensor) else num_frames
+            # num_frames is of shape (batch_size,) whereas batch_size is truly batch_size*num_return_sequences
+            num_frames = np.repeat(np.asarray(num_frames), batch_size // len(num_frames))
 
         # let's ignore decoder_input_ids that can negatively impact the DTW while we know they have timestamps 0.0s
         # (they are not taken into account for the DTW in OAI implementation)
@@ -339,31 +332,40 @@ class WhisperGenerationMixin(GenerationMixin):
         if weights.shape[2] == 0:
             return timestamps
 
-        if num_frames is None or isinstance(num_frames, int):
-            # Normalize and smoothen the weights.
-            std = torch.std(weights, dim=-2, keepdim=True, unbiased=False)
-            mean = torch.mean(weights, dim=-2, keepdim=True)
-            weights = (weights - mean) / std
-            weights = _median_filter(weights, self.config.median_filter_width)
-
-            # Average the different cross-attention heads.
-            weights = weights.mean(dim=1)
+        # In a batch, sequences that finished early are padded after their EOS token. The cross-attentions of those
+        # padding positions must not take part in the DTW, otherwise they shift and squeeze the timestamps of the real
+        # tokens: each sequence must get the same timestamps as when it is generated alone.
+        generation_config = generation_config if generation_config is not None else self.generation_config
+        eos_token_id = generation_config.eos_token_id
+        if eos_token_id is not None:
+            eos_token_id = torch.tensor(eos_token_id, device=generate_outputs.sequences.device).view(-1)
+        num_prompt_tokens = num_input_ids if num_input_ids is not None else 0
 
         # Perform dynamic time warping on each element of the batch.
         for batch_idx in range(batch_size):
-            if num_frames is not None and isinstance(num_frames, (tuple, list, np.ndarray, torch.Tensor)):
-                matrix = weights[batch_idx, ..., : num_frames[batch_idx] // 2]
+            matrix = weights[batch_idx]
+            if num_frames is not None:
+                matrix = matrix[..., : num_frames[batch_idx] // 2]
 
-                # Normalize and smoothen the weights.
-                std = torch.std(matrix, dim=-2, keepdim=True, unbiased=False)
-                mean = torch.mean(matrix, dim=-2, keepdim=True)
-                matrix = (matrix - mean) / std
-                matrix = _median_filter(matrix, self.config.median_filter_width)
+            # Only keep the cross-attentions of the tokens up to the first EOS of this sequence
+            num_tokens = matrix.shape[1]
+            if eos_token_id is not None:
+                generated = generate_outputs.sequences[batch_idx, num_prompt_tokens:]
+                is_eos = torch.isin(generated, eos_token_id)
+                if is_eos.any():
+                    num_tokens = min(num_tokens, int(is_eos.int().argmax()))
+            if num_tokens == 0:
+                continue
+            matrix = matrix[:, :num_tokens]
 
-                # Average the different cross-attention heads.
-                matrix = matrix.mean(dim=0)
-            else:
-                matrix = weights[batch_idx]
+            # Normalize and smoothen the weights.
+            std = torch.std(matrix, dim=-2, keepdim=True, unbiased=False)
+            mean = torch.mean(matrix, dim=-2, keepdim=True)
+            matrix = (matrix - mean) / std
+            matrix = _median_filter(matrix, self.config.median_filter_width)
+
+            # Average the different cross-attention heads.
+            matrix = matrix.mean(dim=0)
 
             text_indices, time_indices = _dynamic_time_warping(-matrix.cpu().double().numpy())
             jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
@@ -375,9 +377,9 @@ class WhisperGenerationMixin(GenerationMixin):
             # that is not important since we expect this last token to be the eos token)
             # 1. for decoder_input_ids, we set the timestamps to 0.0
             # 2. for the eos token (or last predicted token), we simply duplicate the timestamp of the last non-eos token
-            timestamps[batch_idx] = torch.cat(
-                [torch.zeros(num_input_ids), torch.tensor(jump_times), torch.tensor([jump_times[-1]])]
-            )
+            num_timestamps = num_prompt_tokens + len(jump_times)
+            timestamps[batch_idx, num_prompt_tokens:num_timestamps] = torch.tensor(jump_times, dtype=torch.float32)
+            timestamps[batch_idx, num_timestamps:] = float(jump_times[-1])
 
         return timestamps
 
@@ -1171,6 +1173,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 generation_config.alignment_heads,
                 num_frames=num_frames,
                 num_input_ids=decoder_input_ids.shape[-1],
+                generation_config=generation_config,
             )
 
         def split_by_batch_index(values, key, batch_idx, is_shortform, beam_indices=None):
