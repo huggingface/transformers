@@ -65,8 +65,9 @@ class TimesFm2_5OutputForPrediction(BaseModelOutput):
     r"""
     mean_predictions (`torch.Tensor` of shape `(batch_size, horizon_length)`):
         Deterministic forecasts after denormalization.
-    full_predictions (`torch.Tensor` of shape `(batch_size, horizon_length, quantiles)`):
-        Quantile forecasts including the median after denormalization.
+    full_predictions (`torch.Tensor` of shape `(batch_size, horizon_length, num_quantiles)`):
+        Denormalized forecasts with an extra leading channel at index 0, followed by the quantile forecasts
+        in `config.quantiles` order. `num_quantiles = len(config.quantiles) + 1`.
     loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `future_values` is provided):
         Training loss combining MSE and quantile losses when targets are supplied.
     """
@@ -824,16 +825,13 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
             # full_forecast is already in normalized space (before denormalization).
             normalized_preds = full_forecast[:, :target_len]
             normalized_targets = self.model._revin(future_values, mu_global, sigma_global, reverse=False)
-            normalized_mean_preds = normalized_preds[:, :, decode_index]
-            mse_loss = F.mse_loss(normalized_mean_preds, normalized_targets)
-            quantile_indices = [i for i in range(normalized_preds.shape[-1]) if i != decode_index]
-            if quantile_indices:
-                index_tensor = torch.tensor(quantile_indices, device=normalized_preds.device, dtype=torch.long)
-                quantile_tensor = torch.index_select(normalized_preds, dim=-1, index=index_tensor)
-                quantile_loss = self._quantile_loss(quantile_tensor, normalized_targets)
-                loss = mse_loss + quantile_loss
-            else:
-                loss = mse_loss
+            loss = F.mse_loss(normalized_preds[..., decode_index], normalized_targets)
+            # Channel 0 is the point-forecast head, not a quantile level: channels `1..N-1` hold
+            # `config.quantiles` in the same order, so the pinball loss has to start at channel 1.
+            # Selecting the channels by `i != decode_index` instead shifts the lower half by one level
+            # and feeds the point-forecast head to `q=0.1`.
+            if self.config.quantiles:
+                loss = loss + self._quantile_loss(normalized_preds[..., 1:], normalized_targets)
 
         return TimesFm2_5OutputForPrediction(
             last_hidden_state=model_outputs.last_hidden_state,
