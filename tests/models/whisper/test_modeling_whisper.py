@@ -908,6 +908,62 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         model.generate(input_features, max_new_tokens=1, prompt_ids=prompt_ids)
 
+    def test_token_timestamps_skip_encoder_attentions_generate(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        model = WhisperForConditionalGeneration(config).to(torch_device).eval()
+        input_features = inputs_dict["input_features"][:2].to(torch_device)
+        attention_mask = torch.ones((2, input_features.shape[-1]), dtype=torch.long, device=torch_device)
+
+        vocab_size = config.vocab_size
+        num_timestamp_tokens = 20
+        timestamp_begin = vocab_size - num_timestamp_tokens
+        model.generation_config.alignment_heads = [[0, 0]]
+        model.generation_config.no_timestamps_token_id = timestamp_begin - 1
+        model.generation_config.eos_token_id = None
+        model.config.eos_token_id = None
+        model.generation_config._detect_timestamp_from_logprob = False
+        model.generation_config.max_initial_timestamp_index = 0
+        model.generation_config.prev_bos_token_id = timestamp_begin - 3
+        model.generation_config.max_length = 16
+
+        outputs = model.generate(
+            input_features,
+            attention_mask=attention_mask,
+            logits_processor=[
+                DummyTimestampLogitProcessor(timestamp_begin, vocab_size, batch_size=2, max_length=16, min_space=4)
+            ],
+            return_timestamps=True,
+            return_token_timestamps=True,
+            return_segments=True,
+            max_new_tokens=16,
+        )
+        self.assertEqual(outputs["token_timestamps"].shape[0], 2)
+        self.assertTrue(outputs["segments"][0])
+        for segment in outputs["segments"][0]:
+            self.assertIsNone(segment["result"].get("encoder_attentions"))
+
+        # An explicit output_attentions request keeps the encoder attentions. Token timestamps
+        # must be identical because the decoder cross-attentions are unchanged.
+        outputs_with_encoder_attentions = model.generate(
+            input_features,
+            attention_mask=attention_mask,
+            logits_processor=[
+                DummyTimestampLogitProcessor(timestamp_begin, vocab_size, batch_size=2, max_length=16, min_space=4)
+            ],
+            return_timestamps=True,
+            return_token_timestamps=True,
+            return_segments=True,
+            max_new_tokens=16,
+            output_attentions=True,
+        )
+        self.assertTrue(
+            any(
+                segment["result"].get("encoder_attentions") is not None
+                for segment in outputs_with_encoder_attentions["segments"][0]
+            )
+        )
+        self.assertTrue(torch.equal(outputs["token_timestamps"], outputs_with_encoder_attentions["token_timestamps"]))
+
     def test_generate_longform_with_prompt_ids(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = WhisperForConditionalGeneration(config).eval().to(torch_device)
