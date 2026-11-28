@@ -22,7 +22,12 @@ import numpy as np
 from datasets import load_dataset
 
 from transformers import Phi4MultimodalFeatureExtractor
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch
+from transformers.testing_utils import (
+    check_json_file_has_correct_format,
+    require_torch,
+    require_torch_accelerator,
+    torch_device,
+)
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_processing_common import floats_list
@@ -194,6 +199,18 @@ class Phi4MultimodalFeatureExtractionTest(SequenceFeatureExtractionTestMixin, un
         speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples]
+
+    @require_torch_accelerator
+    def test_feature_extraction_on_accelerator(self):
+        feature_extractor = self.feature_extraction_class()
+        speech_inputs = [np.random.randn(n).astype(np.float32) for n in (4000, 9000, 16000)]
+
+        cpu_outputs = feature_extractor(speech_inputs, return_tensors="pt", device="cpu")
+        device_outputs = feature_extractor(speech_inputs, return_tensors="pt", device=torch_device)
+
+        torch.testing.assert_close(
+            device_outputs.audio_input_features.cpu(), cpu_outputs.audio_input_features, atol=1e-3, rtol=1e-3
+        )
 
     @require_torch
     def test_torch_integration(self):

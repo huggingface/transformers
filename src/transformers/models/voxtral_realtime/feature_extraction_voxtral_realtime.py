@@ -84,6 +84,7 @@ class VoxtralRealtimeFeatureExtractor(SequenceFeatureExtractor):
         self.global_log_mel_max = global_log_mel_max
 
     def _torch_extract_fbank_features(self, waveform, device: str = "cpu", center: bool = True):
+        waveform = waveform.to(device)
         window = torch.hann_window(self.n_fft, device=device)
         stft = torch.stft(waveform, self.n_fft, self.hop_length, window=window, return_complex=True, center=center)
         magnitudes = stft[..., :-1].abs() ** 2
