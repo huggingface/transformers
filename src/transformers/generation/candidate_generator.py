@@ -734,7 +734,11 @@ class AssistantToTargetTranslator:
         )
         self._suppress_input_ids: list[int] = self._get_suppress_input_ids()
         self.logits_processors: LogitsProcessorList | None = None
-        self.assistant_prune_lm_head = assistant_prune_lm_head and assistant_model is not None
+        # Nothing to prune when every assistant token is in the target vocab, e.g. models that share a tokenizer but
+        # have different vocab sizes due to padding, such as Qwen2.5-7B (152064) + Qwen2.5-0.5B (151936)
+        self.assistant_prune_lm_head = (
+            assistant_prune_lm_head and assistant_model is not None and len(self._suppress_input_ids) > 0
+        )
         if len(self._suppress_input_ids) > 0:
             # the assistant vocab is not a subset of the target vocab
             if self.assistant_prune_lm_head and assistant_model is not None:
@@ -757,6 +761,19 @@ class AssistantToTargetTranslator:
                 self.logits_processors = LogitsProcessorList(
                     [SuppressTokensLogitsProcessor(self._get_suppress_input_ids(), self._assistant_model_device)]
                 )
+        if not self.assistant_prune_lm_head and assistant_model is not None:
+            # Rows of the assistant LM head past its tokenizer (vocab_size padding) have no token and must not be sampled
+            padded_ids = list(
+                range(len(self._assistant_to_target_input_ids), assistant_model.config.get_text_config().vocab_size)
+            )
+            if len(padded_ids) > 0:
+                self.logits_processors = LogitsProcessorList(
+                    [
+                        SuppressTokensLogitsProcessor(
+                            self._suppress_input_ids.tolist() + padded_ids, self._assistant_model_device
+                        )
+                    ]
+                )
 
     def unmap_input_ids(self):
         """
@@ -765,11 +782,7 @@ class AssistantToTargetTranslator:
         This method is required for the first forward pass of `_MapInputEmbedding` where input ids are already in the assistant vocabulary space. By disabling the mapping, it ensures that the input ids are processed correctly without remapping.
 
         """
-        # map_input_embeddings is only initialized when _suppress_input_ids is non-empty
-        # (i.e., the assistant vocab is not a strict subset of the target vocab, such as
-        # when models share the same tokenizer but have different vocab sizes due to padding,
-        # e.g., Qwen2.5-7B (152064) + Qwen2.5-0.5B (151936))
-        if self.assistant_prune_lm_head and len(self._suppress_input_ids) > 0:
+        if self.assistant_prune_lm_head:
             self.map_input_embeddings.map = False
 
     def _get_assistant_to_target_input_ids(self):
