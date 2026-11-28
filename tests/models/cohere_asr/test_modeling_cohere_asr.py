@@ -36,6 +36,7 @@ if is_torch_available():
 
     from transformers import CohereAsrForConditionalGeneration
     from transformers.models.cohere_asr.modeling_cohere_asr import CohereAsrModel
+    from transformers.models.cohere_asr.processing_cohere_asr import CohereAsrProcessor
     from transformers.models.parakeet.modeling_parakeet import ParakeetEncoderModelOutput
 
 
@@ -324,6 +325,14 @@ class CohereAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @unittest.skip(reason="FIXME: likely intended because we need input ids but to double-check")
     def test_generate_without_input_ids(self):
         pass
+
+    def test_reassemble_chunk_texts_empty_chunks(self):
+        # https://github.com/huggingface/transformers/issues/47273: all chunks of a sample decoding to empty used to
+        # raise an IndexError, and a single decoded `str` was split into characters
+        reassemble = CohereAsrProcessor._reassemble_chunk_texts
+        self.assertEqual(reassemble(["", ""], [(0, 0), (0, 1)]), [""])
+        self.assertEqual(reassemble(["", "b", "", "c"], [(0, 0), (0, 1), (1, 0), (1, 1)]), ["b", "c"])
+        self.assertEqual(reassemble("hello world", [(0, None)]), ["hello world"])
 
 
 # TODO: remove revision
