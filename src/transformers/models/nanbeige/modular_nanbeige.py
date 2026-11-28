@@ -1,0 +1,233 @@
+# Copyright 2026 the HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import copy
+from collections.abc import Callable
+
+import torch
+from huggingface_hub.dataclasses import strict
+
+from ...cache_utils import Cache, DynamicCache
+from ...masking_utils import create_causal_mask
+from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
+from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.type_validators import interval
+from ..llama.configuration_llama import LlamaConfig
+from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaDecoderLayer,
+    LlamaForCausalLM,
+    LlamaModel,
+    LlamaPreTrainedModel,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+)
+
+
+# Keep the interval factory separate for modular config inheritance.
+loop_count_field = interval(min=1)
+
+
+@auto_docstring(checkpoint="Nanbeige/Nanbeige4.2-3B")
+@strict
+class NanbeigeConfig(LlamaConfig):
+    r"""
+    num_loops (`int`, *optional*, defaults to 2):
+        Number of times the decoder layers run per forward pass, with shared weights. Each pass has its own key-value
+        cache entries when caching is enabled. The output RMSNorm runs after every pass.
+
+    ```python
+    >>> from transformers import NanbeigeConfig, NanbeigeModel
+
+    >>> configuration = NanbeigeConfig()
+    >>> model = NanbeigeModel(configuration)
+    >>> configuration = model.config
+    ```
+    """
+
+    default_theta = 70_000_000.0
+
+    vocab_size: int = 166144
+    hidden_size: int = 3072
+    intermediate_size: int = 10752
+    num_hidden_layers: int = 22
+    num_attention_heads: int = 48
+    num_key_value_heads: int | None = 8
+    max_position_embeddings: int = 262144
+    rms_norm_eps: float = 1e-5
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 166100
+    eos_token_id: int | list[int] | None = 166101
+    head_dim: int | None = 128
+    num_loops: int = loop_count_field(default=2)
+
+    @property
+    def total_num_hidden_layers(self) -> int:
+        """Number of decoder layer calls per forward pass."""
+        return self.num_loops * self.num_hidden_layers
+
+
+class NanbeigeAttention(LlamaAttention):
+    @no_inherit_decorator
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
+        cache_offset: int = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if cache is not None:
+            # Each pass writes to its own cache slot.
+            key_states, value_states = cache.update(
+                key_states, value_states, self.layer_idx + cache_offset, kwargs=kwargs
+            )
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class NanbeigeDecoderLayer(LlamaDecoderLayer):
+    @no_inherit_decorator
+    def forward(self, **super_kwargs):
+        return super().forward(**super_kwargs)
+
+
+class NanbeigePreTrainedModel(LlamaPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(NanbeigeDecoderLayer, num_hidden_layers_key="total_num_hidden_layers"),
+        "attentions": NanbeigeAttention,
+    }
+
+
+class NanbeigeModel(LlamaModel):
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
+
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
+
+        num_layers = self.config.num_hidden_layers
+        num_loops = self.config.num_loops
+        if cache is not None and len(cache.layers) == num_layers:
+            # Later passes write to their own cache layers, appended after the first pass's layers.
+            cache.layers += [copy.deepcopy(layer) for layer in cache.layers * (num_loops - 1)]
+
+        if position_ids is None:
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache=cache,
+            position_ids=position_ids,
+        )
+        position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids)
+        hidden_states = inputs_embeds
+
+        for loop_idx in range(num_loops):
+            cache_offset = loop_idx * num_layers
+            for decoder_layer in self.layers:
+                hidden_states = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask,
+                    position_embeddings=position_embeddings,
+                    position_ids=position_ids,
+                    cache=cache,
+                    cache_offset=cache_offset,
+                    use_cache=use_cache,
+                    **kwargs,
+                )
+            hidden_states = self.norm(hidden_states)
+
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states, cache=cache)
+
+
+class NanbeigeForCausalLM(LlamaForCausalLM):
+    @can_return_tuple
+    @auto_docstring
+    def forward(self, **super_kwargs):
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, NanbeigeForCausalLM
+
+        >>> checkpoint = "Nanbeige/Nanbeige4.2-3B"
+        >>> model = NanbeigeForCausalLM.from_pretrained(checkpoint)
+        >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+
+        >>> messages = [{"role": "user", "content": "Which number is bigger, 9.11 or 9.8?"}]
+        >>> inputs = tokenizer.apply_chat_template(
+        ...     messages,
+        ...     add_generation_prompt=True,
+        ...     enable_thinking=False,
+        ...     return_tensors="pt",
+        ...     return_dict=True,
+        ... ).to(model.device)
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=30)
+        >>> tokenizer.decode(generated_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        ```"""
+        return super().forward(**super_kwargs)
+
+
+__all__ = ["NanbeigeConfig", "NanbeigePreTrainedModel", "NanbeigeModel", "NanbeigeForCausalLM"]
