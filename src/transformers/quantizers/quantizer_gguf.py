@@ -29,6 +29,7 @@ if is_torch_available():
         get_gguf_conversion_mapping,
         get_gguf_plan,
         is_gguf_arch_supported,
+        remove_dropped_modules,
         replace_with_gguf_modules,
     )
 
@@ -142,9 +143,10 @@ class GgufHfQuantizer(HfQuantizer):
         return legacy["tensors"]
 
     def _process_model_before_weight_loading(self, model, **kwargs):
-        """Swap in `GgufLinear` wherever the weight can stay packed."""
+        """Drop the modules the file never has, then swap in `GgufLinear` wherever the weight can stay packed."""
         if not self.supported:
             return
+        remove_dropped_modules(model, self.header.architecture)
         self.mapping = get_gguf_conversion_mapping(self.header.architecture, model.config)
         self.quantized, packable, self.input_permutations = get_gguf_plan(self.header, self.mapping)
         if self.quantization_config.dequantize:

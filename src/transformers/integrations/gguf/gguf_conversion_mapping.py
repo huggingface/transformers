@@ -233,11 +233,40 @@ def _lfm2(config) -> list[WeightTransform]:
     return renamings + [conv_kernel]
 
 
+def _bert(config) -> list[WeightTransform]:
+    """BERT: llama.cpp only renames, so every quantized weight stays packed.
+
+    The file has no `bert.` prefix, pooler or heads: llama.cpp keeps the encoder alone, for embeddings.
+    """
+    return [
+        WeightRenaming(r"^token_embd\.", "embeddings.word_embeddings."),
+        WeightRenaming(r"^token_types\.", "embeddings.token_type_embeddings."),
+        WeightRenaming(r"^position_embd\.", "embeddings.position_embeddings."),
+        WeightRenaming(r"^token_embd_norm\.", "embeddings.LayerNorm."),
+        WeightRenaming(r"^blk\.", "encoder.layer."),
+        WeightRenaming(r"\.attn_q\.", ".attention.self.query."),
+        WeightRenaming(r"\.attn_k\.", ".attention.self.key."),
+        WeightRenaming(r"\.attn_v\.", ".attention.self.value."),
+        WeightRenaming(r"\.attn_output\.", ".attention.output.dense."),
+        WeightRenaming(r"\.attn_output_norm\.", ".attention.output.LayerNorm."),
+        WeightRenaming(r"\.ffn_up\.", ".intermediate.dense."),
+        WeightRenaming(r"\.ffn_down\.", ".output.dense."),
+        WeightRenaming(r"\.layer_output_norm\.", ".output.LayerNorm."),
+    ]
+
+
 # gguf `general.architecture` -> builder taking the model config
 GGUF_ARCHS = {
     "qwen35": _qwen35,
     "qwen35moe": _qwen35moe,
     "lfm2": _lfm2,
+    "bert": _bert,
+}
+
+# gguf `general.architecture` -> modules of the base model llama.cpp never writes. The model is built without
+# them, rather than with random weights: BERT files keep the encoder alone, for embeddings, and drop the pooler.
+GGUF_DROPPED_MODULES = {
+    "bert": ("pooler",),
 }
 
 
