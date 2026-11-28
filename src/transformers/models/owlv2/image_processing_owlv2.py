@@ -392,8 +392,8 @@ class Owlv2ImageProcessor(TorchvisionBackend):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                resized_stack = self.resize(image=stacked_images, size=size, resample=resample)
-                resized_images_grouped[shape] = resized_stack
+                stacked_images = self.resize(image=stacked_images, size=size, resample=resample)
+            resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         # Group images by size for further processing

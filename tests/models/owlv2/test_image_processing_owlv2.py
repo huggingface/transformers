@@ -43,6 +43,16 @@ class Owlv2ImageProcessingTester(ImageProcessingTester):
 class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = Owlv2ImageProcessingTester
 
+    def test_do_resize_false(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            image = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)[0]
+
+            # Without resizing, the image is only padded to a square at its original resolution
+            side = max(image.shape[-2:])
+            pixel_values = image_processor(image, do_resize=False, return_tensors="pt").pixel_values
+            self.assertEqual(tuple(pixel_values.shape), (1, self.image_processor_tester.num_channels, side, side))
+
     @slow
     def test_image_processor_integration_test(self):
         for image_processing_class in self.image_processing_classes.values():
