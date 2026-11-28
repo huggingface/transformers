@@ -63,6 +63,7 @@ if TYPE_CHECKING:
     from .blip_2 import *
     from .bloom import *
     from .blt import *
+    from .blueberry import *
     from .bridgetower import *
     from .bros import *
     from .byt5 import *
