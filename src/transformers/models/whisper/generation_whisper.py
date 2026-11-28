@@ -212,7 +212,7 @@ def _pad_to_max_length(
             if return_token_timestamps:
                 token_timestamps_list.append(torch.ones_like(bos_token_tensor, device=device) * 0.0)
         else:
-            sequences.append(torch.tensor([], device=device))
+            sequences.append(torch.tensor([], dtype=torch.long, device=device))
             if return_token_timestamps:
                 token_timestamps_list.append(torch.tensor([], device=device))
 
