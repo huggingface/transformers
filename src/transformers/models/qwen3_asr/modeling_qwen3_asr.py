@@ -552,7 +552,7 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         audio_embeds = None
-        if input_features is not None and input_ids is not None:
+        if input_features is not None:
             audio_embeds = self.get_audio_features(input_features, input_features_mask, return_dict=True).pooler_output
 
             # replace text-audio token placeholders with audio embeddings

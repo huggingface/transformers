@@ -296,9 +296,19 @@ class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         audio_embeds = None
-        if input_features is not None and input_ids is not None:
+        if input_features is not None:
+            audio_ids = input_ids
+            if audio_ids is None:
+                # Generation from `inputs_embeds` calls the first forward without `input_ids`: recover the audio
+                # placeholder positions from the embeddings (needed for the rotary time embedding timestamps)
+                audio_token_embed = self.get_input_embeddings()(
+                    torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                is_audio = (inputs_embeds == audio_token_embed).all(-1)
+                not_audio_id = (self.config.audio_token_id + 1) % self.get_input_embeddings().num_embeddings
+                audio_ids = torch.where(is_audio, self.config.audio_token_id, not_audio_id)
             audio_embeds = self.get_audio_features(
-                input_features, input_features_mask, input_ids=input_ids, return_dict=True
+                input_features, input_features_mask, input_ids=audio_ids, return_dict=True
             ).pooler_output
 
             # replace text-audio token placeholders with audio embeddings

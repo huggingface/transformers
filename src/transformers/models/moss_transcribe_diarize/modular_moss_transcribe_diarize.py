@@ -738,7 +738,7 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         audio_embeds = None
-        if input_features is not None and input_ids is not None:
+        if input_features is not None:
             audio_embeds = self.get_audio_features(
                 input_features=input_features,
                 input_features_mask=input_features_mask,
