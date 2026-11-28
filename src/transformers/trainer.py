@@ -495,6 +495,25 @@ class Trainer:
         else:
             self.place_model_on_device = True
 
+        # fp16 AMP needs float32 weights: autocast runs the forward pass in fp16 and `GradScaler` refuses to unscale
+        # fp16 gradients. `from_pretrained` loads in the checkpoint's dtype by default, so a checkpoint saved in fp16
+        # would otherwise fail on the first optimizer step. Upcast before device placement and optimizer creation.
+        if (
+            args.fp16
+            and model is not None
+            and not self.is_deepspeed_enabled
+            and not is_sagemaker_mp_enabled()
+            and not getattr(model, "is_loaded_in_8bit", False)
+            and not getattr(model, "is_loaded_in_4bit", False)
+        ):
+            model_dtype = next((p.dtype for p in model.parameters() if p.is_floating_point()), None)
+            if model_dtype == torch.float16:
+                logger.info(
+                    "The model is in float16 but `fp16=True` mixed precision training requires float32 weights. "
+                    "Upcasting the model to float32; autocast still runs the forward pass in float16."
+                )
+                model = model.float()
+
         # ---- 5. Device placement ----------------------------------------------------
         # Bnb Quantized models don't support `.to` operation.
         if (

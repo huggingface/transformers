@@ -79,6 +79,8 @@ from .trainer_test_utils import (
     BasicTextGenerationModel,
     RegressionDataset,
     RegressionModel,
+    RegressionModelConfig,
+    RegressionPreTrainedModel,
     RepeatDataset,
     StoreLossCallback,
     TrainerIntegrationCommon,
@@ -120,6 +122,17 @@ class TrainerMixedPrecisionTest(TestCasePlus, TrainerIntegrationCommon):
             log_0 = trainer.state.log_history[:-1][0]
             # check that the grads were properly clipped due to the grad scaler. Otherwise, we get huge values
             self.assertEqual(log_0["grad_norm"] < 100, True)
+
+    def test_mixed_fp16_upcasts_fp16_model(self):
+        # A checkpoint saved in fp16 is loaded in fp16 by default; fp16 AMP then fails with
+        # "Attempting to unscale FP16 gradients" unless the Trainer upcasts the weights to fp32.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionPreTrainedModel(RegressionModelConfig(a=0, b=0)).half()
+            args = TrainingArguments(tmp_dir, fp16=True, max_steps=2, report_to="none")
+            trainer = Trainer(model, args, train_dataset=RegressionDataset(length=8))
+            self.assertEqual(trainer.model.dtype, torch.float32)
+            if torch_device == "cuda":
+                trainer.train()
 
     @require_torch_bf16
     @require_torch_accelerator
