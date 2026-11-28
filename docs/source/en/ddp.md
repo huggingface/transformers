@@ -58,6 +58,7 @@ Pass these [`TrainingArguments`] to control DDP behavior.
 - [`~TrainingArguments.ddp_find_unused_parameters`] traverses the autograd graph at the end of the forward pass for parameters that won't receive a gradient and marks them as ready so they don't block the all-reduce. Don't use with [`~TrainingArguments.gradient_checkpointing`] because gradient checkpointing discards intermediate activations and recomputes them on the fly.
 - [`~TrainingArguments.ddp_bucket_cap_mb`] is the bucket size for batching gradients into a single all-reduce during the backward pass. A larger bucket means fewer all-reduce calls and less launch overhead.
 - [`~TrainingArguments.ddp_broadcast_buffers`] synchronizes model buffers (such as BatchNorm running statistics) from rank 0 to all other ranks at the start of every forward pass. Disable if your model only uses LayerNorm. Don't use with [`~TrainingArguments.gradient_checkpointing`].
+- [`~TrainingArguments.ddp_gradient_as_bucket_view`] makes gradients alias the all-reduce communication buckets instead of separate tensors, which lowers peak memory usage by roughly the size of the gradients. Gradients only become views after the first iteration and `detach_()` cannot be called on them.
 - [`~TrainingArguments.ddp_backend`] sets the communication backend. Use `"nccl"` for NVIDIA GPUs (default and fastest), `"gloo"` for CPU training or debugging, and `"xccl"`, `"hccl"`, or `"cncl"` for other hardware.
 - [`~TrainingArguments.ddp_timeout`] sets the time limit for all processes and operations (all-reduce, broadcast) to complete. If a process hangs, like when loading a large model slowly, the timeout raises an error instead of blocking indefinitely.
 
@@ -71,6 +72,7 @@ args = TrainingArguments(
     ddp_find_unused_parameters=False,
     ddp_bucket_cap_mb=25,
     ddp_broadcast_buffers=True,
+    ddp_gradient_as_bucket_view=True,
     ddp_timeout=1800,
 )
 ```
