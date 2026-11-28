@@ -17,7 +17,7 @@ import unittest
 
 import torch
 
-from transformers import is_torch_available
+from transformers import is_torch_available, set_seed
 from transformers.testing_utils import require_torch, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -91,6 +91,25 @@ class HYV4ModelTest(CausalLMModelTest, unittest.TestCase):
                 [state.shape for state in iter_hidden_states],
                 expected_shapes,
             )
+
+    def test_interleaved_rotary(self):
+        """Regression test for the RoPE layout fixed in https://github.com/huggingface/transformers/pull/50589."""
+        from transformers.models.hy_v4.modeling_hy_v4 import apply_rotary_pos_emb_interleave
+
+        set_seed(42)
+        q = torch.randn(1, 2, 3, 4, dtype=torch.float32, device=torch_device)
+        k = torch.randn(1, 1, 3, 4, dtype=torch.float32, device=torch_device)
+        positions = torch.tensor([[0, 1, 7]], device=torch_device)
+        angles = positions[..., None] * torch.tensor([1.0, 0.01], device=torch_device)
+        emb = torch.cat((angles, angles), dim=-1)
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q, k, emb.cos(), emb.sin())
+
+        phase = torch.polar(torch.ones_like(angles), angles).unsqueeze(1)
+        for raw, rotated in ((q, q_rot), (k, k_rot)):
+            pairs = torch.view_as_complex(raw.reshape(*raw.shape[:-1], 2, 2))
+            reference = pairs * phase
+            expected = torch.cat((reference.real, reference.imag), dim=-1)
+            torch.testing.assert_close(rotated, expected)
 
     def test_hidden_states_output(self):
         """Override to account for the difference in MHC and the final state shapes"""
