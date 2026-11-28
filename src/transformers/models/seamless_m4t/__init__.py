@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -32,5 +31,36 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_seamless_m4t": {
+                "SeamlessM4TConfig",
+            },
+            "feature_extraction_seamless_m4t": {
+                "SeamlessM4TFeatureExtractor",
+            },
+            "processing_seamless_m4t": {
+                "SeamlessM4TProcessor",
+            },
+            "tokenization_seamless_m4t": {
+                "SeamlessM4TTokenizer",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_seamless_m4t": {
+                "SeamlessM4TCodeHifiGan",
+                "SeamlessM4TForSpeechToSpeech",
+                "SeamlessM4TForSpeechToText",
+                "SeamlessM4TForTextToSpeech",
+                "SeamlessM4TForTextToText",
+                "SeamlessM4THifiGan",
+                "SeamlessM4TModel",
+                "SeamlessM4TPreTrainedModel",
+                "SeamlessM4TTextToUnitForConditionalGeneration",
+                "SeamlessM4TTextToUnitModel",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

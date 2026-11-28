@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -31,5 +30,30 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_mask2former": {
+                "Mask2FormerConfig",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_mask2former": {
+                "Mask2FormerForUniversalSegmentation",
+                "Mask2FormerModel",
+                "Mask2FormerPreTrainedModel",
+            },
+        },
+        frozenset({"torch", "torchvision", "vision"}): {
+            "image_processing_mask2former": {
+                "Mask2FormerImageProcessor",
+            },
+        },
+        frozenset({"torch", "vision"}): {
+            "image_processing_pil_mask2former": {
+                "Mask2FormerImageProcessorPil",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

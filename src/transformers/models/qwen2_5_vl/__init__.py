@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -30,5 +29,27 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_qwen2_5_vl": {
+                "Qwen2_5_VLConfig",
+                "Qwen2_5_VLTextConfig",
+                "Qwen2_5_VLVisionConfig",
+            },
+            "processing_qwen2_5_vl": {
+                "Qwen2_5_VLProcessor",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_qwen2_5_vl": {
+                "Qwen2_5_VLForConditionalGeneration",
+                "Qwen2_5_VLModel",
+                "Qwen2_5_VLPreTrainedModel",
+                "Qwen2_5_VLTextModel",
+                "Qwen2_5_VisionTransformerPretrainedModel",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

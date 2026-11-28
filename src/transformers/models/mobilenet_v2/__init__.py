@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -31,5 +30,31 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_mobilenet_v2": {
+                "MobileNetV2Config",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_mobilenet_v2": {
+                "MobileNetV2ForImageClassification",
+                "MobileNetV2ForSemanticSegmentation",
+                "MobileNetV2Model",
+                "MobileNetV2PreTrainedModel",
+            },
+        },
+        frozenset({"torch", "torchvision", "vision"}): {
+            "image_processing_mobilenet_v2": {
+                "MobileNetV2ImageProcessor",
+            },
+        },
+        frozenset({"vision"}): {
+            "image_processing_pil_mobilenet_v2": {
+                "MobileNetV2ImageProcessorPil",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

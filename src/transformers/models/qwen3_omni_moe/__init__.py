@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -30,5 +29,41 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_qwen3_omni_moe": {
+                "Qwen3OmniMoeAudioEncoderConfig",
+                "Qwen3OmniMoeConfig",
+                "Qwen3OmniMoeTalkerCodePredictorConfig",
+                "Qwen3OmniMoeTalkerConfig",
+                "Qwen3OmniMoeTalkerTextConfig",
+                "Qwen3OmniMoeTextConfig",
+                "Qwen3OmniMoeThinkerConfig",
+                "Qwen3OmniMoeVisionEncoderConfig",
+            },
+            "processing_qwen3_omni_moe": {
+                "Qwen3OmniMoeProcessor",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_qwen3_omni_moe": {
+                "Qwen3OmniMoeCode2Wav",
+                "Qwen3OmniMoeCode2WavDecoderBlock",
+                "Qwen3OmniMoeCode2WavTransformerModel",
+                "Qwen3OmniMoeForConditionalGeneration",
+                "Qwen3OmniMoePreTrainedModel",
+                "Qwen3OmniMoePreTrainedModelForConditionalGeneration",
+                "Qwen3OmniMoeTalkerCodePredictorModel",
+                "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",
+                "Qwen3OmniMoeTalkerForConditionalGeneration",
+                "Qwen3OmniMoeTalkerModel",
+                "Qwen3OmniMoeThinkerForConditionalGeneration",
+                "Qwen3OmniMoeThinkerModel",
+                "Qwen3OmniMoeThinkerTextModel",
+                "Qwen3OmniMoeThinkerTextPreTrainedModel",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

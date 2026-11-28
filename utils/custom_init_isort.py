@@ -251,8 +251,9 @@ def sort_imports(file: str, check_only: bool = True):
     with open(file, encoding="utf-8") as f:
         code = f.read()
 
-    # If the file is not a custom init, there is nothing to do.
-    if "_import_structure = {" not in code:
+    # If the file is not a custom init, there is nothing to do. We only match a module-level `_import_structure`,
+    # since the generated model inits define an indented one that isn't a list of imports to sort.
+    if not any(line.startswith("_import_structure = {") for line in code.splitlines()):
         return
 
     # Blocks of indent level 0

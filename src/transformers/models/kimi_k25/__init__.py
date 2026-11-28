@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -32,5 +31,33 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_kimi_k25": {
+                "Kimi_K25Config",
+                "Kimi_K25VisionConfig",
+            },
+            "processing_kimi_k25": {
+                "Kimi_K25Processor",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_kimi_k25": {
+                "Kimi_K25ForConditionalGeneration",
+                "Kimi_K25Model",
+                "Kimi_K25PreTrainedModel",
+                "Kimi_K25VisionModel",
+            },
+        },
+        frozenset({"torch", "torchvision", "vision"}): {
+            "image_processing_kimi_k25": {
+                "Kimi_K25ImageProcessor",
+            },
+            "video_processing_kimi_k25": {
+                "Kimi_K25VideoProcessor",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

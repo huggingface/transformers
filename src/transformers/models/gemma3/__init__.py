@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -32,5 +31,38 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_gemma3": {
+                "Gemma3Config",
+                "Gemma3TextConfig",
+            },
+            "processing_gemma3": {
+                "Gemma3Processor",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_gemma3": {
+                "Gemma3ForCausalLM",
+                "Gemma3ForConditionalGeneration",
+                "Gemma3ForSequenceClassification",
+                "Gemma3Model",
+                "Gemma3PreTrainedModel",
+                "Gemma3TextForSequenceClassification",
+                "Gemma3TextModel",
+            },
+        },
+        frozenset({"torch", "torchvision", "vision"}): {
+            "image_processing_gemma3": {
+                "Gemma3ImageProcessor",
+            },
+        },
+        frozenset({"vision"}): {
+            "image_processing_pil_gemma3": {
+                "Gemma3ImageProcessorPil",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -34,5 +33,46 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_gemma4": {
+                "Gemma4AudioConfig",
+                "Gemma4Config",
+                "Gemma4TextConfig",
+                "Gemma4VisionConfig",
+            },
+            "feature_extraction_gemma4": {
+                "Gemma4AudioFeatureExtractor",
+            },
+            "processing_gemma4": {
+                "Gemma4Processor",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_gemma4": {
+                "Gemma4AudioModel",
+                "Gemma4ForCausalLM",
+                "Gemma4ForConditionalGeneration",
+                "Gemma4Model",
+                "Gemma4PreTrainedModel",
+                "Gemma4TextModel",
+                "Gemma4VisionModel",
+            },
+        },
+        frozenset({"torch", "torchvision", "vision"}): {
+            "image_processing_gemma4": {
+                "Gemma4ImageProcessor",
+            },
+            "video_processing_gemma4": {
+                "Gemma4VideoProcessor",
+            },
+        },
+        frozenset({"vision"}): {
+            "image_processing_pil_gemma4": {
+                "Gemma4ImageProcessorPil",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

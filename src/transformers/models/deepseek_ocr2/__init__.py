@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -32,5 +31,40 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_deepseek_ocr2": {
+                "DeepseekOcr2Config",
+                "DeepseekOcr2SamVisionConfig",
+                "DeepseekOcr2TextConfig",
+                "DeepseekOcr2VisionConfig",
+                "DeepseekOcr2VisionEncoderConfig",
+            },
+            "processing_deepseek_ocr2": {
+                "DeepseekOcr2Processor",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_deepseek_ocr2": {
+                "DeepseekOcr2ForConditionalGeneration",
+                "DeepseekOcr2Model",
+                "DeepseekOcr2PreTrainedModel",
+                "DeepseekOcr2TextModel",
+                "DeepseekOcr2TextPreTrainedModel",
+                "DeepseekOcr2VisionModel",
+            },
+        },
+        frozenset({"torch", "torchvision", "vision"}): {
+            "image_processing_deepseek_ocr2": {
+                "DeepseekOcr2ImageProcessor",
+            },
+        },
+        frozenset({"vision"}): {
+            "image_processing_pil_deepseek_ocr2": {
+                "DeepseekOcr2ImageProcessorPil",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

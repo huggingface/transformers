@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -32,5 +31,37 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_hunyuan_vl": {
+                "HunYuanVLConfig",
+                "HunYuanVLTextConfig",
+                "HunYuanVLVisionConfig",
+            },
+            "processing_hunyuan_vl": {
+                "HunYuanVLProcessor",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_hunyuan_vl": {
+                "HunYuanVLForConditionalGeneration",
+                "HunYuanVLModel",
+                "HunYuanVLPreTrainedModel",
+                "HunYuanVLTextModel",
+                "HunYuanVLVisionTransformer",
+            },
+        },
+        frozenset({"torch", "torchvision", "vision"}): {
+            "image_processing_hunyuan_vl": {
+                "HunYuanVLImageProcessor",
+            },
+        },
+        frozenset({"vision"}): {
+            "image_processing_pil_hunyuan_vl": {
+                "HunYuanVLImageProcessorPil",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

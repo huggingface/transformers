@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -30,5 +29,29 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_nemotron3_5_transcribe": {
+                "Nemotron3_5TranscribeAsrAudioConfig",
+                "Nemotron3_5TranscribeAudioConfig",
+                "Nemotron3_5TranscribeConfig",
+                "Nemotron3_5TranscribeWordTimestampConfig",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_nemotron3_5_transcribe": {
+                "Nemotron3_5TranscribeAsrAudioModel",
+                "Nemotron3_5TranscribeAudioModel",
+                "Nemotron3_5TranscribeForConditionalGeneration",
+                "Nemotron3_5TranscribeModel",
+                "Nemotron3_5TranscribePreTrainedModel",
+                "Nemotron3_5TranscribeWordTimestampModel",
+            },
+            "processing_nemotron3_5_transcribe": {
+                "Nemotron3_5TranscribeProcessor",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

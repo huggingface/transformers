@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -33,5 +32,52 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_ernie4_5_vl_moe": {
+                "Ernie4_5_VLMoeConfig",
+                "Ernie4_5_VLMoeTextConfig",
+                "Ernie4_5_VLMoeVisionConfig",
+                "Ernie4_5_VL_MoeConfig",
+                "Ernie4_5_VL_MoeTextConfig",
+                "Ernie4_5_VL_MoeVisionConfig",
+            },
+            "processing_ernie4_5_vl_moe": {
+                "Ernie4_5_VLMoeProcessor",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_ernie4_5_vl_moe": {
+                "Ernie4_5_VLMoeForConditionalGeneration",
+                "Ernie4_5_VLMoeModel",
+                "Ernie4_5_VLMoePreTrainedModel",
+                "Ernie4_5_VLMoeTextModel",
+                "Ernie4_5_VLMoeVariableResolutionResamplerModel",
+                "Ernie4_5_VLMoeVisionTransformerPretrainedModel",
+                "Ernie4_5_VL_MoeForConditionalGeneration",
+                "Ernie4_5_VL_MoeModel",
+                "Ernie4_5_VL_MoePreTrainedModel",
+                "Ernie4_5_VL_MoeTextModel",
+                "Ernie4_5_VL_MoeVariableResolutionResamplerModel",
+                "Ernie4_5_VL_MoeVisionTransformerPretrainedModel",
+            },
+        },
+        frozenset({"torch", "torchvision", "vision"}): {
+            "image_processing_ernie4_5_vl_moe": {
+                "Ernie4_5_VLMoeImageProcessor",
+                "Ernie4_5_VL_MoeImageProcessor",
+            },
+            "video_processing_ernie4_5_vl_moe": {
+                "Ernie4_5_VLMoeVideoProcessor",
+            },
+        },
+        frozenset({"vision"}): {
+            "image_processing_pil_ernie4_5_vl_moe": {
+                "Ernie4_5_VLMoeImageProcessorPil",
+                "Ernie4_5_VL_MoeImageProcessorPil",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

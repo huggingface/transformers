@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -30,5 +29,39 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_qwen2_5_omni": {
+                "Qwen2_5OmniAudioEncoderConfig",
+                "Qwen2_5OmniBigVGANConfig",
+                "Qwen2_5OmniConfig",
+                "Qwen2_5OmniDiTConfig",
+                "Qwen2_5OmniTalkerConfig",
+                "Qwen2_5OmniTextConfig",
+                "Qwen2_5OmniThinkerConfig",
+                "Qwen2_5OmniToken2WavConfig",
+                "Qwen2_5OmniVisionEncoderConfig",
+            },
+            "processing_qwen2_5_omni": {
+                "Qwen2_5OmniProcessor",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_qwen2_5_omni": {
+                "Qwen2_5OmniForConditionalGeneration",
+                "Qwen2_5OmniPreTrainedModel",
+                "Qwen2_5OmniPreTrainedModelForConditionalGeneration",
+                "Qwen2_5OmniTalkerForConditionalGeneration",
+                "Qwen2_5OmniTalkerModel",
+                "Qwen2_5OmniThinkerForConditionalGeneration",
+                "Qwen2_5OmniThinkerModel",
+                "Qwen2_5OmniThinkerTextModel",
+                "Qwen2_5OmniToken2WavBigVGANModel",
+                "Qwen2_5OmniToken2WavDiTModel",
+                "Qwen2_5OmniToken2WavModel",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)
