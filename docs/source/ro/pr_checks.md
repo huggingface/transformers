@@ -122,8 +122,7 @@ Testele sunt împărțite pe job-uri CI paralele, iar fiecare job preia fișiere
 - `tests_generate`: teste de generare
 - `pipelines_torch`: teste de pipeline
 - `tests_training_ci`: teste pentru loop-ul de antrenare
-- `tests_tensor_parallel_ci`: teste de tensor parallelism
-- `tests_fsdp_ci`: teste FSDP
+- `tests_distributed_ci`: teste de tensor parallelism, expert parallelism și FSDP
 
 ### Testele slow
 
