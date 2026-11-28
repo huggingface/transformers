@@ -289,6 +289,8 @@
       title: bitsandbytes
     - local: quantization/eetq
       title: EETQ
+    - local: quantization/entropack
+      title: EntroPack
     - local: quantization/fbgemm_fp8
       title: FBGEMM FP8
     - local: quantization/finegrained_fp8
