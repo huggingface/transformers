@@ -19,7 +19,7 @@ import unittest
 from pathlib import Path
 
 from transformers import is_datasets_available, is_torch_available
-from transformers.testing_utils import cleanup, require_torch, require_torchaudio, slow, torch_device
+from transformers.testing_utils import cleanup, require_torch, require_torchaudio, skip_tpu, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -814,6 +814,7 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(predicted_end_times, EXPECTED_END_TIMESTAMPS)
 
     @slow
+    @skip_tpu("test crashes the process")
     def test_tdt_model_integration_loss(self):
         """
         Verify that ParakeetForTDT loss matches NeMo's TDT loss (sigma=0).

@@ -23,6 +23,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    skip_tpu,
     slow,
     torch_device,
 )
@@ -232,6 +233,7 @@ class LaraMiniIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         text = tokenizer.decode(generated_ids[0, inputs.input_ids.shape[1] :], skip_special_tokens=True)
         self.assertEqual(text, " Paris. The capital of Germany is Berlin. The capital of Spain is Madrid.")
 
+    @skip_tpu("test aborts")
     def test_model_retrieves_beyond_the_sliding_window(self):
         """The pass key is ~740 tokens before the question, out of reach of the 512-token sliding window, and
         generation runs with a cache that crosses the window: it takes the global attention layers to recall the key."""

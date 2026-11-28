@@ -36,6 +36,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
+    skip_tpu,
     slow,
     torch_device,
 )
@@ -805,6 +806,7 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(torch.equal(out.sequences, expected.sequences))
         torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
 
+    @skip_tpu("test aborts")
     def test_chunked_prefill_slices_per_token_types(self):
         """
         Ernie4.5-VL-MoE routes each token by its `moe_mm_token_type_ids`, so every chunk of a chunked prefill must
