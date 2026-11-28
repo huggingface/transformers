@@ -65,6 +65,7 @@ These [`FineGrainedFP8Config`] parameters change how the weights and activations
 | `scale_fmt` | `"float"` | Storage format of the weight scales. `"float"` stores float32 scales. `"ue8m0"` stores 1-byte power-of-two scales (`torch.float8_e8m0fnu`), as in DeepSeek-V4 checkpoints, and needs PyTorch 2.7 or later. |
 | `expert_dtype` | `"fp8"` | Format of the mixture-of-experts weights. `"fp4"` loads the FP4-packed experts in DeepSeek-V4 checkpoints. |
 | `modules_to_convert` | `None` | Embedding tables to load in FP8 from a pre-quantized checkpoint, matched by module name suffix. |
+| `experts_only` | `False` | Keep only the mixture-of-experts weights in FP8. See [Keep only the experts in FP8](#keep-only-the-experts-in-fp8). |
 
 ## Load a pre-quantized FP8 checkpoint
 
@@ -77,6 +78,22 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-8B-FP8", device_map="cu
 ```
 
 Fine-grained FP8 also loads MXFP8 checkpoints, whose config sets `quant_method="mxfp8"`. MXFP8 stores FP8 weights with one power-of-two scale, saved as a byte, per block of 32 weights.
+
+## Keep only the experts in FP8
+
+In a mixture-of-experts model, the experts hold almost all the weights. The other linear layers, like the attention projections, are small, and during generation they run faster in bf16 than in FP8: an FP8 layer quantizes its input on every call. Set `experts_only=True` to keep only the experts in FP8. The other layers are dequantized as the checkpoint loads.
+
+```py
+from transformers import AutoModelForCausalLM, FineGrainedFP8Config
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    quantization_config=FineGrainedFP8Config(experts_only=True),
+    device_map="cuda",
+)
+```
+
+On one H100, this model then takes 0.9 GB more memory and decodes 1.8x faster with [`~GenerationMixin.generate`]. A model loaded this way saves its dequantized layers in bf16 and reloads the same way.
 
 ## Use the DeepGEMM fast path
 
