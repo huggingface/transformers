@@ -1295,6 +1295,7 @@ class Gemma3nTextMLP(Gemma2MLP):
         super().__init__(config)
         self.intermediate_size = config.intermediate_size[layer_idx]
         self.activation_sparsity = config.activation_sparsity_pattern[layer_idx]
+        self.std_multiplier = nn.Buffer(self._compute_std_multiplier(), persistent=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         gate_proj = self.gate_proj(hidden_states)
@@ -1305,17 +1306,19 @@ class Gemma3nTextMLP(Gemma2MLP):
         down_proj = self.down_proj(activations * up_proj)
         return down_proj
 
-    def _gaussian_topk(self, inputs: torch.Tensor) -> torch.Tensor:
-        target_sparsity_tensor = torch.tensor(self.activation_sparsity, dtype=torch.float32, device=inputs.device)
+    def _compute_std_multiplier(self) -> torch.Tensor:
         # normal_dist and std_multiplier are adapted from jax.scipy.stats.norm.ppf().
         #
         # References:
         #   *   https://docs.jax.dev/en/latest/_autosummary/jax.scipy.stats.norm.ppf.html
         #   *   https://pytorch.org/docs/stable/distributions.html#torch.distributions.normal.Normal
         #   *   https://pytorch.org/docs/stable/distributions.html#torch.distributions.transformed_distribution.TransformedDistribution.icdf
-        normal_dist = torch.distributions.normal.Normal(0, 1)
-        std_multiplier: torch.Tensor = normal_dist.icdf(target_sparsity_tensor)
-        std_multiplier = std_multiplier.type(inputs.dtype)
+        with torch.device("cpu"):
+            target_sparsity_tensor = torch.tensor(self.activation_sparsity, dtype=torch.float32)
+            return torch.distributions.normal.Normal(0, 1).icdf(target_sparsity_tensor)
+
+    def _gaussian_topk(self, inputs: torch.Tensor) -> torch.Tensor:
+        std_multiplier = self.std_multiplier.to(dtype=inputs.dtype)
         inputs_mean = torch.mean(inputs, dim=-1, keepdim=True)
         inputs_std = torch.std(inputs, dim=-1, keepdim=True, unbiased=False)
         cutoff_x = inputs_mean + inputs_std * std_multiplier
@@ -1634,6 +1637,8 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
             init.copy_(module.local_causal_valid_mask, module.create_local_causal_valid_mask())
         elif isinstance(module, Gemma3nTextScaledWordEmbedding):
             init.constant_(module.embed_scale, module.scalar_embed_scale)
+        elif isinstance(module, Gemma3nTextMLP):
+            init.copy_(module.std_multiplier, module._compute_std_multiplier())
         elif isinstance(module, Gemma3nTextAltUp):
             init.zeros_(module.correct_output_scale)
             init.constant_(module.router_input_scale, self.config.hidden_size**-1.0)
