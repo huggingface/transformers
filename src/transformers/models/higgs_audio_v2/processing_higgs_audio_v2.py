@@ -227,7 +227,8 @@ class HiggsAudioV2Processor(ProcessorMixin):
             if audio is not None:
                 audio_labels = audio_input_ids.clone()
                 audio_labels[audio_labels == self.audio_stream_bos_id] = -100
-                audio_labels[audio_labels == self.audio_stream_eos_id] = -100
+                eos_mask = audio_input_ids == self.audio_stream_eos_id
+                audio_labels[:, 1:].masked_fill_(eos_mask[:, 1:] & eos_mask[:, :-1], -100)
                 data.update({"audio_labels": audio_labels})
 
         return BatchFeature(data=data, tensor_type="pt")
